@@ -1,0 +1,28 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Resourcefull", "src\Resourcefull\Resourcefull.csproj", "{091CC0C1-17C7-4A6C-99B9-67C46609C5FD}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Resourcefull", "Resourcefull", "{42A31FAE-F230-4E42-B2C1-54654F64A318}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Resourcefull.UnitTests", "src\Resourcefull.UnitTests\Resourcefull.UnitTests.csproj", "{7B24D6FB-F0DC-406E-8A12-AFCF7CAFB074}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{091CC0C1-17C7-4A6C-99B9-67C46609C5FD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{091CC0C1-17C7-4A6C-99B9-67C46609C5FD}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{091CC0C1-17C7-4A6C-99B9-67C46609C5FD}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{091CC0C1-17C7-4A6C-99B9-67C46609C5FD}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7B24D6FB-F0DC-406E-8A12-AFCF7CAFB074}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7B24D6FB-F0DC-406E-8A12-AFCF7CAFB074}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7B24D6FB-F0DC-406E-8A12-AFCF7CAFB074}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7B24D6FB-F0DC-406E-8A12-AFCF7CAFB074}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{091CC0C1-17C7-4A6C-99B9-67C46609C5FD} = {42A31FAE-F230-4E42-B2C1-54654F64A318}
+		{7B24D6FB-F0DC-406E-8A12-AFCF7CAFB074} = {42A31FAE-F230-4E42-B2C1-54654F64A318}
+	EndGlobalSection
+EndGlobal
