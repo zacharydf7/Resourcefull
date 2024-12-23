@@ -15,12 +15,9 @@ jobs:
         uses: actions/setup-dotnet@v3
         with:
           dotnet-version: '9'
-      
-      - name: Print Dir
-        run: cd Resourcefull && ls -la
 
-      # - name: Restore dependencies
-      #   run: dotnet restore
+      - name: Restore dependencies
+        run: cd Resourcefull && dotnet restore
 
       # - name: Build
       #   run: dotnet build --configuration Release --no-restore
