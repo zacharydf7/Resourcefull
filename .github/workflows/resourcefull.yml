@@ -7,9 +7,7 @@ on:
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
-
     steps:
     - uses: actions/checkout@v4
     - name: Setup .NET
@@ -26,7 +24,6 @@ jobs:
   publish:
     needs: build
     runs-on: ubuntu-latest
-
     steps:
     - uses: actions/checkout@v4
     - name: Setup .NET
@@ -35,6 +32,8 @@ jobs:
         dotnet-version: 9.0.x
     - name: Configure GitHub Package Source
       run: dotnet nuget add source --username zacharydf7 --password ${{ secrets.GITHUB_TOKEN }} --store-password-in-clear-text --name github "https://nuget.pkg.github.com/zacharydf7/index.json"
+    - name: Restore dependencies
+      run: dotnet restore
     - name: Create NuGet package
       run: dotnet pack --no-build --output ./bin/Release
     - name: Publish package
