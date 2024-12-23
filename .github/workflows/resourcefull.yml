@@ -19,11 +19,11 @@ jobs:
       - name: Restore dependencies
         run: cd Resourcefull && dotnet restore
 
-      # - name: Build
-      #   run: dotnet build --configuration Release --no-restore
+      - name: Build
+        run: dotnet build --configuration Release --no-restore
 
-      # - name: Run unit tests
-      #   run: dotnet test --no-build --verbosity normal
+      - name: Run unit tests
+        run: dotnet test --no-build --verbosity normal
 
   # publish:
   #   if: github.ref == 'refs/heads/main' # Only publish on push to the main branch
