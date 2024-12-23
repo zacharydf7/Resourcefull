@@ -22,10 +22,10 @@ jobs:
         run: cd Resourcefull && dotnet restore
 
       - name: Build
-        run: dotnet build --configuration Release --no-restore
+        run: cd Resourcefull && dotnet build --configuration Release --no-restore
 
       - name: Run unit tests
-        run: dotnet test --no-build --verbosity normal
+        run: cd Resourcefull && dotnet test --no-build --verbosity normal
 
   # publish:
   #   if: github.ref == 'refs/heads/main' # Only publish on push to the main branch
