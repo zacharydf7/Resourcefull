@@ -1,10 +1,14 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Resourcefull", "src\Resourcefull\Resourcefull.csproj", "{091CC0C1-17C7-4A6C-99B9-67C46609C5FD}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Resourcefull", "Resourcefull\src\Resourcefull\Resourcefull.csproj", "{091CC0C1-17C7-4A6C-99B9-67C46609C5FD}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Resourcefull", "Resourcefull", "{42A31FAE-F230-4E42-B2C1-54654F64A318}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Resourcefull.UnitTests", "src\Resourcefull.UnitTests\Resourcefull.UnitTests.csproj", "{7B24D6FB-F0DC-406E-8A12-AFCF7CAFB074}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Resourcefull.UnitTests", "Resourcefull\tests\Resourcefull.UnitTests\Resourcefull.UnitTests.csproj", "{7B24D6FB-F0DC-406E-8A12-AFCF7CAFB074}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{23BDD604-EC85-4539-95F4-4A7A68FE9F43}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{EEB94C28-6612-4643-B2B8-E182C4F0E633}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -22,7 +26,9 @@ Global
 		{7B24D6FB-F0DC-406E-8A12-AFCF7CAFB074}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
-		{091CC0C1-17C7-4A6C-99B9-67C46609C5FD} = {42A31FAE-F230-4E42-B2C1-54654F64A318}
-		{7B24D6FB-F0DC-406E-8A12-AFCF7CAFB074} = {42A31FAE-F230-4E42-B2C1-54654F64A318}
+		{23BDD604-EC85-4539-95F4-4A7A68FE9F43} = {42A31FAE-F230-4E42-B2C1-54654F64A318}
+		{091CC0C1-17C7-4A6C-99B9-67C46609C5FD} = {23BDD604-EC85-4539-95F4-4A7A68FE9F43}
+		{EEB94C28-6612-4643-B2B8-E182C4F0E633} = {42A31FAE-F230-4E42-B2C1-54654F64A318}
+		{7B24D6FB-F0DC-406E-8A12-AFCF7CAFB074} = {EEB94C28-6612-4643-B2B8-E182C4F0E633}
 	EndGlobalSection
 EndGlobal

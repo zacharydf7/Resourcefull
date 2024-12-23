@@ -20,7 +20,7 @@
     </ItemGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\Resourcefull\Resourcefull.csproj" />
+      <ProjectReference Include="..\..\src\Resourcefull\Resourcefull.csproj" />
     </ItemGroup>
 
 </Project>
