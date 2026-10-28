@@ -31,7 +31,7 @@ public class VersionOrderIntegrationTests(SqlServerFixture fixture)
 
         // Act
         List<ResourceInfo> versions = await repository.GetResourceVersionsAsync(containerName, "n");
-        await repository.DeleteResourceAsync(containerName, "n");
+        await repository.DeleteResourceAsync(containerName, "n", "third");
         ResourceInfo? promoted = await repository.GetResourceInfoAsync(containerName, "n");
 
         // Assert

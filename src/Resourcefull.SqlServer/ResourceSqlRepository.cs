@@ -202,6 +202,16 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
         // promotion of the next version can't race a write.
         WriteNameAsync(resourceContainerName, resourceName, async (dbContext, ct) =>
         {
+            if (versionId == null)
+            {
+                // Without a version, every version of the name goes; their chunks cascade.
+                List<ResourceModel> versions = await dbContext.Resources
+                    .Where(r => r.ContainerName == resourceContainerName && r.Name == resourceName)
+                    .ToListAsync(ct);
+                dbContext.Resources.RemoveRange(versions);
+                return await dbContext.SaveChangesAsync(ct) > 0;
+            }
+
             ResourceModel? existingResource = await ResolveAsync(dbContext.Resources, resourceContainerName, resourceName, versionId, ct);
 
             if (existingResource == null) return false;

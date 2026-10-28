@@ -122,19 +122,21 @@ internal class ResourceInMemoryRepository : IResourceRepository
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        InMemoryResource? existingResource = versionId == null
-            ? _resources.Where(r => r.ContainerName == resourceContainerName && r.Name == resourceName)
-                .OrderByDescending(r => r.Sequence).FirstOrDefault()
-            : _resources.FirstOrDefault(r => r.ContainerName == resourceContainerName && r.Name == resourceName && r.ResourceInfo.VersionId == versionId);
+        // Without a version, every version of the name goes.
+        List<InMemoryResource> doomed = [.. _resources.Where(r => r.ContainerName == resourceContainerName && r.Name == resourceName
+            && (versionId == null || r.ResourceInfo.VersionId == versionId))];
 
-        if (existingResource is null) return false;
+        if (doomed.Count == 0) return false;
 
-        await existingResource.Stream.DisposeAsync();
-        _resources.Remove(existingResource);
         InMemoryResourceContainer? correspondingContainer = _resourceContainers.FirstOrDefault(x => x.Name == resourceContainerName);
-        correspondingContainer?.Resources.Remove(existingResource);
+        foreach (InMemoryResource resource in doomed)
+        {
+            await resource.Stream.DisposeAsync();
+            _resources.Remove(resource);
+            correspondingContainer?.Resources.Remove(resource);
+        }
 
-        return await Task.FromResult(true);
+        return true;
     }
 
     public async Task AddResourceContainerAsync(ResourceContainerInfo resourceContainerInfo, CancellationToken cancellationToken = default)

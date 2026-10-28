@@ -39,6 +39,10 @@ internal interface IResourceRepository
     Task<List<ResourceInfo>> GetResourceVersionsAsync(string resourceContainerName, string resourceName, CancellationToken cancellationToken = default);
     Task<ResourceInfo?> GetResourceInfoAsync(string resourceContainerName, string resourceName, string? versionId = null, CancellationToken cancellationToken = default);
     Task<Stream?> GetResourceStreamAsync(string resourceContainerName, string resourceName, string? versionId = null, CancellationToken cancellationToken = default);
+    /// <summary>
+    /// Deletes one version of a resource, or with no <paramref name="versionId"/> every version of it. Deleting the
+    /// current version alone makes the most recently stored remaining version current.
+    /// </summary>
     Task<bool> DeleteResourceAsync(string resourceContainerName, string resourceName, string? versionId = null, CancellationToken cancellationToken = default);
 
     // Resource Containers

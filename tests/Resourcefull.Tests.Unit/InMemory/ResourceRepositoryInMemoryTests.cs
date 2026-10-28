@@ -695,7 +695,7 @@ public class ResourceInMemoryRepositoryTests
         await repository.AddResourceAsync("c", new ResourceInfo { ContainerName = "c", Name = "n", VersionId = "third", LastModified = DateTime.UtcNow }, new MemoryStream());
 
         // Act
-        await repository.DeleteResourceAsync("c", "n");
+        await repository.DeleteResourceAsync("c", "n", "third");
 
         // Assert
         Assert.Equal("second", (await repository.GetResourceInfoAsync("c", "n"))!.VersionId);
@@ -794,5 +794,25 @@ public class ResourceInMemoryRepositoryTests
         // Assert
         await Assert.ThrowsAsync<ResourceContentLengthMismatchException>(act);
         Assert.Null(await repository.GetResourceInfoAsync("c", "n"));
+    }
+
+    [Fact]
+    public async Task DeleteResourceAsync_ShouldDeleteEveryVersion_WhenNoVersionIsGiven()
+    {
+        // Arrange
+        var repository = new ResourceInMemoryRepository();
+        await repository.AddResourceContainerAsync(new ResourceContainerInfo { Name = "c" });
+        await repository.AddResourceAsync("c", new ResourceInfo { ContainerName = "c", Name = "n", VersionId = "first" }, new MemoryStream());
+        await repository.AddResourceAsync("c", new ResourceInfo { ContainerName = "c", Name = "n", VersionId = "second" }, new MemoryStream());
+        await repository.AddResourceAsync("c", new ResourceInfo { ContainerName = "c", Name = "other", VersionId = "kept" }, new MemoryStream());
+
+        // Act
+        bool deleted = await repository.DeleteResourceAsync("c", "n");
+
+        // Assert
+        Assert.True(deleted);
+        Assert.Empty(await repository.GetResourceVersionsAsync("c", "n"));
+        Assert.Null(await repository.GetResourceInfoAsync("c", "n"));
+        Assert.Equal("other", Assert.Single(await repository.GetAllResourceInfoAsync("c")).Name);
     }
 }

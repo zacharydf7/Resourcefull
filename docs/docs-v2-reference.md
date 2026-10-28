@@ -154,6 +154,9 @@ informational only.
 - **Enable versioning:** call `UseVersioning`.
 - **MaxVersions:** limits how many versions are kept per resource. Older versions are pruned
   automatically when the limit is exceeded.
+- **Deleting:** `DeleteResourceIfExistsAsync(name)` deletes the resource with its whole history; pass a
+  `versionId` to delete just that version. Earlier releases deleted only the current version here; to remove
+  just the latest upload, pass its `versionId`.
 - **`ResourceInfo.IsLatest`:** every returned `ResourceInfo` carries an `IsLatest` flag. When you list
   versions with `GetResourceVersionsAsync`, exactly one entry has `IsLatest = true` — the current
   version — so you no longer need positional tricks to find it.
@@ -225,8 +228,8 @@ ResourceInfo info = await container.UploadAsync("report.pdf", stream, null, cts.
   the token no longer applies, and pruning older versions (beyond `MaxVersions`, or the overwritten version
   when versioning is off) runs to completion. If pruning fails, the upload still returns the stored version,
   and the older versions stay until a later overwriting or versioned upload of the name prunes them. Until
-  then they are ordinary stored versions: with versioning off, deleting the name makes the overwritten
-  version current again.
+  then they are ordinary stored versions: they appear in `GetResourceVersionsAsync` and can be read by
+  version ID, and deleting the name removes them with the rest of its history.
 - **`DownloadStreamingAsync`** takes a token for locating the resource. To cancel the download itself,
   pass a token to the returned stream's `ReadAsync` or `CopyToAsync`; `DownloadContentAsync` does this
   for you.
@@ -459,14 +462,17 @@ IEnumerable<ResourceInfo> history = versions.Where(v => !v.IsLatest); // older v
 
 #### DeleteResourceIfExistsAsync
 
-Deletes a resource (or a specific version) if it exists.
+Deletes a resource and all its versions, or one version of it, if it exists.
 
 - `resourceName: string`
-- `versionId: string?` (optional)
-- **Returns** `Task<bool>` — `true` if a resource was deleted.
+- `versionId: string?` (optional) — without it, the resource and every version of it are deleted. With it,
+  only that version is deleted; if it was the current version, the most recently stored remaining version
+  becomes current.
+- **Returns** `Task<bool>` — `true` if anything was deleted.
 
 ```csharp
-bool wasDeleted = await container.DeleteResourceIfExistsAsync("my-resource");
+bool wasDeleted = await container.DeleteResourceIfExistsAsync("my-resource");            // all versions
+bool versionDeleted = await container.DeleteResourceIfExistsAsync("my-resource", versionId); // one version
 ```
 
 #### ExistsAsync

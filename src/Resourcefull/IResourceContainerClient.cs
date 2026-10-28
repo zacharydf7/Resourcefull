@@ -142,11 +142,14 @@ public interface IResourceContainerClient : IDisposable
     public Task<IReadOnlyList<ResourceInfo>> GetResourceVersionsAsync(string resourceName, CancellationToken cancellationToken);
 
     /// <summary>
-    /// Deletes a resource (or a specific version) if it exists.
+    /// Deletes a resource and all its versions, or one version of it, if it exists.
     /// </summary>
     /// <param name="resourceName">The name of the resource to delete.</param>
-    /// <param name="versionId">The version to delete; the current version when null.</param>
-    /// <returns><see langword="true"/> if a resource was deleted; otherwise <see langword="false"/>.</returns>
+    /// <param name="versionId">
+    /// The one version to delete; if it is the current version, the most recently stored remaining version becomes
+    /// current. When null, the resource and every version of it are deleted.
+    /// </param>
+    /// <returns><see langword="true"/> if anything was deleted; otherwise <see langword="false"/>.</returns>
     /// <exception cref="ArgumentException"><paramref name="resourceName"/> is null, empty, longer than 256 characters, or starts or ends with whitespace (<see cref="ArgumentNullException"/> when null).</exception>
     public Task<bool> DeleteResourceIfExistsAsync(string resourceName, string? versionId = null);
 
