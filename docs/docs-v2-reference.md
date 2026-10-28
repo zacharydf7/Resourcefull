@@ -59,7 +59,9 @@ Attempting to configure more than one results in an `InvalidOperationException`.
 
 ### In-Memory Provider
 
-Ideal for testing and local development; uses in-memory data structures to simulate data access.
+Ideal for testing and local development; uses in-memory data structures to simulate data access. It keeps the
+SQL Server provider's behavior where tests could notice the difference: for example, its download streams can't
+seek either.
 
 ```csharp
 builder.Services.AddResourcefull(o =>
@@ -134,6 +136,10 @@ The XML docs on each member state its contract. In short, a provider must:
   create-only write to an existing name or a duplicate container (`ResourceConflictException`).
 - **Measure what it stores:** read the content through a `HashingStream`, store the measured length, and return
   `HashingStream.Complete(declaredLength)`, which also rejects a wrong declared length.
+- **Return content as a read-only, forward-only stream**, like the built-in providers: `CanSeek` and `CanWrite`
+  false, `Length` the content's full length, `Position` the bytes read so far, and `NotSupportedException` for
+  seeking, setting `Position`, writing and `SetLength`.
+- **Store container metadata and URI**, and hand back copies so callers can't change what is stored.
 - **Honor cancellation:** a cancelled operation throws `OperationCanceledException` and leaves nothing half-done.
 - **Be safe to call concurrently** for the lifetime it registers with.
 
@@ -433,7 +439,9 @@ Downloads a resource as a stream. Prefer this for large resources to avoid buffe
 - `resourceName: string`
 - `versionId: string?` (optional; current version when null)
 - **Returns** `Task<ResourceDownloadResult?>` — `null` if not found. When non-null, `Stream` is
-  guaranteed to be present.
+  guaranteed to be present. The stream is read-only and forward-only: `Length` and `Position` report the
+  content's length and the bytes read so far, but it can't seek, so copy it into a `MemoryStream` first if you
+  need to rewind.
 
 ```csharp
 ResourceDownloadResult? result = await container.DownloadStreamingAsync("my-resource");

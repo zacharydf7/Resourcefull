@@ -4,8 +4,9 @@ namespace Resourcefull.SqlServer;
 
 internal class ResourceStream(List<ResourceChunkModel> fileChunks) : Stream
 {
-    private Queue<ResourceChunkModel> _chunks = new(fileChunks.OrderBy(c => c.Index));
-    private int _currentChunkIndex = 0;
+    private readonly Queue<ResourceChunkModel> _chunks = new(fileChunks.OrderBy(c => c.Index));
+    private readonly long _length = fileChunks.Sum(c => (long)c.Data.Length);
+    private long _position = 0;
     private byte[]? _currentChunkData;
     private int _currentChunkPosition = 0;
 
@@ -26,6 +27,7 @@ internal class ResourceStream(List<ResourceChunkModel> fileChunks) : Stream
         Array.Copy(_currentChunkData, _currentChunkPosition, buffer, offset, bytesToCopy);
 
         _currentChunkPosition += bytesToCopy;
+        _position += bytesToCopy;
 
         return await Task.FromResult(bytesToCopy);
     }
@@ -36,16 +38,11 @@ internal class ResourceStream(List<ResourceChunkModel> fileChunks) : Stream
 
     public override bool CanWrite => false;
 
-    public override long Length => _chunks?.Sum(chunk => chunk.Data.Length) ?? 0;
+    public override long Length => _length;
 
     public override long Position
     {
-        get
-        {
-            if (_chunks == null) return 0;
-
-            return _chunks.Take(_currentChunkIndex).Sum(chunk => chunk.Data.Length);
-        }
+        get => _position;
         set
         {
             throw new NotSupportedException();
@@ -64,16 +61,16 @@ internal class ResourceStream(List<ResourceChunkModel> fileChunks) : Stream
 
     public override long Seek(long offset, SeekOrigin origin)
     {
-        throw new NotImplementedException();
+        throw new NotSupportedException();
     }
 
     public override void SetLength(long value)
     {
-        throw new NotImplementedException();
+        throw new NotSupportedException();
     }
 
     public override void Write(byte[] buffer, int offset, int count)
     {
-        throw new NotImplementedException();
+        throw new NotSupportedException();
     }
 }

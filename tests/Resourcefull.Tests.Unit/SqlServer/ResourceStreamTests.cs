@@ -79,15 +79,31 @@ public class ResourceStreamTests
     }
 
     [Fact]
-    public void ResourceStream_ShouldThrowNotImplemented_WhenSeekWriteOrSetLengthIsCalled()
+    public void ResourceStream_ShouldThrowNotSupported_WhenSeekWriteSetLengthOrPositionIsCalled()
     {
         // Arrange & Act
         var stream = new ResourceStream([Chunk(1, "x")]);
 
         // Assert
-        Assert.Throws<NotImplementedException>(() => stream.Seek(0, SeekOrigin.Begin));
-        Assert.Throws<NotImplementedException>(() => stream.Write(new byte[1], 0, 1));
-        Assert.Throws<NotImplementedException>(() => stream.SetLength(1));
+        Assert.Throws<NotSupportedException>(() => stream.Seek(0, SeekOrigin.Begin));
+        Assert.Throws<NotSupportedException>(() => stream.Write(new byte[1], 0, 1));
+        Assert.Throws<NotSupportedException>(() => stream.SetLength(1));
+        Assert.Throws<NotSupportedException>(() => stream.Position = 0);
+    }
+
+    [Fact]
+    public void ResourceStream_ShouldReportTheTotalLengthAndTheBytesReadSoFar_WhenReadPartWay()
+    {
+        // Arrange
+        var stream = new ResourceStream([Chunk(1, "aaa"), Chunk(2, "bbb")]);
+
+        // Act
+        int read = stream.Read(new byte[4], 0, 4) + stream.Read(new byte[1], 0, 1);
+
+        // Assert
+        Assert.Equal(4, read);
+        Assert.Equal(6, stream.Length);
+        Assert.Equal(4, stream.Position);
     }
 
     [Fact]

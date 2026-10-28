@@ -74,7 +74,7 @@ internal class ResourceInMemoryRepository : IResourceRepository
 
     public Task<Stream?> GetResourceStreamAsync(string resourceContainerName, string resourceName, string? versionId = null, CancellationToken cancellationToken = default) =>
         UnderLockAsync<Stream?>(() => Resolve(VersionsOf(resourceContainerName, resourceName), versionId) is { } resource
-            ? new MemoryStream(resource.Content, writable: false)
+            ? new InMemoryResourceStream(resource.Content)
             : null, cancellationToken);
 
     public Task<bool> DeleteResourceAsync(string resourceContainerName, string resourceName, string? versionId = null, CancellationToken cancellationToken = default) =>
@@ -99,18 +99,23 @@ internal class ResourceInMemoryRepository : IResourceRepository
     public Task AddResourceContainerAsync(ResourceContainerInfo resourceContainerInfo, CancellationToken cancellationToken = default) =>
         UnderLockAsync(() =>
         {
-            if (!_containers.TryAdd(resourceContainerInfo.Name, new InMemoryResourceContainer { Name = resourceContainerInfo.Name }))
+            var container = new InMemoryResourceContainer
+            {
+                Name = resourceContainerInfo.Name,
+                Uri = resourceContainerInfo.Uri,
+                Metadata = new Dictionary<string, string>(resourceContainerInfo.Metadata)
+            };
+            if (!_containers.TryAdd(resourceContainerInfo.Name, container))
                 throw new ResourceConflictException($"Resource Container with the name {resourceContainerInfo.Name} already exists.");
             return true;
         }, cancellationToken);
 
     public Task<List<ResourceContainerInfo>> GetAllResourceContainerInfoAsync(CancellationToken cancellationToken = default) =>
-        UnderLockAsync<List<ResourceContainerInfo>>(() => [.. _containers.Values.Select(c => new ResourceContainerInfo { Name = c.Name })],
-            cancellationToken);
+        UnderLockAsync<List<ResourceContainerInfo>>(() => [.. _containers.Values.Select(ToContainerInfo)], cancellationToken);
 
     public Task<ResourceContainerInfo?> GetResourceContainerInfoAsync(string resourceContainerName, CancellationToken cancellationToken = default) =>
         UnderLockAsync(() => _containers.GetValueOrDefault(resourceContainerName) is { } container
-            ? new ResourceContainerInfo { Name = container.Name }
+            ? ToContainerInfo(container)
             : null, cancellationToken);
 
     public Task<bool> DeleteResourceContainerAsync(string resourceContainerName, CancellationToken cancellationToken = default) =>
@@ -135,6 +140,13 @@ internal class ResourceInMemoryRepository : IResourceRepository
     private static InMemoryResource? Resolve(List<InMemoryResource> versions, string? versionId) => versionId == null
         ? versions.MaxBy(r => r.Sequence)
         : versions.FirstOrDefault(r => r.ResourceInfo.VersionId == versionId);
+
+    private static ResourceContainerInfo ToContainerInfo(InMemoryResourceContainer container) => new()
+    {
+        Name = container.Name,
+        Uri = container.Uri,
+        Metadata = new Dictionary<string, string>(container.Metadata)
+    };
 
     private static ResourceInfo ToResourceInfo(InMemoryResource resource, bool isLatest) => new()
     {

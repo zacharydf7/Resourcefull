@@ -74,7 +74,9 @@ public interface IResourceRepository
 
     /// <summary>
     /// Opens the content of one version of a resource, or of the current version when <paramref name="versionId"/>
-    /// is null. The caller owns and disposes the returned stream.
+    /// is null, as a read-only, forward-only stream: <see cref="Stream.Length"/> is the content's full length,
+    /// <see cref="Stream.Position"/> the bytes read so far, and seeking, setting the position, writing and
+    /// <see cref="Stream.SetLength"/> throw <see cref="NotSupportedException"/>. The caller owns and disposes it.
     /// </summary>
     /// <returns>The content, or <see langword="null"/> when the version does not exist.</returns>
     Task<Stream?> GetResourceStreamAsync(string resourceContainerName, string resourceName, string? versionId = null, CancellationToken cancellationToken = default);
@@ -90,18 +92,20 @@ public interface IResourceRepository
     // Resource Containers
 
     /// <summary>
-    /// Adds a container. Like <see cref="AddResourceAsync"/>, a duplicate is detected by the write itself.
+    /// Adds a container, storing its <see cref="ResourceContainerInfo.Uri"/> and a copy of its
+    /// <see cref="ResourceContainerInfo.Metadata"/>. Like <see cref="AddResourceAsync"/>, a duplicate is detected by
+    /// the write itself.
     /// </summary>
     /// <exception cref="ResourceConflictException">A container with the same name already exists.</exception>
     Task AddResourceContainerAsync(ResourceContainerInfo resourceContainerInfo, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Lists every container.
+    /// Lists every container, each with its stored URI and its own copy of the stored metadata.
     /// </summary>
     Task<List<ResourceContainerInfo>> GetAllResourceContainerInfoAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Gets a container.
+    /// Gets a container, with its stored URI and its own copy of the stored metadata.
     /// </summary>
     /// <returns>The container, or <see langword="null"/> when it does not exist.</returns>
     Task<ResourceContainerInfo?> GetResourceContainerInfoAsync(string resourceContainerName, CancellationToken cancellationToken = default);

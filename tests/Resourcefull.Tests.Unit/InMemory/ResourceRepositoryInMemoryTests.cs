@@ -583,6 +583,51 @@ public class ResourceInMemoryRepositoryTests
     }
 
     [Fact]
+    public async Task GetResourceContainerInfoAsync_ShouldReturnACopyOfTheStoredMetadataAndUri_WhenTheContainerWasAddedWithThem()
+    {
+        // Arrange
+        var repository = new ResourceInMemoryRepository();
+        var metadata = new Dictionary<string, string> { ["key"] = "original" };
+        await repository.AddResourceContainerAsync(new ResourceContainerInfo { Name = "c", Uri = "https://example.test/c", Metadata = metadata });
+        metadata["key"] = "changed by the caller";
+
+        // Act
+        ResourceContainerInfo? first = await repository.GetResourceContainerInfoAsync("c");
+        first!.Metadata["key"] = "changed by a reader";
+        ResourceContainerInfo listed = Assert.Single(await repository.GetAllResourceContainerInfoAsync());
+
+        // Assert
+        Assert.Equal("https://example.test/c", listed.Uri);
+        Assert.Equal("original", listed.Metadata["key"]);
+        Assert.Equal("original", (await repository.GetResourceContainerInfoAsync("c"))!.Metadata["key"]);
+    }
+
+    [Fact]
+    public async Task GetResourceStreamAsync_ShouldReturnAReadOnlyForwardOnlyStream_WhenTheResourceExists()
+    {
+        // Arrange
+        var repository = new ResourceInMemoryRepository();
+        await repository.AddResourceContainerAsync(new ResourceContainerInfo { Name = "c" });
+        await repository.AddResourceAsync("c", new ResourceInfo { ContainerName = "c", Name = "n", VersionId = "v1" }, new MemoryStream([1, 2, 3, 4, 5, 6]));
+
+        // Act
+        await using Stream stream = (await repository.GetResourceStreamAsync("c", "n"))!;
+        int read = await stream.ReadAsync(new byte[4]);
+
+        // Assert
+        Assert.IsNotAssignableFrom<MemoryStream>(stream);
+        Assert.True(stream.CanRead);
+        Assert.False(stream.CanWrite);
+        Assert.False(stream.CanSeek);
+        Assert.Equal(6, stream.Length);
+        Assert.Equal(read, stream.Position);
+        Assert.Throws<NotSupportedException>(() => stream.Seek(0, SeekOrigin.Begin));
+        Assert.Throws<NotSupportedException>(() => stream.Position = 0);
+        Assert.Throws<NotSupportedException>(() => stream.Write(new byte[1], 0, 1));
+        Assert.Throws<NotSupportedException>(() => stream.SetLength(1));
+    }
+
+    [Fact]
     public async Task AddResourceAsync_ShouldThrowOperationCanceledAndStoreNothing_WhenTokenIsAlreadyCancelled()
     {
         // Arrange

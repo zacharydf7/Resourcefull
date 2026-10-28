@@ -3,6 +3,8 @@
 internal class InMemoryResourceContainer
 {
     public required string Name { get; init; }
+    public string? Uri { get; init; }
+    public required IDictionary<string, string> Metadata { get; init; }
 
     /// <summary>Every stored version of each resource, keyed by resource name; a name with no versions has no entry.</summary>
     public Dictionary<string, List<InMemoryResource>> Resources { get; } = new(StringComparer.Ordinal);
