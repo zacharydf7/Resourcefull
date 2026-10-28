@@ -13,8 +13,8 @@ public class ResourceUploadOptions
 
     /// <summary>
     /// Store the upload only if no resource with this name exists yet, whether or not versioning is enabled. The
-    /// check is part of the write; on SQL Server, of several concurrent create-only uploads of one name exactly one
-    /// succeeds and the rest throw <see cref="ResourceConflictException"/>. Takes precedence over <see cref="Overwrite"/>.
+    /// check is part of the write, so of several concurrent create-only uploads of one name exactly one succeeds and
+    /// the rest throw <see cref="ResourceConflictException"/>. Takes precedence over <see cref="Overwrite"/>.
     /// </summary>
     public bool CreateOnly { get; set; }
 

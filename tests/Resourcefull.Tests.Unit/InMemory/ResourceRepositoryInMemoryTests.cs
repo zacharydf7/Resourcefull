@@ -702,6 +702,23 @@ public class ResourceInMemoryRepositoryTests
     }
 
     [Fact]
+    public async Task DeleteResourceAsync_ShouldLeaveNoTraceOfTheName_WhenGivenTheIdOfItsOnlyVersion()
+    {
+        // Arrange
+        var repository = new ResourceInMemoryRepository();
+        await repository.AddResourceContainerAsync(new ResourceContainerInfo { Name = "c" });
+        await repository.AddResourceAsync("c", new ResourceInfo { ContainerName = "c", Name = "n", VersionId = "v1" }, new MemoryStream());
+
+        // Act
+        bool deleted = await repository.DeleteResourceAsync("c", "n", "v1");
+
+        // Assert
+        Assert.True(deleted);
+        Assert.Empty(await repository.GetAllResourceInfoAsync("c"));
+        await repository.AddResourceAsync("c", new ResourceInfo { ContainerName = "c", Name = "n", VersionId = "v2" }, new MemoryStream(), createOnly: true);
+    }
+
+    [Fact]
     public async Task GetAllResourceInfoAsync_ShouldReturnTheLastStoredVersion_WhenItsClockIsBehind()
     {
         // Arrange: the second writer's clock is an hour behind the first's.
@@ -814,5 +831,99 @@ public class ResourceInMemoryRepositoryTests
         Assert.Empty(await repository.GetResourceVersionsAsync("c", "n"));
         Assert.Null(await repository.GetResourceInfoAsync("c", "n"));
         Assert.Equal("other", Assert.Single(await repository.GetAllResourceInfoAsync("c")).Name);
+    }
+
+    /// <summary>Runs <paramref name="action"/> just before the first read of <paramref name="content"/>.</summary>
+    private sealed class BeforeFirstReadStream(byte[] content, Func<Task> action) : MemoryStream(content)
+    {
+        private bool _done;
+
+        public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            if (!_done)
+            {
+                _done = true;
+                await action();
+            }
+            return await base.ReadAsync(buffer, cancellationToken);
+        }
+
+        public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+            => ReadAsync(buffer.AsMemory(offset, count), cancellationToken).AsTask();
+    }
+
+    [Fact]
+    public async Task GetResourceStreamAsync_ShouldGiveEveryReaderTheWholeContent_WhenReadInParallel()
+    {
+        // Arrange
+        byte[] payload = RandomNumberGenerator.GetBytes(100_000);
+        var repository = new ResourceInMemoryRepository();
+        await repository.AddResourceContainerAsync(new ResourceContainerInfo { Name = "c" });
+        await repository.AddResourceAsync("c", new ResourceInfo { ContainerName = "c", Name = "n", VersionId = "v1" }, new MemoryStream(payload));
+
+        // Act
+        byte[][] reads = await Task.WhenAll(Enumerable.Range(0, 16).Select(_ => Task.Run(async () =>
+        {
+            await using Stream stream = (await repository.GetResourceStreamAsync("c", "n"))!;
+            using var copy = new MemoryStream();
+            await stream.CopyToAsync(copy);
+            return copy.ToArray();
+        })));
+
+        // Assert
+        Assert.All(reads, read => Assert.Equal(payload, read));
+    }
+
+    [Fact]
+    public async Task AddResourceAsync_ShouldStoreEveryResource_WhenUploadsAndListingsRunInParallel()
+    {
+        // Arrange
+        var repository = new ResourceInMemoryRepository();
+        await repository.AddResourceContainerAsync(new ResourceContainerInfo { Name = "c" });
+
+        // Act
+        Task[] work = [.. Enumerable.Range(0, 64).Select(i => Task.Run(async () =>
+        {
+            await repository.AddResourceAsync("c", new ResourceInfo { ContainerName = "c", Name = $"n{i}", VersionId = "v1" }, new MemoryStream([1]));
+            await repository.GetAllResourceInfoAsync("c");
+        }))];
+        await Task.WhenAll(work);
+
+        // Assert
+        Assert.Equal(64, (await repository.GetAllResourceInfoAsync("c")).Count);
+    }
+
+    [Fact]
+    public async Task AddResourceAsync_ShouldLetExactlyOneSucceed_WhenConcurrentCreateOnlyWritesTargetOneName()
+    {
+        // Arrange
+        var repository = new ResourceInMemoryRepository();
+        await repository.AddResourceContainerAsync(new ResourceContainerInfo { Name = "c" });
+
+        // Act
+        Exception?[] outcomes = await Task.WhenAll(Enumerable.Range(0, 16).Select(i => Task.Run(() => Record.ExceptionAsync(() =>
+            repository.AddResourceAsync("c", new ResourceInfo { ContainerName = "c", Name = "n", VersionId = $"v{i}" }, new MemoryStream([1]), createOnly: true)))));
+
+        // Assert
+        Assert.Single(outcomes, o => o is null);
+        Assert.All(outcomes.Where(o => o is not null), o => Assert.IsType<ResourceConflictException>(o));
+        Assert.Single(await repository.GetResourceVersionsAsync("c", "n"));
+    }
+
+    [Fact]
+    public async Task AddResourceAsync_ShouldThrowAndStoreNothing_WhenTheContainerIsDeletedWhileTheContentIsRead()
+    {
+        // Arrange
+        var repository = new ResourceInMemoryRepository();
+        await repository.AddResourceContainerAsync(new ResourceContainerInfo { Name = "c" });
+        var content = new BeforeFirstReadStream([1, 2, 3],() => repository.DeleteResourceContainerAsync("c"));
+
+        // Act
+        Task act() => repository.AddResourceAsync("c", new ResourceInfo { ContainerName = "c", Name = "n", VersionId = "v1" }, content);
+
+        // Assert
+        await Assert.ThrowsAsync<ResourceContainerNotFoundException>(act);
+        await repository.AddResourceContainerAsync(new ResourceContainerInfo { Name = "c" });
+        Assert.Null(await repository.GetResourceInfoAsync("c", "n"));
     }
 }

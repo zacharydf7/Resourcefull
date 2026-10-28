@@ -59,8 +59,7 @@ Attempting to configure more than one results in an `InvalidOperationException`.
 
 ### In-Memory Provider
 
-Ideal for testing and local development; uses in-memory data structures to simulate data access. It is not
-yet safe for concurrent use, so call it from one caller at a time.
+Ideal for testing and local development; uses in-memory data structures to simulate data access.
 
 ```csharp
 builder.Services.AddResourcefull(o =>
@@ -386,11 +385,11 @@ Uploads a resource. Two overloads accept a `Stream` or in-memory `BinaryData`.
   is disabled and `Overwrite` is false), `ResourceContentLengthMismatchException` (the declared
   `Headers.ContentLength` differs from the bytes supplied; nothing is stored).
 
-Uploads of the same name never interleave: on SQL Server each one holds a lock on the name until it commits,
-so concurrent uploads leave exactly one current version, and a successful prune never leaves more than
-`MaxVersions` (see [Cancellation](#cancellation) for a prune that fails).
-The create-only check is part of the write, so on SQL Server, of several concurrent create-only uploads of one
-name exactly one succeeds and the rest throw `ResourceConflictException`.
+Uploads of the same name never interleave: each provider stores them one at a time (SQL Server holds a lock on
+the name until each commits), so concurrent uploads leave exactly one current version, and a successful prune
+never leaves more than `MaxVersions` (see [Cancellation](#cancellation) for a prune that fails).
+The create-only check is part of the write, so of several concurrent create-only uploads of one name exactly one
+succeeds and the rest throw `ResourceConflictException`.
 
 ```csharp
 var options = new ResourceUploadOptions
