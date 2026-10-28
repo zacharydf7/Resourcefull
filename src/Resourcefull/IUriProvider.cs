@@ -1,6 +1,5 @@
 ﻿using System.Runtime.CompilerServices;
 
-[assembly: InternalsVisibleTo("Resourcefull.Http")]
 [assembly: InternalsVisibleTo("Resourcefull.Tests.Unit")]
 
 namespace Resourcefull;
