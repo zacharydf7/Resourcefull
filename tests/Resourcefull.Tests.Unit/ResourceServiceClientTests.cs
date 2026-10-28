@@ -8,6 +8,49 @@ public class ResourceServiceClientTests
     private static ResourceServiceClient NewService(IResourceRepository repository, IUriProvider? uriProvider = null)
         => new(repository, Options.Create(new ResourcefullOptions()), uriProvider);
 
+    public static TheoryData<string?> InvalidContainerNames() =>
+    [
+        null,
+        "",
+        "   ",
+        " leading",
+        "trailing ",
+        new string('a', ResourceNames.MaxContainerNameLength + 1)
+    ];
+
+    [Theory]
+    [MemberData(nameof(InvalidContainerNames))]
+    public async Task EveryContainerNameEntryPoint_ShouldThrowArgumentException_WhenGivenAnInvalidName(string? name)
+    {
+        // Arrange
+        var repository = new Mock<IResourceRepository>(MockBehavior.Strict);
+        var service = NewService(repository.Object);
+
+        // Act & Assert
+        Assert.ThrowsAny<ArgumentException>(() => service.GetResourceContainerClient(name!));
+        await Assert.ThrowsAnyAsync<ArgumentException>(() => service.CreateResourceContainerAsync(name!));
+        await Assert.ThrowsAnyAsync<ArgumentException>(() => service.CreateResourceContainerIfNotExistsAsync(name!));
+        await Assert.ThrowsAnyAsync<ArgumentException>(() => service.GetResourceContainerInfoAsync(name!));
+        await Assert.ThrowsAnyAsync<ArgumentException>(() => service.ContainerExistsAsync(name!));
+        await Assert.ThrowsAnyAsync<ArgumentException>(() => service.DeleteResourceContainerIfExistsAsync(name!));
+        repository.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task CreateResourceContainerAsync_ShouldCreateContainer_WhenGivenANameAtTheMaximumLength()
+    {
+        // Arrange
+        var name = new string('a', ResourceNames.MaxContainerNameLength);
+        var repository = new Mock<IResourceRepository>();
+        var service = NewService(repository.Object);
+
+        // Act
+        await service.CreateResourceContainerAsync(name);
+
+        // Assert
+        repository.Verify(r => r.AddResourceContainerAsync(It.Is<ResourceContainerInfo>(c => c.Name == name), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
     [Fact]
     public void GetResourceContainerClient_ShouldNotTouchTheRepository_WhenClientIsCreated()
     {
@@ -28,7 +71,7 @@ public class ResourceServiceClientTests
     {
         // Arrange
         var repository = new Mock<IResourceRepository>();
-        repository.Setup(r => r.GetAllResourceContainerInfoAsync(It.IsAny<CancellationToken>())).ReturnsAsync([]);
+        repository.Setup(r => r.GetResourceContainerInfoAsync("newContainer", It.IsAny<CancellationToken>())).ReturnsAsync((ResourceContainerInfo?)null);
         var service = NewService(repository.Object);
 
         // Act
@@ -44,8 +87,8 @@ public class ResourceServiceClientTests
     {
         // Arrange & Act
         var repository = new Mock<IResourceRepository>();
-        repository.Setup(r => r.GetAllResourceContainerInfoAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync([new() { Name = "existing" }]);
+        repository.Setup(r => r.GetResourceContainerInfoAsync("existing", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ResourceContainerInfo { Name = "existing" });
         var service = NewService(repository.Object);
 
         // Assert
@@ -58,8 +101,8 @@ public class ResourceServiceClientTests
     {
         // Arrange
         var repository = new Mock<IResourceRepository>();
-        repository.Setup(r => r.GetAllResourceContainerInfoAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync([new() { Name = "existing" }]);
+        repository.Setup(r => r.GetResourceContainerInfoAsync("existing", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ResourceContainerInfo { Name = "existing" });
         var service = NewService(repository.Object);
 
         // Act
@@ -75,7 +118,7 @@ public class ResourceServiceClientTests
     {
         // Arrange
         var repository = new Mock<IResourceRepository>();
-        repository.Setup(r => r.GetAllResourceContainerInfoAsync(It.IsAny<CancellationToken>())).ReturnsAsync([]);
+        repository.Setup(r => r.GetResourceContainerInfoAsync("fresh", It.IsAny<CancellationToken>())).ReturnsAsync((ResourceContainerInfo?)null);
         var service = NewService(repository.Object);
 
         // Act
@@ -93,8 +136,8 @@ public class ResourceServiceClientTests
         var gate = new object();
         var added = new List<ResourceContainerInfo>();
         var repository = new Mock<IResourceRepository>();
-        repository.Setup(r => r.GetAllResourceContainerInfoAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(() => { lock (gate) { return added.ToList(); } });
+        repository.Setup(r => r.GetResourceContainerInfoAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string name, CancellationToken _) => { lock (gate) { return added.FirstOrDefault(c => c.Name == name); } });
         repository.Setup(r => r.AddResourceContainerAsync(It.IsAny<ResourceContainerInfo>(), It.IsAny<CancellationToken>()))
             .Callback<ResourceContainerInfo, CancellationToken>((c, _) => { lock (gate) { added.Add(c); } })
             .Returns(Task.CompletedTask);
@@ -117,10 +160,10 @@ public class ResourceServiceClientTests
         // The container does not exist on the pre-create checks, the add fails (another instance won
         // the race), and a re-check then shows it exists — the method should swallow and return.
         var repository = new Mock<IResourceRepository>();
-        repository.SetupSequence(r => r.GetAllResourceContainerInfoAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync([])                                  // fast-path check
-            .ReturnsAsync([])                                  // re-check under the lock
-            .ReturnsAsync([new() { Name = "racy" }]);          // re-check after the failed add
+        repository.SetupSequence(r => r.GetResourceContainerInfoAsync("racy", It.IsAny<CancellationToken>()))
+            .ReturnsAsync((ResourceContainerInfo?)null)                // fast-path check
+            .ReturnsAsync((ResourceContainerInfo?)null)                // re-check under the lock
+            .ReturnsAsync(new ResourceContainerInfo { Name = "racy" }); // re-check after the failed add
         repository.Setup(r => r.AddResourceContainerAsync(It.IsAny<ResourceContainerInfo>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new ResourceConflictException("already exists"));
         var service = NewService(repository.Object);
@@ -137,7 +180,7 @@ public class ResourceServiceClientTests
     {
         // Arrange & Act
         var repository = new Mock<IResourceRepository>();
-        repository.Setup(r => r.GetAllResourceContainerInfoAsync(It.IsAny<CancellationToken>())).ReturnsAsync([]);
+        repository.Setup(r => r.GetResourceContainerInfoAsync("boom", It.IsAny<CancellationToken>())).ReturnsAsync((ResourceContainerInfo?)null);
         repository.Setup(r => r.AddResourceContainerAsync(It.IsAny<ResourceContainerInfo>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("storage down"));
         var service = NewService(repository.Object);
@@ -152,7 +195,7 @@ public class ResourceServiceClientTests
     {
         // Arrange & Act
         var repository = new Mock<IResourceRepository>();
-        repository.Setup(r => r.GetAllResourceContainerInfoAsync(It.IsAny<CancellationToken>())).ReturnsAsync([]);
+        repository.Setup(r => r.GetResourceContainerInfoAsync("cancelled", It.IsAny<CancellationToken>())).ReturnsAsync((ResourceContainerInfo?)null);
         repository.Setup(r => r.AddResourceContainerAsync(It.IsAny<ResourceContainerInfo>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new OperationCanceledException());
         var service = NewService(repository.Object);
@@ -178,29 +221,11 @@ public class ResourceServiceClientTests
     }
 
     [Fact]
-    public async Task ContainerExistsAsync_ShouldReturnFalse_WhenOnlyTheCaseDiffers()
-    {
-        // Arrange
-        var repository = new Mock<IResourceRepository>();
-        repository.Setup(r => r.GetAllResourceContainerInfoAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync([new() { Name = "Container" }]);
-        var service = NewService(repository.Object);
-
-        // Act
-        bool exactCase = await service.ContainerExistsAsync("Container");
-        bool differentCase = await service.ContainerExistsAsync("container");
-
-        // Assert
-        Assert.True(exactCase);
-        Assert.False(differentCase);
-    }
-
-    [Fact]
     public async Task DeleteResourceContainerIfExistsAsync_ShouldReturnFalse_WhenContainerDoesNotExist()
     {
         // Arrange
         var repository = new Mock<IResourceRepository>();
-        repository.Setup(r => r.GetAllResourceContainerInfoAsync(It.IsAny<CancellationToken>())).ReturnsAsync([]);
+        repository.Setup(r => r.GetResourceContainerInfoAsync("missing", It.IsAny<CancellationToken>())).ReturnsAsync((ResourceContainerInfo?)null);
         var service = NewService(repository.Object);
 
         // Act
@@ -216,8 +241,8 @@ public class ResourceServiceClientTests
     {
         // Arrange
         var repository = new Mock<IResourceRepository>();
-        repository.Setup(r => r.GetAllResourceContainerInfoAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync([new() { Name = "existing" }]);
+        repository.Setup(r => r.GetResourceContainerInfoAsync("existing", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ResourceContainerInfo { Name = "existing" });
         repository.Setup(r => r.DeleteResourceContainerAsync("existing", It.IsAny<CancellationToken>())).ReturnsAsync(true);
         var service = NewService(repository.Object);
 
@@ -233,7 +258,7 @@ public class ResourceServiceClientTests
     {
         // Arrange
         var repository = new Mock<IResourceRepository>();
-        repository.Setup(r => r.GetAllResourceContainerInfoAsync(It.IsAny<CancellationToken>())).ReturnsAsync([]);
+        repository.Setup(r => r.GetResourceContainerInfoAsync("name", It.IsAny<CancellationToken>())).ReturnsAsync((ResourceContainerInfo?)null);
         var service = NewService(repository.Object);
 
         // Act
@@ -249,14 +274,14 @@ public class ResourceServiceClientTests
         // Arrange
         using var cts = new CancellationTokenSource();
         var repository = new Mock<IResourceRepository>();
-        repository.Setup(r => r.GetAllResourceContainerInfoAsync(cts.Token)).ReturnsAsync([]);
+        repository.Setup(r => r.GetResourceContainerInfoAsync("name", cts.Token)).ReturnsAsync((ResourceContainerInfo?)null);
         var service = NewService(repository.Object);
 
         // Act
         await service.CreateResourceContainerAsync("name", null, cts.Token);
 
         // Assert
-        repository.Verify(r => r.GetAllResourceContainerInfoAsync(cts.Token), Times.Once);
+        repository.Verify(r => r.GetResourceContainerInfoAsync("name", cts.Token), Times.Once);
         repository.Verify(r => r.AddResourceContainerAsync(It.IsAny<ResourceContainerInfo>(), cts.Token), Times.Once);
     }
 
@@ -266,7 +291,7 @@ public class ResourceServiceClientTests
         // Arrange
         using var cts = new CancellationTokenSource();
         var repository = new Mock<IResourceRepository>();
-        repository.Setup(r => r.GetAllResourceContainerInfoAsync(cts.Token)).ReturnsAsync([]);
+        repository.Setup(r => r.GetResourceContainerInfoAsync("name", cts.Token)).ReturnsAsync((ResourceContainerInfo?)null);
         var service = NewService(repository.Object);
 
         // Act
@@ -313,14 +338,14 @@ public class ResourceServiceClientTests
         // Arrange
         using var cts = new CancellationTokenSource();
         var repository = new Mock<IResourceRepository>();
-        repository.Setup(r => r.GetAllResourceContainerInfoAsync(cts.Token)).ReturnsAsync([]);
+        repository.Setup(r => r.GetResourceContainerInfoAsync("name", cts.Token)).ReturnsAsync((ResourceContainerInfo?)null);
         var service = NewService(repository.Object);
 
         // Act
         await service.ContainerExistsAsync("name", cts.Token);
 
         // Assert
-        repository.Verify(r => r.GetAllResourceContainerInfoAsync(cts.Token), Times.Once);
+        repository.Verify(r => r.GetResourceContainerInfoAsync("name", cts.Token), Times.Once);
     }
 
     [Fact]
@@ -329,7 +354,7 @@ public class ResourceServiceClientTests
         // Arrange
         using var cts = new CancellationTokenSource();
         var repository = new Mock<IResourceRepository>();
-        repository.Setup(r => r.GetAllResourceContainerInfoAsync(cts.Token)).ReturnsAsync([new() { Name = "name" }]);
+        repository.Setup(r => r.GetResourceContainerInfoAsync("name", cts.Token)).ReturnsAsync(new ResourceContainerInfo { Name = "name" });
         var service = NewService(repository.Object);
 
         // Act

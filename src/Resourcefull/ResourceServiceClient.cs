@@ -12,13 +12,18 @@ internal class ResourceServiceClient(IResourceRepository resourceRepository, IOp
     private static readonly SemaphoreSlim CreateContainerGate = new(1, 1);
 
     public IResourceContainerClient GetResourceContainerClient(string resourceContainerName)
-        => new ResourceContainerClient(resourceRepository, uriProvider, _options, new ResourceContainerInfo { Name = resourceContainerName });
+    {
+        ResourceNames.ThrowIfInvalidContainerName(resourceContainerName);
+        return new ResourceContainerClient(resourceRepository, uriProvider, _options, new ResourceContainerInfo { Name = resourceContainerName });
+    }
 
     public Task<IResourceContainerClient> CreateResourceContainerAsync(string resourceContainerName, IDictionary<string, string>? metadata = null)
         => CreateResourceContainerAsync(resourceContainerName, metadata, CancellationToken.None);
 
     public async Task<IResourceContainerClient> CreateResourceContainerAsync(string resourceContainerName, IDictionary<string, string>? metadata, CancellationToken cancellationToken)
     {
+        ResourceNames.ThrowIfInvalidContainerName(resourceContainerName);
+
         if (await ContainerExistsAsync(resourceContainerName, cancellationToken))
         {
             throw new ResourceConflictException($"Resource Container with the name {resourceContainerName} already exists.");
@@ -32,6 +37,8 @@ internal class ResourceServiceClient(IResourceRepository resourceRepository, IOp
 
     public async Task<IResourceContainerClient> CreateResourceContainerIfNotExistsAsync(string resourceContainerName, IDictionary<string, string>? metadata, CancellationToken cancellationToken)
     {
+        ResourceNames.ThrowIfInvalidContainerName(resourceContainerName);
+
         if (await ContainerExistsAsync(resourceContainerName, cancellationToken))
         {
             return GetResourceContainerClient(resourceContainerName);
@@ -81,7 +88,10 @@ internal class ResourceServiceClient(IResourceRepository resourceRepository, IOp
         => GetResourceContainerInfoAsync(resourceContainerName, CancellationToken.None);
 
     public async Task<ResourceContainerInfo?> GetResourceContainerInfoAsync(string resourceContainerName, CancellationToken cancellationToken)
-        => await resourceRepository.GetResourceContainerInfoAsync(resourceContainerName, cancellationToken);
+    {
+        ResourceNames.ThrowIfInvalidContainerName(resourceContainerName);
+        return await resourceRepository.GetResourceContainerInfoAsync(resourceContainerName, cancellationToken);
+    }
 
     public Task<IReadOnlyList<ResourceContainerInfo>> GetResourceContainersAsync()
         => GetResourceContainersAsync(CancellationToken.None);
@@ -93,16 +103,15 @@ internal class ResourceServiceClient(IResourceRepository resourceRepository, IOp
         => ContainerExistsAsync(resourceContainerName, CancellationToken.None);
 
     public async Task<bool> ContainerExistsAsync(string resourceContainerName, CancellationToken cancellationToken)
-    {
-        List<ResourceContainerInfo> containers = await resourceRepository.GetAllResourceContainerInfoAsync(cancellationToken);
-        return containers.Any(x => x.Name.Equals(resourceContainerName, StringComparison.Ordinal));
-    }
+        => await GetResourceContainerInfoAsync(resourceContainerName, cancellationToken) != null;
 
     public Task<bool> DeleteResourceContainerIfExistsAsync(string resourceContainerName)
         => DeleteResourceContainerIfExistsAsync(resourceContainerName, CancellationToken.None);
 
     public async Task<bool> DeleteResourceContainerIfExistsAsync(string resourceContainerName, CancellationToken cancellationToken)
     {
+        ResourceNames.ThrowIfInvalidContainerName(resourceContainerName);
+
         if (!await ContainerExistsAsync(resourceContainerName, cancellationToken))
         {
             return false;

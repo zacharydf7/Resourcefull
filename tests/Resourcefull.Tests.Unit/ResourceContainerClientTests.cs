@@ -23,6 +23,53 @@ public class ResourceContainerClientTests
         return repository;
     }
 
+    public static TheoryData<string?> InvalidResourceNames() =>
+    [
+        null,
+        "",
+        "   ",
+        " leading",
+        "trailing ",
+        new string('a', ResourceNames.MaxResourceNameLength + 1)
+    ];
+
+    [Theory]
+    [MemberData(nameof(InvalidResourceNames))]
+    public async Task EveryResourceNameEntryPoint_ShouldThrowArgumentException_WhenGivenAnInvalidName(string? name)
+    {
+        // Arrange
+        var repository = new Mock<IResourceRepository>(MockBehavior.Strict);
+        var client = NewClient(repository.Object, options: new ResourcefullOptions { IsVersioningEnabled = true, MaxVersions = 1 });
+
+        // Act & Assert
+        await Assert.ThrowsAnyAsync<ArgumentException>(() => client.UploadAsync(name!, new MemoryStream()));
+        await Assert.ThrowsAnyAsync<ArgumentException>(() => client.UploadAsync(name!, BinaryData.FromString("x")));
+        await Assert.ThrowsAnyAsync<ArgumentException>(() => client.RestoreVersionAsync(name!, "v1"));
+        await Assert.ThrowsAnyAsync<ArgumentException>(() => client.DownloadStreamingAsync(name!));
+        await Assert.ThrowsAnyAsync<ArgumentException>(() => client.DownloadContentAsync(name!));
+        await Assert.ThrowsAnyAsync<ArgumentException>(() => client.GetResourceInfoAsync(name!));
+        await Assert.ThrowsAnyAsync<ArgumentException>(() => client.GetResourceVersionsAsync(name!));
+        await Assert.ThrowsAnyAsync<ArgumentException>(() => client.DeleteResourceIfExistsAsync(name!));
+        await Assert.ThrowsAnyAsync<ArgumentException>(() => client.ExistsAsync(name!));
+        repository.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task UploadAsync_ShouldStoreTheResource_WhenGivenANameAtTheMaximumLength()
+    {
+        // Arrange
+        var name = new string('a', ResourceNames.MaxResourceNameLength);
+        var repository = NewRepository();
+        var client = NewClient(repository.Object);
+
+        // Act
+        await client.UploadAsync(name, new MemoryStream());
+
+        // Assert
+        repository.Verify(r => r.AddResourceAsync(Container, It.Is<ResourceInfo>(i => i.Name == name),
+            It.IsAny<Stream>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
     [Fact]
     public async Task UploadAsync_ShouldReturnResourceInfo_WhenNewResourceIsUploaded()
     {

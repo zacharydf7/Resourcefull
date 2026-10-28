@@ -11,7 +11,9 @@ internal class ResourceContainerConfiguration : IEntityTypeConfiguration<Resourc
         builder.HasKey(rc => rc.Name);
 
         builder.Property(rc => rc.Name)
-            .IsRequired();
+            .IsRequired()
+            .HasMaxLength(ResourceNames.MaxContainerNameLength)
+            .UseCollation(ResourceDbContext.NameCollation);
 
         builder.Property(rc => rc.Metadata)
             .HasColumnType("varchar(MAX)")

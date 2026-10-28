@@ -17,6 +17,7 @@ public interface IResourceServiceClient
     /// Azure's <c>GetBlobContainerClient</c>.
     /// </summary>
     /// <param name="resourceContainerName">The name of the resource container.</param>
+    /// <exception cref="ArgumentException"><paramref name="resourceContainerName"/> is null, empty, longer than 128 characters, or starts or ends with whitespace (<see cref="ArgumentNullException"/> when null).</exception>
     public IResourceContainerClient GetResourceContainerClient(string resourceContainerName);
 
     /// <summary>
@@ -26,6 +27,7 @@ public interface IResourceServiceClient
     /// <param name="metadata">Optional metadata to store with the container.</param>
     /// <returns>A client for the newly created container.</returns>
     /// <exception cref="ResourceConflictException">A container with the same name already exists.</exception>
+    /// <exception cref="ArgumentException"><paramref name="resourceContainerName"/> is null, empty, longer than 128 characters, or starts or ends with whitespace (<see cref="ArgumentNullException"/> when null).</exception>
     public Task<IResourceContainerClient> CreateResourceContainerAsync(string resourceContainerName, IDictionary<string, string>? metadata = null);
 
     /// <inheritdoc cref="CreateResourceContainerAsync(string, IDictionary{string, string}?)"/>
@@ -39,6 +41,7 @@ public interface IResourceServiceClient
     /// <param name="resourceContainerName">The name of the container.</param>
     /// <param name="metadata">Optional metadata applied only when the container is created.</param>
     /// <returns>A client for the container.</returns>
+    /// <exception cref="ArgumentException"><paramref name="resourceContainerName"/> is null, empty, longer than 128 characters, or starts or ends with whitespace (<see cref="ArgumentNullException"/> when null).</exception>
     public Task<IResourceContainerClient> CreateResourceContainerIfNotExistsAsync(string resourceContainerName, IDictionary<string, string>? metadata = null);
 
     /// <inheritdoc cref="CreateResourceContainerIfNotExistsAsync(string, IDictionary{string, string}?)"/>
@@ -51,6 +54,7 @@ public interface IResourceServiceClient
     /// </summary>
     /// <param name="resourceContainerName">The name of the container.</param>
     /// <returns>The <see cref="ResourceContainerInfo"/>, or <see langword="null"/> if the container does not exist.</returns>
+    /// <exception cref="ArgumentException"><paramref name="resourceContainerName"/> is null, empty, longer than 128 characters, or starts or ends with whitespace (<see cref="ArgumentNullException"/> when null).</exception>
     public Task<ResourceContainerInfo?> GetResourceContainerInfoAsync(string resourceContainerName);
 
     /// <inheritdoc cref="GetResourceContainerInfoAsync(string)"/>
@@ -73,6 +77,7 @@ public interface IResourceServiceClient
     /// Checks whether a container exists.
     /// </summary>
     /// <param name="resourceContainerName">The name of the container.</param>
+    /// <exception cref="ArgumentException"><paramref name="resourceContainerName"/> is null, empty, longer than 128 characters, or starts or ends with whitespace (<see cref="ArgumentNullException"/> when null).</exception>
     public Task<bool> ContainerExistsAsync(string resourceContainerName);
 
     /// <inheritdoc cref="ContainerExistsAsync(string)"/>
@@ -85,6 +90,7 @@ public interface IResourceServiceClient
     /// </summary>
     /// <param name="resourceContainerName">The name of the container to delete.</param>
     /// <returns><see langword="true"/> if a container was deleted; otherwise <see langword="false"/>.</returns>
+    /// <exception cref="ArgumentException"><paramref name="resourceContainerName"/> is null, empty, longer than 128 characters, or starts or ends with whitespace (<see cref="ArgumentNullException"/> when null).</exception>
     public Task<bool> DeleteResourceContainerIfExistsAsync(string resourceContainerName);
 
     /// <inheritdoc cref="DeleteResourceContainerIfExistsAsync(string)"/>

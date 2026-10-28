@@ -42,7 +42,9 @@ namespace Resourcefull.SqlServer.Migrations
             modelBuilder.Entity("Resourcefull.SqlServer.Models.ResourceContainerModel", b =>
                 {
                     b.Property<string>("Name")
-                        .HasColumnType("nvarchar(450)");
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
+                        .UseCollation("Latin1_General_100_BIN2");
 
                     b.Property<string>("Metadata")
                         .IsRequired()
@@ -66,7 +68,9 @@ namespace Resourcefull.SqlServer.Migrations
 
                     b.Property<string>("ContainerName")
                         .IsRequired()
-                        .HasColumnType("nvarchar(450)");
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
+                        .UseCollation("Latin1_General_100_BIN2");
 
                     b.Property<long?>("ContentLength")
                         .HasColumnType("bigint");
@@ -86,15 +90,19 @@ namespace Resourcefull.SqlServer.Migrations
 
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasColumnType("nvarchar(450)");
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)")
+                        .UseCollation("Latin1_General_100_BIN2");
 
                     b.Property<string>("Uri")
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("VersionId")
                         .IsRequired()
-                        .HasColumnType("nvarchar(450)")
-                        .HasColumnName("VersionId");
+                        .HasMaxLength(36)
+                        .HasColumnType("nvarchar(36)")
+                        .HasColumnName("VersionId")
+                        .UseCollation("Latin1_General_100_BIN2");
 
                     b.HasKey("Id");
 

@@ -24,8 +24,14 @@ internal class ResourceConfiguration : IEntityTypeConfiguration<ResourceModel>
             .HasFilter("[IsLatest] = 1")
             .HasDatabaseName("IX_Resources_Latest");
 
+        builder.Property(r => r.ContainerName)
+            .HasMaxLength(ResourceNames.MaxContainerNameLength)
+            .UseCollation(ResourceDbContext.NameCollation);
+
         builder.Property(r => r.Name)
-            .IsRequired();
+            .IsRequired()
+            .HasMaxLength(ResourceNames.MaxResourceNameLength)
+            .UseCollation(ResourceDbContext.NameCollation);
 
         builder.Property(r => r.Metadata)
             .HasColumnType("varchar(MAX)")
@@ -34,6 +40,8 @@ internal class ResourceConfiguration : IEntityTypeConfiguration<ResourceModel>
         builder.Property(r => r.VersionId)
             .HasColumnName("VersionId")
             .IsRequired()
+            .HasMaxLength(ResourceNames.MaxVersionIdLength)
+            .UseCollation(ResourceDbContext.NameCollation)
             .HasValueGenerator<VersionIdValueGenerator>();
 
         builder.HasMany(r => r.Chunks)

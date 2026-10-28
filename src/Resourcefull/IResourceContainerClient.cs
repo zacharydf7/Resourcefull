@@ -23,7 +23,7 @@ public interface IResourceContainerClient : IDisposable
     /// <param name="content">The content to upload.</param>
     /// <param name="uploadOptions">Optional configuration for the upload.</param>
     /// <returns>The <see cref="ResourceInfo"/> for the uploaded resource.</returns>
-    /// <exception cref="ArgumentException"><paramref name="resourceName"/> is null or empty.</exception>
+    /// <exception cref="ArgumentException"><paramref name="resourceName"/> is null, empty, longer than 256 characters, or starts or ends with whitespace (<see cref="ArgumentNullException"/> when null).</exception>
     /// <exception cref="ArgumentNullException"><paramref name="content"/> is null.</exception>
     /// <exception cref="ResourceConflictException">
     /// Versioning is disabled, a resource with the same name already exists and
@@ -57,7 +57,7 @@ public interface IResourceContainerClient : IDisposable
     /// <param name="versionId">The version ID to restore.</param>
     /// <returns>The <see cref="ResourceInfo"/> for the newly created version, or <see langword="null"/> if the resource or version does not exist.</returns>
     /// <exception cref="InvalidOperationException">Versioning is not enabled.</exception>
-    /// <exception cref="ArgumentException"><paramref name="resourceName"/> or <paramref name="versionId"/> is null or empty.</exception>
+    /// <exception cref="ArgumentException"><paramref name="resourceName"/> is null, empty, longer than 256 characters, or starts or ends with whitespace (<see cref="ArgumentNullException"/> when null); or <paramref name="versionId"/> is null or empty.</exception>
     public Task<ResourceInfo?> RestoreVersionAsync(string resourceName, string versionId);
 
     /// <inheritdoc cref="RestoreVersionAsync(string, string)"/>
@@ -72,6 +72,7 @@ public interface IResourceContainerClient : IDisposable
     /// <param name="resourceName">The name of the resource to download.</param>
     /// <param name="versionId">The version to download; the current version when null.</param>
     /// <returns>The download result, or <see langword="null"/> if the resource does not exist. When non-null, the stream is guaranteed to be present.</returns>
+    /// <exception cref="ArgumentException"><paramref name="resourceName"/> is null, empty, longer than 256 characters, or starts or ends with whitespace (<see cref="ArgumentNullException"/> when null).</exception>
     public Task<ResourceDownloadResult?> DownloadStreamingAsync(string resourceName, string? versionId = null);
 
     /// <inheritdoc cref="DownloadStreamingAsync(string, string?)"/>
@@ -85,6 +86,7 @@ public interface IResourceContainerClient : IDisposable
     /// <param name="resourceName">The name of the resource to download.</param>
     /// <param name="versionId">The version to download; the current version when null.</param>
     /// <returns>The resource content, or <see langword="null"/> if the resource does not exist.</returns>
+    /// <exception cref="ArgumentException"><paramref name="resourceName"/> is null, empty, longer than 256 characters, or starts or ends with whitespace (<see cref="ArgumentNullException"/> when null).</exception>
     public Task<ResourceContent?> DownloadContentAsync(string resourceName, string? versionId = null);
 
     /// <inheritdoc cref="DownloadContentAsync(string, string?)"/>
@@ -98,6 +100,7 @@ public interface IResourceContainerClient : IDisposable
     /// <param name="resourceName">The name of the resource.</param>
     /// <param name="versionId">The version to inspect; the current version when null.</param>
     /// <returns>The <see cref="ResourceInfo"/>, or <see langword="null"/> if the resource does not exist.</returns>
+    /// <exception cref="ArgumentException"><paramref name="resourceName"/> is null, empty, longer than 256 characters, or starts or ends with whitespace (<see cref="ArgumentNullException"/> when null).</exception>
     public Task<ResourceInfo?> GetResourceInfoAsync(string resourceName, string? versionId = null);
 
     /// <inheritdoc cref="GetResourceInfoAsync(string, string?)"/>
@@ -122,6 +125,7 @@ public interface IResourceContainerClient : IDisposable
     /// </summary>
     /// <param name="resourceName">The name of the resource.</param>
     /// <returns>A (possibly empty) list of versions.</returns>
+    /// <exception cref="ArgumentException"><paramref name="resourceName"/> is null, empty, longer than 256 characters, or starts or ends with whitespace (<see cref="ArgumentNullException"/> when null).</exception>
     public Task<IReadOnlyList<ResourceInfo>> GetResourceVersionsAsync(string resourceName);
 
     /// <inheritdoc cref="GetResourceVersionsAsync(string)"/>
@@ -135,6 +139,7 @@ public interface IResourceContainerClient : IDisposable
     /// <param name="resourceName">The name of the resource to delete.</param>
     /// <param name="versionId">The version to delete; the current version when null.</param>
     /// <returns><see langword="true"/> if a resource was deleted; otherwise <see langword="false"/>.</returns>
+    /// <exception cref="ArgumentException"><paramref name="resourceName"/> is null, empty, longer than 256 characters, or starts or ends with whitespace (<see cref="ArgumentNullException"/> when null).</exception>
     public Task<bool> DeleteResourceIfExistsAsync(string resourceName, string? versionId = null);
 
     /// <inheritdoc cref="DeleteResourceIfExistsAsync(string, string?)"/>
@@ -148,6 +153,7 @@ public interface IResourceContainerClient : IDisposable
     /// <param name="resourceName">The name of the resource.</param>
     /// <param name="versionId">The version to check; the current version when null.</param>
     /// <returns><see langword="true"/> if it exists; otherwise <see langword="false"/>.</returns>
+    /// <exception cref="ArgumentException"><paramref name="resourceName"/> is null, empty, longer than 256 characters, or starts or ends with whitespace (<see cref="ArgumentNullException"/> when null).</exception>
     public Task<bool> ExistsAsync(string resourceName, string? versionId = null);
 
     /// <inheritdoc cref="ExistsAsync(string, string?)"/>

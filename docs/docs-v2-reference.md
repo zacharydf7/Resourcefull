@@ -20,6 +20,19 @@ versions of resources.
 The API is modeled on the Azure Blob Storage SDK (`BlobServiceClient` / `BlobContainerClient`), so it
 should feel familiar and make a future move to blob storage natural.
 
+## Names
+
+Container and resource names follow the same rules on every provider:
+
+- **Case-sensitive.** `Report.pdf` and `report.pdf` are different resources, and `Docs` and `docs` are
+  different containers, regardless of the SQL Server's default collation.
+- **Length:** a container name is 1–128 characters; a resource name is 1–256 characters.
+- **No leading or trailing whitespace.** SQL Server ignores trailing spaces when comparing strings, so
+  names that differ only there are rejected rather than silently treated as the same name.
+
+Every method that takes a name checks it first and throws `ArgumentException` (`ArgumentNullException`
+for null) before touching storage.
+
 ## Setup
 
 Install the NuGet packages you need:
@@ -156,7 +169,7 @@ builder.Services.AddResourcefull(o =>
 | Item not found (single read) | returns `null` |
 | Listing with no results | returns an **empty** `IReadOnlyList<T>` (never null) |
 | Existence / conditional delete | returns `bool` |
-| Invalid argument (null/empty) | throws `ArgumentException` / `ArgumentNullException` |
+| Invalid argument (null/empty, or a name that breaks the [name rules](#names)) | throws `ArgumentException` / `ArgumentNullException` |
 | Name conflict on create/upload | throws `ResourceConflictException` |
 | Upload into a container that does not exist | throws `ResourceContainerNotFoundException` |
 | Restore while versioning disabled | throws `InvalidOperationException` |
@@ -583,6 +596,25 @@ v1 database:
    `migrate_20260624193539_RedesignKeysAndVersioning.sql`; a v1 database with versioning needs only the
    latter.
 
+`migrate_20261028213132_NameLimitsAndCaseSensitiveNames.sql` applies the [name rules](#names) to an
+existing database. It sizes the name columns to their limits and switches them to a case-sensitive
+collation. Three things to check before running it:
+
+- **Lookups become case-sensitive.** Callers that relied on the server's case-insensitive default must
+  pass names in their stored case.
+- **Longer names stop the upgrade.** The script fails, and changes nothing, if a stored container name is
+  longer than 128 characters or a resource name longer than 256.
+- **Names that break the other rules become unreachable.** Earlier versions accepted empty container names
+  and names with leading or trailing whitespace. After the upgrade those rows still appear in listings, but
+  every method that takes the name rejects it, so they can no longer be read or deleted through the API.
+  Rename or delete them first. This finds the ones padded with spaces (check for tabs and other
+  whitespace the same way):
+
+  ```sql
+  SELECT [Name] FROM [ResourceContainers] WHERE DATALENGTH([Name]) = 0 OR DATALENGTH([Name]) <> DATALENGTH(TRIM([Name]));
+  SELECT [ContainerName], [Name] FROM [Resources] WHERE DATALENGTH([Name]) <> DATALENGTH(TRIM([Name]));
+  ```
+
 New databases provisioned from `Scripts/Resourcefull.sql` already include the v2 schema and RCSI — no
 upgrade step is required. `Scripts/Resourcefull.sql` is itself idempotent and can be used in place of the
 individual upgrade scripts; it applies whichever migrations the database is missing.
@@ -601,6 +633,7 @@ dotnet ef migrations script --idempotent --project src/Resourcefull.SqlServer --
 # One upgrade script per migration after the first: <previous migration> <this migration>
 dotnet ef migrations script 20240611171637_InitialCreate 20250513172319_AddVersioning --idempotent --project src/Resourcefull.SqlServer --output src/Resourcefull.SqlServer/Scripts/Migrations/migrate_20250513172319_AddVersioning.sql
 dotnet ef migrations script 20250513172319_AddVersioning 20260624193539_RedesignKeysAndVersioning --idempotent --project src/Resourcefull.SqlServer --output src/Resourcefull.SqlServer/Scripts/Migrations/migrate_20260624193539_RedesignKeysAndVersioning.sql
+dotnet ef migrations script 20260624193539_RedesignKeysAndVersioning 20261028213132_NameLimitsAndCaseSensitiveNames --idempotent --project src/Resourcefull.SqlServer --output src/Resourcefull.SqlServer/Scripts/Migrations/migrate_20261028213132_NameLimitsAndCaseSensitiveNames.sql
 ```
 
 Then put the preamble back at the top of each file. The fresh-install preamble creates the database when

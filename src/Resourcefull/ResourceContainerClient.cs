@@ -13,8 +13,7 @@ internal class ResourceContainerClient(IResourceRepository resourceRepository, I
     public async Task<ResourceInfo> UploadAsync(string resourceName, Stream content, ResourceUploadOptions? uploadOptions, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(content);
-        if (string.IsNullOrWhiteSpace(resourceName))
-            throw new ArgumentException("Resource name cannot be null or empty.", nameof(resourceName));
+        ResourceNames.ThrowIfInvalidResourceName(resourceName);
 
         uploadOptions ??= new ResourceUploadOptions();
 
@@ -57,8 +56,7 @@ internal class ResourceContainerClient(IResourceRepository resourceRepository, I
     {
         if (!options.IsVersioningEnabled)
             throw new InvalidOperationException("Versioning must be enabled in order to restore versions.");
-        if (string.IsNullOrEmpty(resourceName))
-            throw new ArgumentException($"{nameof(resourceName)} cannot be empty.", nameof(resourceName));
+        ResourceNames.ThrowIfInvalidResourceName(resourceName);
         if (string.IsNullOrEmpty(versionId))
             throw new ArgumentException($"{nameof(versionId)} cannot be empty.", nameof(versionId));
 
@@ -117,7 +115,7 @@ internal class ResourceContainerClient(IResourceRepository resourceRepository, I
 
     public async Task<ResourceDownloadResult?> DownloadStreamingAsync(string resourceName, string? versionId, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrEmpty(resourceName)) return null;
+        ResourceNames.ThrowIfInvalidResourceName(resourceName);
 
         ResourceInfo? resourceInfo = await resourceRepository.GetResourceInfoAsync(ContainerName, resourceName, versionId, cancellationToken);
         if (resourceInfo == null) return null;
@@ -147,7 +145,7 @@ internal class ResourceContainerClient(IResourceRepository resourceRepository, I
 
     public async Task<ResourceInfo?> GetResourceInfoAsync(string resourceName, string? versionId, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrEmpty(resourceName)) return null;
+        ResourceNames.ThrowIfInvalidResourceName(resourceName);
         return await resourceRepository.GetResourceInfoAsync(ContainerName, resourceName, versionId, cancellationToken);
     }
 
@@ -162,7 +160,7 @@ internal class ResourceContainerClient(IResourceRepository resourceRepository, I
 
     public async Task<IReadOnlyList<ResourceInfo>> GetResourceVersionsAsync(string resourceName, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrEmpty(resourceName)) return [];
+        ResourceNames.ThrowIfInvalidResourceName(resourceName);
         return await resourceRepository.GetResourceVersionsAsync(ContainerName, resourceName, cancellationToken);
     }
 
@@ -171,7 +169,7 @@ internal class ResourceContainerClient(IResourceRepository resourceRepository, I
 
     public async Task<bool> DeleteResourceIfExistsAsync(string resourceName, string? versionId, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrEmpty(resourceName)) return false;
+        ResourceNames.ThrowIfInvalidResourceName(resourceName);
         return await resourceRepository.DeleteResourceAsync(ContainerName, resourceName, versionId, cancellationToken);
     }
 
@@ -180,7 +178,7 @@ internal class ResourceContainerClient(IResourceRepository resourceRepository, I
 
     public async Task<bool> ExistsAsync(string resourceName, string? versionId, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrEmpty(resourceName)) return false;
+        ResourceNames.ThrowIfInvalidResourceName(resourceName);
         return await resourceRepository.GetResourceInfoAsync(ContainerName, resourceName, versionId, cancellationToken) != null;
     }
 

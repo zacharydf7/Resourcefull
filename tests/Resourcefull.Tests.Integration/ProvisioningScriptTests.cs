@@ -184,6 +184,31 @@ public class ProvisioningScriptTests(SqlServerFixture fixture)
         await AssertCurrentSchemaAsync(connectionString);
     }
 
+    [SkippableFact]
+    public async Task NameLimitsUpgradeScript_ShouldChangeNothing_WhenAStoredNameIsLongerThanTheNewLimit()
+    {
+        fixture.SkipIfUnavailable();
+
+        // Arrange: a database one migration behind, holding a container name the new 128-character limit cannot fit.
+        const string migrationId = "20261028213132_NameLimitsAndCaseSensitiveNames";
+        ProvisioningScript upgrade = ProvisioningScripts.Expected().Single(s => s.ToMigration == migrationId);
+        string connectionString = fixture.AllocateDatabase("TooLongName");
+        await using (ResourceDbContext context = SqlServerFixture.CreateDbContext(connectionString))
+        {
+            await context.Database.MigrateAsync(upgrade.FromMigration);
+        }
+        await ScalarAsync(connectionString, $"INSERT INTO [ResourceContainers] ([Name], [Uri], [Metadata]) VALUES ('{new string('c', 129)}', NULL, '{{}}')");
+
+        // Act
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => ProvisioningScripts.ApplyAsync(ProvisioningScripts.ReadCommitted(upgrade), connectionString));
+
+        // Assert
+        Assert.Equal(0, await ScalarAsync(connectionString, $"SELECT COUNT(*) FROM [__EFMigrationsHistory] WHERE [MigrationId] = '{migrationId}'"));
+        Assert.Equal(450, await ScalarAsync(connectionString, "SELECT COLUMNPROPERTY(OBJECT_ID('Resources'), 'Name', 'CharMaxLen')"));
+        Assert.Equal(1, await ScalarAsync(connectionString, "SELECT COUNT(*) FROM sys.foreign_keys WHERE [name] = 'FK_Resources_ResourceContainers_ContainerName'"));
+    }
+
     /// <summary>Rows in the shape the first migration created them.</summary>
     private static async Task InsertFirstVersionResourceAsync(string connectionString, string containerName, string resourceName, byte[] payload)
     {
