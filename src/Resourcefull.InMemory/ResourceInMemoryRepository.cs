@@ -109,38 +109,6 @@ internal class ResourceInMemoryRepository : IResourceRepository
         return memoryStream;
     }
 
-    public async Task<bool> UpdateResourceAsync(string resourceContainerName, string resourceName, ResourceInfo resourceInfo, Stream stream, string? versionId = null, CancellationToken cancellationToken = default)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-
-        InMemoryResource? existingResource = versionId == null
-            ? _resources.OrderByDescending(r => r.ResourceInfo.LastModified).FirstOrDefault(r => r.ContainerName == resourceContainerName && r.Name == resourceName)
-            : _resources.FirstOrDefault(r => r.ContainerName == resourceContainerName && r.Name == resourceName && r.ResourceInfo.VersionId == versionId);
-
-        if (existingResource is null) return false;
-
-        if (stream.CanSeek) stream.Position = 0;
-
-        MemoryStream? memoryStream = null;
-        if (stream.Position != stream.Length)
-        {
-            memoryStream = new MemoryStream();
-            await stream.CopyToAsync(memoryStream, cancellationToken);
-            memoryStream.Position = 0;
-        }
-
-        existingResource.ResourceInfo.Name = resourceInfo.Name;
-        existingResource.ResourceInfo.VersionId = resourceInfo.VersionId;
-        existingResource.ResourceInfo.LastModified = resourceInfo.LastModified;
-        existingResource.ResourceInfo.ContentType = resourceInfo.ContentType;
-        existingResource.ResourceInfo.ContentLength = resourceInfo.ContentLength;
-        existingResource.ResourceInfo.Metadata = new Dictionary<string, string>(resourceInfo.Metadata);
-        existingResource.ResourceInfo.Uri = resourceInfo.Uri;
-        existingResource.Stream = memoryStream ?? existingResource.Stream;
-
-        return await Task.FromResult(true);
-    }
-
     public async Task<bool> DeleteResourceAsync(string resourceContainerName, string resourceName, string? versionId = null, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -168,6 +136,8 @@ internal class ResourceInMemoryRepository : IResourceRepository
         {
             Name = resourceContainerInfo.Name
         });
+
+        await Task.CompletedTask;
     }
 
     public async Task<List<ResourceContainerInfo>> GetAllResourceContainerInfoAsync(CancellationToken cancellationToken = default)

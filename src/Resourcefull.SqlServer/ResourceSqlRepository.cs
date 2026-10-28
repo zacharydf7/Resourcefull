@@ -129,48 +129,6 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
             : null;
     }
 
-    public async Task<bool> UpdateResourceAsync(string resourceContainerName, string resourceName, ResourceInfo resourceInfo,
-        Stream stream, string? versionId = null, CancellationToken cancellationToken = default)
-    {
-        using ResourceDbContext dbContext = dbContextFactory.CreateDbContext();
-
-        ResourceModel? existingResource = await ResolveAsync(
-            dbContext.Resources.Include(r => r.Chunks), resourceContainerName, resourceName, versionId, cancellationToken);
-
-        if (existingResource == null) return false;
-
-        if (stream.CanSeek) stream.Position = 0;
-
-        List<ResourceChunkModel>? newChunks = null;
-        if (stream.Position != stream.Length)
-        {
-            var memoryStream = new MemoryStream();
-            await stream.CopyToAsync(memoryStream, cancellationToken);
-            memoryStream.Position = 0;
-            newChunks = await ResourceChunker.ChunksAsync(memoryStream, cancellationToken);
-        }
-
-        dbContext.Resources.Remove(existingResource);
-
-        dbContext.Resources.Add(new ResourceModel
-        {
-            ContainerName = resourceContainerName,
-            Name = resourceInfo.Name,
-            VersionId = resourceInfo.VersionId,
-            LastModified = resourceInfo.LastModified,
-            IsLatest = existingResource.IsLatest,
-            ContentLength = resourceInfo.ContentLength,
-            ContentType = resourceInfo.ContentType,
-            Metadata = resourceInfo.Metadata,
-            Uri = resourceInfo.Uri,
-            Chunks = newChunks ?? existingResource.Chunks?
-                .Select(c => new ResourceChunkModel { Index = c.Index, Data = c.Data })
-                .ToList()
-        });
-
-        return await dbContext.SaveChangesAsync(cancellationToken) > 0;
-    }
-
     public async Task<bool> DeleteResourceAsync(string resourceContainerName, string resourceName, string? versionId = null, CancellationToken cancellationToken = default)
     {
         using ResourceDbContext dbContext = dbContextFactory.CreateDbContext();
