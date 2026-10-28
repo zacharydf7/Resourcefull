@@ -1,0 +1,22 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+	<Title>Resourcefull.InMemory</Title>
+	<Description>Required services for in memory implementation.</Description>
+	<Copyright>©2024</Copyright>
+	<PackageProjectUrl>https://github.com/zacharydf7/Resourcefull</PackageProjectUrl>
+	<RepositoryUrl>https://github.com/zacharydf7/Resourcefull</RepositoryUrl>
+	<RepositoryType>git</RepositoryType>
+	<PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <Version>2.2.0.0</Version>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Resourcefull.SqlServer\Resourcefull.SqlServer.csproj" />
+    <ProjectReference Include="..\Resourcefull\Resourcefull.csproj" />
+  </ItemGroup>
+
+</Project>

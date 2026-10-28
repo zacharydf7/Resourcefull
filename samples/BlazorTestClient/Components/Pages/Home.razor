@@ -1,0 +1,357 @@
+﻿@page "/"
+@using Microsoft.Extensions.Options
+@inject IResourceServiceClient ResourceServiceClient
+@inject IJSRuntime JSRuntime
+@inject FileExtensionContentTypeProvider FileExtensionContentTypeProvider
+@inject IServiceScopeFactory ScopeFactory
+
+<div class="container">
+    <div class="add-container-panel">
+        <InputText @bind-Value=_newContainerName placeholder="New container name" class="input-text" />
+        <button class="btn btn-primary" @onclick=AddContainer>Add New Container</button>
+    </div>
+
+    @if (!string.IsNullOrEmpty(_restoreMessage))
+    {
+        <div class="restore-message">@_restoreMessage</div>
+    }
+
+    @foreach (var container in _resourceContainers)
+    {
+        <div class="container-card">
+            <div class="container-header">
+                <h2>Container: @container.Name</h2>
+                <button class="btn btn-danger" @onclick="() => DeleteContainer(container.Name)">Delete Container</button>
+                <div class="upload-panel">
+                    <span>Upload Resource:</span>
+                    <InputFile OnChange="(e) => UploadResource(e, container.Name)" />
+                </div>
+                @if (!_options.IsVersioningEnabled)
+                {
+                    <div class="flexDisplay">
+                        <label><input type="checkbox" @bind="_overwrite" /> Overwrite existing resource</label>
+                    </div>
+                }
+            </div>
+            <table class="resource-table">
+                <thead>
+                    <tr>
+                        <th>Container Name</th>
+                        <th>Resource Name</th>
+                        <th>Version ID</th>
+                        <th>Last Modified</th>
+                        <th>ContentType</th>
+                        <th>ContentLength</th>
+                        <th>Uri</th>
+                        <th>Delete</th>
+                        <th>Download</th>
+                        @if (_options.IsVersioningEnabled)
+                        {
+                            <th>Version History</th>
+                        }
+                    </tr>
+                </thead>
+                <tbody>
+                @foreach (var resource in _resources.Where(x => x.ContainerName == container.Name))
+                {
+                    var versionKey = $"{resource.ContainerName}::{resource.Name}";
+                    <tr class="resource-row">
+                        <td>@resource.ContainerName</td>
+                        <td>@resource.Name</td>
+                        <td>@resource.VersionId</td>
+                        <td>@resource.LastModified</td>
+                        <td>@resource.ContentType</td>
+                        <td>@resource.ContentLength</td>
+                        <td class="uri-cell">@resource.Uri</td>
+                        <td><button class="btn btn-danger" @onclick="() => DeleteResource(resource)">Delete</button></td>
+                        <td><button class="btn btn-secondary" @onclick="() => DownloadResource(resource)">Download</button></td>
+                        @if (_options.IsVersioningEnabled)
+                        {
+                            <td>
+                                <button class="btn btn-info" @onclick="() => ToggleVersionHistory(resource)">
+                                    @(IsVersionHistoryOpen(versionKey) ? "Hide" : "Show") Version History
+                                </button>
+                            </td>
+                        }
+                    </tr>
+
+                    @if (_options.IsVersioningEnabled && IsVersionHistoryOpen(versionKey))
+                    {
+                        <tr>
+                            <td colspan="10">
+                                <div class="version-history-panel">
+                                    <h4>Version History for @resource.Name</h4>
+                                    <table class="version-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Version ID</th>
+                                                <th>Last Modified</th>
+                                                <th>ContentType</th>
+                                                <th>ContentLength</th>
+                                                <th>Uri</th>
+                                                <th>Delete</th>
+                                                <th>Download</th>
+                                                <th>Restore</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                        @foreach (var version in _resourceVersionsMap.TryGetValue(versionKey, out var versions) ? versions : Enumerable.Empty<ResourceInfo>())
+                                        {
+                                            <tr>
+                                                <td>@version.VersionId</td>
+                                                <td>@version.LastModified</td>
+                                                <td>@version.ContentType</td>
+                                                <td>@version.ContentLength</td>
+                                                <td class="uri-cell">@version.Uri</td>
+                                                <td><button class="btn btn-danger" @onclick="() => DeleteResource(version, true)">Delete</button></td>
+                                                <td><button class="btn btn-secondary" @onclick="() => DownloadResource(version)">Download</button></td>
+                                                <td><button class="btn btn-success" @onclick="() => RestoreResourceVersion(version)">Restore</button></td>
+                                            </tr>
+                                        }
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                }
+                </tbody>
+            </table>
+        </div>
+    }
+
+    @foreach (var error in _errorMessages)
+    {
+        <p style="color: red">@error</p>
+    }
+</div>
+
+@code {
+    private List<ResourceInfo> _resources = new();
+    private List<ResourceContainerInfo> _resourceContainers = new();
+    private List<string> _errorMessages = new();
+    private bool _overwrite;
+    private string _newContainerName = "";
+    private ResourcefullOptions _options = new();
+    private HashSet<string> _openVersionHistories = new();
+    private Dictionary<string, List<ResourceInfo>> _resourceVersionsMap = new();
+    private string _restoreMessage = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        using var scope = ScopeFactory.CreateScope();
+        var options = scope.ServiceProvider.GetRequiredService<IOptions<ResourcefullOptions>>();
+        _options = options.Value; 
+
+        await PopulateResourceContainers();
+    }
+
+    private async Task PopulateResourceContainers()
+    {
+        _resources.Clear();
+        _resourceContainers = (await ResourceServiceClient.GetResourceContainersAsync()).ToList();
+        foreach (var container in _resourceContainers)
+        {
+            var containerClient = ResourceServiceClient.GetResourceContainerClient(container.Name);
+            _resources.AddRange(await containerClient.GetResourcesAsync());
+        }
+        _resourceVersionsMap.Clear();
+        _openVersionHistories.Clear();
+        StateHasChanged();
+    }
+
+    private bool IsVersionHistoryOpen(string key) => _openVersionHistories.Contains(key);
+
+    private async Task ToggleVersionHistory(ResourceInfo resource)
+    {
+        var key = $"{resource.ContainerName}::{resource.Name}";
+        if (_openVersionHistories.Contains(key))
+        {
+            _openVersionHistories.Remove(key);
+            StateHasChanged();
+            return;
+        }
+        _openVersionHistories.Add(key);
+        var containerClient = ResourceServiceClient.GetResourceContainerClient(resource.ContainerName);
+        var versions = await containerClient.GetResourceVersionsAsync(resource.Name);
+        _resourceVersionsMap[key] = versions.Where(v => !v.IsLatest).ToList();
+        StateHasChanged();
+    }
+
+    public async Task DeleteResource(ResourceInfo resourceInfo, bool isVersionHistory = false)
+    {
+        var containerClient = ResourceServiceClient.GetResourceContainerClient(resourceInfo.ContainerName);
+        await containerClient.DeleteResourceIfExistsAsync(resourceInfo.Name, resourceInfo.VersionId);
+        if (isVersionHistory)
+        {
+            var key = $"{resourceInfo.ContainerName}::{resourceInfo.Name}";
+            if (_openVersionHistories.Contains(key))
+            {
+                await ToggleVersionHistory(resourceInfo);
+            }
+        }
+        else
+        {
+            await PopulateResourceContainers();
+        }
+    }
+
+    public async void DownloadResource(ResourceInfo resourceInfo)
+    {
+        var containerClient = ResourceServiceClient.GetResourceContainerClient(resourceInfo.ContainerName);
+        var result = await containerClient.DownloadStreamingAsync(resourceInfo.Name, resourceInfo.VersionId);
+        if (result?.Stream is null) return;
+        using var ms = new MemoryStream();
+        await result.Stream.CopyToAsync(ms);
+        var fileContent = ms.ToArray();
+        await JSRuntime.InvokeVoidAsync("downloadFile", result.ResourceInfo.Name, fileContent);
+    }
+
+    public async void UploadResource(InputFileChangeEventArgs args, string containerName)
+    {
+        FileExtensionContentTypeProvider.TryGetContentType(args.File.Name, out var contentType);
+        ResourceUploadOptions resourceUploadOptions = new()
+        {
+            Overwrite = _overwrite,
+            Headers = new(contentType, args.File.Size)
+        };
+        var containerClient = ResourceServiceClient.GetResourceContainerClient(containerName);
+        try
+        {
+            await containerClient.UploadAsync(args.File.Name, args.File.OpenReadStream(args.File.Size), resourceUploadOptions);
+            _errorMessages.Clear();
+        }
+        catch (ResourcefullException ex)
+        {
+            _errorMessages = new List<string> { ex.Message };
+        }
+        await PopulateResourceContainers();
+    }
+
+    public async void AddContainer()
+    {
+        if (string.IsNullOrWhiteSpace(_newContainerName)) return;
+        await ResourceServiceClient.CreateResourceContainerIfNotExistsAsync(_newContainerName);
+        await PopulateResourceContainers();
+    }
+
+    public async Task<List<ResourceInfo>> GetResourcesFromContainer(string containerName)
+    {
+        var containerClient = ResourceServiceClient.GetResourceContainerClient(containerName);
+        return (await containerClient.GetResourcesAsync()).ToList();
+    }
+
+    public async Task DeleteContainer(string containerName)
+    {
+        await ResourceServiceClient.DeleteResourceContainerIfExistsAsync(containerName);
+        await PopulateResourceContainers();
+    }
+
+    public async Task RestoreResourceVersion(ResourceInfo resourceInfo)
+    {
+        if (string.IsNullOrEmpty(resourceInfo.VersionId))
+            throw new ArgumentException($"{nameof(resourceInfo.VersionId)} cannot be empty.", nameof(resourceInfo.VersionId));
+
+        var containerClient = ResourceServiceClient.GetResourceContainerClient(resourceInfo.ContainerName);
+        try
+        {
+            var restored = await containerClient.RestoreVersionAsync(resourceInfo.Name, resourceInfo.VersionId);
+            if (restored is null)
+            {
+                _restoreMessage = $"Version {resourceInfo.VersionId} for {resourceInfo.Name} could not be found.";
+            }
+            else
+            {
+                _restoreMessage = $"Restored version {resourceInfo.VersionId} as new version for {resourceInfo.Name}.";
+                await PopulateResourceContainers();
+
+                _resources.ForEach(async x =>
+                {
+                    await ToggleVersionHistory(x);
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            _restoreMessage = ex.Message;
+        }
+        StateHasChanged();
+    }
+}
+
+<style>
+    .container {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 20px;
+    }
+    .add-container-panel {
+        margin-bottom: 20px;
+        display: flex;
+        gap: 10px;
+    }
+    .input-text {
+        padding: 5px;
+        font-size: 1rem;
+    }
+    .container-card {
+        background: #f9f9f9;
+        border-radius: 8px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        margin-bottom: 30px;
+        padding: 20px;
+    }
+    .container-header {
+        display: flex;
+        align-items: center;
+        gap: 20px;
+        margin-bottom: 10px;
+    }
+    .upload-panel {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+    .resource-table, .version-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 10px;
+    }
+    .resource-table th, .resource-table td, .version-table th, .version-table td {
+        border: 1px solid #ccc;
+        padding: 6px 8px;
+        text-align: left;
+    }
+    .resource-row {
+        background: #e9ecef;
+    }
+    .version-history-panel {
+        background: #fff;
+        border: 1px solid #ddd;
+        border-radius: 6px;
+        padding: 10px;
+        margin-top: 10px;
+    }
+    .restore-message {
+        margin-top: 10px;
+        color: #155724;
+        background: #d4edda;
+        border: 1px solid #c3e6cb;
+        padding: 8px;
+        border-radius: 4px;
+    }
+    .btn {
+        padding: 4px 10px;
+        border-radius: 4px;
+        border: none;
+        cursor: pointer;
+        font-size: 1rem;
+    }
+    .btn-primary { background: #007bff; color: #fff; }
+    .btn-danger { background: #dc3545; color: #fff; }
+    .btn-secondary { background: #6c757d; color: #fff; }
+    .btn-info { background: #17a2b8; color: #fff; }
+    .btn-success { background: #28a745; color: #fff; }
+    .uri-cell { max-width: 200px; overflow-x: auto; }
+    .flexDisplay { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+</style>

@@ -1,0 +1,24 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <Title>Resourcefull</Title>
+    <Description>Resourcefull is a NuGet package that streamlines the handling of file uploads and downloads across various data providers such as SqlServer, AzureBlobStorage and InMemory, offering a unified interface.</Description>
+    <Copyright>©2024</Copyright>
+    <RepositoryUrl>https://github.com/zacharydf7/Resourcefull</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/zacharydf7/Resourcefull</PackageProjectUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+	<Version>2.2.0.0</Version>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.5" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="10.0.5" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.5" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.5" />
+  </ItemGroup>
+
+</Project>

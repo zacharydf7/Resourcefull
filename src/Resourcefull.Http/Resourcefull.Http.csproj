@@ -1,0 +1,24 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+	  <Title>Resourcefull.Http</Title>
+	  <Copyright>©2024</Copyright>
+	  <Description>Required services for http features.</Description>
+	  <PackageProjectUrl>https://github.com/zacharydf7/Resourcefull</PackageProjectUrl>
+	  <RepositoryUrl>https://github.com/zacharydf7/Resourcefull</RepositoryUrl>
+	  <RepositoryType>git</RepositoryType>
+    <Version>0.0.0.4</Version>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Http" Version="2.2.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Resourcefull\Resourcefull.csproj" />
+  </ItemGroup>
+
+</Project>

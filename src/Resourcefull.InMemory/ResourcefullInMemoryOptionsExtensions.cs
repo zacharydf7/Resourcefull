@@ -1,0 +1,33 @@
+﻿using Microsoft.Extensions.DependencyInjection;
+
+namespace Resourcefull.InMemory;
+
+public static class ResourcefullInMemoryOptionsExtensions
+{
+    /// <summary>
+    /// Configures Resourcefull to use an in-memory data provider.
+    /// The in-memory provider is intended for testing use cases and should not be used in production environments.
+    /// </summary>
+    /// <param name="builder"></param>
+    /// <exception cref="InvalidOperationException"></exception>
+    public static ResourcefullOptionsBuilder UseInMemory(this ResourcefullOptionsBuilder builder)
+    {
+        if (builder.ProviderConfigured)
+        {
+            throw new InvalidOperationException("Provider has already been configured.");
+        }
+
+        ServiceDescriptor? descriptor = builder.Services.SingleOrDefault(
+                d => d.ServiceType ==
+                    typeof(IResourceRepository));
+
+        if (descriptor != null)
+        {
+            builder.Services.Remove(descriptor);
+        }
+
+        builder.Services.AddSingleton<IResourceRepository, ResourceInMemoryRepository>();
+        builder.ProviderConfigured = true;
+        return builder;
+    }
+}
