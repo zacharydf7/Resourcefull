@@ -264,8 +264,8 @@ public class ResourceContainerClientTests
         var repository = NewRepository();
         repository.Setup(r => r.GetResourceInfoAsync(Container, name, null,
             It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new ResourceInfo { ContainerName = Container, Name = name });
-        repository.Setup(r => r.GetResourceStreamAsync(Container, name, null,
+            .ReturnsAsync(new ResourceInfo { ContainerName = Container, Name = name, VersionId = "v1" });
+        repository.Setup(r => r.GetResourceStreamAsync(Container, name, "v1",
             It.IsAny<CancellationToken>())).ReturnsAsync(stream);
         var client = NewClient(repository.Object);
 
@@ -276,6 +276,51 @@ public class ResourceContainerClientTests
         Assert.NotNull(result);
         Assert.Same(stream, result!.Stream);
         Assert.Equal(name, result.ResourceInfo.Name);
+    }
+
+    [Fact]
+    public async Task DownloadContentAsync_ShouldReturnTheResolvedVersionsContent_WhenCurrentChangesBetweenLookups()
+    {
+        // Arrange: info resolves "current" to v1, then an upload makes v2 current before the content is read.
+        var name = "name";
+        var repository = NewRepository();
+        repository.Setup(r => r.GetResourceInfoAsync(Container, name, null,
+            It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ResourceInfo { ContainerName = Container, Name = name, VersionId = "v1" });
+        repository.Setup(r => r.GetResourceStreamAsync(Container, name, null,
+            It.IsAny<CancellationToken>())).ReturnsAsync(new MemoryStream(Encoding.UTF8.GetBytes("v2 content")));
+        repository.Setup(r => r.GetResourceStreamAsync(Container, name, "v1",
+            It.IsAny<CancellationToken>())).ReturnsAsync(new MemoryStream(Encoding.UTF8.GetBytes("v1 content")));
+        var client = NewClient(repository.Object);
+
+        // Act
+        ResourceContent? content = await client.DownloadContentAsync(name);
+
+        // Assert
+        Assert.Equal("v1", content!.ResourceInfo.VersionId);
+        Assert.Equal("v1 content", content.Content.ToString());
+    }
+
+    [Fact]
+    public async Task DownloadStreamingAsync_ShouldReturnNull_WhenResolvedVersionDisappearsBeforeContentIsRead()
+    {
+        // Arrange: info resolves "current" to v1, then v1 is deleted before its content is read.
+        var name = "name";
+        var repository = NewRepository();
+        repository.Setup(r => r.GetResourceInfoAsync(Container, name, null,
+            It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ResourceInfo { ContainerName = Container, Name = name, VersionId = "v1" });
+        repository.Setup(r => r.GetResourceStreamAsync(Container, name, null,
+            It.IsAny<CancellationToken>())).ReturnsAsync(new MemoryStream(Encoding.UTF8.GetBytes("v2 content")));
+        repository.Setup(r => r.GetResourceStreamAsync(Container, name, "v1",
+            It.IsAny<CancellationToken>())).ReturnsAsync((Stream?)null);
+        var client = NewClient(repository.Object);
+
+        // Act
+        ResourceDownloadResult? result = await client.DownloadStreamingAsync(name);
+
+        // Assert
+        Assert.Null(result);
     }
 
     [Fact]
@@ -302,8 +347,8 @@ public class ResourceContainerClientTests
         var repository = NewRepository();
         repository.Setup(r => r.GetResourceInfoAsync(Container, name, null,
             It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new ResourceInfo { ContainerName = Container, Name = name });
-        repository.Setup(r => r.GetResourceStreamAsync(Container, name, null,
+            .ReturnsAsync(new ResourceInfo { ContainerName = Container, Name = name, VersionId = "v1" });
+        repository.Setup(r => r.GetResourceStreamAsync(Container, name, "v1",
             It.IsAny<CancellationToken>()))
             .ReturnsAsync(new MemoryStream(Encoding.UTF8.GetBytes("hello")));
         var client = NewClient(repository.Object);
@@ -603,8 +648,8 @@ public class ResourceContainerClientTests
         using var cts = new CancellationTokenSource();
         var repository = NewRepository();
         repository.Setup(r => r.GetResourceInfoAsync(Container, "name", null, cts.Token))
-            .ReturnsAsync(new ResourceInfo { ContainerName = Container, Name = "name" });
-        repository.Setup(r => r.GetResourceStreamAsync(Container, "name", null, cts.Token))
+            .ReturnsAsync(new ResourceInfo { ContainerName = Container, Name = "name", VersionId = "v1" });
+        repository.Setup(r => r.GetResourceStreamAsync(Container, "name", "v1", cts.Token))
             .ReturnsAsync(new MemoryStream());
         var client = NewClient(repository.Object);
 
@@ -614,7 +659,7 @@ public class ResourceContainerClientTests
 
         // Assert
         Assert.NotNull(result);
-        repository.Verify(r => r.GetResourceStreamAsync(Container, "name", null, cts.Token),
+        repository.Verify(r => r.GetResourceStreamAsync(Container, "name", "v1", cts.Token),
             Times.Once);
     }
 
@@ -625,8 +670,8 @@ public class ResourceContainerClientTests
         using var cts = new CancellationTokenSource();
         var repository = NewRepository();
         repository.Setup(r => r.GetResourceInfoAsync(Container, "name", null, cts.Token))
-            .ReturnsAsync(new ResourceInfo { ContainerName = Container, Name = "name" });
-        repository.Setup(r => r.GetResourceStreamAsync(Container, "name", null, cts.Token))
+            .ReturnsAsync(new ResourceInfo { ContainerName = Container, Name = "name", VersionId = "v1" });
+        repository.Setup(r => r.GetResourceStreamAsync(Container, "name", "v1", cts.Token))
             .ReturnsAsync(new MemoryStream());
         var client = NewClient(repository.Object);
 
@@ -635,7 +680,7 @@ public class ResourceContainerClientTests
 
         // Assert
         Assert.NotNull(content);
-        repository.Verify(r => r.GetResourceStreamAsync(Container, "name", null, cts.Token),
+        repository.Verify(r => r.GetResourceStreamAsync(Container, "name", "v1", cts.Token),
             Times.Once);
     }
 

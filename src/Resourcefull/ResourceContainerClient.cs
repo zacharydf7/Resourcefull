@@ -122,7 +122,8 @@ internal class ResourceContainerClient(IResourceRepository resourceRepository, I
         ResourceInfo? resourceInfo = await resourceRepository.GetResourceInfoAsync(ContainerName, resourceName, versionId, cancellationToken);
         if (resourceInfo == null) return null;
 
-        Stream? stream = await resourceRepository.GetResourceStreamAsync(ContainerName, resourceName, versionId, cancellationToken);
+        // Read the version just resolved, not "current" again: an upload in between would pair this info with other content.
+        Stream? stream = await resourceRepository.GetResourceStreamAsync(ContainerName, resourceName, resourceInfo.VersionId, cancellationToken);
         if (stream == null) return null;
 
         return new ResourceDownloadResult(resourceInfo, stream);
