@@ -17,13 +17,8 @@ internal class ResourceContainerClient(IResourceRepository resourceRepository, I
 
         uploadOptions ??= new ResourceUploadOptions();
 
-        ResourceInfo? existingResource = await resourceRepository.GetResourceInfoAsync(ContainerName, resourceName, null, cancellationToken);
-        if (!options.IsVersioningEnabled && existingResource != null && !uploadOptions.Overwrite)
-        {
-            throw new ResourceConflictException(
-                $"Resource with name {resourceName} already exists. " +
-                $"Set {nameof(uploadOptions.Overwrite)} to true in {nameof(ResourceUploadOptions)} to overwrite existing resources.");
-        }
+        // Without versioning, an upload that may not overwrite is a create-only write.
+        bool createOnly = uploadOptions.CreateOnly || (!options.IsVersioningEnabled && !uploadOptions.Overwrite);
 
         var resourceInfo = new ResourceInfo
         {
@@ -36,7 +31,16 @@ internal class ResourceContainerClient(IResourceRepository resourceRepository, I
             Metadata = uploadOptions.Metadata
         };
 
-        return await SaveNewResourceVersionAsync(content, resourceName, resourceInfo, uploadOptions.Overwrite, cancellationToken);
+        try
+        {
+            return await SaveNewResourceVersionAsync(content, resourceName, resourceInfo, createOnly, cancellationToken);
+        }
+        catch (ResourceConflictException exception) when (!uploadOptions.CreateOnly)
+        {
+            throw new ResourceConflictException(
+                $"Resource with name {resourceName} already exists. " +
+                $"Set {nameof(uploadOptions.Overwrite)} to true in {nameof(ResourceUploadOptions)} to overwrite existing resources.", exception);
+        }
     }
 
     public Task<ResourceInfo> UploadAsync(string resourceName, BinaryData content, ResourceUploadOptions? uploadOptions = null)
@@ -76,33 +80,24 @@ internal class ResourceContainerClient(IResourceRepository resourceRepository, I
             Metadata = resourceInfo.Metadata
         };
 
-        return await SaveNewResourceVersionAsync(stream, resourceName, newResourceInfo, overwrite: false, cancellationToken);
+        return await SaveNewResourceVersionAsync(stream, resourceName, newResourceInfo, createOnly: false, cancellationToken);
     }
 
-    private async Task<ResourceInfo> SaveNewResourceVersionAsync(Stream stream, string resourceName, ResourceInfo resourceInfo, bool overwrite, CancellationToken cancellationToken)
+    private async Task<ResourceInfo> SaveNewResourceVersionAsync(Stream stream, string resourceName, ResourceInfo resourceInfo, bool createOnly, CancellationToken cancellationToken)
     {
-        List<ResourceInfo> priorVersions = await resourceRepository.GetResourceVersionsAsync(ContainerName, resourceName, cancellationToken) ?? [];
-
         resourceInfo.Uri = uriProvider?.GetAbsoluteUri(new ResourcefullContext(ContainerName, resourceName, resourceInfo.VersionId));
 
         if (stream.CanSeek) stream.Position = 0;
-        await resourceRepository.AddResourceAsync(ContainerName, resourceInfo, stream, cancellationToken);
+        await resourceRepository.AddResourceAsync(ContainerName, resourceInfo, stream, createOnly, cancellationToken);
 
-        // Prune only once the new version is stored.
-        if (options.IsVersioningEnabled)
+        // Prune only once the new version is stored, keeping the newest versions in store order. Reading the versions
+        // after the write means concurrent writers each see all of them, so together they never keep more than the
+        // limit; without versioning the limit is one, which is what an overwrite leaves.
+        int keep = options.IsVersioningEnabled ? options.MaxVersions : 1;
+        List<ResourceInfo> versions = await resourceRepository.GetResourceVersionsAsync(ContainerName, resourceName, cancellationToken);
+        foreach (ResourceInfo version in versions.Skip(keep))
         {
-            int excess = priorVersions.Count + 1 - options.MaxVersions;
-            foreach (ResourceInfo version in priorVersions.TakeLast(Math.Max(excess, 0)))
-            {
-                await resourceRepository.DeleteResourceAsync(ContainerName, resourceName, version.VersionId, cancellationToken);
-            }
-        }
-        else if (overwrite)
-        {
-            foreach (ResourceInfo version in priorVersions)
-            {
-                await resourceRepository.DeleteResourceAsync(ContainerName, resourceName, version.VersionId, cancellationToken);
-            }
+            await resourceRepository.DeleteResourceAsync(ContainerName, resourceName, version.VersionId, cancellationToken);
         }
 
         return resourceInfo;

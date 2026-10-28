@@ -67,7 +67,7 @@ public class ResourceContainerClientTests
 
         // Assert
         repository.Verify(r => r.AddResourceAsync(Container, It.Is<ResourceInfo>(i => i.Name == name),
-            It.IsAny<Stream>(), It.IsAny<CancellationToken>()), Times.Once);
+            It.IsAny<Stream>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -76,8 +76,6 @@ public class ResourceContainerClientTests
         // Arrange
         var name = "newResourceName";
         var repository = NewRepository();
-        repository.Setup(r => r.GetResourceInfoAsync(Container, name, null,
-            It.IsAny<CancellationToken>())).ReturnsAsync((ResourceInfo?)null);
         var client = NewClient(repository.Object);
 
         // Act
@@ -87,7 +85,7 @@ public class ResourceContainerClientTests
         Assert.Equal(Container, result.ContainerName);
         Assert.Equal(name, result.Name);
         repository.Verify(r => r.AddResourceAsync(Container, It.IsAny<ResourceInfo>(),
-            It.IsAny<Stream>(), It.IsAny<CancellationToken>()), Times.Once);
+            It.IsAny<Stream>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -96,8 +94,6 @@ public class ResourceContainerClientTests
         // Arrange
         var name = "newResourceName";
         var repository = NewRepository();
-        repository.Setup(r => r.GetResourceInfoAsync(Container, name, null,
-            It.IsAny<CancellationToken>())).ReturnsAsync((ResourceInfo?)null);
         var uriProvider = new Mock<IUriProvider>();
         uriProvider.Setup(u => u.GetAbsoluteUri(It.IsAny<ResourcefullContext>()))
             .Returns("http://resources/x");
@@ -116,8 +112,6 @@ public class ResourceContainerClientTests
         // Arrange
         var name = "newResourceName";
         var repository = NewRepository();
-        repository.Setup(r => r.GetResourceInfoAsync(Container, name, null,
-            It.IsAny<CancellationToken>())).ReturnsAsync((ResourceInfo?)null);
         var client = NewClient(repository.Object);
 
         // Act
@@ -126,7 +120,7 @@ public class ResourceContainerClientTests
         // Assert
         Assert.Equal(name, result.Name);
         repository.Verify(r => r.AddResourceAsync(Container, It.IsAny<ResourceInfo>(),
-            It.IsAny<Stream>(), It.IsAny<CancellationToken>()), Times.Once);
+            It.IsAny<Stream>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -135,28 +129,52 @@ public class ResourceContainerClientTests
         // Arrange & Act
         var name = "existingResourceName";
         var repository = NewRepository();
-        repository.Setup(r => r.GetResourceInfoAsync(Container, name, null,
-            It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new ResourceInfo { ContainerName = Container, Name = name });
+        repository.Setup(r => r.AddResourceAsync(Container, It.IsAny<ResourceInfo>(), It.IsAny<Stream>(),
+            true, It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new ResourceConflictException("exists"));
         var client = NewClient(repository.Object);
 
         // Assert
-        await Assert.ThrowsAsync<ResourceConflictException>(
+        var exception = await Assert.ThrowsAsync<ResourceConflictException>(
             () => client.UploadAsync(name, new MemoryStream()));
+        Assert.Contains(nameof(ResourceUploadOptions.Overwrite), exception.Message);
+    }
+
+    [Theory]
+    [InlineData(false, false, false, true)]
+    [InlineData(false, true, false, false)]
+    [InlineData(false, true, true, true)]
+    [InlineData(true, false, false, false)]
+    [InlineData(true, true, false, false)]
+    [InlineData(true, false, true, true)]
+    public async Task UploadAsync_ShouldWriteCreateOnly_WhenTheOptionsForbidReplacingAnExistingName(
+        bool versioning, bool overwrite, bool createOnly, bool expectedCreateOnly)
+    {
+        // Arrange
+        var repository = NewRepository();
+        var client = NewClient(repository.Object, options: new ResourcefullOptions { IsVersioningEnabled = versioning, MaxVersions = 10 });
+
+        // Act
+        await client.UploadAsync("name", new MemoryStream(), new ResourceUploadOptions { Overwrite = overwrite, CreateOnly = createOnly });
+
+        // Assert
+        repository.Verify(r => r.AddResourceAsync(Container, It.IsAny<ResourceInfo>(), It.IsAny<Stream>(),
+            expectedCreateOnly, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
     public async Task UploadAsync_ShouldSucceed_WhenResourceExistsAndOverwriteIsTrue()
     {
-        // Arrange
+        // Arrange: the versions as they stand after the write, newest first.
         var name = "existingResourceName";
         var repository = NewRepository();
-        repository.Setup(r => r.GetResourceInfoAsync(Container, name, null,
-            It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new ResourceInfo { ContainerName = Container, Name = name });
         repository.Setup(r => r.GetResourceVersionsAsync(Container, name,
             It.IsAny<CancellationToken>()))
-            .ReturnsAsync([new() { ContainerName = Container, Name = name, VersionId = "v1" }]);
+            .ReturnsAsync(
+            [
+                new() { ContainerName = Container, Name = name, VersionId = "new" },
+                new() { ContainerName = Container, Name = name, VersionId = "v1" }
+            ]);
         var client = NewClient(repository.Object);
 
         // Act
@@ -166,7 +184,7 @@ public class ResourceContainerClientTests
         // Assert
         Assert.Equal(name, result.Name);
         repository.Verify(r => r.AddResourceAsync(Container, It.IsAny<ResourceInfo>(),
-            It.IsAny<Stream>(), It.IsAny<CancellationToken>()), Times.Once);
+            It.IsAny<Stream>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Once);
         repository.Verify(r => r.DeleteResourceAsync(Container, name, "v1",
             It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -207,10 +225,11 @@ public class ResourceContainerClientTests
             It.IsAny<CancellationToken>()))
             .ReturnsAsync(
             [
+                new() { ContainerName = Container, Name = name, VersionId = "new" },
                 new() { ContainerName = Container, Name = name, VersionId = versionId }
             ]);
         repository.Setup(r => r.AddResourceAsync(Container, It.IsAny<ResourceInfo>(),
-            It.IsAny<Stream>(), It.IsAny<CancellationToken>()))
+            It.IsAny<Stream>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .Callback(() => calls.Add("add")).Returns(Task.CompletedTask);
         repository.Setup(r => r.DeleteResourceAsync(Container, name, versionId,
             It.IsAny<CancellationToken>()))
@@ -235,6 +254,7 @@ public class ResourceContainerClientTests
             It.IsAny<CancellationToken>()))
             .ReturnsAsync(
             [
+                new() { ContainerName = Container, Name = name, VersionId = "new" },
                 new() { ContainerName = Container, Name = name, VersionId = "v3" },
                 new() { ContainerName = Container, Name = name, VersionId = "v2" },
                 new() { ContainerName = Container, Name = name, VersionId = "v1" }
@@ -252,6 +272,8 @@ public class ResourceContainerClientTests
             It.IsAny<CancellationToken>()), Times.Once);
         repository.Verify(r => r.DeleteResourceAsync(Container, name, "v3",
             It.IsAny<CancellationToken>()), Times.Never);
+        repository.Verify(r => r.DeleteResourceAsync(Container, name, "new",
+            It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -265,6 +287,7 @@ public class ResourceContainerClientTests
             It.IsAny<CancellationToken>()))
             .ReturnsAsync(
             [
+                new() { ContainerName = Container, Name = name, VersionId = "new" },
                 new() { ContainerName = Container, Name = name, VersionId = versionId }
             ]);
         var options = new ResourcefullOptions { IsVersioningEnabled = true, MaxVersions = 2 };
@@ -288,7 +311,7 @@ public class ResourceContainerClientTests
             It.IsAny<CancellationToken>()))
             .ReturnsAsync([new() { ContainerName = Container, Name = name, VersionId = "v1" }]);
         repository.Setup(r => r.AddResourceAsync(Container, It.IsAny<ResourceInfo>(),
-            It.IsAny<Stream>(), It.IsAny<CancellationToken>()))
+            It.IsAny<Stream>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new OperationCanceledException());
         var options = new ResourcefullOptions { IsVersioningEnabled = true, MaxVersions = 1 };
         var client = NewClient(repository.Object, options: options);
@@ -623,7 +646,7 @@ public class ResourceContainerClientTests
 
         // Assert
         repository.Verify(r => r.AddResourceAsync(Container, It.IsAny<ResourceInfo>(),
-            It.IsAny<Stream>(), CancellationToken.None), Times.Once);
+            It.IsAny<Stream>(), It.IsAny<bool>(), CancellationToken.None), Times.Once);
     }
 
     [Fact]
@@ -638,12 +661,10 @@ public class ResourceContainerClientTests
         await client.UploadAsync("name", new MemoryStream(), null, cts.Token);
 
         // Assert
-        repository.Verify(r => r.GetResourceInfoAsync(Container, "name", null, cts.Token),
-            Times.Once);
         repository.Verify(r => r.GetResourceVersionsAsync(Container, "name", cts.Token),
             Times.Once);
         repository.Verify(r => r.AddResourceAsync(Container, It.IsAny<ResourceInfo>(),
-            It.IsAny<Stream>(), cts.Token), Times.Once);
+            It.IsAny<Stream>(), It.IsAny<bool>(), cts.Token), Times.Once);
     }
 
     [Fact]
@@ -659,7 +680,7 @@ public class ResourceContainerClientTests
 
         // Assert
         repository.Verify(r => r.AddResourceAsync(Container, It.IsAny<ResourceInfo>(),
-            It.IsAny<Stream>(), cts.Token), Times.Once);
+            It.IsAny<Stream>(), It.IsAny<bool>(), cts.Token), Times.Once);
     }
 
     [Fact]
@@ -685,7 +706,7 @@ public class ResourceContainerClientTests
 
         // Assert
         repository.Verify(r => r.AddResourceAsync(Container, It.IsAny<ResourceInfo>(),
-            It.IsAny<Stream>(), cts.Token), Times.Once);
+            It.IsAny<Stream>(), It.IsAny<bool>(), cts.Token), Times.Once);
     }
 
     [Fact]
@@ -817,8 +838,8 @@ public class ResourceContainerClientTests
         // Arrange
         var stored = new List<string?>();
         var repository = NewRepository();
-        repository.Setup(r => r.AddResourceAsync(Container, It.IsAny<ResourceInfo>(), It.IsAny<Stream>(), It.IsAny<CancellationToken>()))
-            .Callback<string, ResourceInfo, Stream, CancellationToken>((_, info, _, _) => stored.Add(info.VersionId))
+        repository.Setup(r => r.AddResourceAsync(Container, It.IsAny<ResourceInfo>(), It.IsAny<Stream>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .Callback<string, ResourceInfo, Stream, bool, CancellationToken>((_, info, _, _, _) => stored.Add(info.VersionId))
             .Returns(Task.CompletedTask);
         var client = NewClient(repository.Object, options: new ResourcefullOptions { IsVersioningEnabled = true, MaxVersions = 100 });
 

@@ -26,7 +26,8 @@ public interface IResourceContainerClient : IDisposable
     /// <exception cref="ArgumentException"><paramref name="resourceName"/> is null, empty, longer than 256 characters, or starts or ends with whitespace (<see cref="ArgumentNullException"/> when null).</exception>
     /// <exception cref="ArgumentNullException"><paramref name="content"/> is null.</exception>
     /// <exception cref="ResourceConflictException">
-    /// Versioning is disabled, a resource with the same name already exists and
+    /// A resource with the same name already exists and the upload is create-only: either
+    /// <see cref="ResourceUploadOptions.CreateOnly"/> is set, or versioning is disabled and
     /// <see cref="ResourceUploadOptions.Overwrite"/> is <see langword="false"/>.
     /// </exception>
     /// <exception cref="ResourceContainerNotFoundException">

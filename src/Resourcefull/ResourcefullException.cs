@@ -16,8 +16,11 @@ public class ResourcefullException : Exception
 /// uploading a resource whose name already exists when overwrite is not enabled, or creating a
 /// container that already exists. Maps naturally to an HTTP 409.
 /// </summary>
-public sealed class ResourceConflictException(string message) : ResourcefullException(message)
+public sealed class ResourceConflictException : ResourcefullException
 {
+    public ResourceConflictException(string message) : base(message) { }
+
+    public ResourceConflictException(string message, Exception innerException) : base(message, innerException) { }
 }
 
 /// <summary>

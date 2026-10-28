@@ -21,6 +21,7 @@ internal class ResourceConfiguration : IEntityTypeConfiguration<ResourceModel>
             .HasDatabaseName("UX_Resources_Container_Name_Version");
 
         builder.HasIndex(r => new { r.ContainerName, r.Name })
+            .IsUnique()
             .HasFilter("[IsLatest] = 1")
             .HasDatabaseName("IX_Resources_Latest");
 

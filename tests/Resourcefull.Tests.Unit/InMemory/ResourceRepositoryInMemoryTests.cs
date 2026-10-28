@@ -591,7 +591,7 @@ public class ResourceInMemoryRepositoryTests
         cts.Cancel();
 
         // Act
-        Task act() => repository.AddResourceAsync(containerName, resourceInfo, new MemoryStream([1, 2, 3]), cts.Token);
+        Task act() => repository.AddResourceAsync(containerName, resourceInfo, new MemoryStream([1, 2, 3]), cancellationToken: cts.Token);
 
         // Assert
         await Assert.ThrowsAnyAsync<OperationCanceledException>(act);
@@ -610,7 +610,7 @@ public class ResourceInMemoryRepositoryTests
         var content = new CancelAfterReadsStream(new byte[200_000], cts, readsBeforeCancel: 1);
 
         // Act
-        Task act() => repository.AddResourceAsync(containerName, resourceInfo, content, cts.Token);
+        Task act() => repository.AddResourceAsync(containerName, resourceInfo, content, cancellationToken: cts.Token);
 
         // Assert
         await Assert.ThrowsAnyAsync<OperationCanceledException>(act);
@@ -714,5 +714,50 @@ public class ResourceInMemoryRepositoryTests
         // Assert
         Assert.Equal("behind", Assert.Single(listed).VersionId);
         Assert.Equal(2, current!.ReadByte());
+    }
+
+    [Fact]
+    public async Task AddResourceAsync_ShouldThrowConflictAndStoreNothing_WhenCreateOnlyAndTheNameExists()
+    {
+        // Arrange
+        var repository = new ResourceInMemoryRepository();
+        await repository.AddResourceContainerAsync(new ResourceContainerInfo { Name = "c" });
+        await repository.AddResourceAsync("c", new ResourceInfo { ContainerName = "c", Name = "n", VersionId = "first" }, new MemoryStream());
+
+        // Act
+        Task act() => repository.AddResourceAsync("c", new ResourceInfo { ContainerName = "c", Name = "n", VersionId = "second" }, new MemoryStream(), createOnly: true);
+
+        // Assert
+        await Assert.ThrowsAsync<ResourceConflictException>(act);
+        Assert.Equal("first", Assert.Single(await repository.GetResourceVersionsAsync("c", "n")).VersionId);
+    }
+
+    [Fact]
+    public async Task AddResourceAsync_ShouldStore_WhenCreateOnlyAndTheNameIsNew()
+    {
+        // Arrange
+        var repository = new ResourceInMemoryRepository();
+        await repository.AddResourceContainerAsync(new ResourceContainerInfo { Name = "c" });
+
+        // Act
+        await repository.AddResourceAsync("c", new ResourceInfo { ContainerName = "c", Name = "n", VersionId = "first" }, new MemoryStream(), createOnly: true);
+
+        // Assert
+        Assert.NotNull(await repository.GetResourceInfoAsync("c", "n"));
+    }
+
+    [Fact]
+    public async Task AddResourceContainerAsync_ShouldThrowConflict_WhenTheContainerExists()
+    {
+        // Arrange
+        var repository = new ResourceInMemoryRepository();
+        await repository.AddResourceContainerAsync(new ResourceContainerInfo { Name = "c" });
+
+        // Act
+        Task act() => repository.AddResourceContainerAsync(new ResourceContainerInfo { Name = "c" });
+
+        // Assert
+        await Assert.ThrowsAsync<ResourceConflictException>(act);
+        Assert.Single(await repository.GetAllResourceContainerInfoAsync());
     }
 }

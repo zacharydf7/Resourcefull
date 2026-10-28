@@ -209,6 +209,34 @@ public class ProvisioningScriptTests(SqlServerFixture fixture)
         Assert.Equal(1, await ScalarAsync(connectionString, "SELECT COUNT(*) FROM sys.foreign_keys WHERE [name] = 'FK_Resources_ResourceContainers_ContainerName'"));
     }
 
+    [SkippableFact]
+    public async Task UniqueLatestVersionUpgradeScript_ShouldKeepTheLastStoredVersionCurrent_WhenANameHasTwoCurrentVersions()
+    {
+        fixture.SkipIfUnavailable();
+
+        // Arrange: a database one migration behind, where concurrent uploads left two current versions of one name.
+        const string migrationId = "20261028220856_UniqueLatestVersion";
+        ProvisioningScript upgrade = ProvisioningScripts.Expected().Single(s => s.ToMigration == migrationId);
+        string connectionString = fixture.AllocateDatabase("TwoCurrentVersions");
+        await using (ResourceDbContext context = SqlServerFixture.CreateDbContext(connectionString))
+        {
+            await context.Database.MigrateAsync(upgrade.FromMigration);
+        }
+        await ScalarAsync(connectionString, """
+            INSERT INTO [ResourceContainers] ([Name], [Uri], [Metadata]) VALUES ('c', NULL, '{}');
+            INSERT INTO [Resources] ([ContainerName], [Name], [VersionId], [LastModified], [IsLatest], [Metadata])
+            VALUES ('c', 'n', 'stored-first', SYSDATETIMEOFFSET(), 1, '{}'), ('c', 'n', 'stored-second', SYSDATETIMEOFFSET(), 1, '{}');
+            """);
+
+        // Act
+        await ProvisioningScripts.ApplyAsync(ProvisioningScripts.ReadCommitted(upgrade), connectionString);
+
+        // Assert
+        Assert.Equal(1, await ScalarAsync(connectionString, "SELECT COUNT(*) FROM [Resources] WHERE [IsLatest] = 1"));
+        Assert.Equal("stored-second", await ScalarAsync(connectionString, "SELECT [VersionId] FROM [Resources] WHERE [IsLatest] = 1"));
+        Assert.Equal(true, await ScalarAsync(connectionString, "SELECT [is_unique] FROM sys.indexes WHERE [name] = 'IX_Resources_Latest'"));
+    }
+
     /// <summary>Rows in the shape the first migration created them.</summary>
     private static async Task InsertFirstVersionResourceAsync(string connectionString, string containerName, string resourceName, byte[] payload)
     {

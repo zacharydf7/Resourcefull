@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Resourcefull.SqlServer;
 using Resourcefull.SqlServer.Models;
@@ -9,8 +10,11 @@ public class ResourceSqlRepositoryTests
 {
     private static (ResourceDbContext context, PooledDbContextFactory<ResourceDbContext> factory) NewDatabase()
     {
+        // The in-memory provider has no transactions; the writes' transactional behavior is covered by the
+        // SQL Server integration tests.
         DbContextOptions<ResourceDbContext> options = new DbContextOptionsBuilder<ResourceDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning))
             .Options;
         return (new ResourceDbContext(options), new PooledDbContextFactory<ResourceDbContext>(options));
     }
@@ -699,7 +703,7 @@ public class ResourceSqlRepositoryTests
         cts.Cancel();
 
         // Act
-        Task act() => resourceRepository.AddResourceAsync(containerName, Version(containerName, "resourceName", DateTime.UtcNow), new MemoryStream([1, 2, 3]), cts.Token);
+        Task act() => resourceRepository.AddResourceAsync(containerName, Version(containerName, "resourceName", DateTime.UtcNow), new MemoryStream([1, 2, 3]), cancellationToken: cts.Token);
 
         // Assert
         await Assert.ThrowsAnyAsync<OperationCanceledException>(act);
@@ -718,7 +722,7 @@ public class ResourceSqlRepositoryTests
         var content = new CancelAfterReadsStream(new byte[200_000], cts, readsBeforeCancel: 1);
 
         // Act
-        Task act() => resourceRepository.AddResourceAsync(containerName, Version(containerName, "resourceName", DateTime.UtcNow), content, cts.Token);
+        Task act() => resourceRepository.AddResourceAsync(containerName, Version(containerName, "resourceName", DateTime.UtcNow), content, cancellationToken: cts.Token);
 
         // Assert
         await Assert.ThrowsAnyAsync<OperationCanceledException>(act);
@@ -810,5 +814,43 @@ public class ResourceSqlRepositoryTests
 
         // Assert
         Assert.Equal("second", (await resourceRepository.GetResourceInfoAsync("c", "n"))!.VersionId);
+    }
+
+    [Fact]
+    public async Task AddResourceAsync_ShouldThrowConflictAndStoreNothing_WhenCreateOnlyAndTheNameExists()
+    {
+        // Arrange
+        (ResourceDbContext resourceDbContext, var dbContextFactory) = NewDatabase();
+        await resourceDbContext.ResourceContainers.AddAsync(new ResourceContainerModel { Name = "c" });
+        await resourceDbContext.SaveChangesAsync();
+        var resourceRepository = new ResourceSqlRepository(dbContextFactory);
+        await resourceRepository.AddResourceAsync("c", new ResourceInfo { ContainerName = "c", Name = "n", VersionId = "first" }, new MemoryStream());
+
+        // Act
+        Task act() => resourceRepository.AddResourceAsync("c", new ResourceInfo { ContainerName = "c", Name = "n", VersionId = "second" }, new MemoryStream(), createOnly: true);
+
+        // Assert
+        await Assert.ThrowsAsync<ResourceConflictException>(act);
+        Assert.Equal("first", Assert.Single(await resourceRepository.GetResourceVersionsAsync("c", "n")).VersionId);
+    }
+
+    [Fact]
+    public async Task AddResourceAsync_ShouldStoreNothingMore_WhenTheSameVersionIsWrittenAgain()
+    {
+        // Arrange: a retried write whose first commit succeeded, including a create-only one that must not conflict
+        // with itself.
+        (ResourceDbContext resourceDbContext, var dbContextFactory) = NewDatabase();
+        await resourceDbContext.ResourceContainers.AddAsync(new ResourceContainerModel { Name = "c" });
+        await resourceDbContext.SaveChangesAsync();
+        var resourceRepository = new ResourceSqlRepository(dbContextFactory);
+        var version = new ResourceInfo { ContainerName = "c", Name = "n", VersionId = "v1" };
+        await resourceRepository.AddResourceAsync("c", version, new MemoryStream(), createOnly: true);
+
+        // Act
+        await resourceRepository.AddResourceAsync("c", version, new MemoryStream(), createOnly: true);
+
+        // Assert
+        ResourceInfo stored = Assert.Single(await resourceRepository.GetResourceVersionsAsync("c", "n"));
+        Assert.True(stored.IsLatest);
     }
 }

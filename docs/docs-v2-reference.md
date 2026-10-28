@@ -246,7 +246,8 @@ ResourceContent? content = await container.DownloadContentAsync("my-resource");
 
 #### CreateResourceContainerAsync
 
-Creates a new container. **Throws `ResourceConflictException`** if it already exists.
+Creates a new container. **Throws `ResourceConflictException`** if it already exists, including when a
+concurrent call created it first.
 
 - `resourceContainerName: string`
 - `metadata: IDictionary<string, string>?` (optional)
@@ -336,7 +337,13 @@ Uploads a resource. Two overloads accept a `Stream` or in-memory `BinaryData`.
 - `uploadOptions: ResourceUploadOptions?` (optional)
 - **Returns** `Task<ResourceInfo>`.
 - **Throws** `ArgumentException` (blank name), `ArgumentNullException` (null content),
-  `ResourceConflictException` (name exists, versioning disabled, `Overwrite` false).
+  `ResourceConflictException` (name exists and the upload is create-only: `CreateOnly` is set, or versioning
+  is disabled and `Overwrite` is false).
+
+Uploads of the same name never interleave: on SQL Server each one holds a lock on the name until it commits,
+so concurrent uploads leave exactly one current version, and pruning never leaves more than `MaxVersions`.
+The create-only check is part of the write, so on SQL Server, of several concurrent create-only uploads of one
+name exactly one succeeds and the rest throw `ResourceConflictException`.
 
 ```csharp
 var options = new ResourceUploadOptions
@@ -474,6 +481,8 @@ Configuration for an upload.
 
 - `Overwrite: bool` — overwrite an existing resource. Only used when versioning is **disabled**
   (versioning creates a new version per write, so there is nothing to overwrite).
+- `CreateOnly: bool` — store the upload only if the name doesn't exist yet, with or without versioning;
+  otherwise throw `ResourceConflictException`. Takes precedence over `Overwrite`.
 - `Headers: ResourceHeaders` — `ContentType` and `ContentLength`.
 - `Metadata: IDictionary<string, string>` — additional key/value metadata.
 
@@ -621,6 +630,10 @@ collation. Three things to check before running it:
   SELECT [ContainerName], [Name] FROM [Resources] WHERE DATALENGTH([Name]) <> DATALENGTH(TRIM([Name]));
   ```
 
+`migrate_20261028220856_UniqueLatestVersion.sql` makes "one current version per name" a database constraint.
+Concurrent uploads in earlier releases could leave a name with two current versions; the script keeps the
+most recently stored one current before creating the constraint, so it needs no preparation.
+
 New databases provisioned from `Scripts/Resourcefull.sql` already include the v2 schema and RCSI — no
 upgrade step is required. `Scripts/Resourcefull.sql` is itself idempotent and can be used in place of the
 individual upgrade scripts; it applies whichever migrations the database is missing.
@@ -640,6 +653,7 @@ dotnet ef migrations script --idempotent --project src/Resourcefull.SqlServer --
 dotnet ef migrations script 20240611171637_InitialCreate 20250513172319_AddVersioning --idempotent --project src/Resourcefull.SqlServer --output src/Resourcefull.SqlServer/Scripts/Migrations/migrate_20250513172319_AddVersioning.sql
 dotnet ef migrations script 20250513172319_AddVersioning 20260624193539_RedesignKeysAndVersioning --idempotent --project src/Resourcefull.SqlServer --output src/Resourcefull.SqlServer/Scripts/Migrations/migrate_20260624193539_RedesignKeysAndVersioning.sql
 dotnet ef migrations script 20260624193539_RedesignKeysAndVersioning 20261028213132_NameLimitsAndCaseSensitiveNames --idempotent --project src/Resourcefull.SqlServer --output src/Resourcefull.SqlServer/Scripts/Migrations/migrate_20261028213132_NameLimitsAndCaseSensitiveNames.sql
+dotnet ef migrations script 20261028213132_NameLimitsAndCaseSensitiveNames 20261028220856_UniqueLatestVersion --idempotent --project src/Resourcefull.SqlServer --output src/Resourcefull.SqlServer/Scripts/Migrations/migrate_20261028220856_UniqueLatestVersion.sql
 ```
 
 Then put the preamble back at the top of each file. The fresh-install preamble creates the database when

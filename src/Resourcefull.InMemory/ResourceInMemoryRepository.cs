@@ -13,12 +13,15 @@ internal class ResourceInMemoryRepository : IResourceRepository
     private readonly List<InMemoryResource> _resources = [];
     private long _lastSequence;
 
-    public async Task AddResourceAsync(string resourceContainerName, ResourceInfo resourceInfo, Stream stream, CancellationToken cancellationToken = default)
+    public async Task AddResourceAsync(string resourceContainerName, ResourceInfo resourceInfo, Stream stream, bool createOnly = false, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
         InMemoryResourceContainer correspondingContainer = _resourceContainers.FirstOrDefault(x => x.Name == resourceContainerName)
             ?? throw new ResourceContainerNotFoundException($"Resource Container with the name {resourceContainerName} does not exist.");
+
+        if (createOnly && correspondingContainer.Resources.Any(r => r.Name == resourceInfo.Name))
+            throw new ResourceConflictException($"Resource with name {resourceInfo.Name} already exists.");
 
         if (stream.CanSeek) stream.Position = 0;
 
@@ -133,6 +136,9 @@ internal class ResourceInMemoryRepository : IResourceRepository
     public async Task AddResourceContainerAsync(ResourceContainerInfo resourceContainerInfo, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
+
+        if (_resourceContainers.Any(x => x.Name == resourceContainerInfo.Name))
+            throw new ResourceConflictException($"Resource Container with the name {resourceContainerInfo.Name} already exists.");
 
         _resourceContainers.Add(new InMemoryResourceContainer()
         {

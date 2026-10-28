@@ -6,9 +6,17 @@
 public class ResourceUploadOptions
 {
     /// <summary>
-    /// Determines whether to overwrite a resource when a resource with the same name exists.
+    /// Determines whether to overwrite a resource when a resource with the same name exists. Applies only when
+    /// versioning is disabled; with versioning enabled every upload adds a version.
     /// </summary>
     public bool Overwrite { get; set; }
+
+    /// <summary>
+    /// Store the upload only if no resource with this name exists yet, whether or not versioning is enabled. The
+    /// check is part of the write; on SQL Server, of several concurrent create-only uploads of one name exactly one
+    /// succeeds and the rest throw <see cref="ResourceConflictException"/>. Takes precedence over <see cref="Overwrite"/>.
+    /// </summary>
+    public bool CreateOnly { get; set; }
 
     /// <summary>
     /// <inheritdoc cref="ResourceHeaders(string?, long?)"/>

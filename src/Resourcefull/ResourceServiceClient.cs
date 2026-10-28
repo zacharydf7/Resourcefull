@@ -9,8 +9,6 @@ internal class ResourceServiceClient(IResourceRepository resourceRepository, IOp
 {
     private readonly ResourcefullOptions _options = options.Value;
 
-    private static readonly SemaphoreSlim CreateContainerGate = new(1, 1);
-
     public IResourceContainerClient GetResourceContainerClient(string resourceContainerName)
     {
         ResourceNames.ThrowIfInvalidContainerName(resourceContainerName);
@@ -23,12 +21,6 @@ internal class ResourceServiceClient(IResourceRepository resourceRepository, IOp
     public async Task<IResourceContainerClient> CreateResourceContainerAsync(string resourceContainerName, IDictionary<string, string>? metadata, CancellationToken cancellationToken)
     {
         ResourceNames.ThrowIfInvalidContainerName(resourceContainerName);
-
-        if (await ContainerExistsAsync(resourceContainerName, cancellationToken))
-        {
-            throw new ResourceConflictException($"Resource Container with the name {resourceContainerName} already exists.");
-        }
-
         return await CreateContainerCoreAsync(resourceContainerName, metadata, cancellationToken);
     }
 
@@ -39,35 +31,18 @@ internal class ResourceServiceClient(IResourceRepository resourceRepository, IOp
     {
         ResourceNames.ThrowIfInvalidContainerName(resourceContainerName);
 
+        // The usual case is a container that already exists; finding it with a read avoids a failed insert each time.
         if (await ContainerExistsAsync(resourceContainerName, cancellationToken))
-        {
             return GetResourceContainerClient(resourceContainerName);
-        }
 
-        await CreateContainerGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            if (await ContainerExistsAsync(resourceContainerName, cancellationToken))
-            {
-                return GetResourceContainerClient(resourceContainerName);
-            }
-
-            try
-            {
-                return await CreateContainerCoreAsync(resourceContainerName, metadata, cancellationToken);
-            }
-            catch (Exception exception) when (exception is not OperationCanceledException)
-            {
-                if (await ContainerExistsAsync(resourceContainerName, cancellationToken))
-                {
-                    return GetResourceContainerClient(resourceContainerName);
-                }
-                throw;
-            }
+            return await CreateContainerCoreAsync(resourceContainerName, metadata, cancellationToken);
         }
-        finally
+        catch (ResourceConflictException)
         {
-            CreateContainerGate.Release();
+            // Already there, whether from before or from a concurrent create; either way the caller gets a client.
+            return GetResourceContainerClient(resourceContainerName);
         }
     }
 

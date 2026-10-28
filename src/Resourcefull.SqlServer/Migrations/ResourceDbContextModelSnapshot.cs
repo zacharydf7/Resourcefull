@@ -109,6 +109,7 @@ namespace Resourcefull.SqlServer.Migrations
                     SqlServerKeyBuilderExtensions.IsClustered(b.HasKey("Id"), false);
 
                     b.HasIndex("ContainerName", "Name")
+                        .IsUnique()
                         .HasDatabaseName("IX_Resources_Latest")
                         .HasFilter("[IsLatest] = 1");
 
