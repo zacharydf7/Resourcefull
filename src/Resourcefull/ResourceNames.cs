@@ -3,19 +3,25 @@ using System.Runtime.CompilerServices;
 namespace Resourcefull;
 
 /// <summary>
-/// The rules every container and resource name must follow. Providers size their storage from the same limits, so a
-/// name that passes here always fits.
+/// The limits every container and resource name must stay within. The clients reject longer names, so a provider that
+/// sizes its storage from these always has room. Like <see cref="IResourceRepository"/>, the limits change only in a
+/// major release.
 /// </summary>
-internal static class ResourceNames
+public static class ResourceNames
 {
-    public const int MaxContainerNameLength = 128;
-    public const int MaxResourceNameLength = 256;
-    public const int MaxVersionIdLength = 36;
+    /// <summary>The longest container name, in characters.</summary>
+    public static readonly int MaxContainerNameLength = 128;
 
-    public static void ThrowIfInvalidContainerName(string resourceContainerName, [CallerArgumentExpression(nameof(resourceContainerName))] string? paramName = null)
+    /// <summary>The longest resource name, in characters.</summary>
+    public static readonly int MaxResourceNameLength = 256;
+
+    /// <summary>The longest version ID a client generates, in characters.</summary>
+    public static readonly int MaxVersionIdLength = 36;
+
+    internal static void ThrowIfInvalidContainerName(string resourceContainerName, [CallerArgumentExpression(nameof(resourceContainerName))] string? paramName = null)
         => ThrowIfInvalid(resourceContainerName, MaxContainerNameLength, paramName);
 
-    public static void ThrowIfInvalidResourceName(string resourceName, [CallerArgumentExpression(nameof(resourceName))] string? paramName = null)
+    internal static void ThrowIfInvalidResourceName(string resourceName, [CallerArgumentExpression(nameof(resourceName))] string? paramName = null)
         => ThrowIfInvalid(resourceName, MaxResourceNameLength, paramName);
 
     private static void ThrowIfInvalid(string name, int maxLength, string? paramName)

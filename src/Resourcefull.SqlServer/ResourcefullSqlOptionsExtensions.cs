@@ -13,19 +13,7 @@ public static class ResourcefullSqlOptionsExtensions
     /// <exception cref="InvalidOperationException"></exception>
     public static ResourcefullOptionsBuilder UseSqlServer(this ResourcefullOptionsBuilder builder, string connectionString)
     {
-        if (builder.ProviderConfigured)
-        {
-            throw new InvalidOperationException("Provider has already been configured.");
-        }
-
-        ServiceDescriptor? descriptor = builder.Services.SingleOrDefault(
-                d => d.ServiceType ==
-                    typeof(IResourceRepository));
-
-        if (descriptor != null)
-        {
-            builder.Services.Remove(descriptor);
-        }
+        builder.UseProvider<ResourceSqlRepository>();
 
         builder.Services.AddDbContextFactory<ResourceDbContext>(options =>
             options.UseSqlServer(connectionString, sql =>
@@ -33,9 +21,6 @@ public static class ResourcefullSqlOptionsExtensions
                     maxRetryCount: 5,
                     maxRetryDelay: TimeSpan.FromSeconds(10),
                     errorNumbersToAdd: [1205])));
-        builder.Services.AddScoped<IResourceRepository, ResourceSqlRepository>();
-
-        builder.ProviderConfigured = true;
         return builder;
     }
 }

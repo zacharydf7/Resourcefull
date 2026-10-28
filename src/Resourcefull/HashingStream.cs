@@ -3,9 +3,11 @@ using System.Security.Cryptography;
 namespace Resourcefull;
 
 /// <summary>
-/// Passes reads through from another stream while counting and hashing every byte read.
+/// Passes reads through from another stream while counting and hashing every byte read. Providers read the content
+/// they store through one and return <see cref="Complete(long?)"/> from <see cref="IResourceRepository.AddResourceAsync"/>.
+/// Disposing it does not dispose the source stream.
 /// </summary>
-internal class HashingStream(Stream source) : Stream
+public sealed class HashingStream(Stream source) : Stream
 {
     private const string HashPrefix = "sha256:";
 

@@ -1,8 +1,4 @@
 using Resourcefull.InMemory.Models;
-using System.Runtime.CompilerServices;
-
-// Required for Moq
-[assembly: InternalsVisibleTo("DynamicProxyGenAssembly2")]
 
 namespace Resourcefull.InMemory;
 

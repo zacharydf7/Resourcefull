@@ -80,4 +80,64 @@ public class ResourcefullOptionsBuilderTests
         // Assert
         Assert.NotNull(services.SingleOrDefault(d => d.ServiceType == typeof(IUriProvider)));
     }
+
+    /// <summary>A provider defined outside the library, knowing one container and nothing else.</summary>
+    private sealed class OneContainerProvider : IResourceRepository
+    {
+        public Task<ResourceContainerInfo?> GetResourceContainerInfoAsync(string resourceContainerName, CancellationToken cancellationToken = default)
+            => Task.FromResult(resourceContainerName == "custom" ? new ResourceContainerInfo { Name = "custom" } : null);
+
+        public Task<WrittenContent> AddResourceAsync(string resourceContainerName, ResourceInfo resourceInfo, Stream stream, bool createOnly = false, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<List<ResourceInfo>> GetAllResourceInfoAsync(string resourceContainerName, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<List<ResourceInfo>> GetResourceVersionsAsync(string resourceContainerName, string resourceName, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<ResourceInfo?> GetResourceInfoAsync(string resourceContainerName, string resourceName, string? versionId = null, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<Stream?> GetResourceStreamAsync(string resourceContainerName, string resourceName, string? versionId = null, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<bool> DeleteResourceAsync(string resourceContainerName, string resourceName, string? versionId = null, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task AddResourceContainerAsync(ResourceContainerInfo resourceContainerInfo, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<List<ResourceContainerInfo>> GetAllResourceContainerInfoAsync(CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<bool> DeleteResourceContainerAsync(string resourceContainerName, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+    }
+
+    [Theory]
+    [InlineData(ServiceLifetime.Singleton)]
+    [InlineData(ServiceLifetime.Scoped)]
+    public void UseProvider_ShouldRegisterTheRepositoryWithTheLifetimeGiven_WhenNoProviderIsConfigured(ServiceLifetime lifetime)
+    {
+        // Arrange
+        var services = new ServiceCollection();
+
+        // Act
+        var builder = new ResourcefullOptionsBuilder(services).UseProvider<OneContainerProvider>(lifetime);
+
+        // Assert
+        ServiceDescriptor descriptor = Assert.Single(services, d => d.ServiceType == typeof(IResourceRepository));
+        Assert.Equal(typeof(OneContainerProvider), descriptor.ImplementationType);
+        Assert.Equal(lifetime, descriptor.Lifetime);
+        Assert.True(builder.ProviderConfigured);
+    }
+
+    [Fact]
+    public void UseProvider_ShouldThrow_WhenAProviderIsAlreadyConfigured()
+    {
+        // Arrange
+        var builder = new ResourcefullOptionsBuilder(new ServiceCollection()).UseProvider<OneContainerProvider>();
+
+        // Act & Assert
+        Assert.Throws<InvalidOperationException>(() => builder.UseProvider<OneContainerProvider>());
+    }
+
+    [Fact]
+    public async Task UseProvider_ShouldServeTheServiceClientFromACustomProvider_WhenRegisteredThroughAddResourcefull()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        services.AddResourcefull(options => options.UseProvider<OneContainerProvider>());
+        using ServiceProvider provider = services.BuildServiceProvider();
+
+        // Act
+        bool exists = await provider.GetRequiredService<IResourceServiceClient>().ContainerExistsAsync("custom");
+
+        // Assert
+        Assert.True(exists);
+    }
 }

@@ -59,7 +59,8 @@ Attempting to configure more than one results in an `InvalidOperationException`.
 
 ### In-Memory Provider
 
-Ideal for testing and local development; uses in-memory data structures to simulate data access.
+Ideal for testing and local development; uses in-memory data structures to simulate data access. It is not
+yet safe for concurrent use, so call it from one caller at a time.
 
 ```csharp
 builder.Services.AddResourcefull(o =>
@@ -101,6 +102,41 @@ of taking shared locks, which removes a class of reader/writer deadlocks under c
 
 The provider also enables a **retry policy** (including SQL Server deadlock victims, error 1205) so
 transient contention does not surface to your code.
+
+### Writing a provider
+
+To store resources somewhere else (a file system, object storage, another database), implement
+`IResourceRepository` and register it with `UseProvider`. The interface follows semantic versioning: it changes
+incompatibly only in a major release of `Resourcefull`, so a provider package can depend on a version range.
+
+```csharp
+public static class ResourcefullFileSystemOptionsExtensions
+{
+    public static ResourcefullOptionsBuilder UseFileSystem(this ResourcefullOptionsBuilder builder, string root)
+    {
+        builder.Services.AddSingleton(new FileSystemOptions(root));
+        return builder.UseProvider<FileSystemRepository>(ServiceLifetime.Singleton);
+    }
+}
+```
+
+The XML docs on each member state its contract. In short, a provider must:
+
+- **Treat names and version IDs as untrusted.** The clients only guarantee that names follow the
+  [name rules](#names) (not blank, within the length limits, no whitespace at either end); `/`, `\`, `..` and any
+  other characters can still arrive, and version IDs on reads and deletes aren't checked at all. Encode or escape
+  them before using them as file paths or storage keys.
+- **Compare names and version IDs ordinally** (case-sensitive), and size its storage for
+  `ResourceNames.MaxContainerNameLength`, `MaxResourceNameLength` and `MaxVersionIdLength`. These limits change
+  only in a major release.
+- **Keep exactly one current version per name.** The current version is the one stored most recently, not the
+  one with the latest `LastModified`, and concurrent writes and deletes must never leave two.
+- **Decide conflicts in the write itself:** a missing container (`ResourceContainerNotFoundException`), a
+  create-only write to an existing name or a duplicate container (`ResourceConflictException`).
+- **Measure what it stores:** read the content through a `HashingStream`, store the measured length, and return
+  `HashingStream.Complete(declaredLength)`, which also rejects a wrong declared length.
+- **Honor cancellation:** a cancelled operation throws `OperationCanceledException` and leaves nothing half-done.
+- **Be safe to call concurrently** for the lifetime it registers with.
 
 ### URI Provider
 
