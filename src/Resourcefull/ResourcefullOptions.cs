@@ -3,12 +3,13 @@
 public class ResourcefullOptions
 {
     /// <summary>
-    /// Gets or sets whether versioning is enabled.
+    /// Gets whether versioning is enabled. Set through <see cref="ResourcefullOptionsBuilder.UseVersioning(int?)"/>.
     /// </summary>
-    public bool IsVersioningEnabled { get; set; }
+    public bool IsVersioningEnabled { get; internal set; }
 
     /// <summary>
-    /// Gets or sets the maximum number of versions to keep.
+    /// Gets the maximum number of versions to keep. Set through <see cref="ResourcefullOptionsBuilder.UseVersioning(int?)"/>,
+    /// which guarantees it is greater than zero whenever versioning is enabled.
     /// </summary>
-    public int MaxVersions { get; set; }
+    public int MaxVersions { get; internal set; }
 }
