@@ -773,4 +773,42 @@ public class ResourceSqlRepositoryTests
         await Assert.ThrowsAnyAsync<OperationCanceledException>(act);
         Assert.NotNull(await resourceRepository.GetResourceContainerInfoAsync(containerName));
     }
+
+    [Fact]
+    public async Task GetResourceVersionsAsync_ShouldPutTheLastStoredVersionFirst_WhenItsClockIsBehind()
+    {
+        // Arrange: the second writer's clock is an hour behind the first's.
+        (ResourceDbContext resourceDbContext, var dbContextFactory) = NewDatabase();
+        await resourceDbContext.ResourceContainers.AddAsync(new ResourceContainerModel { Name = "c" });
+        await resourceDbContext.SaveChangesAsync();
+        var resourceRepository = new ResourceSqlRepository(dbContextFactory);
+        await resourceRepository.AddResourceAsync("c", new ResourceInfo { ContainerName = "c", Name = "n", VersionId = "ahead", LastModified = DateTime.UtcNow.AddHours(1) }, new MemoryStream());
+        await resourceRepository.AddResourceAsync("c", new ResourceInfo { ContainerName = "c", Name = "n", VersionId = "behind", LastModified = DateTime.UtcNow }, new MemoryStream());
+
+        // Act
+        List<ResourceInfo> versions = await resourceRepository.GetResourceVersionsAsync("c", "n");
+
+        // Assert
+        Assert.Equal(["behind", "ahead"], versions.Select(v => v.VersionId));
+        Assert.True(versions[0].IsLatest);
+    }
+
+    [Fact]
+    public async Task DeleteResourceAsync_ShouldPromoteTheLastStoredRemainingVersion_WhenAnEarlierOneHasALaterClock()
+    {
+        // Arrange
+        (ResourceDbContext resourceDbContext, var dbContextFactory) = NewDatabase();
+        await resourceDbContext.ResourceContainers.AddAsync(new ResourceContainerModel { Name = "c" });
+        await resourceDbContext.SaveChangesAsync();
+        var resourceRepository = new ResourceSqlRepository(dbContextFactory);
+        await resourceRepository.AddResourceAsync("c", new ResourceInfo { ContainerName = "c", Name = "n", VersionId = "first", LastModified = DateTime.UtcNow.AddHours(1) }, new MemoryStream());
+        await resourceRepository.AddResourceAsync("c", new ResourceInfo { ContainerName = "c", Name = "n", VersionId = "second", LastModified = DateTime.UtcNow }, new MemoryStream());
+        await resourceRepository.AddResourceAsync("c", new ResourceInfo { ContainerName = "c", Name = "n", VersionId = "third", LastModified = DateTime.UtcNow }, new MemoryStream());
+
+        // Act
+        await resourceRepository.DeleteResourceAsync("c", "n");
+
+        // Assert
+        Assert.Equal("second", (await resourceRepository.GetResourceInfoAsync("c", "n"))!.VersionId);
+    }
 }

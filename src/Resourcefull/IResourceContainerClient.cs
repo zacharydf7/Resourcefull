@@ -120,8 +120,9 @@ public interface IResourceContainerClient : IDisposable
     public Task<IReadOnlyList<ResourceInfo>> GetResourcesAsync(CancellationToken cancellationToken);
 
     /// <summary>
-    /// Lists every stored version of a resource, most recent first. The current version has
-    /// <see cref="ResourceInfo.IsLatest"/> set to <see langword="true"/>.
+    /// Lists every stored version of a resource: the current version first, with
+    /// <see cref="ResourceInfo.IsLatest"/> set to <see langword="true"/>, then the rest from the most recently stored to
+    /// the oldest.
     /// </summary>
     /// <param name="resourceName">The name of the resource.</param>
     /// <returns>A (possibly empty) list of versions.</returns>

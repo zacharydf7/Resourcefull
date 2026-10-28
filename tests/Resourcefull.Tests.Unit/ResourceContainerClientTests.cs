@@ -810,4 +810,26 @@ public class ResourceContainerClientTests
         repository.Verify(r => r.GetResourceInfoAsync(Container, "name", null, cts.Token),
             Times.Once);
     }
+
+    [Fact]
+    public async Task UploadAsync_ShouldAssignADistinctVersion7GuidToEachVersion_WhenCalledRepeatedly()
+    {
+        // Arrange
+        var stored = new List<string?>();
+        var repository = NewRepository();
+        repository.Setup(r => r.AddResourceAsync(Container, It.IsAny<ResourceInfo>(), It.IsAny<Stream>(), It.IsAny<CancellationToken>()))
+            .Callback<string, ResourceInfo, Stream, CancellationToken>((_, info, _, _) => stored.Add(info.VersionId))
+            .Returns(Task.CompletedTask);
+        var client = NewClient(repository.Object, options: new ResourcefullOptions { IsVersioningEnabled = true, MaxVersions = 100 });
+
+        // Act
+        for (var i = 0; i < 50; i++)
+        {
+            await client.UploadAsync("name", new MemoryStream());
+        }
+
+        // Assert
+        Assert.Equal(50, stored.Distinct().Count());
+        Assert.All(stored, id => Assert.Equal(7, Guid.Parse(id!).Version));
+    }
 }

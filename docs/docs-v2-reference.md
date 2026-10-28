@@ -145,6 +145,12 @@ versioning is enabled, each resource can have multiple versions, each identified
 `VersionId`. If the optional `VersionId` is not provided, the **current** version is used for reads,
 and write operations create a new version.
 
+A `VersionId` is an opaque string; compare it for equality and don't parse it. New versions get a GUID
+(version 7), and IDs written by earlier releases (timestamps) stay valid. The **store** decides which
+version is current and the order versions are listed in, by the order it stored them, so servers with
+skewed clocks can't make an older write current. `LastModified` records the writing server's clock and is
+informational only.
+
 - **Enable versioning:** call `UseVersioning`.
 - **MaxVersions:** limits how many versions are kept per resource. Older versions are pruned
   automatically when the limit is exceeded.
@@ -425,8 +431,8 @@ IReadOnlyList<ResourceInfo> resources = await container.GetResourcesAsync();
 
 #### GetResourceVersionsAsync
 
-Lists every stored version of a resource, most recent first. The current version has
-`IsLatest = true`.
+Lists every stored version of a resource: the current version first (`IsLatest = true`), then the rest
+from the most recently stored to the oldest.
 
 - `resourceName: string`
 - **Returns** `Task<IReadOnlyList<ResourceInfo>>` (possibly empty).
@@ -481,8 +487,8 @@ Configuration for an upload.
 
 - `ContainerName: string`
 - `Name: string`
-- `VersionId: string?`
-- `LastModified: DateTimeOffset`
+- `VersionId: string?` — opaque; see [Versioning](#versioning).
+- `LastModified: DateTimeOffset` — the writing server's clock; informational.
 - `IsLatest: bool` — **new in v2.** `true` when this is the current version. In a versions list,
   exactly one entry has this set.
 - `ContentType: string?`

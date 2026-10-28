@@ -16,17 +16,19 @@ public class ResourceInfo
     public required string Name { get; set; }
 
     /// <summary>
-    /// The version ID of a stored resource.
+    /// The version ID of a stored resource: an opaque, unique string. Compare it for equality only; its format is not
+    /// part of the contract.
     /// </summary>
     public string? VersionId { get; set; }
 
     /// <summary>
-    /// The last modified date of a stored resource.
+    /// When the version was written, by the clock of the application server that wrote it. Informational only: which
+    /// version is current, and the order versions are listed in, are decided by the store.
     /// </summary>
     public DateTimeOffset LastModified { get; set; }
 
     /// <summary>
-    /// Indicates whether this is the current (most recent) version of the resource. When listing
+    /// Indicates whether this is the current (most recently stored) version of the resource. When listing
     /// versions, exactly one entry has this set to <see langword="true"/>.
     /// </summary>
     public bool IsLatest { get; set; }

@@ -78,7 +78,8 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
 
         return await dbContext.Resources
             .Where(r => r.ContainerName == resourceContainerName && r.Name == resourceName)
-            .OrderByDescending(r => r.LastModified)
+            .OrderByDescending(r => r.IsLatest)
+            .ThenByDescending(r => r.Id)
             .Select(r => new ResourceInfo
             {
                 ContainerName = r.ContainerName,
@@ -143,8 +144,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
         {
             ResourceModel? next = await dbContext.Resources
                 .Where(r => r.ContainerName == resourceContainerName && r.Name == resourceName && r.Id != existingResource.Id)
-                .OrderByDescending(r => r.LastModified)
-                .ThenByDescending(r => r.Id)
+                .OrderByDescending(r => r.Id)
                 .FirstOrDefaultAsync(cancellationToken);
             if (next != null) next.IsLatest = true;
         }

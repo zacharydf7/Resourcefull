@@ -12,7 +12,7 @@ internal class VersionIdValueGenerator : ValueGenerator<string>
     {
         if (entry.Entity is ResourceModel resource) 
         {
-            return resource.VersionId ?? DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffffffZ");
+            return resource.VersionId ?? Guid.CreateVersion7().ToString();
         }
         return "";
     }

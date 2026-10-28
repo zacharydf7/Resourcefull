@@ -25,13 +25,12 @@ internal class ResourceContainerClient(IResourceRepository resourceRepository, I
                 $"Set {nameof(uploadOptions.Overwrite)} to true in {nameof(ResourceUploadOptions)} to overwrite existing resources.");
         }
 
-        var now = DateTime.UtcNow;
         var resourceInfo = new ResourceInfo
         {
             ContainerName = ContainerName,
             Name = resourceName,
-            VersionId = now.ToString("yyyy-MM-ddTHH:mm:ss.fffffffZ"),
-            LastModified = now,
+            VersionId = Guid.CreateVersion7().ToString(),
+            LastModified = DateTime.UtcNow,
             ContentType = uploadOptions.Headers?.ContentType,
             ContentLength = uploadOptions.Headers?.ContentLength,
             Metadata = uploadOptions.Metadata
@@ -66,13 +65,12 @@ internal class ResourceContainerClient(IResourceRepository resourceRepository, I
         Stream? stream = await resourceRepository.GetResourceStreamAsync(ContainerName, resourceName, versionId, cancellationToken);
         if (stream == null) return null;
 
-        var now = DateTime.UtcNow;
         var newResourceInfo = new ResourceInfo
         {
             ContainerName = resourceInfo.ContainerName,
             Name = resourceInfo.Name,
-            VersionId = now.ToString("yyyy-MM-ddTHH:mm:ss.fffffffZ"),
-            LastModified = now,
+            VersionId = Guid.CreateVersion7().ToString(),
+            LastModified = DateTime.UtcNow,
             ContentType = resourceInfo.ContentType,
             ContentLength = resourceInfo.ContentLength,
             Metadata = resourceInfo.Metadata

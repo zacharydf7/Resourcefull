@@ -11,4 +11,7 @@ internal class InMemoryResource
     public ResourceInfo ResourceInfo { get; set; } = null!;
     public Stream Stream { get; set; } = null!;
 
+    /// <summary>The order this version was stored in; the highest for a name is its current version.</summary>
+    public long Sequence { get; init; }
+
 }

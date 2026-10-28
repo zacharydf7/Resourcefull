@@ -661,4 +661,58 @@ public class ResourceInMemoryRepositoryTests
         await Assert.ThrowsAnyAsync<OperationCanceledException>(act);
         Assert.NotNull(await repository.GetResourceContainerInfoAsync(containerName));
     }
+
+    [Fact]
+    public async Task GetResourceVersionsAsync_ShouldPutTheLastStoredVersionFirst_WhenItsClockIsBehind()
+    {
+        // Arrange: the second writer's clock is an hour behind the first's.
+        var repository = new ResourceInMemoryRepository();
+        await repository.AddResourceContainerAsync(new ResourceContainerInfo { Name = "c" });
+        await repository.AddResourceAsync("c", new ResourceInfo { ContainerName = "c", Name = "n", VersionId = "ahead", LastModified = DateTime.UtcNow.AddHours(1) }, new MemoryStream());
+        await repository.AddResourceAsync("c", new ResourceInfo { ContainerName = "c", Name = "n", VersionId = "behind", LastModified = DateTime.UtcNow }, new MemoryStream());
+
+        // Act
+        List<ResourceInfo> versions = await repository.GetResourceVersionsAsync("c", "n");
+        ResourceInfo? current = await repository.GetResourceInfoAsync("c", "n");
+
+        // Assert
+        Assert.Equal(["behind", "ahead"], versions.Select(v => v.VersionId));
+        Assert.True(versions[0].IsLatest);
+        Assert.Equal("behind", current!.VersionId);
+    }
+
+    [Fact]
+    public async Task DeleteResourceAsync_ShouldPromoteTheLastStoredRemainingVersion_WhenAnEarlierOneHasALaterClock()
+    {
+        // Arrange
+        var repository = new ResourceInMemoryRepository();
+        await repository.AddResourceContainerAsync(new ResourceContainerInfo { Name = "c" });
+        await repository.AddResourceAsync("c", new ResourceInfo { ContainerName = "c", Name = "n", VersionId = "first", LastModified = DateTime.UtcNow.AddHours(1) }, new MemoryStream());
+        await repository.AddResourceAsync("c", new ResourceInfo { ContainerName = "c", Name = "n", VersionId = "second", LastModified = DateTime.UtcNow }, new MemoryStream());
+        await repository.AddResourceAsync("c", new ResourceInfo { ContainerName = "c", Name = "n", VersionId = "third", LastModified = DateTime.UtcNow }, new MemoryStream());
+
+        // Act
+        await repository.DeleteResourceAsync("c", "n");
+
+        // Assert
+        Assert.Equal("second", (await repository.GetResourceInfoAsync("c", "n"))!.VersionId);
+    }
+
+    [Fact]
+    public async Task GetAllResourceInfoAsync_ShouldReturnTheLastStoredVersion_WhenItsClockIsBehind()
+    {
+        // Arrange: the second writer's clock is an hour behind the first's.
+        var repository = new ResourceInMemoryRepository();
+        await repository.AddResourceContainerAsync(new ResourceContainerInfo { Name = "c" });
+        await repository.AddResourceAsync("c", new ResourceInfo { ContainerName = "c", Name = "n", VersionId = "ahead", LastModified = DateTime.UtcNow.AddHours(1) }, new MemoryStream([1]));
+        await repository.AddResourceAsync("c", new ResourceInfo { ContainerName = "c", Name = "n", VersionId = "behind", LastModified = DateTime.UtcNow }, new MemoryStream([2]));
+
+        // Act
+        List<ResourceInfo> listed = await repository.GetAllResourceInfoAsync("c");
+        Stream? current = await repository.GetResourceStreamAsync("c", "n");
+
+        // Assert
+        Assert.Equal("behind", Assert.Single(listed).VersionId);
+        Assert.Equal(2, current!.ReadByte());
+    }
 }

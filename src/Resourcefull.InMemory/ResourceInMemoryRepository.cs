@@ -11,6 +11,7 @@ internal class ResourceInMemoryRepository : IResourceRepository
 
     private readonly List<InMemoryResourceContainer> _resourceContainers = [];
     private readonly List<InMemoryResource> _resources = [];
+    private long _lastSequence;
 
     public async Task AddResourceAsync(string resourceContainerName, ResourceInfo resourceInfo, Stream stream, CancellationToken cancellationToken = default)
     {
@@ -30,6 +31,7 @@ internal class ResourceInMemoryRepository : IResourceRepository
             ContainerName = resourceContainerName,
             Name = resourceInfo.Name,
             Stream = memoryStream,
+            Sequence = ++_lastSequence,
             ResourceInfo = new ResourceInfo()
             {
                 ContainerName = resourceContainerName,
@@ -57,7 +59,7 @@ internal class ResourceInMemoryRepository : IResourceRepository
             var groups = resourceContainer.Resources
             .GroupBy(r => r.Name);
 
-            return await Task.FromResult<List<ResourceInfo>>([.. groups.SelectMany(g => g.OrderByDescending(r => r.ResourceInfo.LastModified).Take(1)
+            return await Task.FromResult<List<ResourceInfo>>([.. groups.SelectMany(g => g.OrderByDescending(r => r.Sequence).Take(1)
             .Select(r => new ResourceInfo()
             {
                 ContainerName = resourceContainerName,
@@ -82,7 +84,7 @@ internal class ResourceInMemoryRepository : IResourceRepository
         cancellationToken.ThrowIfCancellationRequested();
 
         InMemoryResource? resource = versionId == null
-            ? _resources.OrderByDescending(r => r.ResourceInfo.LastModified).FirstOrDefault(r => r.ContainerName == resourceContainerName && r.Name == resourceName)
+            ? _resources.OrderByDescending(r => r.Sequence).FirstOrDefault(r => r.ContainerName == resourceContainerName && r.Name == resourceName)
             : _resources.FirstOrDefault(r => r.ContainerName == resourceContainerName && r.Name == resourceName && r.ResourceInfo.VersionId == versionId);
 
         if (resource is null) return null;
@@ -95,7 +97,7 @@ internal class ResourceInMemoryRepository : IResourceRepository
         cancellationToken.ThrowIfCancellationRequested();
 
         InMemoryResource? resource = versionId == null
-            ? _resources.OrderByDescending(r => r.ResourceInfo.LastModified).FirstOrDefault(r => r.ContainerName == resourceContainerName && r.Name == resourceName)
+            ? _resources.OrderByDescending(r => r.Sequence).FirstOrDefault(r => r.ContainerName == resourceContainerName && r.Name == resourceName)
             : _resources.FirstOrDefault(r => r.ContainerName == resourceContainerName && r.Name == resourceName && r.ResourceInfo.VersionId == versionId);
 
         if (resource is null) return null;
@@ -115,7 +117,7 @@ internal class ResourceInMemoryRepository : IResourceRepository
 
         InMemoryResource? existingResource = versionId == null
             ? _resources.Where(r => r.ContainerName == resourceContainerName && r.Name == resourceName)
-                .OrderByDescending(r => r.ResourceInfo.LastModified).FirstOrDefault()
+                .OrderByDescending(r => r.Sequence).FirstOrDefault()
             : _resources.FirstOrDefault(r => r.ContainerName == resourceContainerName && r.Name == resourceName && r.ResourceInfo.VersionId == versionId);
 
         if (existingResource is null) return false;
@@ -187,7 +189,7 @@ internal class ResourceInMemoryRepository : IResourceRepository
         {
             var ordered = resourceContainer.Resources
                 .Where(x => x.Name == resourceName)
-                .OrderByDescending(x => x.ResourceInfo.LastModified)
+                .OrderByDescending(x => x.Sequence)
                 .ToList();
 
             return await Task.FromResult(ordered
@@ -214,7 +216,7 @@ internal class ResourceInMemoryRepository : IResourceRepository
     {
         InMemoryResource? latest = _resources
             .Where(r => r.ContainerName == resourceContainerName && r.Name == resourceName)
-            .OrderByDescending(r => r.ResourceInfo.LastModified)
+            .OrderByDescending(r => r.Sequence)
             .FirstOrDefault();
         return latest is not null && latest.ResourceInfo.VersionId == versionId;
     }

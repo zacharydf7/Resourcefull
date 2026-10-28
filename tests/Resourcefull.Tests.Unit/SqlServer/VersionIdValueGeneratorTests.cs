@@ -31,7 +31,7 @@ public class VersionIdValueGeneratorTests
     }
 
     [Fact]
-    public void Next_ShouldGenerateParseableTimestamp_WhenVersionIdIsNull()
+    public void Next_ShouldGenerateAVersion7Guid_WhenVersionIdIsNull()
     {
         // Arrange
         using var context = NewContext();
@@ -42,8 +42,8 @@ public class VersionIdValueGeneratorTests
         string generated = generator.Next(context.Entry(resource));
 
         // Assert
-        Assert.False(string.IsNullOrWhiteSpace(generated));
-        Assert.True(DateTime.TryParse(generated, out _));
+        Assert.True(Guid.TryParse(generated, out Guid guid));
+        Assert.Equal(7, guid.Version);
     }
 
     [Fact]
