@@ -11,6 +11,7 @@
 	<RepositoryUrl>https://github.com/zacharydf7/Resourcefull</RepositoryUrl>
 	<RepositoryType>git</RepositoryType>
 	<PackageLicenseExpression>MIT</PackageLicenseExpression>
+	<EnablePackageValidation>true</EnablePackageValidation>
     <Version>2.2.0.0</Version>
   </PropertyGroup>
 
