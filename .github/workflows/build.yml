@@ -1,22 +1,50 @@
-name: .NET Build and Deploy
+name: .NET Build and Test
 
 on:
   push:
     branches: [ "main" ]
+  pull_request:
   workflow_dispatch: # manual trigger
 
 jobs:
-  build:
+  unit-tests:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
     - name: Setup .NET
       uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: 9.0.x
+        dotnet-version: 10.0.x
     - name: Restore dependencies
       run: dotnet restore
     - name: Build
-      run: dotnet build --no-restore
+      run: dotnet build --no-restore --configuration Release
     - name: Test
-      run: dotnet test --no-build --verbosity normal
+      run: dotnet test tests/Resourcefull.Tests.Unit --no-build --configuration Release
+
+  integration-tests:
+    runs-on: ubuntu-latest
+    services:
+      sqlserver:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: "Y"
+          MSSQL_SA_PASSWORD: "Resourcefull(!)Integration1"
+          MSSQL_PID: "Developer"
+        ports:
+          - 1433:1433
+    env:
+      RESOURCEFULL_TEST_SQLSERVER: "Server=127.0.0.1,1433;User Id=sa;Password=Resourcefull(!)Integration1;TrustServerCertificate=True;Encrypt=False"
+      RESOURCEFULL_TEST_SQL_READY_TIMEOUT_SECONDS: "120"
+    steps:
+    - uses: actions/checkout@v4
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 10.0.x
+    - name: Restore dependencies
+      run: dotnet restore
+    - name: Build
+      run: dotnet build --no-restore --configuration Release
+    - name: Test
+      run: dotnet test tests/Resourcefull.Tests.Integration --no-build --configuration Release
