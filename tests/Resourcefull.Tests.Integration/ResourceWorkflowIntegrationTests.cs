@@ -101,4 +101,32 @@ public class ResourceWorkflowIntegrationTests(SqlServerFixture fixture)
         command.Parameters.AddWithValue("@c", containerName);
         return (int)(await command.ExecuteScalarAsync())!;
     }
+
+    [SkippableFact]
+    public async Task UploadAsync_ShouldReturnAndStoreTheMeasuredLength_WhenTheDeclaredLengthIsRightOrAbsent()
+    {
+        _fixture.SkipIfUnavailable();
+
+        // Arrange
+        using var provider = _fixture.BuildServiceProvider();
+        using var scope = provider.CreateScope();
+        var service = scope.ServiceProvider.GetRequiredService<IResourceServiceClient>();
+        var container = await service.CreateResourceContainerAsync($"c-{Guid.NewGuid():N}");
+        byte[] payload = new byte[70_000];
+        Random.Shared.NextBytes(payload);
+
+        // Act
+        ResourceInfo undeclared = await container.UploadAsync("undeclared.bin", new MemoryStream(payload));
+        ResourceInfo declared = await container.UploadAsync("declared.bin", new MemoryStream(payload),
+            new ResourceUploadOptions { Headers = new ResourceHeaders("application/octet-stream", payload.Length) });
+        Exception? wrong = await Record.ExceptionAsync(() => container.UploadAsync("wrong.bin", new MemoryStream(payload),
+            new ResourceUploadOptions { Headers = new ResourceHeaders("application/octet-stream", payload.Length + 1) }));
+
+        // Assert
+        Assert.Equal(payload.Length, undeclared.ContentLength);
+        Assert.Equal(payload.Length, (await container.GetResourceInfoAsync("undeclared.bin"))!.ContentLength);
+        Assert.Equal(undeclared.ContentHash, declared.ContentHash);
+        Assert.IsType<ResourceContentLengthMismatchException>(wrong);
+        Assert.False(await container.ExistsAsync("wrong.bin"));
+    }
 }

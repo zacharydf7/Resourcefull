@@ -178,6 +178,7 @@ builder.Services.AddResourcefull(o =>
 | Invalid argument (null/empty, or a name that breaks the [name rules](#names)) | throws `ArgumentException` / `ArgumentNullException` |
 | Name conflict on create/upload | throws `ResourceConflictException` |
 | Upload into a container that does not exist | throws `ResourceContainerNotFoundException` |
+| Upload whose declared length differs from its content | throws `ResourceContentLengthMismatchException` |
 | Restore while versioning disabled | throws `InvalidOperationException` |
 
 `ResourceConflictException` and `ResourceContainerNotFoundException` derive from
@@ -339,10 +340,12 @@ Uploads a resource. Two overloads accept a `Stream` or in-memory `BinaryData`.
 - `resourceName: string`
 - `content: Stream` **or** `BinaryData`
 - `uploadOptions: ResourceUploadOptions?` (optional)
-- **Returns** `Task<ResourceInfo>`.
+- **Returns** `Task<ResourceInfo>` describing what was stored: the new version's ID, the measured
+  `ContentLength`, the `ContentHash` and `IsLatest = true`, with a copy of the metadata.
 - **Throws** `ArgumentException` (blank name), `ArgumentNullException` (null content),
   `ResourceConflictException` (name exists and the upload is create-only: `CreateOnly` is set, or versioning
-  is disabled and `Overwrite` is false).
+  is disabled and `Overwrite` is false), `ResourceContentLengthMismatchException` (the declared
+  `Headers.ContentLength` differs from the bytes supplied; nothing is stored).
 
 Uploads of the same name never interleave: on SQL Server each one holds a lock on the name until it commits,
 so concurrent uploads leave exactly one current version, and a successful prune never leaves more than
@@ -506,14 +509,18 @@ Configuration for an upload.
 - `IsLatest: bool` — **new in v2.** `true` when this is the current version. In a versions list,
   exactly one entry has this set.
 - `ContentType: string?`
-- `ContentLength: long?`
+- `ContentLength: long?` — measured from the bytes stored. Versions stored by earlier releases keep the
+  length their caller declared.
+- `ContentHash: string?` — SHA-256 of the content as `sha256:` plus lowercase hex, computed while it was
+  written. Set on the `ResourceInfo` an upload or restore returns; it isn't stored, so reads return `null`.
 - `Uri: string?`
 - `Metadata: IDictionary<string, string>`
 
 ### ResourceHeaders
 
 - `ContentType: string?`
-- `ContentLength: long?`
+- `ContentLength: long?` — optional. When given, it must match the bytes supplied, or the upload throws
+  `ResourceContentLengthMismatchException` and stores nothing.
 
 ### ResourceDownloadResult
 
@@ -545,6 +552,8 @@ A record representing the context of a Resourcefull operation (passed to `IUriPr
 - `ResourceConflictException : ResourcefullException` — an operation conflicts with an existing
   resource or container (e.g. uploading a name that already exists with overwrite off, or creating a
   container that already exists). Maps naturally to an HTTP 409.
+- `ResourceContentLengthMismatchException : ResourcefullException` — an upload declared a content length
+  that differs from the bytes it supplied; nothing was stored. Maps naturally to an HTTP 400.
 
 ## Migrating from v1
 

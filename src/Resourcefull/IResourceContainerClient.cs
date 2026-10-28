@@ -22,9 +22,15 @@ public interface IResourceContainerClient : IDisposable
     /// <param name="resourceName">The name of the uploaded resource.</param>
     /// <param name="content">The content to upload.</param>
     /// <param name="uploadOptions">Optional configuration for the upload.</param>
-    /// <returns>The <see cref="ResourceInfo"/> for the uploaded resource.</returns>
+    /// <returns>
+    /// What was stored: the new version, its measured <see cref="ResourceInfo.ContentLength"/> and
+    /// <see cref="ResourceInfo.ContentHash"/>, and <see cref="ResourceInfo.IsLatest"/> set.
+    /// </returns>
     /// <exception cref="ArgumentException"><paramref name="resourceName"/> is null, empty, longer than 256 characters, or starts or ends with whitespace (<see cref="ArgumentNullException"/> when null).</exception>
     /// <exception cref="ArgumentNullException"><paramref name="content"/> is null.</exception>
+    /// <exception cref="ResourceContentLengthMismatchException">
+    /// <see cref="ResourceUploadOptions.Headers"/> declares a content length that differs from the content; nothing was stored.
+    /// </exception>
     /// <exception cref="ResourceConflictException">
     /// A resource with the same name already exists and the upload is create-only: either
     /// <see cref="ResourceUploadOptions.CreateOnly"/> is set, or versioning is disabled and

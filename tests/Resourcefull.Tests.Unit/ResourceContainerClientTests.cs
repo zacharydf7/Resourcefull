@@ -15,11 +15,15 @@ public class ResourceContainerClientTests
         => new(repository, uriProvider, options ?? new ResourcefullOptions(),
             new ResourceContainerInfo { Name = containerName });
 
+    private static readonly WrittenContent Written = new(5, "sha256:written");
+
     private static Mock<IResourceRepository> NewRepository()
     {
         var repository = new Mock<IResourceRepository>();
         repository.Setup(r => r.GetResourceVersionsAsync(Container, It.IsAny<string>(),
             It.IsAny<CancellationToken>())).ReturnsAsync([]);
+        repository.Setup(r => r.AddResourceAsync(Container, It.IsAny<ResourceInfo>(), It.IsAny<Stream>(),
+            It.IsAny<bool>(), It.IsAny<CancellationToken>())).ReturnsAsync(Written);
         return repository;
     }
 
@@ -230,7 +234,7 @@ public class ResourceContainerClientTests
             ]);
         repository.Setup(r => r.AddResourceAsync(Container, It.IsAny<ResourceInfo>(),
             It.IsAny<Stream>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
-            .Callback(() => calls.Add("add")).Returns(Task.CompletedTask);
+            .Callback(() => calls.Add("add")).ReturnsAsync(Written);
         repository.Setup(r => r.DeleteResourceAsync(Container, name, versionId,
             It.IsAny<CancellationToken>()))
             .Callback(() => calls.Add("delete")).ReturnsAsync(true);
@@ -838,7 +842,7 @@ public class ResourceContainerClientTests
         var repository = NewRepository();
         repository.Setup(r => r.AddResourceAsync(Container, It.IsAny<ResourceInfo>(), It.IsAny<Stream>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .Callback<string, ResourceInfo, Stream, bool, CancellationToken>((_, info, _, _, _) => stored.Add(info.VersionId))
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync(Written);
         var client = NewClient(repository.Object, options: new ResourcefullOptions { IsVersioningEnabled = true, MaxVersions = 100 });
 
         // Act
@@ -861,7 +865,7 @@ public class ResourceContainerClientTests
         repository.Setup(r => r.AddResourceAsync(Container, It.IsAny<ResourceInfo>(), It.IsAny<Stream>(),
             It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .Callback(cts.Cancel)
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync(Written);
         repository.Setup(r => r.GetResourceVersionsAsync(Container, "name", It.IsAny<CancellationToken>()))
             .ReturnsAsync(
             [
@@ -898,5 +902,47 @@ public class ResourceContainerClientTests
 
         // Assert
         Assert.Equal("name", result.Name);
+    }
+
+    [Fact]
+    public async Task UploadAsync_ShouldReturnWhatWasStored_WhenTheWriteSucceeds()
+    {
+        // Arrange: the caller declares nothing about the length and keeps its own metadata dictionary.
+        var metadata = new Dictionary<string, string> { ["k"] = "v" };
+        var client = NewClient(NewRepository().Object);
+
+        // Act
+        ResourceInfo result = await client.UploadAsync("name", new MemoryStream(), new ResourceUploadOptions { Metadata = metadata });
+
+        // Assert
+        Assert.Equal(Written.ContentLength, result.ContentLength);
+        Assert.Equal(Written.ContentHash, result.ContentHash);
+        Assert.True(result.IsLatest);
+        Assert.NotSame(metadata, result.Metadata);
+        Assert.Equal(metadata, result.Metadata);
+    }
+
+    [Fact]
+    public async Task RestoreVersionAsync_ShouldMeasureTheRestoredContent_WhenTheStoredLengthIsWrong()
+    {
+        // Arrange: an older version whose stored length came from a caller and is wrong.
+        var repository = NewRepository();
+        repository.Setup(r => r.GetResourceInfoAsync(Container, "name", "v1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ResourceInfo { ContainerName = Container, Name = "name", VersionId = "v1", ContentLength = 999 });
+        repository.Setup(r => r.GetResourceStreamAsync(Container, "name", "v1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new MemoryStream([1, 2, 3]));
+        long? declaredLength = -1;
+        repository.Setup(r => r.AddResourceAsync(Container, It.IsAny<ResourceInfo>(), It.IsAny<Stream>(), false, It.IsAny<CancellationToken>()))
+            .Callback<string, ResourceInfo, Stream, bool, CancellationToken>((_, info, _, _, _) => declaredLength = info.ContentLength)
+            .ReturnsAsync(Written);
+        var client = NewClient(repository.Object, options: new ResourcefullOptions { IsVersioningEnabled = true, MaxVersions = 10 });
+
+        // Act
+        ResourceInfo? restored = await client.RestoreVersionAsync("name", "v1");
+
+        // Assert
+        Assert.Null(declaredLength);
+        Assert.Equal(Written.ContentLength, restored!.ContentLength);
+        Assert.True(restored.IsLatest);
     }
 }

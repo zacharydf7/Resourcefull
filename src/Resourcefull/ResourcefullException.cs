@@ -24,6 +24,15 @@ public sealed class ResourceConflictException : ResourcefullException
 }
 
 /// <summary>
+/// Thrown when an upload declares a content length that differs from the bytes it supplies. Nothing is
+/// stored. Maps naturally to an HTTP 400.
+/// </summary>
+public sealed class ResourceContentLengthMismatchException : ResourcefullException
+{
+    public ResourceContentLengthMismatchException(string message) : base(message) { }
+}
+
+/// <summary>
 /// Thrown when an operation targets a resource container that does not exist — for example
 /// uploading a resource into a container that was never created or has since been deleted.
 /// Maps naturally to an HTTP 404.

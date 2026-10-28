@@ -39,9 +39,17 @@ public class ResourceInfo
     public string? ContentType { get; set; }
 
     /// <summary>
-    /// <inheritdoc cref="ResourceHeaders.ContentLength"/>
+    /// The length of the stored content in bytes, measured as it was written. Versions stored by releases before
+    /// lengths were measured keep the length their caller declared.
     /// </summary>
     public long? ContentLength { get; set; }
+
+    /// <summary>
+    /// The SHA-256 of the content, as <c>sha256:</c> followed by lowercase hex, computed as it was written. Set on the
+    /// <see cref="ResourceInfo"/> an upload or restore returns; the hash is not stored with the resource, so reads
+    /// return <see langword="null"/>.
+    /// </summary>
+    public string? ContentHash { get; set; }
 
     /// <summary>
     /// The URI of a stored resource.

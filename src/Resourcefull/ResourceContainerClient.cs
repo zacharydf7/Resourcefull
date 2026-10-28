@@ -28,7 +28,7 @@ internal class ResourceContainerClient(IResourceRepository resourceRepository, I
             LastModified = DateTime.UtcNow,
             ContentType = uploadOptions.Headers?.ContentType,
             ContentLength = uploadOptions.Headers?.ContentLength,
-            Metadata = uploadOptions.Metadata
+            Metadata = new Dictionary<string, string>(uploadOptions.Metadata)
         };
 
         try
@@ -76,7 +76,8 @@ internal class ResourceContainerClient(IResourceRepository resourceRepository, I
             VersionId = Guid.CreateVersion7().ToString(),
             LastModified = DateTime.UtcNow,
             ContentType = resourceInfo.ContentType,
-            ContentLength = resourceInfo.ContentLength,
+            // Measured like any upload rather than declared: lengths stored by earlier releases came from callers.
+            ContentLength = null,
             Metadata = resourceInfo.Metadata
         };
 
@@ -88,7 +89,12 @@ internal class ResourceContainerClient(IResourceRepository resourceRepository, I
         resourceInfo.Uri = uriProvider?.GetAbsoluteUri(new ResourcefullContext(ContainerName, resourceName, resourceInfo.VersionId));
 
         if (stream.CanSeek) stream.Position = 0;
-        await resourceRepository.AddResourceAsync(ContainerName, resourceInfo, stream, createOnly, cancellationToken);
+        WrittenContent written = await resourceRepository.AddResourceAsync(ContainerName, resourceInfo, stream, createOnly, cancellationToken);
+
+        // Report what was stored rather than what was asked for.
+        resourceInfo.ContentLength = written.ContentLength;
+        resourceInfo.ContentHash = written.ContentHash;
+        resourceInfo.IsLatest = true;
 
         // The new version is stored, so the upload has succeeded; pruning is cleanup that neither the caller's token
         // nor a failure may turn into a reported failure.

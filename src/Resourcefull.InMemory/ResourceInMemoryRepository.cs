@@ -13,7 +13,7 @@ internal class ResourceInMemoryRepository : IResourceRepository
     private readonly List<InMemoryResource> _resources = [];
     private long _lastSequence;
 
-    public async Task AddResourceAsync(string resourceContainerName, ResourceInfo resourceInfo, Stream stream, bool createOnly = false, CancellationToken cancellationToken = default)
+    public async Task<WrittenContent> AddResourceAsync(string resourceContainerName, ResourceInfo resourceInfo, Stream stream, bool createOnly = false, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -26,7 +26,9 @@ internal class ResourceInMemoryRepository : IResourceRepository
         if (stream.CanSeek) stream.Position = 0;
 
         var memoryStream = new MemoryStream();
-        await stream.CopyToAsync(memoryStream, cancellationToken);
+        using var content = new HashingStream(stream);
+        await content.CopyToAsync(memoryStream, cancellationToken);
+        WrittenContent written = content.Complete(resourceInfo.ContentLength);
         memoryStream.Position = 0;
 
         var newResource = new InMemoryResource()
@@ -42,13 +44,15 @@ internal class ResourceInMemoryRepository : IResourceRepository
                 VersionId = resourceInfo.VersionId,
                 LastModified = resourceInfo.LastModified,
                 ContentType = resourceInfo.ContentType,
-                ContentLength = resourceInfo.ContentLength,
+                ContentLength = written.ContentLength,
                 Metadata = new Dictionary<string, string>(resourceInfo.Metadata),
                 Uri = resourceInfo.Uri
             }
         };
         _resources.Add(newResource);
         correspondingContainer.Resources.Add(newResource);
+
+        return written;
     }
 
     public async Task<List<ResourceInfo>> GetAllResourceInfoAsync(string resourceContainerName, CancellationToken cancellationToken = default)

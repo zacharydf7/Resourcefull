@@ -17,10 +17,14 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
     private const int SqlUniqueIndexViolation = 2601;
     private const int SqlUniqueConstraintViolation = 2627;
 
-    public async Task AddResourceAsync(string resourceContainerName, ResourceInfo resourceInfo, Stream stream, bool createOnly = false, CancellationToken cancellationToken = default)
+    public async Task<WrittenContent> AddResourceAsync(string resourceContainerName, ResourceInfo resourceInfo, Stream stream, bool createOnly = false, CancellationToken cancellationToken = default)
     {
-        // The caller's stream can only be read once, so it is chunked before the write, which may be retried.
-        List<ResourceChunkModel> chunks = await ResourceChunker.ChunksAsync(stream, cancellationToken);
+        // The caller's stream can only be read once, so it is chunked, and measured, before the write, which may be
+        // retried.
+        if (stream.CanSeek) stream.Position = 0;
+        using var content = new HashingStream(stream);
+        List<ResourceChunkModel> chunks = await ResourceChunker.ChunksAsync(content, cancellationToken);
+        WrittenContent written = content.Complete(resourceInfo.ContentLength);
 
         try
         {
@@ -50,13 +54,15 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
                     LastModified = resourceInfo.LastModified,
                     IsLatest = true,
                     ContentType = resourceInfo.ContentType,
-                    ContentLength = resourceInfo.ContentLength,
+                    ContentLength = written.ContentLength,
                     Uri = resourceInfo.Uri,
                     Metadata = resourceInfo.Metadata,
                     Chunks = [.. chunks.Select(c => new ResourceChunkModel { Index = c.Index, Data = c.Data })]
                 });
                 return await dbContext.SaveChangesAsync(ct);
             }, cancellationToken);
+
+            return written;
         }
         catch (DbUpdateException exception) when (exception.InnerException is SqlException { Number: SqlForeignKeyViolation })
         {

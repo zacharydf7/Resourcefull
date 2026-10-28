@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using Resourcefull.InMemory;
 
 namespace Resourcefull.Tests.Unit.InMemory;
@@ -174,8 +176,9 @@ public class ResourceInMemoryRepositoryTests
         // Act
         ResourceInfo? outputResource = await repository.GetResourceInfoAsync(containerName, resourceInfo.Name);
 
-        // Assert
+        // Assert: stored as current, with the length measured from the (empty) stream.
         resourceInfo.IsLatest = true;
+        resourceInfo.ContentLength = 0;
         Assert.Equivalent(resourceInfo, outputResource);
     }
 
@@ -759,5 +762,37 @@ public class ResourceInMemoryRepositoryTests
         // Assert
         await Assert.ThrowsAsync<ResourceConflictException>(act);
         Assert.Single(await repository.GetAllResourceContainerInfoAsync());
+    }
+
+    [Fact]
+    public async Task AddResourceAsync_ShouldStoreAndReturnTheMeasuredLengthAndHash_WhenNoLengthIsDeclared()
+    {
+        // Arrange
+        byte[] payload = Encoding.UTF8.GetBytes("measured, not declared");
+        var repository = new ResourceInMemoryRepository();
+        await repository.AddResourceContainerAsync(new ResourceContainerInfo { Name = "c" });
+
+        // Act
+        WrittenContent written = await repository.AddResourceAsync("c", new ResourceInfo { ContainerName = "c", Name = "n", VersionId = "v1" }, new MemoryStream(payload));
+
+        // Assert
+        Assert.Equal(payload.Length, written.ContentLength);
+        Assert.Equal("sha256:" + Convert.ToHexStringLower(SHA256.HashData(payload)), written.ContentHash);
+        Assert.Equal(payload.Length, (await repository.GetResourceInfoAsync("c", "n"))!.ContentLength);
+    }
+
+    [Fact]
+    public async Task AddResourceAsync_ShouldThrowAndStoreNothing_WhenTheDeclaredLengthIsWrong()
+    {
+        // Arrange
+        var repository = new ResourceInMemoryRepository();
+        await repository.AddResourceContainerAsync(new ResourceContainerInfo { Name = "c" });
+
+        // Act
+        Task act() => repository.AddResourceAsync("c", new ResourceInfo { ContainerName = "c", Name = "n", VersionId = "v1", ContentLength = 4 }, new MemoryStream([1, 2, 3]));
+
+        // Assert
+        await Assert.ThrowsAsync<ResourceContentLengthMismatchException>(act);
+        Assert.Null(await repository.GetResourceInfoAsync("c", "n"));
     }
 }
