@@ -219,9 +219,13 @@ using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
 ResourceInfo info = await container.UploadAsync("report.pdf", stream, null, cts.Token);
 ```
 
-- **A cancelled upload stores nothing.** When versioning prunes older versions, the new version is written
-  first and the prune runs afterwards, so a cancellation between the two leaves one version too many
-  (trimmed by the next upload) rather than one too few.
+- **A cancelled upload stores nothing.** An upload cancelled before its new version is stored throws
+  `OperationCanceledException` and changes nothing. Once the version is stored the upload has succeeded:
+  the token no longer applies, and pruning older versions (beyond `MaxVersions`, or the overwritten version
+  when versioning is off) runs to completion. If pruning fails, the upload still returns the stored version,
+  and the older versions stay until a later overwriting or versioned upload of the name prunes them. Until
+  then they are ordinary stored versions: with versioning off, deleting the name makes the overwritten
+  version current again.
 - **`DownloadStreamingAsync`** takes a token for locating the resource. To cancel the download itself,
   pass a token to the returned stream's `ReadAsync` or `CopyToAsync`; `DownloadContentAsync` does this
   for you.
@@ -341,7 +345,8 @@ Uploads a resource. Two overloads accept a `Stream` or in-memory `BinaryData`.
   is disabled and `Overwrite` is false).
 
 Uploads of the same name never interleave: on SQL Server each one holds a lock on the name until it commits,
-so concurrent uploads leave exactly one current version, and pruning never leaves more than `MaxVersions`.
+so concurrent uploads leave exactly one current version, and a successful prune never leaves more than
+`MaxVersions` (see [Cancellation](#cancellation) for a prune that fails).
 The create-only check is part of the write, so on SQL Server, of several concurrent create-only uploads of one
 name exactly one succeeds and the rest throw `ResourceConflictException`.
 

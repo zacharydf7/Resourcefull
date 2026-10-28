@@ -90,17 +90,34 @@ internal class ResourceContainerClient(IResourceRepository resourceRepository, I
         if (stream.CanSeek) stream.Position = 0;
         await resourceRepository.AddResourceAsync(ContainerName, resourceInfo, stream, createOnly, cancellationToken);
 
-        // Prune only once the new version is stored, keeping the newest versions in store order. Reading the versions
-        // after the write means concurrent writers each see all of them, so together they never keep more than the
-        // limit; without versioning the limit is one, which is what an overwrite leaves.
+        // The new version is stored, so the upload has succeeded; pruning is cleanup that neither the caller's token
+        // nor a failure may turn into a reported failure.
+        try
+        {
+            await PruneAsync(resourceName, CancellationToken.None);
+        }
+        catch (Exception)
+        {
+            // The older versions stay until a later overwriting or versioned upload of the name prunes them; every
+            // prune works from the versions as they stand after its own write.
+        }
+
+        return resourceInfo;
+    }
+
+    /// <summary>
+    /// Keeps the newest versions in store order. Reading the versions after the write means concurrent writers each
+    /// see all of them, so together they never keep more than the limit; without versioning the limit is one, which
+    /// is what an overwrite leaves.
+    /// </summary>
+    private async Task PruneAsync(string resourceName, CancellationToken cancellationToken)
+    {
         int keep = options.IsVersioningEnabled ? options.MaxVersions : 1;
         List<ResourceInfo> versions = await resourceRepository.GetResourceVersionsAsync(ContainerName, resourceName, cancellationToken);
         foreach (ResourceInfo version in versions.Skip(keep))
         {
             await resourceRepository.DeleteResourceAsync(ContainerName, resourceName, version.VersionId, cancellationToken);
         }
-
-        return resourceInfo;
     }
 
     public Task<ResourceDownloadResult?> DownloadStreamingAsync(string resourceName, string? versionId = null)

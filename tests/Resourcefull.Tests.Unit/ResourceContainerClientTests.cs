@@ -661,8 +661,6 @@ public class ResourceContainerClientTests
         await client.UploadAsync("name", new MemoryStream(), null, cts.Token);
 
         // Assert
-        repository.Verify(r => r.GetResourceVersionsAsync(Container, "name", cts.Token),
-            Times.Once);
         repository.Verify(r => r.AddResourceAsync(Container, It.IsAny<ResourceInfo>(),
             It.IsAny<Stream>(), It.IsAny<bool>(), cts.Token), Times.Once);
     }
@@ -852,5 +850,53 @@ public class ResourceContainerClientTests
         // Assert
         Assert.Equal(50, stored.Distinct().Count());
         Assert.All(stored, id => Assert.Equal(7, Guid.Parse(id!).Version));
+    }
+
+    [Fact]
+    public async Task UploadAsync_ShouldReturnTheStoredVersionAndStillPrune_WhenCancelledAfterTheWrite()
+    {
+        // Arrange: overwrite without versioning; the caller cancels as soon as the new version is stored.
+        using var cts = new CancellationTokenSource();
+        var repository = NewRepository();
+        repository.Setup(r => r.AddResourceAsync(Container, It.IsAny<ResourceInfo>(), It.IsAny<Stream>(),
+            It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .Callback(cts.Cancel)
+            .Returns(Task.CompletedTask);
+        repository.Setup(r => r.GetResourceVersionsAsync(Container, "name", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(
+            [
+                new() { ContainerName = Container, Name = "name", VersionId = "new" },
+                new() { ContainerName = Container, Name = "name", VersionId = "old" }
+            ]);
+        var client = NewClient(repository.Object);
+
+        // Act
+        ResourceInfo result = await client.UploadAsync("name", new MemoryStream(), new ResourceUploadOptions { Overwrite = true }, cts.Token);
+
+        // Assert
+        Assert.Equal("name", result.Name);
+        repository.Verify(r => r.DeleteResourceAsync(Container, "name", "old", CancellationToken.None), Times.Once);
+    }
+
+    [Fact]
+    public async Task UploadAsync_ShouldReturnTheStoredVersion_WhenPruningFails()
+    {
+        // Arrange
+        var repository = NewRepository();
+        repository.Setup(r => r.GetResourceVersionsAsync(Container, "name", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(
+            [
+                new() { ContainerName = Container, Name = "name", VersionId = "new" },
+                new() { ContainerName = Container, Name = "name", VersionId = "old" }
+            ]);
+        repository.Setup(r => r.DeleteResourceAsync(Container, "name", "old", It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("storage unavailable"));
+        var client = NewClient(repository.Object);
+
+        // Act
+        ResourceInfo result = await client.UploadAsync("name", new MemoryStream(), new ResourceUploadOptions { Overwrite = true });
+
+        // Assert
+        Assert.Equal("name", result.Name);
     }
 }
