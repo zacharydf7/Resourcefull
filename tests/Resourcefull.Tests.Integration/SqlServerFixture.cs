@@ -9,8 +9,9 @@ namespace Resourcefull.Tests.Integration;
 /// Provisions a real, throwaway SQL Server database for the integration suite and resolves which
 /// server to use from the environment:
 /// 
-/// When no server can be reached, <see cref="IsAvailable"/> is <see langword="false"/> and tests
-/// skip rather than fail. Each run gets its own database which is dropped on teardown.
+/// When LocalDB cannot be reached, <see cref="IsAvailable"/> is <see langword="false"/> and tests
+/// skip rather than fail. A server named by the environment that cannot be reached fails the suite.
+/// Each run gets its own database which is dropped on teardown.
 /// </summary>
 public sealed class SqlServerFixture : IAsyncLifetime
 {
@@ -43,6 +44,10 @@ public sealed class SqlServerFixture : IAsyncLifetime
 
         if (!await WaitForServerAsync(_masterConnectionString, fromEnvironment))
         {
+            // A configured server that never answers is a broken environment, not a missing one; skipping would let CI pass untested.
+            if (fromEnvironment)
+                throw new InvalidOperationException($"{ConnectionEnvVar} is set but SQL Server could not be reached before the readiness timeout.");
+
             IsAvailable = false;
             return;
         }
