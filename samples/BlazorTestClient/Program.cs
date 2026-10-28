@@ -7,7 +7,6 @@ using Resourcefull.SqlServer;
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
 var provider = new FileExtensionContentTypeProvider();
-provider.Mappings[".snz"] = "application/project-file";
 
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
