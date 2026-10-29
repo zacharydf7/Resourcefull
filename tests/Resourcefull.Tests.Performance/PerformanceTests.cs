@@ -183,16 +183,19 @@ public sealed class PerformanceTests(SqlServerFixture fixture, ITestOutputHelper
     /// </summary>
     private async Task MeasureAsync(string scenario, long contentBytes, Func<int, Task> run)
     {
-        // Flushes the pages the scenario's setup dirtied, so SQL Server doesn't write them out during the measured runs:
-        // on a slow disk that more than tripled the time of deletes measured right after their uploads.
+        await run(0);
+
+        // After the warm-up, so the cleanup of what it deleted isn't measured either.
+        await WaitForGhostCleanupAsync();
+
+        // Flushes the pages the scenario's setup and warm-up dirtied, so SQL Server doesn't write them out during the
+        // measured runs: on a slow disk that more than tripled the time of deletes measured right after their uploads.
         await using (SqlConnection connection = await fixture.OpenConnectionAsync())
         await using (SqlCommand checkpoint = connection.CreateCommand())
         {
             checkpoint.CommandText = "CHECKPOINT;";
             await checkpoint.ExecuteNonQueryAsync();
         }
-
-        await run(0);
 
         // The log is read around all the repetitions rather than each one: reading it between repetitions added
         // allocations to the next one's measurements. Each repetition logs the same, so the average is what one logs.
@@ -221,6 +224,31 @@ public sealed class PerformanceTests(SqlServerFixture fixture, ITestOutputHelper
             Median(samples, s => s.RoundTrips), Median(samples, s => s.LogicalReads), logBytes,
             Median(samples, s => s.AllocatedBytes), Median(samples, s => s.PeakHeapBytes),
             Math.Round(Median(samples, s => s.Seconds), 4), contentBytes), output);
+    }
+
+    /// <summary>
+    /// Waits until SQL Server's background ghost cleanup has removed the rows earlier scenarios deleted. It runs seconds
+    /// after a delete and logs as it goes, about 6 MB for 96 MiB of deleted content, which would otherwise count
+    /// against whichever scenario happens to be measured then. Scanning the pages also queues them for cleanup. A few
+    /// ghosts can linger; cleaning one logs about 360 bytes, so the few left log far less than the gate's slack.
+    /// </summary>
+    private async Task WaitForGhostCleanupAsync()
+    {
+        const long LingeringGhosts = 64;
+        var waited = Stopwatch.StartNew();
+        await using SqlConnection connection = await fixture.OpenConnectionAsync();
+        await using SqlCommand command = connection.CreateCommand();
+        command.CommandText = "SELECT ISNULL(SUM([ghost_record_count]), 0) FROM sys.dm_db_index_physical_stats(DB_ID(), " +
+            "OBJECT_ID('ResourceChunks'), NULL, NULL, 'DETAILED');";
+        while (Convert.ToInt64(await command.ExecuteScalarAsync()) > LingeringGhosts)
+        {
+            if (waited.Elapsed > TimeSpan.FromMinutes(1))
+            {
+                output.WriteLine("Ghost cleanup was still running after a minute; measuring anyway.");
+                return;
+            }
+            await Task.Delay(250);
+        }
     }
 
     /// <summary>
