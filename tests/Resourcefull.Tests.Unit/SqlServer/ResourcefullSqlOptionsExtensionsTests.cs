@@ -40,4 +40,20 @@ public class ResourcefullSqlOptionsExtensionsTests
         Assert.Contains(services, service => service.ServiceType == typeof(ResourceDbContext));
         Assert.Contains(services, service => service.ServiceType == typeof(IResourceRepository));
     }
+
+    [Fact]
+    public async Task MigrateResourcefullDatabaseAsync_ShouldThrowAndNameUseSqlServer_WhenResourcefullUsesAnotherProvider()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        services.AddResourcefull(options => options.UseInMemory());
+        await using ServiceProvider provider = services.BuildServiceProvider();
+
+        // Act
+        Task act() => provider.MigrateResourcefullDatabaseAsync();
+
+        // Assert
+        InvalidOperationException exception = await Assert.ThrowsAsync<InvalidOperationException>(act);
+        Assert.Contains("UseSqlServer", exception.Message);
+    }
 }

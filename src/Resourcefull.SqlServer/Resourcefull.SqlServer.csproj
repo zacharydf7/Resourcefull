@@ -24,51 +24,9 @@
 	  <ProjectReference Include="..\Resourcefull\Resourcefull.csproj" />
 	</ItemGroup>
 
+  <!-- The provisioning and upgrade scripts ship in the package's scripts folder for operators to run; they are not
+       added to the projects that reference the package. -->
   <ItemGroup>
-    <Content Include="Scripts\Resourcefull.sql">
-      <Pack>true</Pack>
-      <PackagePath>contentFiles\any\any\Scripts</PackagePath>
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-      <CopyToPublishDirectory>Always</CopyToPublishDirectory>
-    </Content>
-  </ItemGroup>
-
-  <ItemGroup>
-    <Content Include="Scripts\Migrations\migrate_20250513172319_AddVersioning.sql">
-      <Pack>true</Pack>
-      <PackagePath>contentFiles\any\any\Scripts\Migrations</PackagePath>
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-      <CopyToPublishDirectory>Always</CopyToPublishDirectory>
-    </Content>
-    <Content Include="Scripts\Migrations\migrate_20260624193539_RedesignKeysAndVersioning.sql">
-      <Pack>true</Pack>
-      <PackagePath>contentFiles\any\any\Scripts\Migrations</PackagePath>
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-      <CopyToPublishDirectory>Always</CopyToPublishDirectory>
-    </Content>
-    <Content Include="Scripts\Migrations\migrate_20261028213132_NameLimitsAndCaseSensitiveNames.sql">
-      <Pack>true</Pack>
-      <PackagePath>contentFiles\any\any\Scripts\Migrations</PackagePath>
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-      <CopyToPublishDirectory>Always</CopyToPublishDirectory>
-    </Content>
-    <Content Include="Scripts\Migrations\migrate_20261028220856_UniqueLatestVersion.sql">
-      <Pack>true</Pack>
-      <PackagePath>contentFiles\any\any\Scripts\Migrations</PackagePath>
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-      <CopyToPublishDirectory>Always</CopyToPublishDirectory>
-    </Content>
-    <Content Include="Scripts\Migrations\migrate_20261029003116_EnableReadCommittedSnapshot.sql">
-      <Pack>true</Pack>
-      <PackagePath>contentFiles\any\any\Scripts\Migrations</PackagePath>
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-      <CopyToPublishDirectory>Always</CopyToPublishDirectory>
-    </Content>
-    <Content Include="Scripts\Migrations\migrate_20261029021712_AddContentHash.sql">
-      <Pack>true</Pack>
-      <PackagePath>contentFiles\any\any\Scripts\Migrations</PackagePath>
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-      <CopyToPublishDirectory>Always</CopyToPublishDirectory>
-    </Content>
+    <None Include="Scripts\**\*.sql" Pack="true" PackagePath="scripts" />
   </ItemGroup>
 </Project>

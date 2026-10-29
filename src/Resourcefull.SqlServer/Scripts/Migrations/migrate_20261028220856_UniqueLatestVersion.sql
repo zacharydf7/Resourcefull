@@ -1,4 +1,3 @@
-USE [ResourceDB];
 SET XACT_ABORT ON;
 GO
 

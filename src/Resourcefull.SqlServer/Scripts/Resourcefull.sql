@@ -1,12 +1,3 @@
-IF NOT EXISTS (
-    SELECT [name] FROM sys.databases WHERE [name] = N'ResourceDB'
-)
-BEGIN
-    CREATE DATABASE [ResourceDB];
-END;
-GO
-
-USE [ResourceDB];
 SET XACT_ABORT ON;
 GO
 

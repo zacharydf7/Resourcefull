@@ -13,28 +13,13 @@ namespace Resourcefull.Tests.Integration;
 /// </summary>
 internal static partial class ProvisioningScripts
 {
-    public const string DatabaseName = "ResourceDB";
     public const string ScriptsRelativeDirectory = "src/Resourcefull.SqlServer/Scripts";
     public const string FreshInstallFileName = "Resourcefull.sql";
     public const string UpgradeDirectoryName = "Migrations";
     public const string UpgradeFileNamePrefix = "migrate_";
 
-    public const string FreshInstallPreamble =
-        "IF NOT EXISTS (\n" +
-        "    SELECT [name] FROM sys.databases WHERE [name] = N'ResourceDB'\n" +
-        ")\n" +
-        "BEGIN\n" +
-        "    CREATE DATABASE [ResourceDB];\n" +
-        "END;\n" +
-        "GO\n" +
-        "\n" +
-        "USE [ResourceDB];\n" +
-        "SET XACT_ABORT ON;\n" +
-        "GO\n" +
-        "\n";
-
-    public const string UpgradePreamble =
-        "USE [ResourceDB];\n" +
+    /// <summary>Every script runs against the database it is connected to; this is all that precedes the generated body.</summary>
+    public const string Preamble =
         "SET XACT_ABORT ON;\n" +
         "GO\n" +
         "\n";
@@ -60,14 +45,13 @@ internal static partial class ProvisioningScripts
         IReadOnlyList<string> ids = MigrationIds;
         var scripts = new List<ProvisioningScript>
         {
-            new(FreshInstallFileName, FreshInstallPreamble, FromMigration: null, ToMigration: null)
+            new(FreshInstallFileName, FromMigration: null, ToMigration: null)
         };
 
         for (int i = 1; i < ids.Count; i++)
         {
             scripts.Add(new ProvisioningScript(
                 Path.Combine(UpgradeDirectoryName, $"{UpgradeFileNamePrefix}{ids[i]}.sql"),
-                UpgradePreamble,
                 FromMigration: ids[i - 1],
                 ToMigration: ids[i]));
         }
@@ -112,18 +96,17 @@ internal static partial class ProvisioningScripts
     public static int CountBatches(string sql) => SplitBatches(sql).Count;
 
     /// <summary>
-    /// Runs the script batch by batch like <c>sqlcmd</c>, from <c>master</c>, with <c>ResourceDB</c> swapped for the
-    /// throwaway database in <paramref name="targetConnectionString"/> so a real one is never touched. With
-    /// <paramref name="batchCount"/>, stops after that many batches, as a run interrupted there would.
+    /// Runs the script batch by batch like <c>sqlcmd -d</c>, connected to the database in
+    /// <paramref name="targetConnectionString"/>, creating it first when it doesn't exist yet, as an operator would.
+    /// With <paramref name="batchCount"/>, stops after that many batches, as a run interrupted there would.
     /// </summary>
     public static async Task ApplyAsync(string sql, string targetConnectionString, int batchCount = int.MaxValue)
     {
-        var target = new SqlConnectionStringBuilder(targetConnectionString);
-        string replaced = Regex.Replace(sql, $@"\b{Regex.Escape(DatabaseName)}\b", target.InitialCatalog);
-        IReadOnlyList<string> batches = [.. SplitBatches(replaced).Take(batchCount)];
+        IReadOnlyList<string> batches = [.. SplitBatches(sql).Take(batchCount)];
 
-        var master = new SqlConnectionStringBuilder(targetConnectionString) { InitialCatalog = "master", Pooling = false };
-        await using var connection = new SqlConnection(master.ConnectionString);
+        var target = new SqlConnectionStringBuilder(targetConnectionString) { Pooling = false };
+        await CreateDatabaseIfMissingAsync(target);
+        await using var connection = new SqlConnection(target.ConnectionString);
         await connection.OpenAsync();
 
         for (int i = 0; i < batches.Count; i++)
@@ -141,6 +124,17 @@ internal static partial class ProvisioningScripts
                     $"{exception.Message}{Environment.NewLine}{batches[i].Trim()}", exception);
             }
         }
+    }
+
+    private static async Task CreateDatabaseIfMissingAsync(SqlConnectionStringBuilder target)
+    {
+        var master = new SqlConnectionStringBuilder(target.ConnectionString) { InitialCatalog = "master" };
+        await using var connection = new SqlConnection(master.ConnectionString);
+        await connection.OpenAsync();
+        await using SqlCommand command = connection.CreateCommand();
+        command.CommandText = $"IF DB_ID(@name) IS NULL CREATE DATABASE [{target.InitialCatalog}];";
+        command.Parameters.AddWithValue("@name", target.InitialCatalog);
+        await command.ExecuteNonQueryAsync();
     }
 
     public static string ReadCommitted(ProvisioningScript script) =>
@@ -178,7 +172,7 @@ internal static partial class ProvisioningScripts
     private static partial Regex BatchSeparatorPattern();
 }
 
-internal sealed record ProvisioningScript(string RelativePath, string Preamble, string? FromMigration, string? ToMigration)
+internal sealed record ProvisioningScript(string RelativePath, string? FromMigration, string? ToMigration)
 {
     public string Command =>
         "dotnet ef migrations script" +

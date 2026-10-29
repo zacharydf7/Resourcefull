@@ -81,24 +81,49 @@ builder.Services.AddResourcefull(o =>
 });
 ```
 
-**Provisioning the database:**
+**Provisioning the database.** The connection string passed to `UseSqlServer` must name the database that
+holds Resourcefull's tables (`ResourceContainers`, `Resources`, `ResourceChunks` and EF Core's
+`__EFMigrationsHistory`). That can be a database of its own or your application's database, as long as no
+tables of yours share those names. Provisioning turns on `READ_COMMITTED_SNAPSHOT`, which is a setting of the
+whole database: in a shared database it also changes how your application's own queries read (from row versions
+rather than waiting on locks, with the version store in `tempdb`). If your application relies on read-committed
+blocking, give Resourcefull a database of its own. Either way, provision it in one of two ways:
 
-- **New database:** execute the bundled `Scripts/Resourcefull.sql` script against your SQL Server
-  instance. It creates the `ResourceDB` database if it is missing, brings it to the latest schema and
-  enables `READ_COMMITTED_SNAPSHOT` (see [below](#read_committed_snapshot)). The script is idempotent:
-  every step is guarded by the migration history, so running it again on a database it already provisioned,
-  or on an older database, applies only what is missing.
-- **Existing v1 database:** run the upgrade scripts under `Scripts/Migrations/` in order during a
-  maintenance window. See [Upgrading the database schema](#upgrading-the-database-schema).
+- **From the application.** Call `MigrateResourcefullDatabaseAsync` on the built service provider. It creates
+  the database if it is missing and applies only the migrations it lacks:
 
-The scripts are generated from the package's EF Core migrations, and the integration test suite fails if
-they stop matching them. See [Regenerating the scripts](#regenerating-the-scripts) if you maintain the
-package.
+  ```csharp
+  var app = builder.Build();
+  await app.Services.MigrateResourcefullDatabaseAsync();
+  ```
+
+  Run it from a deployment step, or from one instance at startup. On a database that doesn't have
+  `READ_COMMITTED_SNAPSHOT` yet, enabling it disconnects every other session (see
+  [below](#read_committed_snapshot)).
+- **With the scripts.** Create the database, then run `Resourcefull.sql` connected to it:
+
+  ```shell
+  sqlcmd -S <server> -d <database> -b -I -i Resourcefull.sql
+  ```
+
+  The scripts run against whichever database they are connected to (`-d`) and never create or switch
+  databases. `-b` stops at the first error, and `-I` turns on `QUOTED_IDENTIFIER`, which the filtered
+  indexes need. `Resourcefull.sql` brings any database, empty or older, to the latest schema and is safe to
+  run again. To upgrade an existing database step by step, see
+  [Upgrading the database schema](#upgrading-the-database-schema).
+
+The scripts ship in the package's `scripts` folder, for example
+`~/.nuget/packages/resourcefull.sqlserver/<version>/scripts/` (`Resourcefull.sql`, plus one upgrade script per
+migration under `Migrations/`). They are not added to the projects that reference the package. They are
+also in the repository under `src/Resourcefull.SqlServer/Scripts/`. They are generated from the package's
+EF Core migrations, and the integration test suite fails if they stop matching them. See
+[Regenerating the scripts](#regenerating-the-scripts) if you maintain the package.
 
 #### READ_COMMITTED_SNAPSHOT
 
 The SQL Server provider is designed to run with `READ_COMMITTED_SNAPSHOT` (RCSI) **enabled** on the
-resource database. The provided scripts enable it for you. RCSI lets reads use row-versioning instead
+database that holds its tables. RCSI applies to the whole database, so in a database shared with your application
+it applies to your tables too. The provided scripts enable it for you. RCSI lets reads use row-versioning instead
 of taking shared locks, which removes a class of reader/writer deadlocks under concurrent load.
 
 The provider also enables a **retry policy** (including SQL Server deadlock victims, error 1205) so
@@ -702,9 +727,10 @@ v1 database:
 1. **Stop the consuming application** (the upgrade rebuilds keys and enabling RCSI disconnects open
    sessions).
 2. **Back up the database.**
-3. Run the scripts under `Scripts/Migrations/` that your database has not yet recorded, oldest first,
-   using a tool that halts on the first error (`sqlcmd -b`, or SSMS in SQLCMD mode with `:on error exit` at
-   the top; SSMS otherwise carries on with the next batch), during a **maintenance window**.
+3. Run the scripts under `scripts/Migrations/` that your database has not yet recorded, oldest first,
+   connected to that database, using a tool that halts on the first error (`sqlcmd -d <database> -b -I`, or
+   SSMS in SQLCMD mode with `:on error exit` at the top; SSMS otherwise carries on with the next batch),
+   during a **maintenance window**. `MigrateResourcefullDatabaseAsync` applies the same migrations.
    Each script covers one migration, is data-preserving, skips itself when its migration is already in
    `__EFMigrationsHistory`, and is safe to re-run if it is interrupted. A database that predates
    versioning needs `migrate_20250513172319_AddVersioning.sql` before
@@ -780,8 +806,8 @@ foreach (ContentLengthMismatch mismatch in result.Mismatches)
 `ContentHash` stays nullable. Making it required would be a later, separate change, once every database has been
 backfilled.
 
-New databases provisioned from `Scripts/Resourcefull.sql` already include the v2 schema and RCSI — no
-upgrade step is required. `Scripts/Resourcefull.sql` is itself idempotent and can be used in place of the
+New databases provisioned from `Resourcefull.sql` already include the v2 schema and RCSI — no
+upgrade step is required. `Resourcefull.sql` is itself idempotent and can be used in place of the
 individual upgrade scripts; it applies whichever migrations the database is missing.
 
 ## Regenerating the scripts
@@ -804,38 +830,20 @@ dotnet ef migrations script 20261028220856_UniqueLatestVersion 20261029003116_En
 dotnet ef migrations script 20261029003116_EnableReadCommittedSnapshot 20261029021712_AddContentHash --idempotent --project src/Resourcefull.SqlServer --output src/Resourcefull.SqlServer/Scripts/Migrations/migrate_20261029021712_AddContentHash.sql
 ```
 
-Then put the preamble back at the top of each file. Both preambles switch to the database and turn on
-`XACT_ABORT`. The generated scripts run each transactional migration as one `BEGIN TRANSACTION … COMMIT` batch, and some
-errors (a duplicate key or a constraint violation in an `INSERT` or `UPDATE`) stop only the failing statement,
-so without it the rest of the migration could still commit, along with its history row. The fresh-install
-preamble also creates the database when it is missing:
+Then put the preamble back at the top of each file. It is the same for every script, and only turns on
+`XACT_ABORT`; the scripts never name a database. The generated scripts run each transactional migration as one
+`BEGIN TRANSACTION … COMMIT` batch, and some errors (a duplicate key or a constraint violation in an `INSERT`
+or `UPDATE`) stop only the failing statement, so without it the rest of the migration could still commit,
+along with its history row:
 
 ```sql
-IF NOT EXISTS (
-    SELECT [name] FROM sys.databases WHERE [name] = N'ResourceDB'
-)
-BEGIN
-    CREATE DATABASE [ResourceDB];
-END;
-GO
-
-USE [ResourceDB];
 SET XACT_ABORT ON;
 GO
 
 ```
 
-The upgrade preamble:
-
-```sql
-USE [ResourceDB];
-SET XACT_ABORT ON;
-GO
-
-```
-
-Add the new upgrade script to `Resourcefull.SqlServer.csproj` as `Content` like the existing ones so it
-ships in the package. The test that fails names the script and prints the command that regenerates it.
+Every `.sql` file under `Scripts/` is packed into the package's `scripts` folder, so a new upgrade script needs
+no project change. The test that fails names the script and prints the command that regenerates it.
 
 Three rules keep the generated part generated, and the scripts safe to re-run:
 

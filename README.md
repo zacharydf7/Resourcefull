@@ -61,9 +61,19 @@ public class Reports(IResourceServiceClient resources)
 
 ## SQL Server
 
-`Resourcefull.SqlServer` ships idempotent provisioning and upgrade scripts. Run `Scripts/Resourcefull.sql`
-to create the database. To bring an existing database up to date, run the scripts under
-`Scripts/Migrations/` that it is missing, oldest first, after reading the
+Point `UseSqlServer` at the database that should hold Resourcefull's tables, either its own or your
+application's. Provisioning turns on `READ_COMMITTED_SNAPSHOT` for that whole database, so give Resourcefull
+a database of its own if your application relies on read-committed locking. To provision it from the
+application, call `MigrateResourcefullDatabaseAsync`:
+
+```csharp
+var app = builder.Build();
+await app.Services.MigrateResourcefullDatabaseAsync();
+```
+
+`Resourcefull.SqlServer` also ships idempotent scripts in its `scripts` folder. Run `Resourcefull.sql`
+connected to the database to provision it. To bring an existing database up to date step by step, run the
+scripts under `scripts/Migrations/` that it is missing, oldest first, after reading the
 [upgrade guide](https://github.com/zacharydf7/Resourcefull/blob/main/docs/docs-v2-reference.md#upgrading-the-database-schema).
 The [reference](https://github.com/zacharydf7/Resourcefull/blob/main/docs/docs-v2-reference.md#sql-server-provider)
 covers provisioning and the recommended database settings.

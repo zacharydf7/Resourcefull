@@ -32,7 +32,7 @@ public class ProvisioningScriptTests(SqlServerFixture fixture)
     {
         // Arrange
         ProvisioningScript script = ProvisioningScripts.Expected().Single(s => s.RelativePath == relativePath);
-        string expected = ProvisioningScripts.Normalize(script.Preamble + ProvisioningScripts.GenerateBody(script.FromMigration, script.ToMigration));
+        string expected = ProvisioningScripts.Normalize(ProvisioningScripts.Preamble + ProvisioningScripts.GenerateBody(script.FromMigration, script.ToMigration));
         string path = Path.Combine(ProvisioningScripts.ScriptsDirectory, script.RelativePath);
         Assert.True(File.Exists(path), $"{script.RelativePath} is missing from {ProvisioningScripts.ScriptsRelativeDirectory}. Generate it with:{Environment.NewLine}  {script.Command}{Environment.NewLine}then put the preamble back at the top.");
 
@@ -72,12 +72,12 @@ public class ProvisioningScriptTests(SqlServerFixture fixture)
                 $"{ProvisioningScripts.ScriptsRelativeDirectory} does not hold one script per shipped migration range.{Environment.NewLine}" +
                 $"Missing: {(missing.Count == 0 ? "(none)" : string.Join(", ", missing))}{Environment.NewLine}" +
                 $"Unexpected: {(unexpected.Count == 0 ? "(none)" : string.Join(", ", unexpected))}{Environment.NewLine}" +
-                "Every migration after the first ships an upgrade script, and the package project must list each file as Content.");
+                "Every migration after the first ships an upgrade script.");
         }
     }
 
     [SkippableFact]
-    public async Task FreshInstallScript_ShouldProduceAWorkingDatabase_WhenRunAgainstAnEmptyServer()
+    public async Task FreshInstallScript_ShouldProduceAWorkingDatabase_WhenRunAgainstAnEmptyDatabase()
     {
         fixture.SkipIfUnavailable();
 
@@ -226,18 +226,15 @@ public class ProvisioningScriptTests(SqlServerFixture fixture)
         Assert.Equal(ids.Where(id => string.CompareOrdinal(id, target) <= 0), await ReadMigrationHistoryAsync(connectionString));
     }
 
-    [SkippableTheory]
-    [InlineData(ProvisioningScripts.FreshInstallPreamble)]
-    [InlineData(ProvisioningScripts.UpgradePreamble)]
-    public async Task Preamble_ShouldMakeAMigrationAllOrNothing_WhenAStatementInItsTransactionFails(string preamble)
+    [SkippableFact]
+    public async Task Preamble_ShouldMakeAMigrationAllOrNothing_WhenAStatementInItsTransactionFails()
     {
         fixture.SkipIfUnavailable();
 
         // Arrange: a migration-shaped batch whose duplicate-key INSERT fails without ending the batch by itself, so
         // only the session settings decide whether the statements after it still run and commit.
-        string connectionString = fixture.AllocateDatabase($"AllOrNothing{preamble.Length}");
-        await ProvisioningScripts.ApplyAsync(ProvisioningScripts.FreshInstallPreamble, connectionString);
-        string sql = preamble + """
+        string connectionString = fixture.AllocateDatabase("AllOrNothing");
+        string sql = ProvisioningScripts.Preamble + """
             BEGIN TRANSACTION;
             CREATE TABLE [BeforeFailure] ([Id] int PRIMARY KEY);
             INSERT INTO [BeforeFailure] ([Id]) VALUES (1), (1);
@@ -253,6 +250,27 @@ public class ProvisioningScriptTests(SqlServerFixture fixture)
         InvalidOperationException failure = await Assert.ThrowsAsync<InvalidOperationException>(act);
         Assert.Equal(2627, Assert.IsType<SqlException>(failure.InnerException).Number);
         Assert.Equal(0, await ScalarAsync(connectionString, "SELECT COUNT(*) FROM sys.tables WHERE [name] IN ('BeforeFailure', 'AfterFailure')"));
+    }
+
+    [SkippableFact]
+    public async Task MigrateResourcefullDatabaseAsync_ShouldProduceAWorkingDatabaseAndChangeNothingWhenRunAgain_WhenTheDatabaseDoesNotExist()
+    {
+        fixture.SkipIfUnavailable();
+
+        // Arrange
+        string connectionString = fixture.AllocateDatabase("MigratedByHelper");
+        var services = new ServiceCollection();
+        services.AddResourcefull(options => options.UseSqlServer(connectionString));
+        await using ServiceProvider provider = services.BuildServiceProvider();
+
+        // Act
+        await provider.MigrateResourcefullDatabaseAsync();
+        List<string> historyAfterFirstRun = await ReadMigrationHistoryAsync(connectionString);
+        await provider.MigrateResourcefullDatabaseAsync();
+
+        // Assert
+        Assert.Equal(historyAfterFirstRun, await ReadMigrationHistoryAsync(connectionString));
+        await AssertCurrentSchemaAsync(connectionString);
     }
 
     [SkippableFact]
