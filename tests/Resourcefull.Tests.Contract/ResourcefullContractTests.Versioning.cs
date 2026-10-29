@@ -62,12 +62,12 @@ public abstract partial class ResourcefullContractTests
 
         // Act
         await container.UploadAsync("doc", BinaryData.FromString("v1"));
-        await container.UploadAsync("doc", BinaryData.FromString("v2"));
-        await container.UploadAsync("doc", BinaryData.FromString("v3"));
+        ResourceInfo second = await container.UploadAsync("doc", BinaryData.FromString("v2"));
+        ResourceInfo third = await container.UploadAsync("doc", BinaryData.FromString("v3"));
 
         // Assert
         IReadOnlyList<ResourceInfo> versions = await container.GetResourceVersionsAsync("doc");
-        Assert.Equal(2, versions.Count);
+        Assert.Equal([third.VersionId, second.VersionId], versions.Select(v => v.VersionId));
         Assert.Single(versions, version => version.IsLatest);
         Assert.Equal("v3", (await container.DownloadContentAsync("doc"))!.Content.ToString());
     }
@@ -171,13 +171,21 @@ public abstract partial class ResourcefullContractTests
     }
 
     [SkippableFact]
-    public async Task RestoreVersionAsync_ShouldStoreTheEarlierContentAsANewCurrentVersion_WhenGivenAnEarlierVersionId()
+    public async Task RestoreVersionAsync_ShouldStoreTheEarlierContentAndMetadataAsANewCurrentVersion_WhenGivenAnEarlierVersionId()
     {
         // Arrange
         using ServiceProvider provider = BuildServiceProvider(o => o.UseVersioning());
         IResourceContainerClient container = await NewContainerAsync(provider);
-        ResourceInfo first = await container.UploadAsync("doc", BinaryData.FromString("v1"));
-        await container.UploadAsync("doc", BinaryData.FromString("v2"));
+        ResourceInfo first = await container.UploadAsync("doc", BinaryData.FromString("v1"), new ResourceUploadOptions
+        {
+            Headers = new ResourceHeaders("text/plain", null),
+            Metadata = new Dictionary<string, string> { ["draft"] = "1" }
+        });
+        await container.UploadAsync("doc", BinaryData.FromString("v2"), new ResourceUploadOptions
+        {
+            Headers = new ResourceHeaders("text/markdown", null),
+            Metadata = new Dictionary<string, string> { ["draft"] = "2", ["reviewed"] = "yes" }
+        });
 
         // Act
         ResourceInfo? restored = await container.RestoreVersionAsync("doc", first.VersionId!);
@@ -188,6 +196,9 @@ public abstract partial class ResourcefullContractTests
         Assert.Equal(restored!.VersionId, versions[0].VersionId);
         Assert.NotEqual(first.VersionId, restored.VersionId);
         Assert.Equal(first.ContentHash, restored.ContentHash);
-        Assert.Equal("v1", (await container.DownloadContentAsync("doc"))!.Content.ToString());
+        ResourceContent current = (await container.DownloadContentAsync("doc"))!;
+        Assert.Equal("v1", current.Content.ToString());
+        Assert.Equal("text/plain", current.ResourceInfo.ContentType);
+        Assert.Equal(new Dictionary<string, string> { ["draft"] = "1" }, current.ResourceInfo.Metadata);
     }
 }
