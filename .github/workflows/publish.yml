@@ -1,25 +1,47 @@
 name: Publish NuGet Packages
 
+# Pushing a v* tag publishes the packages built and tested from that commit. The tag must match <Version> in
+# src/Directory.Build.props.
 on:
-  workflow_dispatch: # manual trigger
+  push:
+    tags: [ "v*" ]
+
+permissions:
+  contents: read
 
 jobs:
+  build-and-test:
+    uses: ./.github/workflows/build.yml
+
   publish:
+    needs: build-and-test
     runs-on: ubuntu-latest
+    environment: nuget
+    permissions:
+      id-token: write # for the short-lived nuget.org API key from Trusted Publishing
     steps:
-    - uses: actions/checkout@v7
+    - name: Download the tested packages
+      uses: actions/download-artifact@v8
+      with:
+        name: nupkg
+        path: ./nupkg
+    - name: Check the packages match the tag
+      run: |
+        version="${GITHUB_REF_NAME#v}"
+        for id in Resourcefull Resourcefull.SqlServer Resourcefull.InMemory; do
+          if [ ! -f "nupkg/$id.$version.nupkg" ]; then
+            echo "::error::$id $version wasn't built. The tag $GITHUB_REF_NAME must match <Version> in src/Directory.Build.props."
+            exit 1
+          fi
+        done
     - name: Setup .NET
       uses: actions/setup-dotnet@v6
       with:
         dotnet-version: 10.0.x
-    - name: Restore dependencies
-      run: dotnet restore
-    - name: Build
-      run: dotnet build -c Release --no-restore
-    - name: Create NuGet packages
-      run: |
-        dotnet pack src/Resourcefull --no-build -c Release --output ./nupkg
-        dotnet pack src/Resourcefull.SqlServer --no-build -c Release --output ./nupkg
-        dotnet pack src/Resourcefull.InMemory --no-build -c Release --output ./nupkg
+    - name: Log in to nuget.org
+      id: login
+      uses: NuGet/login@v1
+      with:
+        user: ${{ vars.NUGET_USER }}
     - name: Publish to nuget.org
-      run: dotnet nuget push ./nupkg/*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
+      run: dotnet nuget push "nupkg/*.nupkg" --api-key "${{ steps.login.outputs.NUGET_API_KEY }}" --source https://api.nuget.org/v3/index.json --skip-duplicate
