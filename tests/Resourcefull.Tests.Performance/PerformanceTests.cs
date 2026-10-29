@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Diagnostics.Metrics;
 using System.Runtime.CompilerServices;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
@@ -96,6 +97,56 @@ public sealed class PerformanceTests(SqlServerFixture fixture, ITestOutputHelper
                 await using Stream content = download!.Stream;
                 await content.CopyToAsync(Stream.Null);
             })));
+    }
+
+    [SkippableFact]
+    public async Task UploadAndDownload_ShouldStayWithinTheirBaselines_WhenTelemetryIsListening()
+    {
+        // The same operations as upload-16MiB and download-16MiB, with every span and measurement recorded, so the
+        // cost of telemetry while it's in use is held to a budget too.
+        IResourceContainerClient container = await NewContainerAsync();
+        long length = 16L * Mebibyte;
+        using TelemetryListeners listening = new();
+
+        await MeasureAsync("upload-16MiB-traced", length,
+            run: iteration => container.UploadAsync($"r{iteration}", new GeneratedStream(length)));
+        await MeasureAsync("download-16MiB-traced", length, run: async _ =>
+        {
+            ResourceDownloadResult? download = await container.DownloadStreamingAsync("r0");
+            await using Stream content = download!.Stream;
+            await content.CopyToAsync(Stream.Null);
+        });
+    }
+
+    /// <summary>Listens to every Resourcefull span and instrument, as an application exporting them would, and drops what it hears.</summary>
+    private sealed class TelemetryListeners : IDisposable
+    {
+        private readonly ActivityListener _spans = new()
+        {
+            ShouldListenTo = source => source.Name == ResourcefullTelemetry.ActivitySourceName,
+            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllDataAndRecorded
+        };
+        private readonly MeterListener _instruments = new()
+        {
+            InstrumentPublished = (instrument, listener) =>
+            {
+                if (instrument.Meter.Name == ResourcefullTelemetry.MeterName) listener.EnableMeasurementEvents(instrument);
+            }
+        };
+
+        public TelemetryListeners()
+        {
+            ActivitySource.AddActivityListener(_spans);
+            _instruments.SetMeasurementEventCallback<double>((_, _, _, _) => { });
+            _instruments.SetMeasurementEventCallback<long>((_, _, _, _) => { });
+            _instruments.Start();
+        }
+
+        public void Dispose()
+        {
+            _spans.Dispose();
+            _instruments.Dispose();
+        }
     }
 
     [SkippableFact]

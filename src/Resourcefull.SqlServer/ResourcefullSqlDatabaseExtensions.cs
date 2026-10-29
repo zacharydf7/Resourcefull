@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -25,7 +26,15 @@ public static class ResourcefullSqlDatabaseExtensions
     {
         var dbContextFactory = services.GetService<IDbContextFactory<ResourceDbContext>>()
             ?? throw new InvalidOperationException($"{nameof(MigrateResourcefullDatabaseAsync)} needs Resourcefull configured with {nameof(ResourcefullSqlOptionsExtensions.UseSqlServer)}.");
-        await using ResourceDbContext dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
-        await dbContext.Database.MigrateAsync(cancellationToken);
+        using Activity? activity = SqlTelemetry.Start("migrate");
+        try
+        {
+            await using ResourceDbContext dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+            await dbContext.Database.MigrateAsync(cancellationToken);
+        }
+        catch (Exception exception) when (SqlTelemetry.Failed(activity, exception))
+        {
+            throw;
+        }
     }
 }

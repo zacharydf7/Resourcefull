@@ -15,7 +15,9 @@ public sealed class ResourceListOptions
     public string? Prefix { get; init; }
 
     /// <summary>Resources per page, from 1 to <see cref="MaxPageSize"/>. The default is 1,000.</summary>
-    public int PageSize { get; init; } = 1000;
+    public int PageSize { get; init; } = DefaultPageSize;
+
+    internal const int DefaultPageSize = 1000;
 }
 
 /// <summary>

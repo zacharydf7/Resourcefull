@@ -94,12 +94,14 @@ public static class ResourceContainerClientHttpExtensions
             return PreconditionFailed(request, null, exception.Message);
         }
 
+        if (hasPreconditions) Preconditions.Record(request.HttpContext, "met");
         request.HttpContext.Response.GetTypedHeaders().ETag = Preconditions.EntityTagOf(stored);
         return existed ? TypedResults.Ok(stored) : TypedResults.Created(stored.Uri, stored);
     }
 
     private static IResult PreconditionFailed(HttpRequest request, string? currentContentHash, string message)
     {
+        Preconditions.Record(request.HttpContext, "failed");
         request.HttpContext.Response.GetTypedHeaders().ETag = Preconditions.EntityTagOf(currentContentHash);
         return TypedResults.Problem(statusCode: StatusCodes.Status412PreconditionFailed, title: message);
     }

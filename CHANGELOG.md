@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **Telemetry.** Every client operation records a trace span and metrics, through `ActivitySource` and `Meter`
+  named `Resourcefull`: each operation's duration, and the bytes uploaded and downloaded, tagged by operation,
+  provider and error type. SQL Server's migrations and hash backfill record spans. Resource names, and failure
+  messages that may contain them, go on spans only with `UseTelemetry(t => t.RecordResourceNames = true)`. Nothing is
+  measured until something subscribes. See [Telemetry](docs/telemetry.md).
+
 ## 3.1.0
 
 New features, all additive: code written for 3.0 keeps compiling, and custom providers keep working. The one thing to

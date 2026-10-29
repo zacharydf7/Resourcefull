@@ -82,11 +82,23 @@ public class ResourcefullOptionsBuilder
             throw new InvalidOperationException($"Value for {nameof(maxVersions)} must be greater than zero.");
         }
 
-        Services.Configure<ResourcefullOptions>(options => 
+        Services.Configure<ResourcefullOptions>(options =>
         {
             options.IsVersioningEnabled = true;
             options.MaxVersions = maxVersions ?? 100;
         });
+        return this;
+    }
+
+    /// <summary>
+    /// Configures what Resourcefull's spans and metrics record. Telemetry is published whether or not this is called,
+    /// under the names in <see cref="ResourcefullTelemetry"/>; this only changes what goes into it.
+    /// </summary>
+    /// <param name="configure">A callback to set <see cref="ResourcefullTelemetryOptions"/>.</param>
+    public ResourcefullOptionsBuilder UseTelemetry(Action<ResourcefullTelemetryOptions> configure)
+    {
+        ArgumentNullException.ThrowIfNull(configure);
+        Services.Configure<ResourcefullOptions>(options => configure(options.Telemetry));
         return this;
     }
 }

@@ -16,4 +16,10 @@ public class ResourcefullOptions
     /// which guarantees it is greater than zero whenever versioning is enabled.
     /// </summary>
     public int MaxVersions { get; internal set; }
+
+    /// <summary>
+    /// Gets what telemetry records. Set through
+    /// <see cref="ResourcefullOptionsBuilder.UseTelemetry(Action{ResourcefullTelemetryOptions})"/>.
+    /// </summary>
+    public ResourcefullTelemetryOptions Telemetry { get; internal set; } = new();
 }

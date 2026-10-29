@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Http.Headers;
 using Microsoft.Net.Http.Headers;
 
@@ -16,6 +17,22 @@ internal static class Preconditions
     /// <inheritdoc cref="EntityTagOf(ResourceInfo?)"/>
     public static EntityTagHeaderValue? EntityTagOf(string? contentHash) =>
         contentHash is null ? null : new EntityTagHeaderValue($"\"{contentHash}\"");
+
+    /// <summary>Whether the request has any of the preconditions <see cref="Evaluate"/> considers.</summary>
+    public static bool Any(HttpRequest request)
+    {
+        RequestHeaders headers = request.GetTypedHeaders();
+        return headers.IfMatch.Count > 0 || headers.IfNoneMatch.Count > 0
+            || headers.IfModifiedSince is not null || headers.IfUnmodifiedSince is not null;
+    }
+
+    /// <summary>
+    /// Records how the request's preconditions came out, as <c>resourcefull.precondition</c> (<c>met</c>,
+    /// <c>not_modified</c> or <c>failed</c>), on the request's own span, when there is one, rather than on a span the
+    /// application may have started around the call.
+    /// </summary>
+    public static void Record(HttpContext httpContext, string outcome) =>
+        httpContext.Features.Get<IHttpActivityFeature>()?.Activity.SetTag("resourcefull.precondition", outcome);
 
     /// <returns>200 to go ahead, 304 Not Modified, or 412 Precondition Failed.</returns>
     public static int Evaluate(HttpRequest request, ResourceInfo? current)

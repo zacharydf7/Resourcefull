@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Microsoft.EntityFrameworkCore;
 
 namespace Resourcefull.SqlServer;
@@ -22,6 +23,22 @@ public sealed class ContentHashBackfill
     /// <param name="cancellationToken">Stops the run; the hashes already recorded are kept.</param>
     /// <returns>How many hashes this run recorded, and every version whose recorded length is wrong.</returns>
     public async Task<ContentHashBackfillResult> RunAsync(CancellationToken cancellationToken = default)
+    {
+        using Activity? activity = SqlTelemetry.Start("backfill");
+        try
+        {
+            ContentHashBackfillResult result = await RunCoreAsync(cancellationToken);
+            activity?.SetTag("resourcefull.hashed", result.Hashed);
+            activity?.SetTag("resourcefull.mismatches", result.Mismatches.Count);
+            return result;
+        }
+        catch (Exception exception) when (SqlTelemetry.Failed(activity, exception))
+        {
+            throw;
+        }
+    }
+
+    private async Task<ContentHashBackfillResult> RunCoreAsync(CancellationToken cancellationToken)
     {
         int hashed = 0;
         long lastId = 0;

@@ -40,6 +40,8 @@ public sealed class ResourceHttpResult : IResult
         headers.LastModified = resource.LastModified;
 
         int status = Preconditions.Evaluate(httpContext.Request, resource);
+        if (Preconditions.Any(httpContext.Request))
+            Preconditions.Record(httpContext, status switch { StatusCodes.Status304NotModified => "not_modified", StatusCodes.Status200OK => "met", _ => "failed" });
         response.StatusCode = status;
         if (status != StatusCodes.Status200OK) return;
 

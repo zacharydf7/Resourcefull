@@ -18,6 +18,7 @@ bytes: SQL Server, process memory for tests, or a provider you write.
 - [Concurrency](concurrency.md): what's guaranteed when several callers write the same name.
 - [Errors](errors.md): what each operation returns or throws.
 - [URI providers](uri-providers.md): giving containers and resources the URIs your API serves them at.
+- [Telemetry](telemetry.md): the spans and metrics every operation records.
 
 ## Providers
 

@@ -16,6 +16,8 @@
     href: errors.md
   - name: URI providers
     href: uri-providers.md
+  - name: Telemetry
+    href: telemetry.md
 - name: Providers
   items:
   - name: SQL Server

@@ -121,6 +121,9 @@ Three rules keep the scripts generated and safe to run again:
 - **Lines** wrap at about 120 characters; fill a line before wrapping parameters rather than putting one per line.
 - **Public members** need XML documentation; the build fails without it.
 - **Commit messages** are one short line in the imperative: "Add a content hash to every version".
+- **Telemetry is part of done.** A change that adds or changes an operation records its span and metrics, adds
+  the operation to [Telemetry](docs/telemetry.md), and has a test that observes them; the test that calls every
+  public client method fails for a method that records no span.
 - **Pull requests** keep to one change, with tests, and update the docs when behavior changes.
 
 ## Releasing
