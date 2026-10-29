@@ -267,6 +267,27 @@ public sealed class TelemetryTests : IDisposable
     }
 
     [Fact]
+    public async Task AddResourcefullCheck_ShouldRecordAHealthCheckSpanAndDuration_WhenCalled()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        services.AddSingleton(typeof(Microsoft.Extensions.Logging.ILogger<>), typeof(Microsoft.Extensions.Logging.Abstractions.NullLogger<>));
+        services.AddResourcefull(o => o.UseInMemory());
+        services.AddHealthChecks().AddResourcefullCheck();
+        await using ServiceProvider provider = services.BuildServiceProvider();
+        using Activity root = TestSource.StartActivity("test")!;
+
+        // Act
+        await provider.GetRequiredService<Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckService>().CheckHealthAsync();
+
+        // Assert
+        Activity check = Assert.Single(SpansIn(root));
+        Assert.Equal("resourcefull health_check", check.OperationName);
+        Assert.Equal("inmemory", check.GetTagItem("resourcefull.provider"));
+        Assert.Contains(_measurements, m => m.Instrument == "resourcefull.client.operation.duration" && Equals(m.Tags["resourcefull.operation"], "health_check"));
+    }
+
+    [Fact]
     public async Task ClientOperations_ShouldRecordTheirOwnTags_WhenTheyHaveThem()
     {
         // Arrange

@@ -4,8 +4,8 @@ using System.Reflection;
 namespace Resourcefull.SqlServer;
 
 /// <summary>
-/// Spans for the SQL Server package's own operations, the backfill and migrations, published under the same source
-/// name as the clients' spans and tagged the same way.
+/// Spans for the SQL Server package's own operations, the backfill, migrations and health check, published under the
+/// same source name as the clients' spans and tagged the same way.
 /// </summary>
 internal static class SqlTelemetry
 {

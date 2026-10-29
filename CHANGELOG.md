@@ -4,6 +4,9 @@
 
 ### Added
 
+- **Health checks.** `AddHealthChecks().AddResourcefullCheck()` reports whether storage can be reached through any
+  provider, and `AddResourcefullSqlServerCheck()` also reports Unhealthy when the database is missing migrations this
+  release needs, and Degraded when a newer release has upgraded it. See [Health checks](docs/health-checks.md).
 - **Telemetry.** Every client operation records a trace span and metrics, through `ActivitySource` and `Meter`
   named `Resourcefull`: each operation's duration, and the bytes uploaded and downloaded, tagged by operation,
   provider and error type. SQL Server's migrations and hash backfill record spans. Resource names, and failure

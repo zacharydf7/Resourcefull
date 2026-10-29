@@ -68,6 +68,7 @@ metrics. It also has:
 | `delete_container` | `DeleteResourceContainerIfExistsAsync` | |
 | `migrate` | `MigrateResourcefullDatabaseAsync` (SQL Server) | span only |
 | `backfill` | `ContentHashBackfill.RunAsync` (SQL Server) | span only; `resourcefull.hashed`, `resourcefull.mismatches` |
+| `health_check` | `AddResourcefullCheck`; `AddResourcefullSqlServerCheck` (span only) | for SQL Server, `resourcefull.pending_migrations` |
 
 `GetResourceContainerClient` doesn't contact storage, so it records nothing.
 

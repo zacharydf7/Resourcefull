@@ -1,6 +1,11 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Net;
+using System.Net.Sockets;
 using Microsoft.Data.SqlClient;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.Extensions.DependencyInjection;
 using Resourcefull.SqlServer;
 
@@ -58,5 +63,44 @@ public sealed class TelemetryIntegrationTests(SqlServerFixture fixture)
         Assert.Equal(2, backfill.GetTagItem("resourcefull.hashed"));
         Assert.Equal(1, backfill.GetTagItem("resourcefull.mismatches"));
         Assert.Equal(ActivityStatusCode.Unset, migrate.Status);
+    }
+
+    [SkippableFact]
+    public async Task AddResourcefullSqlServerCheck_ShouldRecordItsSpanWithPendingMigrationsOrItsFailure_WhenCalled()
+    {
+        fixture.SkipIfUnavailable();
+
+        // Arrange: a database missing its last migration, and a server that accepts the connection but never answers, so
+        // the check times out.
+        var spans = new ConcurrentQueue<Activity>();
+        using var listener = new ActivityListener
+        {
+            ShouldListenTo = source => source.Name is ResourcefullTelemetry.ActivitySourceName or "Resourcefull.Tests.Integration",
+            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllDataAndRecorded,
+            ActivityStopped = spans.Enqueue
+        };
+        ActivitySource.AddActivityListener(listener);
+        string behind = fixture.AllocateDatabase("TelemetryHealth");
+        await using (ResourceDbContext context = SqlServerFixture.CreateDbContext(behind))
+        {
+            string[] migrations = [.. context.Database.GetMigrations()];
+            await context.GetService<IMigrator>().MigrateAsync(migrations[^2]);
+        }
+        using var silent = new TcpListener(IPAddress.Loopback, 0);
+        silent.Start();
+        string unresponsive = new SqlConnectionStringBuilder(fixture.ConnectionString)
+            { DataSource = $"tcp:127.0.0.1,{((IPEndPoint)silent.LocalEndpoint).Port}", ConnectTimeout = 30 }.ConnectionString;
+        using Activity root = TestSource.StartActivity("test")!;
+
+        // Act
+        await SqlServerHealthCheckIntegrationTests.CheckAsync(behind);
+        await SqlServerHealthCheckIntegrationTests.CheckAsync(unresponsive, TimeSpan.FromSeconds(1));
+
+        // Assert
+        List<Activity> checks = [.. spans.Where(s => s.TraceId == root.TraceId && s.OperationName == "resourcefull health_check")];
+        Assert.Equal(2, checks.Count);
+        Assert.All(checks, s => Assert.Equal("sqlserver", s.GetTagItem("resourcefull.provider")));
+        Assert.Contains(checks, s => Equals(s.GetTagItem("resourcefull.pending_migrations"), 1) && s.Status == ActivityStatusCode.Unset);
+        Assert.Contains(checks, s => s.Status == ActivityStatusCode.Error && s.GetTagItem("error.type") is not null);
     }
 }
