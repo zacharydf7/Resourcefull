@@ -28,7 +28,7 @@ jobs:
     - name: Check the packages match the tag
       run: |
         version="${GITHUB_REF_NAME#v}"
-        for id in Resourcefull Resourcefull.SqlServer Resourcefull.InMemory; do
+        for id in Resourcefull Resourcefull.SqlServer Resourcefull.InMemory Resourcefull.AspNetCore; do
           if [ ! -f "nupkg/$id.$version.nupkg" ]; then
             echo "::error::$id $version wasn't built. The tag $GITHUB_REF_NAME must match <Version> in src/Directory.Build.props."
             exit 1

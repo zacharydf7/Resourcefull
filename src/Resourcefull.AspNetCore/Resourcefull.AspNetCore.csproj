@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <Title>Resourcefull.AspNetCore</Title>
+    <Description>ASP.NET Core support for Resourcefull: serve downloads with their headers and conditional responses, accept uploads with the request's preconditions, and turn Resourcefull's exceptions into status codes.</Description>
+    <PackageTags>$(PackageTags);aspnetcore</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Resourcefull\Resourcefull.csproj" />
+  </ItemGroup>
+
+</Project>

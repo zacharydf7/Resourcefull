@@ -25,4 +25,19 @@ public class ResourceNamesTests
     [MemberData(nameof(ValidResourceNames))]
     public void IsValidResourceName_ShouldReturnTrue_WhenGivenAValidName(string name)
         => Assert.True(ResourceNames.IsValidResourceName(name));
+
+    public static TheoryData<string> NonNullInvalidResourceNames() =>
+        [.. ((IEnumerable<object?[]>)ResourceContainerClientTests.InvalidResourceNames()).Select(row => row[0]).OfType<string>()];
+
+    [Theory]
+    [MemberData(nameof(NonNullInvalidResourceNames))]
+    public void ThrowIfInvalidResourceName_ShouldThrowResourceNameExceptionNamingTheArgument_WhenGivenANonNullInvalidName(string name)
+    {
+        var exception = Assert.Throws<ResourceNameException>(() => ResourceNames.ThrowIfInvalidResourceName(name, "resourceName"));
+        Assert.Equal("resourceName", exception.ParamName);
+    }
+
+    [Fact]
+    public void ThrowIfInvalidResourceName_ShouldThrowArgumentNullException_WhenGivenNull()
+        => Assert.Throws<ArgumentNullException>("resourceName", () => ResourceNames.ThrowIfInvalidResourceName(null!, "resourceName"));
 }

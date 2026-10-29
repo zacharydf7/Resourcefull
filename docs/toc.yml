@@ -26,7 +26,7 @@
     href: providers/writing-a-provider.md
 - name: Guides
   items:
-  - name: ASP.NET Core recipes
+  - name: ASP.NET Core
     href: recipes/aspnet-core.md
   - name: Upgrading to 3.0
     href: upgrading.md

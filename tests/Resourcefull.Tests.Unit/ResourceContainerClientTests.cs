@@ -275,13 +275,13 @@ public class ResourceContainerClientTests
     [Theory]
     [InlineData("")]
     [InlineData(" ")]
-    public async Task UploadAsync_ShouldThrowArgumentException_WhenNameIsBlank(string name)
+    public async Task UploadAsync_ShouldThrowResourceNameException_WhenNameIsBlank(string name)
     {
         // Arrange & Act
         var client = NewClient(new Mock<IResourceRepository>().Object);
 
         // Assert
-        await Assert.ThrowsAsync<ArgumentException>(
+        await Assert.ThrowsAsync<ResourceNameException>(
             () => client.UploadAsync(name, new MemoryStream()));
     }
 
@@ -701,20 +701,26 @@ public class ResourceContainerClientTests
         Assert.Null(result);
     }
 
-    [Theory]
-    [InlineData("", "v1")]
-    [InlineData("name", "")]
-    public async Task RestoreVersionAsync_ShouldThrowArgumentException_WhenArgsBlank(
-        string name,
-        string versionId)
+    [Fact]
+    public async Task RestoreVersionAsync_ShouldThrowResourceNameException_WhenTheNameIsBlank()
     {
         // Arrange & Act
         var options = new ResourcefullOptions { IsVersioningEnabled = true };
         var client = NewClient(new Mock<IResourceRepository>().Object, options: options);
 
         // Assert
-        await Assert.ThrowsAsync<ArgumentException>(
-            () => client.RestoreVersionAsync(name, versionId));
+        await Assert.ThrowsAsync<ResourceNameException>(() => client.RestoreVersionAsync("", "v1"));
+    }
+
+    [Fact]
+    public async Task RestoreVersionAsync_ShouldThrowArgumentException_WhenTheVersionIdIsBlank()
+    {
+        // Arrange & Act
+        var options = new ResourcefullOptions { IsVersioningEnabled = true };
+        var client = NewClient(new Mock<IResourceRepository>().Object, options: options);
+
+        // Assert
+        await Assert.ThrowsAsync<ArgumentException>("versionId", () => client.RestoreVersionAsync("name", ""));
     }
 
     [Fact]

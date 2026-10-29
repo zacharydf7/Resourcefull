@@ -112,6 +112,6 @@ using (IServiceScope scope = host.Services.CreateScope())
 ## Next steps
 
 - [Uploads and downloads](uploads-and-downloads.md) for streams, lengths, hashes and cancellation.
-- [ASP.NET Core recipes](recipes/aspnet-core.md) for serving files from an API with the right status codes and
+- [ASP.NET Core](recipes/aspnet-core.md) for serving files from an API with the right status codes and
   headers.
 - The [samples](../samples/README.md): a minimal API and a Blazor app that run out of the box.

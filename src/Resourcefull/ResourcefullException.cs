@@ -34,6 +34,20 @@ public sealed class ResourceConflictException : ResourcefullException
 }
 
 /// <summary>
+/// Thrown when a container or resource name breaks the name rules: empty, only whitespace, too long, or with whitespace
+/// at either end. A <see langword="null"/> name throws <see cref="ArgumentNullException"/> instead. It derives from
+/// <see cref="ArgumentException"/>, so code that catches that still catches it, and its
+/// <see cref="ArgumentException.ParamName"/> names the argument. Maps naturally to an HTTP 400.
+/// </summary>
+public sealed class ResourceNameException : ArgumentException
+{
+    /// <summary>Creates the exception with a message and the name of the argument that broke the rules.</summary>
+    /// <param name="message">The message that describes the error.</param>
+    /// <param name="paramName">The name of the argument that holds the name.</param>
+    public ResourceNameException(string message, string? paramName) : base(message, paramName) { }
+}
+
+/// <summary>
 /// Thrown when an upload or delete with <see cref="ResourceConditions"/> finds that the name's current version doesn't
 /// meet them. Nothing is changed. Maps naturally to an HTTP 412.
 /// </summary>

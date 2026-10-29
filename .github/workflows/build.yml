@@ -21,12 +21,15 @@ jobs:
     - name: Build
       run: dotnet build --no-restore --configuration Release
     - name: Test
-      run: dotnet test tests/Resourcefull.Tests.Unit --no-build --configuration Release
+      run: |
+        dotnet test tests/Resourcefull.Tests.Unit --no-build --configuration Release
+        dotnet test tests/Resourcefull.Tests.AspNetCore --no-build --configuration Release
     - name: Create NuGet packages
       run: |
         dotnet pack src/Resourcefull --no-build -c Release --output ./nupkg
         dotnet pack src/Resourcefull.SqlServer --no-build -c Release --output ./nupkg
         dotnet pack src/Resourcefull.InMemory --no-build -c Release --output ./nupkg
+        dotnet pack src/Resourcefull.AspNetCore --no-build -c Release --output ./nupkg
     - name: Upload NuGet packages
       uses: actions/upload-artifact@v7
       with:

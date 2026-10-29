@@ -9,6 +9,14 @@
   ID or content hash you read. The write decides it, so of concurrent writers that read the same version exactly one
   succeeds; the rest throw the new `ResourcePreconditionFailedException` (HTTP 412). See
   [Updating only if unchanged](docs/concurrency.md#updating-only-if-unchanged).
+- **`Resourcefull.AspNetCore`**, a new package for serving and accepting files. `Results.Resource(download)` sends a
+  download with `Content-Length`, a strong `ETag`, `Last-Modified` and `Content-Disposition`, and answers conditional
+  and `HEAD` requests. `UploadFromRequestAsync` stores a request body, honoring `If-Match`, `If-None-Match` and
+  `If-Unmodified-Since` race-free. `AddResourcefullExceptionHandler` turns Resourcefull's exceptions into problem
+  details with the right status codes. See [ASP.NET Core](docs/recipes/aspnet-core.md).
+- **`ResourceNameException`**, thrown for a name that breaks the name rules. It derives from `ArgumentException`, so
+  existing `catch (ArgumentException)` code still catches it, but a test that expects exactly `ArgumentException`
+  needs updating.
 - **Listing by prefix, a page at a time.** `ListResourcesAsync` enumerates a container's current resources, or those
   under a prefix, fetching pages as you go, and `GetResourcePageAsync` returns one page with a continuation token for
   APIs that page for their own callers. With SQL Server a page costs the same wherever it starts. See

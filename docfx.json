@@ -8,6 +8,7 @@
           "files": [
             "Resourcefull/Resourcefull.csproj",
             "Resourcefull.InMemory/Resourcefull.InMemory.csproj",
+            "Resourcefull.AspNetCore/Resourcefull.AspNetCore.csproj",
             "Resourcefull.SqlServer/Resourcefull.SqlServer.csproj"
           ]
         }

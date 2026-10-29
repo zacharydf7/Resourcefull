@@ -47,10 +47,12 @@ public static class ResourceNames
 
     private static void ThrowIfInvalid(string name, int maxLength, string? paramName)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(name, paramName);
+        ArgumentNullException.ThrowIfNull(name, paramName);
 
+        if (string.IsNullOrWhiteSpace(name))
+            throw new ResourceNameException("Name must not be empty or only whitespace.", paramName);
         if (FindProblem(name, maxLength) is { } problem)
-            throw new ArgumentException(problem, paramName);
+            throw new ResourceNameException(problem, paramName);
     }
 
     /// <summary>What's wrong with a name that isn't blank, or <see langword="null"/> if nothing is.</summary>

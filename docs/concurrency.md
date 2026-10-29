@@ -47,8 +47,9 @@ carries the version that's current now (`CurrentVersionId` and `CurrentContentHa
 They can read again, reapply their change and retry.
 
 - **`IfMatchContentHash`** compares the content hash instead. The [ASP.NET Core recipe](recipes/aspnet-core.md)
-  sends it as the `ETag`, in quotes as HTTP requires, so pass the tag from an `If-Match` header without its quotes,
-  and handle `*`, weak tags (`W/"…"`) and lists of tags yourself. Versions stored before 3.0 have no hash until the
+  sends it as the `ETag`, in quotes as HTTP requires, so pass the tag from an `If-Match` header without its quotes.
+  `UploadFromRequestAsync` in the [ASP.NET Core package](recipes/aspnet-core.md#accepting-uploads) does that for you,
+  along with `*`, weak tags and lists of tags. Versions stored before 3.0 have no hash until the
   [backfill](providers/sql-server.md#recording-hashes-for-older-versions) records one, and until then they meet no
   hash condition.
 - **Set both** and both must hold.

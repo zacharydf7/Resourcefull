@@ -7,7 +7,8 @@ Resourcefull reports an expected absence with a return value and everything else
 | A single resource, version or container that doesn't exist | `null` |
 | A listing with nothing in it | an empty list, never `null` |
 | An existence check or a conditional delete | `bool` |
-| A `null` or invalid name, or a missing argument | `ArgumentNullException` or `ArgumentException`, before storage is contacted |
+| A `null` name, or a missing argument | `ArgumentNullException`, before storage is contacted |
+| A name that breaks the [name rules](containers-and-names.md#names) | `ResourceNameException`, an `ArgumentException`, before storage is contacted |
 | Uploading a name that exists, when the upload is create-only | `ResourceConflictException` |
 | Creating a container that exists | `ResourceConflictException` |
 | Uploading into a container that doesn't exist | `ResourceContainerNotFoundException` |
@@ -29,6 +30,9 @@ All of them derive from `ResourcefullException`, so one `catch` handles any of t
 | `ResourceContentLengthMismatchException` | The upload's declared length didn't match its content. | 400 Bad Request |
 | `ResourcePreconditionFailedException` | The name's current version didn't meet the upload's or delete's conditions. | 412 Precondition Failed |
 
+`ResourceNameException` derives from `ArgumentException` rather than `ResourcefullException`, so existing
+`catch (ArgumentException)` code still catches it; it maps to 400 Bad Request.
+
 ```csharp
 try
 {
@@ -44,5 +48,5 @@ catch (ResourceContainerNotFoundException)
 }
 ```
 
-The [ASP.NET Core recipes](recipes/aspnet-core.md#turning-exceptions-into-status-codes) map them to responses in one
-place.
+The [ASP.NET Core package](recipes/aspnet-core.md#turning-exceptions-into-status-codes) maps them all, the name exception
+included, to responses in one place.

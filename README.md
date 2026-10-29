@@ -9,6 +9,7 @@ memory for tests, or in a storage provider of your own.
 | `Resourcefull` | The clients and the provider interface. |
 | `Resourcefull.SqlServer` | Stores resources in SQL Server. |
 | `Resourcefull.InMemory` | Keeps resources in process memory, for tests and local development. |
+| `Resourcefull.AspNetCore` | Serves downloads and accepts uploads in ASP.NET Core, with conditional requests and status codes. |
 
 ## Features
 
@@ -68,7 +69,7 @@ reference.
   uploads and downloads, versioning, concurrency, errors
 - [SQL Server](https://github.com/zacharydf7/Resourcefull/blob/main/docs/providers/sql-server.md): provisioning,
   permissions and upgrades
-- [ASP.NET Core recipes](https://github.com/zacharydf7/Resourcefull/blob/main/docs/recipes/aspnet-core.md)
+- [ASP.NET Core](https://github.com/zacharydf7/Resourcefull/blob/main/docs/recipes/aspnet-core.md)
 - [Upgrading to 3.0](https://github.com/zacharydf7/Resourcefull/blob/main/docs/upgrading.md) and the
   [changelog](https://github.com/zacharydf7/Resourcefull/blob/main/CHANGELOG.md)
 - [All documentation](https://github.com/zacharydf7/Resourcefull/blob/main/docs/index.md)

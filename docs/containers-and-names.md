@@ -87,4 +87,4 @@ first, for example to validate a whole request before acting on any of it, call 
 or `ResourceNames.IsValidResourceName`.
 
 Names appear in URIs and file names that you build from them, so escape them there; see
-[URI providers](uri-providers.md) and the [ASP.NET Core recipes](recipes/aspnet-core.md).
+[URI providers](uri-providers.md) and [ASP.NET Core](recipes/aspnet-core.md).
