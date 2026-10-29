@@ -1,7 +1,3 @@
----
-_layout: landing
----
-
 # Resourcefull
 
 Store and serve files of any type and size from infrastructure you run yourself. Upload, download, list and version

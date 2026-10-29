@@ -26,7 +26,7 @@
       { "files": [ "assets/icon.png" ] }
     ],
     "output": "_site",
-    "template": [ "default", "modern" ],
+    "template": [ "default", "modern", "template" ],
     "globalMetadata": {
       "_appName": "Resourcefull",
       "_appTitle": "Resourcefull",

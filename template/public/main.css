@@ -1,0 +1,6 @@
+/* The logo is a PNG, which the modern template shows at its natural size; size it to the navigation bar. */
+#logo {
+  width: 40px;
+  height: 40px;
+  margin-right: .5rem;
+}
