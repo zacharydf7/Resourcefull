@@ -737,8 +737,11 @@ dotnet ef migrations script 20261028213132_NameLimitsAndCaseSensitiveNames 20261
 dotnet ef migrations script 20261028220856_UniqueLatestVersion 20261029003116_EnableReadCommittedSnapshot --idempotent --project src/Resourcefull.SqlServer --output src/Resourcefull.SqlServer/Scripts/Migrations/migrate_20261029003116_EnableReadCommittedSnapshot.sql
 ```
 
-Then put the preamble back at the top of each file. The fresh-install preamble creates the database when
-it is missing and switches to it:
+Then put the preamble back at the top of each file. Both preambles switch to the database and turn on
+`XACT_ABORT`. The generated scripts run each transactional migration as one `BEGIN TRANSACTION … COMMIT` batch, and some
+errors (a duplicate key or a constraint violation in an `INSERT` or `UPDATE`) stop only the failing statement,
+so without it the rest of the migration could still commit, along with its history row. The fresh-install
+preamble also creates the database when it is missing:
 
 ```sql
 IF NOT EXISTS (
@@ -750,14 +753,16 @@ END;
 GO
 
 USE [ResourceDB];
+SET XACT_ABORT ON;
 GO
 
 ```
 
-The upgrade preamble only switches to it:
+The upgrade preamble:
 
 ```sql
 USE [ResourceDB];
+SET XACT_ABORT ON;
 GO
 
 ```

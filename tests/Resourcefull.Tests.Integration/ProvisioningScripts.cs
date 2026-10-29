@@ -29,11 +29,13 @@ internal static partial class ProvisioningScripts
         "GO\n" +
         "\n" +
         "USE [ResourceDB];\n" +
+        "SET XACT_ABORT ON;\n" +
         "GO\n" +
         "\n";
 
     public const string UpgradePreamble =
         "USE [ResourceDB];\n" +
+        "SET XACT_ABORT ON;\n" +
         "GO\n" +
         "\n";
 

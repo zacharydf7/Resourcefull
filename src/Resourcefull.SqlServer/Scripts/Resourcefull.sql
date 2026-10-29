@@ -7,6 +7,7 @@ END;
 GO
 
 USE [ResourceDB];
+SET XACT_ABORT ON;
 GO
 
 IF OBJECT_ID(N'[__EFMigrationsHistory]') IS NULL

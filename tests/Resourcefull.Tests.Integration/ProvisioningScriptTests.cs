@@ -226,6 +226,35 @@ public class ProvisioningScriptTests(SqlServerFixture fixture)
         Assert.Equal(ids.Where(id => string.CompareOrdinal(id, target) <= 0), await ReadMigrationHistoryAsync(connectionString));
     }
 
+    [SkippableTheory]
+    [InlineData(ProvisioningScripts.FreshInstallPreamble)]
+    [InlineData(ProvisioningScripts.UpgradePreamble)]
+    public async Task Preamble_ShouldMakeAMigrationAllOrNothing_WhenAStatementInItsTransactionFails(string preamble)
+    {
+        fixture.SkipIfUnavailable();
+
+        // Arrange: a migration-shaped batch whose duplicate-key INSERT fails without ending the batch by itself, so
+        // only the session settings decide whether the statements after it still run and commit.
+        string connectionString = fixture.AllocateDatabase($"AllOrNothing{preamble.Length}");
+        await ProvisioningScripts.ApplyAsync(ProvisioningScripts.FreshInstallPreamble, connectionString);
+        string sql = preamble + """
+            BEGIN TRANSACTION;
+            CREATE TABLE [BeforeFailure] ([Id] int PRIMARY KEY);
+            INSERT INTO [BeforeFailure] ([Id]) VALUES (1), (1);
+            CREATE TABLE [AfterFailure] ([Id] int);
+            COMMIT;
+            GO
+            """;
+
+        // Act
+        Task act() => ProvisioningScripts.ApplyAsync(sql, connectionString);
+
+        // Assert
+        InvalidOperationException failure = await Assert.ThrowsAsync<InvalidOperationException>(act);
+        Assert.Equal(2627, Assert.IsType<SqlException>(failure.InnerException).Number);
+        Assert.Equal(0, await ScalarAsync(connectionString, "SELECT COUNT(*) FROM sys.tables WHERE [name] IN ('BeforeFailure', 'AfterFailure')"));
+    }
+
     [SkippableFact]
     public async Task NameLimitsUpgradeScript_ShouldChangeNothing_WhenAStoredNameIsLongerThanTheNewLimit()
     {
