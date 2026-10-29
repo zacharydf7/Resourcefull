@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using Moq;
 using System.Text;
 
@@ -11,9 +12,10 @@ public class ResourceContainerClientTests
         IResourceRepository repository,
         string containerName = Container,
         ResourcefullOptions? options = null,
-        IUriProvider? uriProvider = null)
+        IUriProvider? uriProvider = null,
+        ILogger? logger = null)
         => new(repository, uriProvider, options ?? new ResourcefullOptions(),
-            new ResourceContainerInfo { Name = containerName });
+            new ResourceContainerInfo { Name = containerName }, logger);
 
     private static readonly WrittenContent Written = new(5, "sha256:written", new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero));
 
@@ -883,7 +885,34 @@ public class ResourceContainerClientTests
     }
 
     [Fact]
-    public async Task UploadAsync_ShouldReturnTheStoredVersion_WhenPruningFails()
+    public async Task UploadAsync_ShouldReturnTheStoredVersionAndLogAWarning_WhenPruningFails()
+    {
+        // Arrange
+        var failure = new InvalidOperationException("storage unavailable");
+        var repository = NewRepository();
+        repository.Setup(r => r.GetResourceVersionsAsync(Container, "name", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(
+            [
+                new() { ContainerName = Container, Name = "name", VersionId = "new" },
+                new() { ContainerName = Container, Name = "name", VersionId = "old" }
+            ]);
+        repository.Setup(r => r.DeleteResourceAsync(Container, "name", "old", It.IsAny<CancellationToken>()))
+            .ThrowsAsync(failure);
+        var logger = new Mock<ILogger>();
+        logger.Setup(l => l.IsEnabled(It.IsAny<LogLevel>())).Returns(true);
+        var client = NewClient(repository.Object, logger: logger.Object);
+
+        // Act
+        ResourceInfo result = await client.UploadAsync("name", new MemoryStream(), new ResourceUploadOptions { Overwrite = true });
+
+        // Assert
+        Assert.Equal("name", result.Name);
+        logger.Verify(l => l.Log(LogLevel.Warning, It.IsAny<EventId>(), It.IsAny<It.IsAnyType>(), failure,
+            It.IsAny<Func<It.IsAnyType, Exception?, string>>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task UploadAsync_ShouldReturnTheStoredVersion_WhenLoggingAPruneFailureThrows()
     {
         // Arrange
         var repository = NewRepository();
@@ -895,7 +924,11 @@ public class ResourceContainerClientTests
             ]);
         repository.Setup(r => r.DeleteResourceAsync(Container, "name", "old", It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("storage unavailable"));
-        var client = NewClient(repository.Object);
+        var logger = new Mock<ILogger>();
+        logger.Setup(l => l.IsEnabled(It.IsAny<LogLevel>())).Returns(true);
+        logger.Setup(l => l.Log(It.IsAny<LogLevel>(), It.IsAny<EventId>(), It.IsAny<It.IsAnyType>(), It.IsAny<Exception?>(),
+            It.IsAny<Func<It.IsAnyType, Exception?, string>>())).Throws(new AggregateException("logger unavailable"));
+        var client = NewClient(repository.Object, logger: logger.Object);
 
         // Act
         ResourceInfo result = await client.UploadAsync("name", new MemoryStream(), new ResourceUploadOptions { Overwrite = true });

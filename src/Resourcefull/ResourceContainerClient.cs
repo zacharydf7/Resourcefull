@@ -1,8 +1,13 @@
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+
 namespace Resourcefull;
 
-internal class ResourceContainerClient(IResourceRepository resourceRepository, IUriProvider? uriProvider,
-    ResourcefullOptions options, ResourceContainerInfo containerInfo) : IResourceContainerClient
+internal partial class ResourceContainerClient(IResourceRepository resourceRepository, IUriProvider? uriProvider,
+    ResourcefullOptions options, ResourceContainerInfo containerInfo, ILogger? logger) : IResourceContainerClient
 {
+    private readonly ILogger _logger = logger ?? NullLogger.Instance;
+
     public ResourceContainerInfo ResourceContainerInfo { get; } = containerInfo;
 
     private string ContainerName => ResourceContainerInfo.Name;
@@ -100,10 +105,19 @@ internal class ResourceContainerClient(IResourceRepository resourceRepository, I
         {
             await PruneAsync(resourceName, CancellationToken.None);
         }
-        catch (Exception)
+        catch (Exception exception)
         {
             // The older versions stay until a later overwriting or versioned upload of the name prunes them; every
-            // prune works from the versions as they stand after its own write.
+            // prune works from the versions as they stand after its own write. Logged, as a prune that keeps failing
+            // would otherwise let storage grow unnoticed.
+            try
+            {
+                LogPruneFailed(_logger, exception, ContainerName, resourceName);
+            }
+            catch
+            {
+                // A logging provider that throws mustn't fail an upload that was stored either.
+            }
         }
 
         return resourceInfo;
@@ -200,4 +214,8 @@ internal class ResourceContainerClient(IResourceRepository resourceRepository, I
     // Container clients now share the service client's scope, so there is
     // nothing to dispose. IDisposable is retained for backwards compatibility.
     public void Dispose() => GC.SuppressFinalize(this);
+
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "Pruning older versions of {ContainerName}/{ResourceName} failed after its upload was stored; they stay until a later upload of the name prunes them.")]
+    private static partial void LogPruneFailed(ILogger logger, Exception exception, string containerName, string resourceName);
 }

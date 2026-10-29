@@ -316,7 +316,9 @@ ResourceInfo info = await container.UploadAsync("report.pdf", stream, null, cts.
   when versioning is off) runs to completion. If pruning fails, the upload still returns the stored version,
   and the older versions stay until a later overwriting or versioned upload of the name prunes them. Until
   then they are ordinary stored versions: they appear in `GetResourceVersionsAsync` and can be read by
-  version ID, and deleting the name removes them with the rest of its history.
+  version ID, and deleting the name removes them with the rest of its history. A failed prune is logged as
+  a warning, with its exception, under the `Resourcefull.ResourceContainerClient` category of the
+  application's `ILogger` (when logging is registered), so one that keeps failing doesn't go unnoticed.
 - **`DownloadStreamingAsync`** takes a token for locating the resource. To cancel the download itself,
   pass a token to the returned stream's `ReadAsync` or `CopyToAsync`; `DownloadContentAsync` does this
   for you.

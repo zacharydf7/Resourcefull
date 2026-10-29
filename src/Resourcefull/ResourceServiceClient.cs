@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using System.Runtime.CompilerServices;
 
@@ -5,7 +6,8 @@ using System.Runtime.CompilerServices;
 
 namespace Resourcefull;
 
-internal class ResourceServiceClient(IResourceRepository resourceRepository, IOptions<ResourcefullOptions> options, IUriProvider? uriProvider = null) : IResourceServiceClient
+internal class ResourceServiceClient(IResourceRepository resourceRepository, IOptions<ResourcefullOptions> options, IUriProvider? uriProvider = null,
+    ILogger<ResourceContainerClient>? containerLogger = null) : IResourceServiceClient
 {
     private readonly ResourcefullOptions _options = options.Value;
 
@@ -17,7 +19,7 @@ internal class ResourceServiceClient(IResourceRepository resourceRepository, IOp
         {
             Name = resourceContainerName,
             Uri = uriProvider?.GetAbsoluteUri(new ResourcefullContext(resourceContainerName))
-        });
+        }, containerLogger);
     }
 
     public Task<IResourceContainerClient> CreateResourceContainerAsync(string resourceContainerName, IDictionary<string, string>? metadata = null)
@@ -38,7 +40,7 @@ internal class ResourceServiceClient(IResourceRepository resourceRepository, IOp
 
         // The usual case is a container that already exists; finding it with a read avoids a failed insert each time.
         if (await resourceRepository.GetResourceContainerInfoAsync(resourceContainerName, cancellationToken) is { } existing)
-            return new ResourceContainerClient(resourceRepository, uriProvider, _options, existing);
+            return new ResourceContainerClient(resourceRepository, uriProvider, _options, existing, containerLogger);
 
         try
         {
@@ -49,7 +51,7 @@ internal class ResourceServiceClient(IResourceRepository resourceRepository, IOp
             // Created concurrently; the caller gets a client for it all the same, with what was stored (or, should it
             // already be gone again, what a client made without a read has).
             return await resourceRepository.GetResourceContainerInfoAsync(resourceContainerName, cancellationToken) is { } stored
-                ? new ResourceContainerClient(resourceRepository, uriProvider, _options, stored)
+                ? new ResourceContainerClient(resourceRepository, uriProvider, _options, stored, containerLogger)
                 : GetResourceContainerClient(resourceContainerName);
         }
     }
@@ -64,7 +66,7 @@ internal class ResourceServiceClient(IResourceRepository resourceRepository, IOp
         };
 
         await resourceRepository.AddResourceContainerAsync(containerInfo, cancellationToken);
-        return new ResourceContainerClient(resourceRepository, uriProvider, _options, containerInfo);
+        return new ResourceContainerClient(resourceRepository, uriProvider, _options, containerInfo, containerLogger);
     }
 
     public Task<ResourceContainerInfo?> GetResourceContainerInfoAsync(string resourceContainerName)
