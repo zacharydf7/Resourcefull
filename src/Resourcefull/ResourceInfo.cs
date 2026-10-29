@@ -22,8 +22,8 @@ public class ResourceInfo
     public string? VersionId { get; set; }
 
     /// <summary>
-    /// When the version was written, by the clock of the application server that wrote it. Informational only: which
-    /// version is current, and the order versions are listed in, are decided by the store.
+    /// When the version became current, by the clock of the application server that stored it. Informational only:
+    /// which version is current, and the order versions are listed in, are decided by the store.
     /// </summary>
     public DateTimeOffset LastModified { get; set; }
 

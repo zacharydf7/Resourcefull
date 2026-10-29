@@ -148,7 +148,11 @@ The XML docs on each member state its contract. In short, a provider must:
 - **Decide conflicts in the write itself:** a missing container (`ResourceContainerNotFoundException`), a
   create-only write to an existing name or a duplicate container (`ResourceConflictException`).
 - **Measure what it stores:** read the content through a `HashingStream`, store the measured length, and return
-  `HashingStream.Complete(declaredLength)`, which also rejects a wrong declared length.
+  `HashingStream.Complete(declaredLength, lastModified)`, which also rejects a wrong declared length. Call it as
+  the write makes the version current but before it commits, so a wrong length stores nothing.
+- **Stamp the time a version becomes current:** pass `Complete` the time the write makes the version current, not
+  the time before its content was read, and store it as the version's `LastModified`. Ignore the `LastModified`
+  the caller passes. Take an optional `TimeProvider` in the constructor, so an app or a test can set the clock.
 - **Return content as a read-only, forward-only stream**, like the built-in providers: `CanSeek` and `CanWrite`
   false, `Length` the content's full length, `Position` the bytes read so far, and `NotSupportedException` for
   seeking, setting `Position`, writing and `SetLength`.
@@ -204,8 +208,8 @@ and write operations create a new version.
 A `VersionId` is an opaque string; compare it for equality and don't parse it. New versions get a GUID
 (version 7), and IDs written by earlier releases (timestamps) stay valid. The **store** decides which
 version is current and the order versions are listed in, by the order it stored them, so servers with
-skewed clocks can't make an older write current. `LastModified` records the writing server's clock and is
-informational only.
+skewed clocks can't make an older write current. `LastModified` records when the version became current, by
+the clock of the server that stored it, and is informational only.
 
 - **Enable versioning:** call `UseVersioning`.
 - **MaxVersions:** limits how many versions are kept per resource. Older versions are pruned
@@ -573,7 +577,8 @@ Configuration for an upload.
 - `ContainerName: string`
 - `Name: string`
 - `VersionId: string?` — opaque; see [Versioning](#versioning).
-- `LastModified: DateTimeOffset` — the writing server's clock; informational.
+- `LastModified: DateTimeOffset` — when the version became current (the moment its write committed, not when the
+  upload began), by the storing server's clock; informational. A registered `TimeProvider` is used as that clock.
 - `IsLatest: bool` — **new in v2.** `true` when this is the current version. In a versions list,
   exactly one entry has this set.
 - `ContentType: string?`

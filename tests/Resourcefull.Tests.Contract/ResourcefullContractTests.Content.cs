@@ -84,6 +84,24 @@ public abstract partial class ResourcefullContractTests
     }
 
     [SkippableFact]
+    public async Task UploadAsync_ShouldStampTheTimeTheVersionBecameCurrent_WhenTheClockMovesOnWhileTheContentIsRead()
+    {
+        // Arrange: the clock moves on as the content is read, as it would during a large or slow upload.
+        var clock = new ManualTimeProvider();
+        using ServiceProvider provider = BuildServiceProvider(o => o.Services.AddSingleton<TimeProvider>(clock));
+        IResourceContainerClient container = await NewContainerAsync(provider);
+        DateTimeOffset readFinished = clock.Now.AddMinutes(5);
+        var content = new AdvanceClockOnReadStream(new byte[100], clock, readFinished);
+
+        // Act
+        ResourceInfo uploaded = await container.UploadAsync("doc", content);
+
+        // Assert
+        Assert.Equal(readFinished, uploaded.LastModified);
+        Assert.Equal(readFinished, (await container.GetResourceInfoAsync("doc"))!.LastModified);
+    }
+
+    [SkippableFact]
     public async Task DownloadContentAsync_ShouldReturnNull_WhenTheResourceDoesNotExist()
     {
         // Arrange
@@ -96,5 +114,18 @@ public abstract partial class ResourcefullContractTests
         // Assert
         Assert.Null(content);
         Assert.False(await container.ExistsAsync("missing.txt"));
+    }
+
+    /// <summary>Sets <paramref name="clock"/> to <paramref name="readTime"/> when it is first read.</summary>
+    private sealed class AdvanceClockOnReadStream(byte[] content, ManualTimeProvider clock, DateTimeOffset readTime) : MemoryStream(content)
+    {
+        public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            clock.Now = readTime;
+            return base.ReadAsync(buffer, cancellationToken);
+        }
+
+        public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+            => ReadAsync(buffer.AsMemory(offset, count), cancellationToken).AsTask();
     }
 }

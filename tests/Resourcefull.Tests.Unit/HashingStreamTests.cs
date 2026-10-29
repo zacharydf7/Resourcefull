@@ -5,9 +5,10 @@ namespace Resourcefull.Tests.Unit;
 public class HashingStreamTests
 {
     private const string EmptySha256 = "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+    private static readonly DateTimeOffset Stamp = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
 
     [Fact]
-    public async Task Complete_ShouldReportTheCountAndSha256OfEveryByteRead_WhenTheStreamIsReadToTheEnd()
+    public async Task Complete_ShouldReportTheCountAndSha256OfEveryByteReadAndTheGivenTime_WhenTheStreamIsReadToTheEnd()
     {
         // Arrange
         byte[] payload = RandomNumberGenerator.GetBytes(200_000);
@@ -15,11 +16,12 @@ public class HashingStreamTests
 
         // Act
         await content.CopyToAsync(Stream.Null);
-        WrittenContent written = content.Complete(declaredLength: null);
+        WrittenContent written = content.Complete(declaredLength: null, Stamp);
 
         // Assert
         Assert.Equal(payload.Length, written.ContentLength);
         Assert.Equal(Sha256Of(payload), written.ContentHash);
+        Assert.Equal(Stamp, written.LastModified);
     }
 
     [Fact]
@@ -40,7 +42,7 @@ public class HashingStreamTests
         }
         while (bytesRead > 0);
 
-        WrittenContent written = content.Complete(declaredLength: null);
+        WrittenContent written = content.Complete(declaredLength: null, Stamp);
 
         // Assert
         Assert.Equal(payload.Length, written.ContentLength);
@@ -55,7 +57,7 @@ public class HashingStreamTests
 
         // Act
         await content.CopyToAsync(Stream.Null);
-        WrittenContent written = content.Complete(declaredLength: 0);
+        WrittenContent written = content.Complete(declaredLength: 0, Stamp);
 
         // Assert
         Assert.Equal(0, written.ContentLength);
@@ -72,7 +74,7 @@ public class HashingStreamTests
         await content.CopyToAsync(Stream.Null);
 
         // Assert
-        Assert.Throws<ResourceContentLengthMismatchException>(() => content.Complete(declaredLength));
+        Assert.Throws<ResourceContentLengthMismatchException>(() => content.Complete(declaredLength, Stamp));
     }
 
     private static string Sha256Of(byte[] payload) => "sha256:" + Convert.ToHexStringLower(SHA256.HashData(payload));

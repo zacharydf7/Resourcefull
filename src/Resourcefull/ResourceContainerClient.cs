@@ -25,7 +25,6 @@ internal class ResourceContainerClient(IResourceRepository resourceRepository, I
             ContainerName = ContainerName,
             Name = resourceName,
             VersionId = Guid.CreateVersion7().ToString(),
-            LastModified = DateTime.UtcNow,
             ContentType = uploadOptions.Headers?.ContentType,
             ContentLength = uploadOptions.Headers?.ContentLength,
             Metadata = new Dictionary<string, string>(uploadOptions.Metadata)
@@ -74,7 +73,6 @@ internal class ResourceContainerClient(IResourceRepository resourceRepository, I
             ContainerName = resourceInfo.ContainerName,
             Name = resourceInfo.Name,
             VersionId = Guid.CreateVersion7().ToString(),
-            LastModified = DateTime.UtcNow,
             ContentType = resourceInfo.ContentType,
             // Measured like any upload rather than declared: lengths stored by earlier releases came from callers.
             ContentLength = null,
@@ -94,6 +92,7 @@ internal class ResourceContainerClient(IResourceRepository resourceRepository, I
         // Report what was stored rather than what was asked for.
         resourceInfo.ContentLength = written.ContentLength;
         resourceInfo.ContentHash = written.ContentHash;
+        resourceInfo.LastModified = written.LastModified;
         resourceInfo.IsLatest = true;
 
         // The new version is stored, so the upload has succeeded; pruning is cleanup that neither the caller's token

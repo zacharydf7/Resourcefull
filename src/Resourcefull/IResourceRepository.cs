@@ -42,7 +42,10 @@ public interface IResourceRepository
     /// <param name="cancellationToken">Cancels the write; a cancelled write stores nothing.</param>
     /// <returns>
     /// The length and hash of what was stored, measured by reading <paramref name="stream"/> through a
-    /// <see cref="HashingStream"/>; the measured length, not <see cref="ResourceInfo.ContentLength"/>, is stored.
+    /// <see cref="HashingStream"/>; the measured length, not <see cref="ResourceInfo.ContentLength"/>, is stored. Also
+    /// the time the version became current, taken when the write makes it current (not before its content was read)
+    /// and stored as its <see cref="ResourceInfo.LastModified"/>; the caller's <see cref="ResourceInfo.LastModified"/>
+    /// is ignored.
     /// </returns>
     /// <exception cref="ResourceContentLengthMismatchException">
     /// <paramref name="resourceInfo"/> declares a content length that differs from the stream; nothing was stored.

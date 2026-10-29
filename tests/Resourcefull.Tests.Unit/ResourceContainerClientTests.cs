@@ -15,7 +15,7 @@ public class ResourceContainerClientTests
         => new(repository, uriProvider, options ?? new ResourcefullOptions(),
             new ResourceContainerInfo { Name = containerName });
 
-    private static readonly WrittenContent Written = new(5, "sha256:written");
+    private static readonly WrittenContent Written = new(5, "sha256:written", new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero));
 
     private static Mock<IResourceRepository> NewRepository()
     {
@@ -917,6 +917,7 @@ public class ResourceContainerClientTests
         // Assert
         Assert.Equal(Written.ContentLength, result.ContentLength);
         Assert.Equal(Written.ContentHash, result.ContentHash);
+        Assert.Equal(Written.LastModified, result.LastModified);
         Assert.True(result.IsLatest);
         Assert.NotSame(metadata, result.Metadata);
         Assert.Equal(metadata, result.Metadata);

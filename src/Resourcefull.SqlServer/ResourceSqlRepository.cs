@@ -11,8 +11,10 @@ using System.Text;
 
 namespace Resourcefull.SqlServer;
 
-internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbContextFactory) : IResourceRepository
+internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbContextFactory, TimeProvider? timeProvider = null) : IResourceRepository
 {
+    private readonly TimeProvider _clock = timeProvider ?? TimeProvider.System;
+
     private const int SqlForeignKeyViolation = 547;
     private const int SqlUniqueIndexViolation = 2601;
     private const int SqlUniqueConstraintViolation = 2627;
@@ -68,7 +70,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
                 ContainerName = resourceContainerName,
                 Name = resourceInfo.Name,
                 VersionId = resourceInfo.VersionId,
-                LastModified = resourceInfo.LastModified,
+                LastModified = _clock.GetUtcNow(),
                 IsLatest = false,
                 ContentType = resourceInfo.ContentType,
                 Uri = resourceInfo.Uri,
@@ -89,7 +91,6 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
                 if (batch.Count == ChunksPerUploadBatch) await SaveChunksAsync(attempt, batch, ct);
             }
             await SaveChunksAsync(attempt, batch, ct);
-            written = content.Complete(resourceInfo.ContentLength);
 
             // The in-memory provider the unit tests use has no locks.
             if (attempt.Database.IsRelational())
@@ -101,6 +102,10 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
             if (createOnly && priorLatest.Count > 0)
                 throw new ResourceConflictException($"Resource with name {resourceInfo.Name} already exists.");
 
+            // Stamped under the name's lock as the version becomes current, not before its content was read. A wrong
+            // declared length throws here, before anything about the name changes.
+            written = content.Complete(resourceInfo.ContentLength, _clock.GetUtcNow());
+
             // Clear the old current version before setting the new one, so the unique "latest" index never holds
             // two rows for the name in the middle of the write.
             foreach (ResourceModel prior in priorLatest) prior.IsLatest = false;
@@ -109,6 +114,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
             attempt.Attach(resource);
             resource.IsLatest = true;
             resource.ContentLength = written.ContentLength;
+            resource.LastModified = written.LastModified;
             await attempt.SaveChangesAsync(ct);
 
             await transaction.CommitAsync(ct);

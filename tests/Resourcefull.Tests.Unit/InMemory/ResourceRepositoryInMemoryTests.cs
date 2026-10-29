@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using Resourcefull.InMemory;
+using Resourcefull.Tests.Contract;
 
 namespace Resourcefull.Tests.Unit.InMemory;
 
@@ -166,7 +167,8 @@ public class ResourceInMemoryRepositoryTests
     {
         // Arrange
         var containerName = "containerName";
-        var repository = new ResourceInMemoryRepository();
+        var clock = new ManualTimeProvider();
+        var repository = new ResourceInMemoryRepository(clock);
         var resourceInfo = new ResourceInfo { ContainerName = containerName, Name = "existingResourceName" };
         var resourceContainerInfo = new ResourceContainerInfo() { Name = containerName };
         await repository.AddResourceContainerAsync(resourceContainerInfo);
@@ -176,9 +178,10 @@ public class ResourceInMemoryRepositoryTests
         // Act
         ResourceInfo? outputResource = await repository.GetResourceInfoAsync(containerName, resourceInfo.Name);
 
-        // Assert: stored as current, with the length measured from the (empty) stream.
+        // Assert: stored as current, with the length measured from the (empty) stream and the time it was stored.
         resourceInfo.IsLatest = true;
         resourceInfo.ContentLength = 0;
+        resourceInfo.LastModified = clock.Now;
         Assert.Equivalent(resourceInfo, outputResource);
     }
 
@@ -420,12 +423,15 @@ public class ResourceInMemoryRepositoryTests
         await Task.Delay(10);
         var date2 = DateTime.UtcNow;
         var containerName = "containerName";
-        var repository = new ResourceInMemoryRepository();
-        var resourceInfo1 = new ResourceInfo { ContainerName = containerName, Name = "newResourceName", VersionId = date1.ToString("yyyy-MM-ddTHH:mm:ss.fffffffZ"), LastModified = date1 };
-        var resourceInfo2 = new ResourceInfo { ContainerName = containerName, Name = "newResourceName", VersionId = date2.ToString("yyyy-MM-ddTHH:mm:ss.fffffffZ"), LastModified = date2 };
+        var clock = new ManualTimeProvider();
+        var repository = new ResourceInMemoryRepository(clock);
+        var resourceInfo1 = new ResourceInfo { ContainerName = containerName, Name = "newResourceName", VersionId = date1.ToString("yyyy-MM-ddTHH:mm:ss.fffffffZ") };
+        var resourceInfo2 = new ResourceInfo { ContainerName = containerName, Name = "newResourceName", VersionId = date2.ToString("yyyy-MM-ddTHH:mm:ss.fffffffZ") };
         var resourceContainerInfo = new ResourceContainerInfo() { Name = containerName };
         await repository.AddResourceContainerAsync(resourceContainerInfo);
+        clock.Now = date1;
         await repository.AddResourceAsync(containerName, resourceInfo1, new MemoryStream());
+        clock.Now = date2;
         await repository.AddResourceAsync(containerName, resourceInfo2, new MemoryStream());
 
         // Act
@@ -444,12 +450,15 @@ public class ResourceInMemoryRepositoryTests
         await Task.Delay(10);
         var date2 = DateTime.UtcNow;
         var containerName = "containerName";
-        var repository = new ResourceInMemoryRepository();
-        var resourceInfo1 = new ResourceInfo { ContainerName = containerName, Name = "newResourceName", VersionId = date1.ToString("yyyy-MM-ddTHH:mm:ss.fffffffZ"), LastModified = date1 };
-        var resourceInfo2 = new ResourceInfo { ContainerName = containerName, Name = "newResourceName", VersionId = date2.ToString("yyyy-MM-ddTHH:mm:ss.fffffffZ"), LastModified = date2 };
+        var clock = new ManualTimeProvider();
+        var repository = new ResourceInMemoryRepository(clock);
+        var resourceInfo1 = new ResourceInfo { ContainerName = containerName, Name = "newResourceName", VersionId = date1.ToString("yyyy-MM-ddTHH:mm:ss.fffffffZ") };
+        var resourceInfo2 = new ResourceInfo { ContainerName = containerName, Name = "newResourceName", VersionId = date2.ToString("yyyy-MM-ddTHH:mm:ss.fffffffZ") };
         var resourceContainerInfo = new ResourceContainerInfo() { Name = containerName };
         await repository.AddResourceContainerAsync(resourceContainerInfo);
+        clock.Now = date1;
         await repository.AddResourceAsync(containerName, resourceInfo1, new MemoryStream());
+        clock.Now = date2;
         await repository.AddResourceAsync(containerName, resourceInfo2, new MemoryStream());
 
         // Act
@@ -468,12 +477,15 @@ public class ResourceInMemoryRepositoryTests
         await Task.Delay(10);
         var date2 = DateTime.UtcNow;
         var containerName = "containerName";
-        var repository = new ResourceInMemoryRepository();
-        var resourceInfo1 = new ResourceInfo { ContainerName = containerName, Name = "newResourceName", VersionId = date1.ToString("yyyy-MM-ddTHH:mm:ss.fffffffZ"), LastModified = date1 };
-        var resourceInfo2 = new ResourceInfo { ContainerName = containerName, Name = "newResourceName", VersionId = date2.ToString("yyyy-MM-ddTHH:mm:ss.fffffffZ"), LastModified = date2 };
+        var clock = new ManualTimeProvider();
+        var repository = new ResourceInMemoryRepository(clock);
+        var resourceInfo1 = new ResourceInfo { ContainerName = containerName, Name = "newResourceName", VersionId = date1.ToString("yyyy-MM-ddTHH:mm:ss.fffffffZ") };
+        var resourceInfo2 = new ResourceInfo { ContainerName = containerName, Name = "newResourceName", VersionId = date2.ToString("yyyy-MM-ddTHH:mm:ss.fffffffZ") };
         var resourceContainerInfo = new ResourceContainerInfo() { Name = containerName };
         await repository.AddResourceContainerAsync(resourceContainerInfo);
+        clock.Now = date1;
         await repository.AddResourceAsync(containerName, resourceInfo1, new MemoryStream());
+        clock.Now = date2;
         await repository.AddResourceAsync(containerName, resourceInfo2, new MemoryStream());
 
         // Act
@@ -714,10 +726,13 @@ public class ResourceInMemoryRepositoryTests
     public async Task GetResourceVersionsAsync_ShouldPutTheLastStoredVersionFirst_WhenItsClockIsBehind()
     {
         // Arrange: the second writer's clock is an hour behind the first's.
-        var repository = new ResourceInMemoryRepository();
+        var clock = new ManualTimeProvider();
+        var repository = new ResourceInMemoryRepository(clock);
         await repository.AddResourceContainerAsync(new ResourceContainerInfo { Name = "c" });
-        await repository.AddResourceAsync("c", new ResourceInfo { ContainerName = "c", Name = "n", VersionId = "ahead", LastModified = DateTime.UtcNow.AddHours(1) }, new MemoryStream());
-        await repository.AddResourceAsync("c", new ResourceInfo { ContainerName = "c", Name = "n", VersionId = "behind", LastModified = DateTime.UtcNow }, new MemoryStream());
+        clock.Now = DateTime.UtcNow.AddHours(1);
+        await repository.AddResourceAsync("c", new ResourceInfo { ContainerName = "c", Name = "n", VersionId = "ahead" }, new MemoryStream());
+        clock.Now = DateTime.UtcNow;
+        await repository.AddResourceAsync("c", new ResourceInfo { ContainerName = "c", Name = "n", VersionId = "behind" }, new MemoryStream());
 
         // Act
         List<ResourceInfo> versions = await repository.GetResourceVersionsAsync("c", "n");
@@ -733,11 +748,15 @@ public class ResourceInMemoryRepositoryTests
     public async Task DeleteResourceAsync_ShouldPromoteTheLastStoredRemainingVersion_WhenAnEarlierOneHasALaterClock()
     {
         // Arrange
-        var repository = new ResourceInMemoryRepository();
+        var clock = new ManualTimeProvider();
+        var repository = new ResourceInMemoryRepository(clock);
         await repository.AddResourceContainerAsync(new ResourceContainerInfo { Name = "c" });
-        await repository.AddResourceAsync("c", new ResourceInfo { ContainerName = "c", Name = "n", VersionId = "first", LastModified = DateTime.UtcNow.AddHours(1) }, new MemoryStream());
-        await repository.AddResourceAsync("c", new ResourceInfo { ContainerName = "c", Name = "n", VersionId = "second", LastModified = DateTime.UtcNow }, new MemoryStream());
-        await repository.AddResourceAsync("c", new ResourceInfo { ContainerName = "c", Name = "n", VersionId = "third", LastModified = DateTime.UtcNow }, new MemoryStream());
+        clock.Now = DateTime.UtcNow.AddHours(1);
+        await repository.AddResourceAsync("c", new ResourceInfo { ContainerName = "c", Name = "n", VersionId = "first" }, new MemoryStream());
+        clock.Now = DateTime.UtcNow;
+        await repository.AddResourceAsync("c", new ResourceInfo { ContainerName = "c", Name = "n", VersionId = "second" }, new MemoryStream());
+        clock.Now = DateTime.UtcNow;
+        await repository.AddResourceAsync("c", new ResourceInfo { ContainerName = "c", Name = "n", VersionId = "third" }, new MemoryStream());
 
         // Act
         await repository.DeleteResourceAsync("c", "n", "third");
@@ -767,10 +786,13 @@ public class ResourceInMemoryRepositoryTests
     public async Task GetAllResourceInfoAsync_ShouldReturnTheLastStoredVersion_WhenItsClockIsBehind()
     {
         // Arrange: the second writer's clock is an hour behind the first's.
-        var repository = new ResourceInMemoryRepository();
+        var clock = new ManualTimeProvider();
+        var repository = new ResourceInMemoryRepository(clock);
         await repository.AddResourceContainerAsync(new ResourceContainerInfo { Name = "c" });
-        await repository.AddResourceAsync("c", new ResourceInfo { ContainerName = "c", Name = "n", VersionId = "ahead", LastModified = DateTime.UtcNow.AddHours(1) }, new MemoryStream([1]));
-        await repository.AddResourceAsync("c", new ResourceInfo { ContainerName = "c", Name = "n", VersionId = "behind", LastModified = DateTime.UtcNow }, new MemoryStream([2]));
+        clock.Now = DateTime.UtcNow.AddHours(1);
+        await repository.AddResourceAsync("c", new ResourceInfo { ContainerName = "c", Name = "n", VersionId = "ahead" }, new MemoryStream([1]));
+        clock.Now = DateTime.UtcNow;
+        await repository.AddResourceAsync("c", new ResourceInfo { ContainerName = "c", Name = "n", VersionId = "behind" }, new MemoryStream([2]));
 
         // Act
         List<ResourceInfo> listed = await repository.GetAllResourceInfoAsync("c");

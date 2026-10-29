@@ -2,8 +2,10 @@ using Resourcefull.InMemory.Models;
 
 namespace Resourcefull.InMemory;
 
-internal class ResourceInMemoryRepository : IResourceRepository
+internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : IResourceRepository
 {
+    private readonly TimeProvider _clock = timeProvider ?? TimeProvider.System;
+
     // One gate guards all state, so every read sees a consistent snapshot and every change is atomic. It is a
     // semaphore so that waiting for it can be cancelled; uploads buffer their content first, so it is never held
     // across I/O.
@@ -18,7 +20,6 @@ internal class ResourceInMemoryRepository : IResourceRepository
         using var buffer = new MemoryStream();
         using var content = new HashingStream(stream);
         await content.CopyToAsync(buffer, cancellationToken);
-        WrittenContent written = content.Complete(resourceInfo.ContentLength);
         byte[] bytes = buffer.ToArray();
 
         return await UnderLockAsync(() =>
@@ -31,10 +32,15 @@ internal class ResourceInMemoryRepository : IResourceRepository
             if (createOnly && container.Resources.ContainsKey(resourceInfo.Name))
                 throw new ResourceConflictException($"Resource with name {resourceInfo.Name} already exists.");
 
-            if (!container.Resources.TryGetValue(resourceInfo.Name, out List<InMemoryResource>? versions))
-                container.Resources[resourceInfo.Name] = versions = [];
-            else if (versions.Any(v => v.ResourceInfo.VersionId == resourceInfo.VersionId))
+            container.Resources.TryGetValue(resourceInfo.Name, out List<InMemoryResource>? versions);
+            if (versions != null && versions.Any(v => v.ResourceInfo.VersionId == resourceInfo.VersionId))
                 throw new ResourceConflictException($"Resource {resourceInfo.Name} already has a version {resourceInfo.VersionId}.");
+
+            // Stamped as the version becomes current, not before its content was read. A wrong declared length throws
+            // here, before anything is stored.
+            WrittenContent written = content.Complete(resourceInfo.ContentLength, _clock.GetUtcNow());
+            if (versions == null)
+                container.Resources[resourceInfo.Name] = versions = [];
 
             versions.Add(new InMemoryResource
             {
@@ -45,7 +51,7 @@ internal class ResourceInMemoryRepository : IResourceRepository
                     ContainerName = resourceContainerName,
                     Name = resourceInfo.Name,
                     VersionId = resourceInfo.VersionId,
-                    LastModified = resourceInfo.LastModified,
+                    LastModified = written.LastModified,
                     ContentType = resourceInfo.ContentType,
                     ContentLength = written.ContentLength,
                     Metadata = new Dictionary<string, string>(resourceInfo.Metadata),

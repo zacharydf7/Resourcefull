@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Resourcefull.SqlServer;
 using Resourcefull.SqlServer.Models;
+using Resourcefull.Tests.Contract;
 using System.Text;
 
 namespace Resourcefull.Tests.Unit.SqlServer;
@@ -26,8 +27,7 @@ public class ResourceSqlRepositoryTests
     {
         ContainerName = container,
         Name = name,
-        VersionId = when.ToString("yyyy-MM-ddTHH:mm:ss.fffffffZ"),
-        LastModified = when
+        VersionId = when.ToString("yyyy-MM-ddTHH:mm:ss.fffffffZ")
     };
 
     [Fact]
@@ -590,8 +590,11 @@ public class ResourceSqlRepositoryTests
         (ResourceDbContext resourceDbContext, var dbContextFactory) = NewDatabase();
         await resourceDbContext.ResourceContainers.AddAsync(new ResourceContainerModel { Name = resourceContainerName });
         await resourceDbContext.SaveChangesAsync();
-        var resourceRepository = new ResourceSqlRepository(dbContextFactory);
+        var clock = new ManualTimeProvider();
+        var resourceRepository = new ResourceSqlRepository(dbContextFactory, clock);
+        clock.Now = date1;
         await resourceRepository.AddResourceAsync(resourceContainerName, resourceInfo1, new MemoryStream());
+        clock.Now = date2;
         await resourceRepository.AddResourceAsync(resourceContainerName, resourceInfo2, new MemoryStream());
 
         // Act
@@ -880,9 +883,12 @@ public class ResourceSqlRepositoryTests
         (ResourceDbContext resourceDbContext, var dbContextFactory) = NewDatabase();
         await resourceDbContext.ResourceContainers.AddAsync(new ResourceContainerModel { Name = "c" });
         await resourceDbContext.SaveChangesAsync();
-        var resourceRepository = new ResourceSqlRepository(dbContextFactory);
-        await resourceRepository.AddResourceAsync("c", new ResourceInfo { ContainerName = "c", Name = "n", VersionId = "ahead", LastModified = DateTime.UtcNow.AddHours(1) }, new MemoryStream());
-        await resourceRepository.AddResourceAsync("c", new ResourceInfo { ContainerName = "c", Name = "n", VersionId = "behind", LastModified = DateTime.UtcNow }, new MemoryStream());
+        var clock = new ManualTimeProvider();
+        var resourceRepository = new ResourceSqlRepository(dbContextFactory, clock);
+        clock.Now = DateTime.UtcNow.AddHours(1);
+        await resourceRepository.AddResourceAsync("c", new ResourceInfo { ContainerName = "c", Name = "n", VersionId = "ahead" }, new MemoryStream());
+        clock.Now = DateTime.UtcNow;
+        await resourceRepository.AddResourceAsync("c", new ResourceInfo { ContainerName = "c", Name = "n", VersionId = "behind" }, new MemoryStream());
 
         // Act
         List<ResourceInfo> versions = await resourceRepository.GetResourceVersionsAsync("c", "n");
@@ -899,10 +905,14 @@ public class ResourceSqlRepositoryTests
         (ResourceDbContext resourceDbContext, var dbContextFactory) = NewDatabase();
         await resourceDbContext.ResourceContainers.AddAsync(new ResourceContainerModel { Name = "c" });
         await resourceDbContext.SaveChangesAsync();
-        var resourceRepository = new ResourceSqlRepository(dbContextFactory);
-        await resourceRepository.AddResourceAsync("c", new ResourceInfo { ContainerName = "c", Name = "n", VersionId = "first", LastModified = DateTime.UtcNow.AddHours(1) }, new MemoryStream());
-        await resourceRepository.AddResourceAsync("c", new ResourceInfo { ContainerName = "c", Name = "n", VersionId = "second", LastModified = DateTime.UtcNow }, new MemoryStream());
-        await resourceRepository.AddResourceAsync("c", new ResourceInfo { ContainerName = "c", Name = "n", VersionId = "third", LastModified = DateTime.UtcNow }, new MemoryStream());
+        var clock = new ManualTimeProvider();
+        var resourceRepository = new ResourceSqlRepository(dbContextFactory, clock);
+        clock.Now = DateTime.UtcNow.AddHours(1);
+        await resourceRepository.AddResourceAsync("c", new ResourceInfo { ContainerName = "c", Name = "n", VersionId = "first" }, new MemoryStream());
+        clock.Now = DateTime.UtcNow;
+        await resourceRepository.AddResourceAsync("c", new ResourceInfo { ContainerName = "c", Name = "n", VersionId = "second" }, new MemoryStream());
+        clock.Now = DateTime.UtcNow;
+        await resourceRepository.AddResourceAsync("c", new ResourceInfo { ContainerName = "c", Name = "n", VersionId = "third" }, new MemoryStream());
 
         // Act
         await resourceRepository.DeleteResourceAsync("c", "n", "third");

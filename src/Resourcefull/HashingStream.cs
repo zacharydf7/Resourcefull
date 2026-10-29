@@ -4,7 +4,8 @@ namespace Resourcefull;
 
 /// <summary>
 /// Passes reads through from another stream while counting and hashing every byte read. Providers read the content
-/// they store through one and return <see cref="Complete(long?)"/> from <see cref="IResourceRepository.AddResourceAsync"/>.
+/// they store through one and return <see cref="Complete(long?, DateTimeOffset)"/>, with the time the version became
+/// current, from <see cref="IResourceRepository.AddResourceAsync"/>.
 /// Disposing it does not dispose the source stream.
 /// </summary>
 public sealed class HashingStream(Stream source) : Stream
@@ -26,10 +27,13 @@ public sealed class HashingStream(Stream source) : Stream
     }
 
     /// <summary>
-    /// Gets what was read, failing when it disagrees with the length the caller declared.
+    /// Gets what was read, failing when it disagrees with the length the caller declared. Call it as the write makes
+    /// the version current, but before it commits, so a wrong declared length stores nothing.
     /// </summary>
+    /// <param name="declaredLength">The length the caller declared, if any.</param>
+    /// <param name="lastModified">When the version became current, by the repository's clock.</param>
     /// <exception cref="ResourceContentLengthMismatchException">The declared length differs from the number of bytes read.</exception>
-    public WrittenContent Complete(long? declaredLength)
+    public WrittenContent Complete(long? declaredLength, DateTimeOffset lastModified)
     {
         if (declaredLength is not null && declaredLength != _bytesRead)
         {
@@ -37,7 +41,7 @@ public sealed class HashingStream(Stream source) : Stream
                 $"The content length was declared as {declaredLength} bytes, but the content was {_bytesRead} bytes.");
         }
 
-        return new WrittenContent(_bytesRead, HashPrefix + Convert.ToHexStringLower(_hash.GetCurrentHash()));
+        return new WrittenContent(_bytesRead, HashPrefix + Convert.ToHexStringLower(_hash.GetCurrentHash()), lastModified);
     }
 
     public override int Read(byte[] buffer, int offset, int count) => Read(buffer.AsSpan(offset, count));
