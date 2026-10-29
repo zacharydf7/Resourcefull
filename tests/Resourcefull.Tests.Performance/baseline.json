@@ -71,6 +71,22 @@
     "Seconds": 0.8631,
     "ContentBytes": 67108864
   },
+  "upload-8-at-once-4MiB": {
+    "RoundTrips": 104,
+    "LogicalReads": 10032,
+    "AllocatedBytes": 16659664,
+    "PeakHeapBytes": 16698856,
+    "Seconds": 0.2885,
+    "ContentBytes": 33554432
+  },
+  "upload-same-name-8-at-once-1MiB": {
+    "RoundTrips": 87,
+    "LogicalReads": 2667,
+    "AllocatedBytes": 13420160,
+    "PeakHeapBytes": 13457944,
+    "Seconds": 0.2639,
+    "ContentBytes": 8388608
+  },
   "versions-20": {
     "RoundTrips": 1,
     "LogicalReads": 3,

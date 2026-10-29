@@ -21,6 +21,7 @@ public sealed class PerformanceTests(SqlServerFixture fixture, ITestOutputHelper
 {
     private const int Repetitions = 5;
     private const int Mebibyte = 1024 * 1024;
+    private const int ConcurrentClients = 8;
 
     private readonly SqlActivity _activity = new();
     private ServiceProvider? _provider;
@@ -96,6 +97,30 @@ public sealed class PerformanceTests(SqlServerFixture fixture, ITestOutputHelper
         for (int i = 0; i <= Repetitions; i++) await container.UploadAsync($"r{i}", new GeneratedStream(16 * Mebibyte));
 
         await MeasureAsync("delete-16MiB", 0, run: iteration => container.DeleteResourceIfExistsAsync($"r{iteration}"));
+    }
+
+    [SkippableFact]
+    public async Task UploadAsync_ShouldStayWithinItsBaseline_WhenEightClientsUploadDifferentNamesAtOnce()
+    {
+        IResourceContainerClient container = await NewContainerAsync();
+        long length = 4L * Mebibyte;
+
+        await MeasureAsync($"upload-{ConcurrentClients}-at-once-4MiB", ConcurrentClients * length,
+            run: iteration => Task.WhenAll(Enumerable.Range(0, ConcurrentClients).Select(client =>
+                container.UploadAsync($"r{iteration}-{client}", new GeneratedStream(length)))));
+    }
+
+    [SkippableFact]
+    public async Task UploadAsync_ShouldStayWithinItsBaseline_WhenEightClientsUploadTheSameNameAtOnce()
+    {
+        // Each upload waits for the others' turn on the name's lock only to make its version current. A new name for
+        // each repetition, so every one starts from the same empty history.
+        IResourceContainerClient container = await NewContainerAsync();
+        long length = Mebibyte;
+
+        await MeasureAsync($"upload-same-name-{ConcurrentClients}-at-once-1MiB", ConcurrentClients * length,
+            run: iteration => Task.WhenAll(Enumerable.Range(0, ConcurrentClients).Select(_ =>
+                container.UploadAsync($"r{iteration}", new GeneratedStream(length)))));
     }
 
     public void Dispose()
