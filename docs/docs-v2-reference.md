@@ -748,7 +748,7 @@ report `ContentHash = null` until the backfill below reaches them.
 ### Recording hashes for older versions
 
 `ContentHashBackfill`, registered by `UseSqlServer`, hashes every version that has no hash yet. It also reports
-every version whose recorded `ContentLength` doesn't match their stored content (a length an earlier release took from
+every version whose recorded `ContentLength` doesn't match its stored content (a length an earlier release took from
 the caller).
 
 ```csharp
