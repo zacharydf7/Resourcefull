@@ -39,14 +39,25 @@ public class RetryPolicyIntegrationTests(SqlServerFixture fixture)
         // The opponent locks B, then waits for A; it commits once the deadlock is resolved in its favor.
         Task opponent = Task.Run(async () =>
         {
-            await using var connection = new SqlConnection(connectionString);
-            await connection.OpenAsync();
-            await using SqlTransaction transaction = (SqlTransaction)await connection.BeginTransactionAsync();
-            await ExecuteAsync(connection, transaction, $"SET DEADLOCK_PRIORITY HIGH; UPDATE {tableB} SET V = 1;");
-            bLocked.SetResult();
-            await aLocked.Task.WaitAsync(TimeSpan.FromSeconds(30));
-            await ExecuteAsync(connection, transaction, $"UPDATE {tableA} SET V = 1;");
-            await transaction.CommitAsync();
+            try
+            {
+                await using var connection = new SqlConnection(connectionString);
+                await connection.OpenAsync();
+                await using SqlTransaction transaction = (SqlTransaction)await connection.BeginTransactionAsync();
+                await ExecuteAsync(connection, transaction, $"SET DEADLOCK_PRIORITY HIGH; UPDATE {tableB} SET V = 1;");
+                bLocked.SetResult();
+                await aLocked.Task.WaitAsync(TimeSpan.FromSeconds(30));
+                await ExecuteAsync(connection, transaction, $"UPDATE {tableA} SET V = 1;");
+                await transaction.CommitAsync();
+            }
+            catch (Exception exception)
+            {
+                // Fails the work's wait for B at once, with the real cause inside an exception the policy never
+                // retries.
+                bLocked.TrySetException(
+                    new InvalidOperationException("The opponent session failed before locking B.", exception));
+                throw;
+            }
         });
 
         // Act: the work locks A, then waits for B, closing the cycle; as the low-priority session it is the victim.
