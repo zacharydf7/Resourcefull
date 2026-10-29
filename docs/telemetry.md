@@ -54,7 +54,7 @@ metrics. It also has:
 |---|---|---|
 | `upload` | `UploadAsync`, both overloads | `resourcefull.conditional`; a `resourcefull prune` child span for pruning older versions |
 | `restore` | `RestoreVersionAsync` | a `resourcefull prune` child span |
-| `download` | `DownloadStreamingAsync`, `DownloadContentAsync` | |
+| `download` | `DownloadStreamingAsync`, `DownloadContentAsync` | for a range, `resourcefull.range`, as HTTP writes it: `100-199`, or `100-` to the end |
 | `get_info` | `GetResourceInfoAsync` | |
 | `exists` | `ExistsAsync` | |
 | `list` | `GetResourcesAsync` | |
@@ -74,6 +74,9 @@ metrics. It also has:
 
 ## ASP.NET Core
 
-`Results.Resource` and `UploadFromRequestAsync` call the operations above, so they're covered through them. ASP.NET
+`Results.Resource` and `UploadFromRequestAsync` call the operations above, so they're covered through them; a range
+request's download carries `resourcefull.range`. A range that starts past the end is invalid input, like an invalid
+name, so its 416 shows up as a failed `download` with `error.type` `System.ArgumentOutOfRangeException`; filter that
+type out of storage error rates. ASP.NET
 Core records each request's status code, 304, 412 and 413 included, in its own metrics and spans. When a request has
 preconditions, the package adds `resourcefull.precondition` to the request's span: `met`, `not_modified` or `failed`.

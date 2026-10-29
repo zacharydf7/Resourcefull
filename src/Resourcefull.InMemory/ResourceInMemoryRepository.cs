@@ -111,8 +111,12 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : I
         }, cancellationToken);
 
     public Task<Stream?> GetResourceStreamAsync(string resourceContainerName, string resourceName, string? versionId = null, CancellationToken cancellationToken = default) =>
+        GetResourceStreamAsync(resourceContainerName, resourceName, versionId, 0, null, cancellationToken);
+
+    public Task<Stream?> GetResourceStreamAsync(string resourceContainerName, string resourceName, string? versionId, long offset,
+        long? length, CancellationToken cancellationToken = default) =>
         UnderLockAsync<Stream?>(() => Resolve(VersionsOf(resourceContainerName, resourceName), versionId) is { } resource
-            ? new InMemoryResourceStream(resource.Content)
+            ? new InMemoryResourceStream(resource.Content, offset)
             : null, cancellationToken);
 
     public Task<bool> DeleteResourceAsync(string resourceContainerName, string resourceName, string? versionId = null, CancellationToken cancellationToken = default) =>

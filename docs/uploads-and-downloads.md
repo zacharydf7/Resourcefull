@@ -67,6 +67,28 @@ The stream and the `ResourceInfo` describe the same version, even if another upl
 while you read. With SQL Server, if the version itself is deleted while you're reading it, the stream throws
 `IOException` rather than ending early.
 
+### Downloading part of a resource
+
+Pass a `ResourceRange` to download only some of the bytes, such as to resume an interrupted download or to seek in a
+video. It's an offset and a length, or an offset alone to read to the end:
+
+```csharp
+ResourceDownloadResult? part = await container.DownloadStreamingAsync("talk.mp4", versionId: null,
+    new ResourceRange(Offset: 1_000_000, Length: 65_536), cancellationToken);
+```
+
+- **The stream holds just the range:** its `Length` is the range's length. `part.Range` says which bytes it holds, and
+  `part.TotalLength` is the whole content's length, measured from what's stored.
+- **A range that runs past the end is cut at the end,** and `part.Range` shows the cut. A range that starts past the
+  end throws `ArgumentOutOfRangeException`.
+- **Only the range is read from storage.** With SQL Server, reading the last MiB of a large file costs about what
+  reading a 1 MiB file does.
+- **To download a resource in parts,** pass the version ID from the first part's `ResourceInfo` to the rest, so a
+  newer upload can't mix two versions in one file.
+
+Every download's result has `TotalLength`; `Range` is `null` when it holds the whole content. To serve ranges over
+HTTP, see [Range requests](recipes/aspnet-core.md#range-requests).
+
 ## Large files
 
 Uploads and downloads both stream, so a file's size doesn't change how much memory they use. A few things still

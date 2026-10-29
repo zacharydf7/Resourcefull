@@ -66,6 +66,23 @@ public sealed class PerformanceTests(SqlServerFixture fixture, ITestOutputHelper
     }
 
     [SkippableFact]
+    public async Task DownloadStreamingAsync_ShouldStayWithinItsBaseline_WhenReadingTheLastMebibyteOf64()
+    {
+        // A range should cost about what download-1MiB costs, not what reading up to it would.
+        IResourceContainerClient container = await NewContainerAsync();
+        long length = 64L * Mebibyte;
+        await container.UploadAsync("r", new GeneratedStream(length));
+
+        await MeasureAsync("download-range-1MiB-of-64MiB", Mebibyte, run: async _ =>
+        {
+            ResourceDownloadResult? download = await container.DownloadStreamingAsync("r", null, new ResourceRange(length - Mebibyte, Mebibyte),
+                CancellationToken.None);
+            await using Stream content = download!.Stream;
+            await content.CopyToAsync(Stream.Null);
+        });
+    }
+
+    [SkippableFact]
     public async Task DownloadStreamingAsync_ShouldCountTheReadsOfItsContent_WhenReadingAMebibyte()
     {
         // The baseline catches reads that grow, not reads that stop being counted: a page query whose reader is

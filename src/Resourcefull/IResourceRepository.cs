@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Runtime.CompilerServices;
 
 [assembly: InternalsVisibleTo("Resourcefull.Tests.Unit")]
@@ -139,6 +140,49 @@ public interface IResourceRepository
     /// </summary>
     /// <returns>The content, or <see langword="null"/> when the version does not exist.</returns>
     Task<Stream?> GetResourceStreamAsync(string resourceContainerName, string resourceName, string? versionId = null, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Opens the content of a version as the other overload does, but starting at <paramref name="offset"/>, for a
+    /// download of a range: <see cref="Stream.Length"/> is still the content's full length, and
+    /// <see cref="Stream.Position"/> starts at <paramref name="offset"/>, or at the content's length when
+    /// <paramref name="offset"/> is past it. Reading may go on past the range, so the client reads only
+    /// <paramref name="length"/> bytes; a provider can stop reading storage there, as the SQL Server provider does.
+    /// The default implementation opens the whole content and reads past the bytes before
+    /// <paramref name="offset"/>, which costs as much as reading them: override it if the store can start at an offset.
+    /// </summary>
+    /// <param name="resourceContainerName">The container of the resource.</param>
+    /// <param name="resourceName">The resource's name.</param>
+    /// <param name="versionId">The version to open, or <see langword="null"/> for the current version.</param>
+    /// <param name="offset">Where the range starts; not negative.</param>
+    /// <param name="length">How many bytes the client will read, not negative; to the end when <see langword="null"/>.</param>
+    /// <param name="cancellationToken">Cancels opening the content.</param>
+    /// <returns>The content, or <see langword="null"/> when the version does not exist.</returns>
+    async Task<Stream?> GetResourceStreamAsync(string resourceContainerName, string resourceName, string? versionId,
+        long offset, long? length, CancellationToken cancellationToken = default)
+    {
+        Stream? content = await GetResourceStreamAsync(resourceContainerName, resourceName, versionId, cancellationToken);
+        if (content is null) return null;
+        try
+        {
+            byte[] buffer = ArrayPool<byte>.Shared.Rent((int)Math.Clamp(offset, 1, 81920));
+            try
+            {
+                for (long skipped = 0, read = 1; skipped < offset && read > 0; skipped += read)
+                    read = await content.ReadAsync(buffer.AsMemory(0, (int)Math.Min(buffer.Length, offset - skipped)), cancellationToken);
+            }
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(buffer);
+            }
+
+            return content;
+        }
+        catch
+        {
+            await content.DisposeAsync();
+            throw;
+        }
+    }
 
     /// <summary>
     /// Deletes one version of a resource, or with no <paramref name="versionId"/> every version of it. Deleting the

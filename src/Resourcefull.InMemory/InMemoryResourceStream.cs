@@ -2,11 +2,12 @@ namespace Resourcefull.InMemory;
 
 /// <summary>
 /// Stored content as a read-only, forward-only stream: the same capabilities as the SQL Server provider's, so code
-/// that seeks a download, or treats it as a <see cref="MemoryStream"/>, fails in tests rather than in production.
+/// that seeks a download, or treats it as a <see cref="MemoryStream"/>, fails in tests rather than in production. For
+/// a range, it starts at <paramref name="offset"/>.
 /// </summary>
-internal sealed class InMemoryResourceStream(byte[] content) : Stream
+internal sealed class InMemoryResourceStream(byte[] content, long offset) : Stream
 {
-    private readonly MemoryStream _content = new(content, writable: false);
+    private readonly MemoryStream _content = new(content, writable: false) { Position = Math.Min(offset, content.Length) };
 
     public override bool CanRead => true;
 

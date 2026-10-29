@@ -169,11 +169,19 @@ internal partial class ResourceContainerClient(IResourceRepository resourceRepos
         => DownloadStreamingAsync(resourceName, versionId, CancellationToken.None);
 
     public Task<ResourceDownloadResult?> DownloadStreamingAsync(string resourceName, string? versionId, CancellationToken cancellationToken)
-        => _telemetry.RunAsync("download", ContainerName, resourceName, () => OpenAsync(resourceName, versionId, cancellationToken));
+        => _telemetry.RunAsync("download", ContainerName, resourceName, () => OpenAsync(resourceName, versionId, null, cancellationToken));
 
-    private async Task<ResourceDownloadResult?> OpenAsync(string resourceName, string? versionId, CancellationToken cancellationToken)
+    public Task<ResourceDownloadResult?> DownloadStreamingAsync(string resourceName, string? versionId, ResourceRange range,
+        CancellationToken cancellationToken)
+        => _telemetry.RunAsync("download", ContainerName, resourceName, () => OpenAsync(resourceName, versionId, range, cancellationToken),
+            "resourcefull.range", $"{range.Offset}-{range.Offset + range.Length - 1}");
+
+    private async Task<ResourceDownloadResult?> OpenAsync(string resourceName, string? versionId, ResourceRange? range,
+        CancellationToken cancellationToken)
     {
         ResourceNames.ThrowIfInvalidResourceName(resourceName);
+        if (range is { } requested && (requested.Offset < 0 || requested.Length < 0))
+            throw new ArgumentOutOfRangeException(nameof(range), requested, "A range can't have a negative offset or length.");
 
         ResourceInfo? resourceInfo = await resourceRepository.GetResourceInfoAsync(ContainerName, resourceName, versionId, cancellationToken);
         if (resourceInfo == null) return null;
@@ -181,10 +189,27 @@ internal partial class ResourceContainerClient(IResourceRepository resourceRepos
         WithUri(resourceInfo);
 
         // Read the version just resolved, not "current" again: an upload in between would pair this info with other content.
-        Stream? stream = await resourceRepository.GetResourceStreamAsync(ContainerName, resourceName, resourceInfo.VersionId, cancellationToken);
+        Stream? stream = range is { } r
+            ? await resourceRepository.GetResourceStreamAsync(ContainerName, resourceName, resourceInfo.VersionId, r.Offset, r.Length, cancellationToken)
+            : await resourceRepository.GetResourceStreamAsync(ContainerName, resourceName, resourceInfo.VersionId, cancellationToken);
         if (stream == null) return null;
 
-        return new ResourceDownloadResult(resourceInfo, _telemetry.CountDownloaded(stream));
+        long totalLength = stream.Length;
+        if (range is not { } part)
+            return new ResourceDownloadResult(resourceInfo, _telemetry.CountDownloaded(stream)) { TotalLength = totalLength };
+
+        if (part.Offset > totalLength)
+        {
+            await stream.DisposeAsync();
+            throw new ArgumentOutOfRangeException(nameof(range), part, $"The range starts past the end of the content, which is {totalLength} bytes long.");
+        }
+
+        long length = Math.Min(part.Length ?? long.MaxValue, totalLength - part.Offset);
+        return new ResourceDownloadResult(resourceInfo, _telemetry.CountDownloaded(new ResourceRangeStream(stream, length)))
+        {
+            TotalLength = totalLength,
+            Range = new ResourceRange(part.Offset, length)
+        };
     }
 
     public Task<ResourceContent?> DownloadContentAsync(string resourceName, string? versionId = null)
@@ -193,7 +218,7 @@ internal partial class ResourceContainerClient(IResourceRepository resourceRepos
     public Task<ResourceContent?> DownloadContentAsync(string resourceName, string? versionId, CancellationToken cancellationToken)
         => _telemetry.RunAsync("download", ContainerName, resourceName, async () =>
         {
-            ResourceDownloadResult? result = await OpenAsync(resourceName, versionId, cancellationToken);
+            ResourceDownloadResult? result = await OpenAsync(resourceName, versionId, null, cancellationToken);
             if (result is null) return null;
 
             await using Stream stream = result.Stream;

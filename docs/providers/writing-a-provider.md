@@ -62,6 +62,17 @@ without the savings. To answer it directly, return at most `pageSize` current ve
 `prefix`, ordinally, and come after `afterName`, ordered by name. Use ordinal order, or your storage's binary order
 if its ordering and its "after" comparison agree, so no name is skipped or repeated between pages.
 
+### Reading ranges
+
+The overload of `GetResourceStreamAsync` that takes an `offset` and a `length` was added in 3.2. Its default
+implementation opens the whole content and reads past the bytes before `offset`, so a provider written for 3.1
+returns correct ranges, just without the savings. To answer it directly, return a stream that starts at `offset`:
+
+- **`Length` is still the content's full length,** so the client can report it, and `Position` starts at `offset`, or
+  at the content's length when `offset` is past it.
+- **Reading may go on past the range.** The client reads only `length` bytes, so a provider can stop reading storage
+  there or carry on to the end, whichever is simpler.
+
 ### Conditional uploads and deletes
 
 The overloads of `AddResourceAsync` and `DeleteResourceAsync` that take conditions were added in 3.1, with default

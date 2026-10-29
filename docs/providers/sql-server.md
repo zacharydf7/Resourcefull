@@ -90,6 +90,9 @@ reads a few chunks at a time as its stream is read, so memory use stays flat wha
 - **About one round trip per MiB.** An upload inserts 16 chunks per round trip and a download reads 16 per query, plus
   a few round trips per operation to find the version, lock the name and make the version current. Reading a
   resource's attributes, listing a container and listing a name's versions are one query each.
+- **A range costs what its own bytes cost.** A [range download](../uploads-and-downloads.md#downloading-part-of-a-resource)
+  finds its first chunk from the chunks' lengths, without reading content, and reads only the chunks the range
+  covers, so the last MiB of a 64 MiB file costs about what a 1 MiB file does.
 - **Throughput is the server's.** With the client and SQL Server on the same machine, uploads of large files run at
   roughly 60 to 120 MiB/s and downloads at 150 to 375 MiB/s. On a network, latency and bandwidth set the pace, and
   the round trips above are what latency multiplies.

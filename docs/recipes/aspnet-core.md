@@ -43,10 +43,37 @@ It answers **conditional requests** without reading the content:
 
 A `HEAD` request gets the headers alone. The download stream is disposed once the response is sent, and the
 request's cancellation token stops the read when the client disconnects. **Range requests** get the whole file (200
-rather than 206), because the stream can't seek.
+rather than 206), because the download is already open; to answer them, see below.
 
 **404** comes from the endpoint: `DownloadStreamingAsync` returns `null` when the container, resource or version
 doesn't exist. The catch-all `{**name}` takes names with `/` in them, such as `2026/10/report.pdf`.
+
+### Range requests
+
+Video players seek, and download managers resume, by asking for a range of bytes. To answer them, pass the container
+and the name instead of a download, and the result looks the resource up itself:
+
+```csharp
+app.MapMethods("/files/{container}/{**name}", ["GET", "HEAD"], (string container, string name,
+    IResourceServiceClient resources) =>
+    Results.Resource(resources.GetResourceContainerClient(container), name));
+```
+
+It sends the same headers and answers the same conditional requests as above, and also:
+
+- **206 Partial Content** with `Content-Range` for one `Range: bytes=…`, reading only that range from storage. The
+  forms `bytes=0-499`, `bytes=500-` and `bytes=-500` (the last 500 bytes) all work, and a range that runs past the end
+  is cut there.
+- **`If-Range`** with the current ETag or `Last-Modified` keeps the range; otherwise the response is the whole file
+  (200), so a client resuming a download never joins parts of two versions.
+- **416 Range Not Satisfiable**, with `Content-Range: bytes */length`, for a range that starts past the end.
+- **The whole file** (200) for a request with several ranges, which HTTP allows. Players and download managers ask
+  for one range at a time.
+- **`Accept-Ranges: bytes`** on every response, so clients know they can ask.
+- **404** when the resource doesn't exist.
+
+Conditional headers are evaluated first, so a matching `If-None-Match` gets 304 even with a `Range`. `TypedResults.Resource`
+takes the same arguments.
 
 ## Accepting uploads
 

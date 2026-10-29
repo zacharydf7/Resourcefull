@@ -370,7 +370,11 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
         };
     }
 
-    public async Task<Stream?> GetResourceStreamAsync(string resourceContainerName, string resourceName, string? versionId = null, CancellationToken cancellationToken = default)
+    public Task<Stream?> GetResourceStreamAsync(string resourceContainerName, string resourceName, string? versionId = null, CancellationToken cancellationToken = default) =>
+        GetResourceStreamAsync(resourceContainerName, resourceName, versionId, 0, null, cancellationToken);
+
+    public async Task<Stream?> GetResourceStreamAsync(string resourceContainerName, string resourceName, string? versionId, long offset,
+        long? length, CancellationToken cancellationToken = default)
     {
         // The stream reads the chunks through this context as the caller reads, and disposes it.
         ResourceDbContext dbContext = dbContextFactory.CreateDbContext();
@@ -386,7 +390,22 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
                 return null;
             }
 
-            return new ResourceStream(PageReader(dbContext, existingResource.Id), existingResource.Length, dbContext);
+            long start = Math.Min(offset, existingResource.Length);
+            long end = length < existingResource.Length - start ? start + length.Value : existingResource.Length;
+            if (start == 0 && end == existingResource.Length)
+                return new ResourceStream(PageReader(dbContext, existingResource.Id), existingResource.Length, dbContext);
+
+            // Only the chunks the range overlaps, found by adding up their lengths: releases have stored different
+            // chunk sizes, so a position can't be turned into an index by division.
+            ChunkSpan chunks = (await dbContext.Database.SqlQuery<ChunkSpan>($"""
+                SELECT MAX(CASE WHEN [End] <= {start} THEN [Index] END) AS [AfterIndex],
+                    MAX(CASE WHEN [End] <= {start} THEN [End] END) AS [Start],
+                    MIN(CASE WHEN [End] >= {end} THEN [Index] END) AS [ThroughIndex]
+                FROM (SELECT [Index], SUM(CAST(DATALENGTH([Data]) AS bigint)) OVER (ORDER BY [Index] ROWS UNBOUNDED PRECEDING) AS [End]
+                    FROM [ResourceChunks] WHERE [ResourceId] = {existingResource.Id}) AS [Chunks]
+                """).ToListAsync(cancellationToken))[0];
+            return new ResourceStream(PageReader(dbContext, existingResource.Id, chunks.AfterIndex, chunks.ThroughIndex),
+                existingResource.Length, dbContext, chunks.Start ?? 0, start, end);
         }
         catch
         {
@@ -397,14 +416,15 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
 
     /// <summary>
     /// Reads a version's chunks a page at a time, each page its own short query, retried as a whole after a transient
-    /// failure. The data streams from the reader into buffers the pages share, rather than a new array per chunk, so a
-    /// page's data is valid only until the next page is read.
+    /// failure: every chunk, or for a range those after <paramref name="afterIndex"/> through
+    /// <paramref name="throughIndex"/>. The data streams from the reader into buffers the pages share, rather than a new
+    /// array per chunk, so a page's data is valid only until the next page is read.
     /// </summary>
     internal static Func<CancellationToken, Task<IReadOnlyList<ReadOnlyMemory<byte>>>> PageReader(ResourceDbContext dbContext,
-        long resourceId)
+        long resourceId, int? afterIndex = null, int? throughIndex = null)
     {
         // No assumption about where indexes start: the first release numbered chunks from zero.
-        int? lastIndex = null;
+        int? lastIndex = afterIndex;
         bool exhausted = false;
         var buffers = new byte[ChunksPerReadPage][];
         IExecutionStrategy strategy = dbContext.Database.CreateExecutionStrategy();
@@ -423,9 +443,12 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
                     await using DbCommand command = dbContext.Database.GetDbConnection().CreateCommand();
                     command.CommandText =
                         $"SELECT TOP ({ChunksPerReadPage}) [Index], DATALENGTH([Data]), [Data] FROM [ResourceChunks] " +
-                        "WHERE [ResourceId] = @resourceId AND (@lastIndex IS NULL OR [Index] > @lastIndex) ORDER BY [Index]";
+                        "WHERE [ResourceId] = @resourceId AND (@lastIndex IS NULL OR [Index] > @lastIndex)" +
+                        (throughIndex is null ? "" : " AND [Index] <= @throughIndex") + " ORDER BY [Index]";
                     command.Parameters.Add(new SqlParameter("@resourceId", resourceId));
                     command.Parameters.Add(new SqlParameter("@lastIndex", SqlDbType.Int) { Value = (object?)lastIndex ?? DBNull.Value });
+                    if (throughIndex is not null)
+                        command.Parameters.Add(new SqlParameter("@throughIndex", SqlDbType.Int) { Value = throughIndex });
 
                     // Sequential access streams each chunk's data instead of buffering the row first.
                     await using DbDataReader reader = await command.ExecuteReaderAsync(CommandBehavior.SequentialAccess, ct)
@@ -464,7 +487,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
                 return (page, pageLastIndex);
             }, cancellationToken).ConfigureAwait(false);
 
-            exhausted = page.Count < ChunksPerReadPage;
+            exhausted = page.Count < ChunksPerReadPage || pageLastIndex == throughIndex;
             lastIndex = pageLastIndex;
             return page;
         };
@@ -630,5 +653,16 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
         return versionId == null
             ? query.Where(r => r.IsLatest)
             : query.Where(r => r.VersionId == versionId);
+    }
+
+    /// <summary>
+    /// The chunks a range overlaps: those after <see cref="AfterIndex"/> (from the first, when null) through
+    /// <see cref="ThroughIndex"/>, the first of them starting at <see cref="Start"/> in the content (0, when null).
+    /// </summary>
+    internal sealed class ChunkSpan
+    {
+        public int? AfterIndex { get; set; }
+        public long? Start { get; set; }
+        public int? ThroughIndex { get; set; }
     }
 }

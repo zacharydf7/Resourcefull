@@ -65,32 +65,39 @@ public class StreamingIntegrationTests(SqlServerFixture fixture)
         Assert.Equal(size, download.Length);
     }
 
+    /// <summary>
+    /// A resource named <c>n</c> whose chunks are numbered from zero, as the first release numbered them, stored out of
+    /// order, with one bigger than the chunk size uploads use: <c>aaa</c>, 70,000 <c>b</c>s, then <c>ccc</c>.
+    /// </summary>
+    private async Task<IResourceContainerClient> StoreLegacyChunksAsync(ServiceProvider provider)
+    {
+        string containerName = $"c-{Guid.NewGuid():N}";
+        IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>().CreateResourceContainerAsync(containerName);
+        await container.UploadAsync("n", new MemoryStream());
+        await using SqlConnection connection = await fixture.OpenConnectionAsync();
+        await using SqlCommand command = connection.CreateCommand();
+        command.CommandText = @"
+            INSERT INTO ResourceChunks (ResourceId, [Index], Data)
+            SELECT r.Id, chunk.[Index], chunk.Data
+            FROM Resources r
+            CROSS JOIN (VALUES
+                (2, CAST('ccc' AS varbinary(max))),
+                (0, CAST('aaa' AS varbinary(max))),
+                (1, CAST(REPLICATE(CAST('b' AS varchar(max)), 70000) AS varbinary(max)))) chunk([Index], Data)
+            WHERE r.ContainerName = @c AND r.Name = 'n'";
+        command.Parameters.AddWithValue("@c", containerName);
+        await command.ExecuteNonQueryAsync();
+        return container;
+    }
+
     [SkippableFact]
     public async Task DownloadStreamingAsync_ShouldReturnTheChunksInIndexOrder_WhenTheyWereStoredOutOfOrderFromZeroAndOfAnySize()
     {
         fixture.SkipIfUnavailable();
 
-        // Arrange: chunks numbered from zero, as the first release numbered them, stored out of order, with one bigger
-        // than the chunk size uploads use.
+        // Arrange
         using ServiceProvider provider = fixture.BuildServiceProvider();
-        string containerName = $"c-{Guid.NewGuid():N}";
-        IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>().CreateResourceContainerAsync(containerName);
-        await container.UploadAsync("n", new MemoryStream());
-        await using (SqlConnection connection = await fixture.OpenConnectionAsync())
-        await using (SqlCommand command = connection.CreateCommand())
-        {
-            command.CommandText = @"
-                INSERT INTO ResourceChunks (ResourceId, [Index], Data)
-                SELECT r.Id, chunk.[Index], chunk.Data
-                FROM Resources r
-                CROSS JOIN (VALUES
-                    (2, CAST('ccc' AS varbinary(max))),
-                    (0, CAST('aaa' AS varbinary(max))),
-                    (1, CAST(REPLICATE(CAST('b' AS varchar(max)), 70000) AS varbinary(max)))) chunk([Index], Data)
-                WHERE r.ContainerName = @c AND r.Name = 'n'";
-            command.Parameters.AddWithValue("@c", containerName);
-            await command.ExecuteNonQueryAsync();
-        }
+        IResourceContainerClient container = await StoreLegacyChunksAsync(provider);
 
         // Act
         ResourceDownloadResult? download = await container.DownloadStreamingAsync("n");
@@ -100,6 +107,32 @@ public class StreamingIntegrationTests(SqlServerFixture fixture)
         // Assert
         Assert.Equal("aaa" + new string('b', 70000) + "ccc", content);
         Assert.Equal(70006, stream.Length);
+    }
+
+    [SkippableTheory]
+    [InlineData(0, 2L)]           // within the first chunk
+    [InlineData(1, 4L)]           // across the first boundary
+    [InlineData(3, 70_000L)]      // exactly the middle chunk
+    [InlineData(70_001, 4L)]      // across the second boundary
+    [InlineData(70_003, null)]    // the last chunk, to the end
+    [InlineData(2, 70_002L)]      // from the first chunk to the last
+    public async Task DownloadStreamingAsync_ShouldReturnTheRange_WhenTheChunksWereStoredOutOfOrderFromZeroAndOfAnySize(long offset, long? length)
+    {
+        fixture.SkipIfUnavailable();
+
+        // Arrange
+        using ServiceProvider provider = fixture.BuildServiceProvider();
+        IResourceContainerClient container = await StoreLegacyChunksAsync(provider);
+        string whole = "aaa" + new string('b', 70000) + "ccc";
+
+        // Act
+        ResourceDownloadResult? download = await container.DownloadStreamingAsync("n", null, new ResourceRange(offset, length), CancellationToken.None);
+        await using Stream stream = download!.Stream;
+        string content = await new StreamReader(stream).ReadToEndAsync();
+
+        // Assert
+        Assert.Equal(whole.Substring((int)offset, (int)(length ?? whole.Length - offset)), content);
+        Assert.Equal(70006, download.TotalLength);
     }
 
     [SkippableFact]

@@ -5,17 +5,25 @@
 /// </summary>
 /// <param name="nextPage">Fetches the next chunks' data in index order, with the token of the read that needs them;
 /// empty once the content is exhausted. A page's data need only stay valid until the next page is fetched.</param>
-/// <param name="length">The content's full length; a read that ends before it throws, as the content was cut short.</param>
+/// <param name="length">The content's full length.</param>
 /// <param name="owner">What the pages are read through, such as the database context; disposed with the stream.</param>
+/// <param name="pagesStart">Where in the content the first page's data starts.</param>
+/// <param name="start">Where the stream starts; the data before it, from <paramref name="pagesStart"/>, is skipped.</param>
+/// <param name="end">
+/// Where the content read must reach, the content's end when null; a read that ends before it throws, as the content
+/// was cut short. The stream may go on past it to the end of the last page.
+/// </param>
 internal class ResourceStream(Func<CancellationToken, Task<IReadOnlyList<ReadOnlyMemory<byte>>>> nextPage, long length,
-    IAsyncDisposable? owner = null) : Stream
+    IAsyncDisposable? owner = null, long pagesStart = 0, long start = 0, long? end = null) : Stream
 {
     private IReadOnlyList<ReadOnlyMemory<byte>> _page = [];
     private int _pageIndex = 0;
     private bool _exhausted = false;
     private ReadOnlyMemory<byte> _currentChunkData = ReadOnlyMemory<byte>.Empty;
     private int _currentChunkPosition = 0;
-    private long _position = 0;
+    private long _position = start;
+    private long _skip = start - pagesStart;
+    private readonly long _end = end ?? length;
 
     // Awaits don't resume on the caller's context: Read blocks on ReadAsync, and would deadlock a single-threaded one.
     public override async Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
@@ -27,7 +35,8 @@ internal class ResourceStream(Func<CancellationToken, Task<IReadOnlyList<ReadOnl
             if (_pageIndex < _page.Count)
             {
                 _currentChunkData = _page[_pageIndex++];
-                _currentChunkPosition = 0;
+                _currentChunkPosition = (int)Math.Min(_skip, _currentChunkData.Length);
+                _skip -= _currentChunkPosition;
             }
             else if (!_exhausted)
             {
@@ -37,7 +46,7 @@ internal class ResourceStream(Func<CancellationToken, Task<IReadOnlyList<ReadOnl
             }
             else
             {
-                if (_position < length)
+                if (_position < _end)
                     throw new IOException($"The content ended after {_position} of its {length} bytes; it may have been deleted while it was read.");
                 return 0;
             }

@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Http.Headers;
+using Microsoft.Extensions.Primitives;
 using Microsoft.Net.Http.Headers;
 
 namespace Resourcefull.AspNetCore;
@@ -40,8 +41,7 @@ internal static class Preconditions
         RequestHeaders headers = request.GetTypedHeaders();
         bool getOrHead = HttpMethods.IsGet(request.Method) || HttpMethods.IsHead(request.Method);
         EntityTagHeaderValue? entityTag = EntityTagOf(current);
-        // HTTP dates have whole seconds.
-        DateTimeOffset? lastModified = current is null ? null : current.LastModified.AddTicks(-(current.LastModified.Ticks % TimeSpan.TicksPerSecond));
+        DateTimeOffset? lastModified = current is null ? null : HttpDate(current.LastModified);
 
         if (headers.IfMatch.Count > 0)
         {
@@ -64,4 +64,23 @@ internal static class Preconditions
 
         return StatusCodes.Status200OK;
     }
+
+    /// <summary>
+    /// Whether a range request's <c>If-Range</c>, when it has one, holds for the current version: its entity tag
+    /// matches strongly, or its date is exactly the last change. When it doesn't, or can't be parsed, the request gets
+    /// the whole content.
+    /// </summary>
+    public static bool RangeHolds(HttpRequest request, ResourceInfo current)
+    {
+        if (StringValues.IsNullOrEmpty(request.Headers.IfRange)) return true;
+        return request.GetTypedHeaders().IfRange switch
+        {
+            { EntityTag: { } tag } => EntityTagOf(current) is { } entityTag && tag.Compare(entityTag, useStrongComparison: true),
+            { LastModified: { } date } => date == HttpDate(current.LastModified),
+            _ => false
+        };
+    }
+
+    /// <summary>A time as an HTTP date carries it, in whole seconds.</summary>
+    private static DateTimeOffset HttpDate(DateTimeOffset time) => time.AddTicks(-(time.Ticks % TimeSpan.TicksPerSecond));
 }

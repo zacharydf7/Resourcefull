@@ -110,6 +110,32 @@ public interface IResourceContainerClient : IDisposable
     public Task<ResourceDownloadResult?> DownloadStreamingAsync(string resourceName, string? versionId, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Downloads part of a resource as a stream, such as to resume a download or to seek in a video. Only the range's
+    /// bytes are read from storage, where the provider supports it.
+    /// </summary>
+    /// <param name="resourceName">The name of the resource to download.</param>
+    /// <param name="versionId">
+    /// The version to download; the current version when null. To download a resource in parts, pass the version ID of
+    /// the first part's result to the rest, so they can't come from a version uploaded in between.
+    /// </param>
+    /// <param name="range">The bytes to download. A range that runs past the end of the content is cut at the end.</param>
+    /// <param name="cancellationToken">Cancels locating the resource. Pass a token to the returned stream's read methods to cancel the download itself.</param>
+    /// <returns>
+    /// The download result, or <see langword="null"/> if the resource does not exist. Its stream holds the range, as
+    /// its <see cref="ResourceDownloadResult.Range"/> says, and <see cref="ResourceDownloadResult.TotalLength"/> is the
+    /// whole content's length.
+    /// </returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="range"/> has a negative offset or length, or starts past the end of the content.</exception>
+    /// <exception cref="ArgumentException"><paramref name="resourceName"/> is null, empty, longer than 256 characters, or starts or ends with whitespace (<see cref="ArgumentNullException"/> when null).</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was cancelled.</exception>
+    /// <exception cref="NotSupportedException">
+    /// This default implementation, kept so implementations written for 3.1 still compile, doesn't download ranges.
+    /// </exception>
+    public Task<ResourceDownloadResult?> DownloadStreamingAsync(string resourceName, string? versionId, ResourceRange range,
+        CancellationToken cancellationToken)
+        => throw new NotSupportedException($"{GetType().Name} doesn't download ranges.");
+
+    /// <summary>
     /// Downloads a resource's content into memory.
     /// </summary>
     /// <param name="resourceName">The name of the resource to download.</param>

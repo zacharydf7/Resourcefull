@@ -180,6 +180,28 @@ public sealed class TelemetryTests : IDisposable
         Assert.False(stream.CanSeek);
     }
 
+    [Theory]
+    [InlineData(6, 5L, "6-10")]
+    [InlineData(6, null, "6-")]
+    public async Task DownloadStreamingAsync_ShouldTagTheRangeAndCountOnlyItsBytes_WhenGivenARange(long offset, long? length, string tag)
+    {
+        // Arrange
+        using ServiceProvider provider = NewServices();
+        IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>().CreateResourceContainerAsync("c");
+        await container.UploadAsync("report.txt", BinaryData.FromString("hello world"));
+        using Activity root = TestSource.StartActivity("test")!;
+
+        // Act
+        ResourceDownloadResult download = (await container.DownloadStreamingAsync("report.txt", null, new ResourceRange(offset, length), CancellationToken.None))!;
+        await using (Stream stream = download.Stream)
+            await stream.CopyToAsync(Stream.Null);
+
+        // Assert
+        Activity span = Assert.Single(SpansIn(root), s => s.OperationName == "resourcefull download");
+        Assert.Equal(tag, span.GetTagItem("resourcefull.range"));
+        Assert.Equal(5, _measurements.Where(m => m.Instrument == "resourcefull.client.downloaded").Sum(m => m.Value));
+    }
+
     [Fact]
     public async Task DownloadContentAsync_ShouldRecordOneDownload_WhenCalled()
     {
