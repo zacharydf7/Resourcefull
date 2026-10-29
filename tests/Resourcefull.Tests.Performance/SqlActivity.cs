@@ -6,10 +6,10 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 namespace Resourcefull.Tests.Performance;
 
 /// <summary>
-/// Counts the round trips EF Core makes (commands, and beginning and committing transactions) and the pages SQL Server
-/// reads for them, so a change that adds a round trip or a scan shows up whatever the machine's speed. Reads come from
-/// <c>SET STATISTICS IO</c>, turned on for every connection as it opens; that statement isn't sent through EF Core, so
-/// it isn't counted as a round trip.
+/// Counts the round trips EF Core makes (commands, savepoints, and beginning and committing transactions) and the pages
+/// SQL Server reads for them, so a change that adds a round trip or a scan shows up whatever the machine's speed. Reads
+/// come from <c>SET STATISTICS IO</c>, turned on for every connection as it opens; that statement isn't sent through EF
+/// Core, so it isn't counted as a round trip.
 /// </summary>
 internal sealed partial class SqlActivity : DbCommandInterceptor, IDbConnectionInterceptor, IDbTransactionInterceptor
 {
@@ -53,6 +53,16 @@ internal sealed partial class SqlActivity : DbCommandInterceptor, IDbConnectionI
     public void TransactionCommitted(DbTransaction transaction, TransactionEndEventData eventData) => Count(transaction);
 
     public Task TransactionCommittedAsync(DbTransaction transaction, TransactionEndEventData eventData,
+        CancellationToken cancellationToken = default)
+    {
+        Count(transaction);
+        return Task.CompletedTask;
+    }
+
+    // EF Core sets a savepoint before each SaveChanges inside a transaction the caller began.
+    public void CreatedSavepoint(DbTransaction transaction, TransactionEventData eventData) => Count(transaction);
+
+    public Task CreatedSavepointAsync(DbTransaction transaction, TransactionEventData eventData,
         CancellationToken cancellationToken = default)
     {
         Count(transaction);

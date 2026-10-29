@@ -34,8 +34,9 @@ every push and pull request.
 ### Performance tests
 
 `tests/Resourcefull.Tests.Performance` measures uploads, downloads, listings and deletes through the public clients
-against SQL Server: the round trips each makes (commands, and beginning and committing transactions), the logical
-reads they cost, the bytes it allocates, how far the heap grows, and how long it takes. It needs SQL Server like the integration tests:
+against SQL Server: the round trips each makes (commands, savepoints, and beginning and committing transactions), the
+logical reads they cost, the bytes it allocates, how far the heap grows, and how long it takes. It needs SQL Server
+like the integration tests:
 
 ```shell
 dotnet test tests/Resourcefull.Tests.Performance -c Release --logger "console;verbosity=detailed"
@@ -52,10 +53,11 @@ worse than its baseline allows:
 | Time | more than twice the baseline, plus 50 ms |
 
 Locally the comparison is only reported, since your machine and SQL Server differ from CI's; set
-`RESOURCEFULL_PERF_ENFORCE=true` to fail as CI does. Every CI run uploads its measurements as the `performance-results`
-artifact. When a change makes a scenario cheaper, or costs more on purpose, copy that artifact's
-`performance-results.json` over `baseline.json` in the same pull request and say why in the commit, so the new
-numbers are what later changes are held to.
+`RESOURCEFULL_PERF_ENFORCE=true` to fail as CI does. Every CI run uploads its measurements as the
+`performance-results` artifact. When a change makes a scenario cheaper, or costs more on purpose, copy that artifact's
+`performance-results.json` over `baseline.json` in the same pull request and say why in the commit, so the new numbers
+are what later changes are held to. Once `baseline.json` has entries, a new scenario fails its first CI run for lack
+of one; copy its entry from that run's artifact into `baseline.json`.
 
 ### How the tests are organized
 
