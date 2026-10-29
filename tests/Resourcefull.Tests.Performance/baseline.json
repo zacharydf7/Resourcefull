@@ -92,7 +92,7 @@
   "upload-same-name-8-at-once-1MiB": {
     "RoundTrips": 87,
     "LogicalReads": 2667,
-    "LogBytes": 9502720,
+    "LogBytes": 10674176,
     "AllocatedBytes": 13420160,
     "PeakHeapBytes": 13457944,
     "Seconds": 0.2639,
