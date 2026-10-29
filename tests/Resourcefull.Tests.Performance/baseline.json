@@ -17,6 +17,15 @@
     "Seconds": 0.1049,
     "ContentBytes": 16777216
   },
+  "download-16MiB-traced": {
+    "RoundTrips": 19,
+    "LogicalReads": 8885,
+    "LogBytes": 0,
+    "AllocatedBytes": 3906656,
+    "PeakHeapBytes": 3925136,
+    "Seconds": 0.0593,
+    "ContentBytes": 16777216
+  },
   "download-1MiB": {
     "RoundTrips": 4,
     "LogicalReads": 566,
