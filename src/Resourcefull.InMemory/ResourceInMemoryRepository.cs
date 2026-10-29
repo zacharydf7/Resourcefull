@@ -15,8 +15,6 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : I
 
     public async Task<WrittenContent> AddResourceAsync(string resourceContainerName, ResourceInfo resourceInfo, Stream stream, bool createOnly = false, CancellationToken cancellationToken = default)
     {
-        if (stream.CanSeek) stream.Position = 0;
-
         using var buffer = new MemoryStream();
         using var content = new HashingStream(stream);
         await content.CopyToAsync(buffer, cancellationToken);

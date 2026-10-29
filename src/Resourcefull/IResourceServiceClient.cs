@@ -14,7 +14,9 @@ public interface IResourceServiceClient
     /// <summary>
     /// Returns a client for a container without contacting the store. The container need not exist
     /// yet; operations report absence at the time they run. This is the cheap, lazy equivalent of
-    /// Azure's <c>GetBlobContainerClient</c>.
+    /// Azure's <c>GetBlobContainerClient</c>. Since nothing is read, the client's
+    /// <see cref="IResourceContainerClient.ResourceContainerInfo"/> carries the name and the URI provider's URI but no
+    /// metadata; use <see cref="GetResourceContainerInfoAsync(string)"/> for the stored metadata.
     /// </summary>
     /// <param name="resourceContainerName">The name of the resource container.</param>
     /// <exception cref="ArgumentException"><paramref name="resourceContainerName"/> is null, empty, longer than 128 characters, or starts or ends with whitespace (<see cref="ArgumentNullException"/> when null).</exception>

@@ -308,6 +308,8 @@ The entry point for managing **containers**. Inject `IResourceServiceClient`.
 Returns a client for a container **synchronously, without contacting the store**. The container need
 not exist yet; operations report absence when they run. This is the cheap, lazy way to get a
 container client and is the recommended replacement for the v1 `CreateResourceContainerClientAsync`.
+Since nothing is read, the client's `ResourceContainerInfo` carries the name and the URI provider's URI but
+no metadata; call `GetResourceContainerInfoAsync` for the stored metadata.
 
 ```csharp
 IResourceContainerClient container = resourceServiceClient.GetResourceContainerClient("my-container");
@@ -332,7 +334,8 @@ IResourceContainerClient container = await resourceServiceClient.CreateResourceC
 #### CreateResourceContainerIfNotExistsAsync
 
 Creates the container if it does not exist; returns a client either way (no exception if it already
-exists).
+exists). The client's `ResourceContainerInfo` is what is stored: for an existing container, its own metadata
+and URI, not the ones passed here.
 
 - `resourceContainerName: string`
 - `metadata: IDictionary<string, string>?` (optional, applied only on creation)
@@ -407,7 +410,8 @@ Manages **resources within a container**. Obtain one from
 Uploads a resource. Two overloads accept a `Stream` or in-memory `BinaryData`.
 
 - `resourceName: string`
-- `content: Stream` **or** `BinaryData`
+- `content: Stream` **or** `BinaryData`. A stream is read from its current position to its end, as `CopyTo`
+  would read it, so rewind a stream you have just written before uploading it. The stream is not disposed.
 - `uploadOptions: ResourceUploadOptions?` (optional)
 - **Returns** `Task<ResourceInfo>` describing what was stored: the new version's ID, the measured
   `ContentLength`, the `ContentHash` and `IsLatest = true`, with a copy of the metadata.
@@ -472,7 +476,7 @@ Downloads a resource as a stream. Prefer this for large resources to avoid buffe
 ResourceDownloadResult? result = await container.DownloadStreamingAsync("my-resource");
 if (result is not null)
 {
-    Stream stream = result.Stream!;
+    Stream stream = result.Stream;
     ResourceInfo info = result.ResourceInfo;
 }
 ```
@@ -603,7 +607,7 @@ Configuration for an upload.
 Returned by `DownloadStreamingAsync`.
 
 - `ResourceInfo: ResourceInfo`
-- `Stream: Stream?` — the content stream (present when the result itself is non-null).
+- `Stream: Stream` — the content stream; the caller disposes it.
 
 ### ResourceContent
 
@@ -637,6 +641,11 @@ v2 replaces the `ErrorOr` return wrapper with direct return values and exception
 methods to match the Azure Blob SDK. The v1 methods were marked `[Obsolete]` in v2.0 and have been
 **removed in v2.1**, so a v1 → v2.1 upgrade must move every call site off the old API in one pass. A
 step-by-step upgrade guide for consuming applications is available in `docs-v2.md`.
+
+> **Uploads no longer rewind the stream.** Earlier releases moved a seekable stream back to position 0 before
+> uploading it. Uploads now read from the stream's current position, as `Stream.CopyTo` and the Azure SDK do,
+> so a `MemoryStream` you have just written must be rewound (`stream.Position = 0`) before you upload it, or
+> the upload stores nothing.
 
 ### Service client (`IResourceServiceClient`)
 

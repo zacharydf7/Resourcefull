@@ -72,7 +72,7 @@ public abstract partial class ResourcefullContractTests
 
         // Act
         ResourceDownloadResult? result = await container.DownloadStreamingAsync("data.bin");
-        await using Stream stream = result!.Stream!;
+        await using Stream stream = result!.Stream;
         int read = await stream.ReadAsync(new byte[10]);
 
         // Assert
@@ -103,6 +103,22 @@ public abstract partial class ResourcefullContractTests
         // Assert
         Assert.Equal(readFinished, uploaded.LastModified);
         Assert.Equal(readFinished, (await container.GetResourceInfoAsync("doc"))!.LastModified);
+    }
+
+    [SkippableFact]
+    public async Task UploadAsync_ShouldStoreTheContentFromTheStreamsCurrentPosition_WhenTheStreamHasBeenReadPartway()
+    {
+        // Arrange: a stream whose 3-byte header the caller has already read past.
+        using ServiceProvider provider = BuildServiceProvider();
+        IResourceContainerClient container = await NewContainerAsync(provider);
+        var content = new MemoryStream([9, 9, 9, 1, 2, 3]) { Position = 3 };
+
+        // Act
+        ResourceInfo uploaded = await container.UploadAsync("doc", content);
+
+        // Assert
+        Assert.Equal(3, uploaded.ContentLength);
+        Assert.Equal([1, 2, 3], (await container.DownloadContentAsync("doc"))!.Content.ToArray());
     }
 
     [SkippableFact]

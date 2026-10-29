@@ -12,7 +12,10 @@ namespace Resourcefull;
 public interface IResourceContainerClient : IDisposable
 {
     /// <summary>
-    /// The attributes of the container this client targets.
+    /// The attributes of the container this client targets, as known when the client was made: the stored ones for a
+    /// client from <see cref="IResourceServiceClient.CreateResourceContainerAsync(string, IDictionary{string, string}?)"/>
+    /// or <see cref="IResourceServiceClient.CreateResourceContainerIfNotExistsAsync(string, IDictionary{string, string}?)"/>,
+    /// the name and URI but no metadata for one from <see cref="IResourceServiceClient.GetResourceContainerClient(string)"/>.
     /// </summary>
     public ResourceContainerInfo ResourceContainerInfo { get; }
 
@@ -20,7 +23,9 @@ public interface IResourceContainerClient : IDisposable
     /// Uploads a resource to the container.
     /// </summary>
     /// <param name="resourceName">The name of the uploaded resource.</param>
-    /// <param name="content">The content to upload.</param>
+    /// <param name="content">
+    /// The content to upload, read from its current position to its end. The stream is not disposed.
+    /// </param>
     /// <param name="uploadOptions">Optional configuration for the upload.</param>
     /// <returns>
     /// What was stored: the new version, its measured <see cref="ResourceInfo.ContentLength"/> and

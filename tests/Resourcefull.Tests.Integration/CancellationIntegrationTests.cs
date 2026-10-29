@@ -59,7 +59,7 @@ public class CancellationIntegrationTests(SqlServerFixture fixture)
         cts.Cancel();
 
         // Act
-        Task act() => download!.Stream!.ReadAsync(new byte[1024], 0, 1024, cts.Token);
+        Task act() => download!.Stream.ReadAsync(new byte[1024], 0, 1024, cts.Token);
 
         // Assert
         Assert.NotNull(download);

@@ -39,6 +39,8 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
         WrittenContent? written = null;
         bool contentRead = false;
         Exception? lastFailure = null;
+        // Where the content starts, so a retry can read it again from there.
+        long? start = stream.CanSeek ? stream.Position : null;
 
         async Task AttemptAsync(CancellationToken ct)
         {
@@ -53,9 +55,9 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
             }
 
             // Any other retry has to read the content again, once some of it has been read.
-            if (contentRead && !stream.CanSeek)
+            if (contentRead && start == null)
                 throw new InvalidOperationException($"Storing resource {resourceInfo.Name} failed with a transient error, and its content can't be read again to retry.", lastFailure);
-            if (stream.CanSeek) stream.Position = 0;
+            if (contentRead) stream.Position = start!.Value;
 
             await using var transaction = await attempt.Database.BeginTransactionAsync(ct);
 

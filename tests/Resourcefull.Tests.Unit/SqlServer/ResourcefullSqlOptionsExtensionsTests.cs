@@ -1,6 +1,7 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
+using Resourcefull.InMemory;
 using Resourcefull.SqlServer;
 
 namespace Resourcefull.Tests.Unit.SqlServer;
@@ -11,10 +12,8 @@ public class ResourcefullSqlOptionsExtensionsTests
     {
         // Arrange & Act
         var services = new ServiceCollection();
-        var resourcefullOptionsBuilder = new ResourcefullOptionsBuilder(services)
-        {
-            ProviderConfigured = true
-        };
+        var resourcefullOptionsBuilder = new ResourcefullOptionsBuilder(services);
+        resourcefullOptionsBuilder.UseInMemory();
 
         // Assert
         Assert.Throws<InvalidOperationException>(() => resourcefullOptionsBuilder.UseSqlServer("someConnectionString"));

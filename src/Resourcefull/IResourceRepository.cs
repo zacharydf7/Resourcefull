@@ -40,7 +40,10 @@ public interface IResourceRepository
     /// </summary>
     /// <param name="resourceContainerName">The container to add to.</param>
     /// <param name="resourceInfo">The version to store; <see cref="ResourceInfo.ContentLength"/>, when set, is the length the caller declared.</param>
-    /// <param name="stream">The content, read once from its current position (rewound first when it can seek).</param>
+    /// <param name="stream">
+    /// The content, read from its current position to its end. A provider that retries may seek back to that position
+    /// when the stream can seek, and must not otherwise move it.
+    /// </param>
     /// <param name="createOnly">Store only if no version of the name exists.</param>
     /// <param name="cancellationToken">Cancels the write; a cancelled write stores nothing.</param>
     /// <returns>

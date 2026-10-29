@@ -12,7 +12,12 @@ internal class ResourceServiceClient(IResourceRepository resourceRepository, IOp
     public IResourceContainerClient GetResourceContainerClient(string resourceContainerName)
     {
         ResourceNames.ThrowIfInvalidContainerName(resourceContainerName);
-        return new ResourceContainerClient(resourceRepository, uriProvider, _options, new ResourceContainerInfo { Name = resourceContainerName });
+        // The URI comes from the URI provider rather than the store, so even a client made without a read has it.
+        return new ResourceContainerClient(resourceRepository, uriProvider, _options, new ResourceContainerInfo
+        {
+            Name = resourceContainerName,
+            Uri = uriProvider?.GetAbsoluteUri(new ResourcefullContext(resourceContainerName))
+        });
     }
 
     public Task<IResourceContainerClient> CreateResourceContainerAsync(string resourceContainerName, IDictionary<string, string>? metadata = null)
@@ -32,8 +37,8 @@ internal class ResourceServiceClient(IResourceRepository resourceRepository, IOp
         ResourceNames.ThrowIfInvalidContainerName(resourceContainerName);
 
         // The usual case is a container that already exists; finding it with a read avoids a failed insert each time.
-        if (await ContainerExistsAsync(resourceContainerName, cancellationToken))
-            return GetResourceContainerClient(resourceContainerName);
+        if (await resourceRepository.GetResourceContainerInfoAsync(resourceContainerName, cancellationToken) is { } existing)
+            return new ResourceContainerClient(resourceRepository, uriProvider, _options, existing);
 
         try
         {
@@ -41,8 +46,11 @@ internal class ResourceServiceClient(IResourceRepository resourceRepository, IOp
         }
         catch (ResourceConflictException)
         {
-            // Already there, whether from before or from a concurrent create; either way the caller gets a client.
-            return GetResourceContainerClient(resourceContainerName);
+            // Created concurrently; the caller gets a client for it all the same, with what was stored (or, should it
+            // already be gone again, what a client made without a read has).
+            return await resourceRepository.GetResourceContainerInfoAsync(resourceContainerName, cancellationToken) is { } stored
+                ? new ResourceContainerClient(resourceRepository, uriProvider, _options, stored)
+                : GetResourceContainerClient(resourceContainerName);
         }
     }
 

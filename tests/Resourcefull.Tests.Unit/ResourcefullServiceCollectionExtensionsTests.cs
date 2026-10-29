@@ -1,9 +1,10 @@
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
+using Resourcefull.InMemory;
 
 namespace Resourcefull.Tests.Unit;
 
-public class IServiceCollectionExtensionsTests
+public class ResourcefullServiceCollectionExtensionsTests
 {
     [Fact]
     public void AddResourcefull_ShouldThrowAnException_WhenNoProviderIsConfigured()
@@ -24,7 +25,7 @@ public class IServiceCollectionExtensionsTests
         // Mock
         var resourcefullOptionsBuilderAction = new Mock<Action<ResourcefullOptionsBuilder>>();
         resourcefullOptionsBuilderAction.Setup(action => action.Invoke(It.IsAny<ResourcefullOptionsBuilder>()))
-            .Callback((ResourcefullOptionsBuilder options) => options.ProviderConfigured = true);
+            .Callback((ResourcefullOptionsBuilder options) => options.UseInMemory());
 
         // Act
         services.AddResourcefull(resourcefullOptionsBuilderAction.Object);

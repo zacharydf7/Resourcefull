@@ -67,6 +67,21 @@ public class ResourceServiceClientTests
     }
 
     [Fact]
+    public void GetResourceContainerClient_ShouldCarryTheUriProvidersUri_WhenAUriProviderIsConfigured()
+    {
+        // Arrange
+        var uriProvider = new Mock<IUriProvider>();
+        uriProvider.Setup(p => p.GetAbsoluteUri(new ResourcefullContext("myContainer", null, null))).Returns("https://resources.test/myContainer");
+        var service = NewService(new Mock<IResourceRepository>(MockBehavior.Strict).Object, uriProvider.Object);
+
+        // Act
+        IResourceContainerClient client = service.GetResourceContainerClient("myContainer");
+
+        // Assert
+        Assert.Equal("https://resources.test/myContainer", client.ResourceContainerInfo.Uri);
+    }
+
+    [Fact]
     public async Task CreateResourceContainerAsync_ShouldCreateContainer_WhenItDoesNotExist()
     {
         // Arrange
@@ -112,19 +127,40 @@ public class ResourceServiceClientTests
     }
 
     [Fact]
-    public async Task CreateResourceContainerIfNotExistsAsync_ShouldReturnAClient_WhenAConcurrentCreateWinsTheAdd()
+    public async Task CreateResourceContainerIfNotExistsAsync_ShouldReturnAClientWithTheStoredInfo_WhenAConcurrentCreateWinsTheAdd()
     {
-        // Arrange: absent when checked, then created by someone else before this add.
+        // Arrange: absent when checked, then created by someone else, with their metadata, before this add.
+        var repository = new Mock<IResourceRepository>();
+        repository.SetupSequence(r => r.GetResourceContainerInfoAsync("existing", It.IsAny<CancellationToken>()))
+            .ReturnsAsync((ResourceContainerInfo?)null)
+            .ReturnsAsync(new ResourceContainerInfo { Name = "existing", Uri = "https://stored", Metadata = new Dictionary<string, string> { ["owner"] = "them" } });
+        repository.Setup(r => r.AddResourceContainerAsync(It.IsAny<ResourceContainerInfo>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new ResourceConflictException("already exists"));
+        var service = NewService(repository.Object);
+
+        // Act
+        IResourceContainerClient client = await service.CreateResourceContainerIfNotExistsAsync("existing", new Dictionary<string, string> { ["owner"] = "us" });
+
+        // Assert
+        Assert.Equal("https://stored", client.ResourceContainerInfo.Uri);
+        Assert.Equal("them", client.ResourceContainerInfo.Metadata["owner"]);
+    }
+
+    [Fact]
+    public async Task CreateResourceContainerIfNotExistsAsync_ShouldReturnAClientForTheName_WhenTheConcurrentlyCreatedContainerIsGoneAgain()
+    {
+        // Arrange: created by someone else before this add, and deleted again before it can be read.
         var repository = new Mock<IResourceRepository>();
         repository.Setup(r => r.AddResourceContainerAsync(It.IsAny<ResourceContainerInfo>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new ResourceConflictException("already exists"));
         var service = NewService(repository.Object);
 
         // Act
-        IResourceContainerClient client = await service.CreateResourceContainerIfNotExistsAsync("existing");
+        IResourceContainerClient client = await service.CreateResourceContainerIfNotExistsAsync("existing", new Dictionary<string, string> { ["owner"] = "us" });
 
         // Assert
         Assert.Equal("existing", client.ResourceContainerInfo.Name);
+        Assert.Empty(client.ResourceContainerInfo.Metadata);
     }
 
     [Fact]

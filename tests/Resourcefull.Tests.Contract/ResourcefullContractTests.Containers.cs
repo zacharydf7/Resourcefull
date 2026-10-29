@@ -27,6 +27,23 @@ public abstract partial class ResourcefullContractTests
     }
 
     [SkippableFact]
+    public async Task CreateResourceContainerIfNotExistsAsync_ShouldReturnAClientWithTheStoredMetadataAndUri_WhenTheContainerExists()
+    {
+        // Arrange
+        using ServiceProvider provider = BuildServiceProvider(o => o.SetUriProvider<PathUriProvider>());
+        IResourceServiceClient service = ServiceOf(provider);
+        string name = NewContainerName();
+        await service.CreateResourceContainerAsync(name, new Dictionary<string, string> { ["owner"] = "ops" });
+
+        // Act
+        IResourceContainerClient container = await service.CreateResourceContainerIfNotExistsAsync(name, new Dictionary<string, string> { ["owner"] = "ignored" });
+
+        // Assert
+        Assert.Equal("ops", container.ResourceContainerInfo.Metadata["owner"]);
+        Assert.Equal($"https://resources.test/{name}", container.ResourceContainerInfo.Uri);
+    }
+
+    [SkippableFact]
     public async Task CreateResourceContainerAsync_ShouldThrowConflict_WhenTheContainerExists()
     {
         // Arrange

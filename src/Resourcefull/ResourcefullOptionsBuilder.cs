@@ -8,7 +8,7 @@ namespace Resourcefull;
 /// </summary>
 public class ResourcefullOptionsBuilder
 {
-    public bool ProviderConfigured { get; set; }
+    public bool ProviderConfigured { get; private set; }
     public IServiceCollection Services { get; init; }
 
     public ResourcefullOptionsBuilder(IServiceCollection services) => Services = services;

@@ -20,16 +20,18 @@ public class UploadRetryIntegrationTests(SqlServerFixture fixture)
     private static readonly string PayloadHash = "sha256:" + Convert.ToHexStringLower(SHA256.HashData(Payload));
 
     [SkippableFact]
-    public async Task AddResourceAsync_ShouldReadTheContentAgainAndStoreIt_WhenASeekableUploadFailsPartway()
+    public async Task AddResourceAsync_ShouldReadTheContentAgainFromWhereItStartedAndStoreIt_WhenASeekableUploadFailsPartway()
     {
         fixture.SkipIfUnavailable();
 
-        // Arrange: the third save is the second batch of chunks, after some content has been written.
+        // Arrange: the third save is the second batch of chunks, after some content has been written; the content
+        // starts past a header the caller has already read.
         var failure = new FailOnceInterceptor(failAtSave: 3);
         (ResourceSqlRepository repository, string c) = await NewRepositoryAsync(failure);
+        var content = new MemoryStream([.. "header"u8, .. Payload]) { Position = "header"u8.Length };
 
         // Act
-        WrittenContent written = await repository.AddResourceAsync(c, Version(c), new MemoryStream(Payload));
+        WrittenContent written = await repository.AddResourceAsync(c, Version(c), content);
 
         // Assert
         Assert.True(failure.Failed);

@@ -28,7 +28,7 @@ public class StreamingIntegrationTests(SqlServerFixture fixture)
         // Act
         await container.UploadAsync("large.bin", upload);
         ResourceDownloadResult? result = await container.DownloadStreamingAsync("large.bin");
-        await using (Stream stream = result!.Stream!)
+        await using (Stream stream = result!.Stream)
         {
             await stream.CopyToAsync(download);
         }
@@ -53,7 +53,7 @@ public class StreamingIntegrationTests(SqlServerFixture fixture)
 
         // Act
         ResourceDownloadResult? result = await container.DownloadStreamingAsync("file.bin");
-        await using (Stream stream = result!.Stream!)
+        await using (Stream stream = result!.Stream)
         {
             Assert.Equal(size, stream.Length);
             await stream.CopyToAsync(download);

@@ -71,7 +71,7 @@ app.MapGet("/api/resources/{containerName}", async (string containerName, IResou
 
         response.Headers.ContentDisposition = contentDisposition.ToString();
 
-        return Results.Stream(downloadResult.Stream!, downloadResult.ResourceInfo.ContentType);
+        return Results.Stream(downloadResult.Stream, downloadResult.ResourceInfo.ContentType);
     }
     else
     {

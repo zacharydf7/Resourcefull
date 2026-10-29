@@ -2,7 +2,7 @@
 
 namespace Resourcefull;
 
-public static class IServiceCollectionExtensions
+public static class ResourcefullServiceCollectionExtensions
 {
     /// <summary>
     /// Adds the Resourcefull service to the service collection.

@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Resourcefull.InMemory;
+using Resourcefull.SqlServer;
 
 namespace Resourcefull.Tests.Unit.InMemory;
 
@@ -10,10 +11,8 @@ public class ResourcefullInMemoryOptionsExtensionsTests
     {
         // Arrange & Act
         var services = new ServiceCollection();
-        var resourcefullOptionsBuilder = new ResourcefullOptionsBuilder(services)
-        {
-            ProviderConfigured = true
-        };
+        var resourcefullOptionsBuilder = new ResourcefullOptionsBuilder(services);
+        resourcefullOptionsBuilder.UseSqlServer("Server=(none)");
 
         // Assert
         Assert.Throws<InvalidOperationException>(() => resourcefullOptionsBuilder.UseInMemory());

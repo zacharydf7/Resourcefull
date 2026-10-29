@@ -86,7 +86,6 @@ internal class ResourceContainerClient(IResourceRepository resourceRepository, I
     {
         resourceInfo.Uri = uriProvider?.GetAbsoluteUri(new ResourcefullContext(ContainerName, resourceName, resourceInfo.VersionId));
 
-        if (stream.CanSeek) stream.Position = 0;
         WrittenContent written = await resourceRepository.AddResourceAsync(ContainerName, resourceInfo, stream, createOnly, cancellationToken);
 
         // Report what was stored rather than what was asked for.
@@ -148,7 +147,7 @@ internal class ResourceContainerClient(IResourceRepository resourceRepository, I
     public async Task<ResourceContent?> DownloadContentAsync(string resourceName, string? versionId, CancellationToken cancellationToken)
     {
         ResourceDownloadResult? result = await DownloadStreamingAsync(resourceName, versionId, cancellationToken);
-        if (result?.Stream == null) return null;
+        if (result is null) return null;
 
         await using Stream stream = result.Stream;
         using var memoryStream = new MemoryStream();
