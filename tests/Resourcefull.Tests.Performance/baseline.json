@@ -10,30 +10,39 @@
   },
   "download-16MiB": {
     "RoundTrips": 19,
-    "LogicalReads": 14,
+    "LogicalReads": 8889,
     "LogBytes": 1638,
-    "AllocatedBytes": 3811736,
-    "PeakHeapBytes": 3843088,
+    "AllocatedBytes": 3894712,
+    "PeakHeapBytes": 3911312,
     "Seconds": 0.1049,
     "ContentBytes": 16777216
   },
   "download-1MiB": {
     "RoundTrips": 4,
-    "LogicalReads": 10,
+    "LogicalReads": 566,
     "LogBytes": 0,
-    "AllocatedBytes": 1475944,
-    "PeakHeapBytes": 1497296,
+    "AllocatedBytes": 1476664,
+    "PeakHeapBytes": 1497928,
     "Seconds": 0.0112,
     "ContentBytes": 1048576
   },
   "download-64MiB": {
     "RoundTrips": 67,
-    "LogicalReads": 26,
+    "LogicalReads": 35709,
     "LogBytes": 0,
-    "AllocatedBytes": 11347312,
-    "PeakHeapBytes": 11402312,
+    "AllocatedBytes": 11584296,
+    "PeakHeapBytes": 11641472,
     "Seconds": 0.3333,
     "ContentBytes": 67108864
+  },
+  "download-8-at-once-4MiB": {
+    "RoundTrips": 56,
+    "LogicalReads": 17824,
+    "LogBytes": 32768,
+    "AllocatedBytes": 15622144,
+    "PeakHeapBytes": 15676592,
+    "Seconds": 0.1763,
+    "ContentBytes": 33554432
   },
   "get-info": {
     "RoundTrips": 1,
