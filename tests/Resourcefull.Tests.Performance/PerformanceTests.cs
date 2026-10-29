@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Resourcefull.SqlServer;
@@ -122,6 +123,15 @@ public sealed class PerformanceTests(SqlServerFixture fixture, ITestOutputHelper
     /// </summary>
     private async Task MeasureAsync(string scenario, long contentBytes, Func<int, Task> run)
     {
+        // Flushes the pages the scenario's setup dirtied, so SQL Server doesn't write them out during the measured runs:
+        // on a slow disk that more than tripled the time of deletes measured right after their uploads.
+        await using (SqlConnection connection = await fixture.OpenConnectionAsync())
+        await using (SqlCommand checkpoint = connection.CreateCommand())
+        {
+            checkpoint.CommandText = "CHECKPOINT;";
+            await checkpoint.ExecuteNonQueryAsync();
+        }
+
         await run(0);
 
         var samples = new List<Measurement>();

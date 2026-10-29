@@ -48,7 +48,8 @@ worse than its baseline allows:
 | Measurement | Fails when |
 |---|---|
 | Round trips | any more than the baseline |
-| Logical reads, allocated bytes | more than 10% over the baseline |
+| Logical reads | more than 10% (plus 2 pages) over the baseline |
+| Allocated bytes | more than 10% over the baseline |
 | Peak heap growth | more than 50% (plus 1 MiB) over the baseline |
 | Time | more than twice the baseline, plus 50 ms |
 

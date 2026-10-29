@@ -21,9 +21,11 @@ internal sealed record Measurement(long RoundTrips, long LogicalReads, long Allo
 internal static class Baseline
 {
     // Round trips don't vary from run to run, so any increase fails. Reads and allocations vary a little with SQL
-    // Server's plans and SqlClient's buffering. Peak heap depends on when the GC runs, and time on how busy the
-    // machine is, so those two only catch large regressions.
+    // Server's plans and SqlClient's buffering, and reads also by a page or two with how the rows lie on their pages.
+    // Peak heap depends on when the GC runs, and time on how busy the machine is, so those two only catch large
+    // regressions.
     private const double ReadsTolerance = 0.10;
+    private const long ReadsSlackPages = 2;
     private const double AllocationTolerance = 0.10;
     private const double PeakHeapTolerance = 0.50;
     private const long PeakHeapSlackBytes = 1024 * 1024;
@@ -49,7 +51,8 @@ internal static class Baseline
         // Once there is a baseline, a scenario missing from it was renamed or added without one, and would go unchecked.
         if (baseline is null && all.Count > 0) failures.Add($"{scenario} has no baseline.");
         Compare("round trips", measured.RoundTrips, baseline?.RoundTrips, 0, 0, failures, output);
-        Compare("logical reads", measured.LogicalReads, baseline?.LogicalReads, ReadsTolerance, 0, failures, output);
+        Compare("logical reads", measured.LogicalReads, baseline?.LogicalReads, ReadsTolerance, ReadsSlackPages, failures,
+            output);
         Compare("allocated bytes", measured.AllocatedBytes, baseline?.AllocatedBytes, AllocationTolerance, 0, failures, output);
         Compare("peak heap bytes", measured.PeakHeapBytes, baseline?.PeakHeapBytes, PeakHeapTolerance, PeakHeapSlackBytes,
             failures, output);
