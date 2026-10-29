@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace Resourcefull.SqlServer.Migrations
 {
     /// <inheritdoc />
-    public partial class AddVersioning : Migration
+    internal partial class AddVersioning : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)

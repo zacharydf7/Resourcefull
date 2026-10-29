@@ -5,7 +5,7 @@
 namespace Resourcefull.SqlServer.Migrations
 {
     /// <inheritdoc />
-    public partial class EnableReadCommittedSnapshot : Migration
+    internal partial class EnableReadCommittedSnapshot : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)

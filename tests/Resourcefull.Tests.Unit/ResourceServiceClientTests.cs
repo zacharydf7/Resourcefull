@@ -81,6 +81,94 @@ public class ResourceServiceClientTests
         Assert.Equal("https://resources.test/myContainer", client.ResourceContainerInfo.Uri);
     }
 
+    private static IUriProvider NewBaseUrlUriProvider()
+    {
+        var uriProvider = new Mock<IUriProvider>();
+        uriProvider.Setup(p => p.GetAbsoluteUri(It.IsAny<ResourcefullContext>()))
+            .Returns((ResourcefullContext context) => $"https://new.test/{context.ContainerName}");
+        return uriProvider.Object;
+    }
+
+    private static Mock<IResourceRepository> NewRepositoryWithStoredUris()
+    {
+        var repository = new Mock<IResourceRepository>();
+        repository.Setup(r => r.GetResourceContainerInfoAsync("stored", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ResourceContainerInfo { Name = "stored", Uri = "https://old.test/stored" });
+        repository.Setup(r => r.GetAllResourceContainerInfoAsync(It.IsAny<CancellationToken>())).ReturnsAsync(
+        [
+            new ResourceContainerInfo { Name = "first", Uri = "https://old.test/first" },
+            new ResourceContainerInfo { Name = "second", Uri = "https://old.test/second" }
+        ]);
+        return repository;
+    }
+
+    [Fact]
+    public async Task GetResourceContainerInfoAsync_ShouldReturnTheUriProvidersUri_WhenTheStoredUriIsOutOfDate()
+    {
+        // Arrange
+        var service = NewService(NewRepositoryWithStoredUris().Object, NewBaseUrlUriProvider());
+
+        // Act
+        ResourceContainerInfo? containerInfo = await service.GetResourceContainerInfoAsync("stored");
+
+        // Assert
+        Assert.Equal("https://new.test/stored", containerInfo!.Uri);
+    }
+
+    [Fact]
+    public async Task GetResourceContainerInfoAsync_ShouldReturnNoUri_WhenNoUriProviderIsConfigured()
+    {
+        // Arrange
+        var service = NewService(NewRepositoryWithStoredUris().Object);
+
+        // Act
+        ResourceContainerInfo? containerInfo = await service.GetResourceContainerInfoAsync("stored");
+
+        // Assert
+        Assert.Null(containerInfo!.Uri);
+    }
+
+    [Fact]
+    public async Task GetResourceContainersAsync_ShouldReturnTheUriProvidersUris_WhenTheStoredUrisAreOutOfDate()
+    {
+        // Arrange
+        var service = NewService(NewRepositoryWithStoredUris().Object, NewBaseUrlUriProvider());
+
+        // Act
+        IReadOnlyList<ResourceContainerInfo> containers = await service.GetResourceContainersAsync();
+
+        // Assert
+        Assert.Equal(["https://new.test/first", "https://new.test/second"], containers.Select(c => c.Uri));
+    }
+
+    [Fact]
+    public async Task ContainerExistsAsync_ShouldNotAskTheUriProvider_WhenCalled()
+    {
+        // Arrange: a provider that only works inside a request, called from outside one.
+        var uriProvider = new Mock<IUriProvider>();
+        uriProvider.Setup(p => p.GetAbsoluteUri(It.IsAny<ResourcefullContext>())).Throws<InvalidOperationException>();
+        var service = NewService(NewRepositoryWithStoredUris().Object, uriProvider.Object);
+
+        // Act
+        bool exists = await service.ContainerExistsAsync("stored");
+
+        // Assert
+        Assert.True(exists);
+    }
+
+    [Fact]
+    public async Task CreateResourceContainerIfNotExistsAsync_ShouldReturnTheUriProvidersUri_WhenTheExistingContainersStoredUriIsOutOfDate()
+    {
+        // Arrange
+        var service = NewService(NewRepositoryWithStoredUris().Object, NewBaseUrlUriProvider());
+
+        // Act
+        IResourceContainerClient client = await service.CreateResourceContainerIfNotExistsAsync("stored");
+
+        // Assert
+        Assert.Equal("https://new.test/stored", client.ResourceContainerInfo.Uri);
+    }
+
     [Fact]
     public async Task CreateResourceContainerAsync_ShouldCreateContainer_WhenItDoesNotExist()
     {
@@ -133,17 +221,17 @@ public class ResourceServiceClientTests
         var repository = new Mock<IResourceRepository>();
         repository.SetupSequence(r => r.GetResourceContainerInfoAsync("existing", It.IsAny<CancellationToken>()))
             .ReturnsAsync((ResourceContainerInfo?)null)
-            .ReturnsAsync(new ResourceContainerInfo { Name = "existing", Uri = "https://stored", Metadata = new Dictionary<string, string> { ["owner"] = "them" } });
+            .ReturnsAsync(new ResourceContainerInfo { Name = "existing", Uri = "https://old.test/existing", Metadata = new Dictionary<string, string> { ["owner"] = "them" } });
         repository.Setup(r => r.AddResourceContainerAsync(It.IsAny<ResourceContainerInfo>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new ResourceConflictException("already exists"));
-        var service = NewService(repository.Object);
+        var service = NewService(repository.Object, NewBaseUrlUriProvider());
 
         // Act
         IResourceContainerClient client = await service.CreateResourceContainerIfNotExistsAsync("existing", new Dictionary<string, string> { ["owner"] = "us" });
 
         // Assert
-        Assert.Equal("https://stored", client.ResourceContainerInfo.Uri);
         Assert.Equal("them", client.ResourceContainerInfo.Metadata["owner"]);
+        Assert.Equal("https://new.test/existing", client.ResourceContainerInfo.Uri);
     }
 
     [Fact]

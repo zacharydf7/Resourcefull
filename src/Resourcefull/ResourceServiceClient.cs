@@ -14,12 +14,7 @@ internal class ResourceServiceClient(IResourceRepository resourceRepository, IOp
     public IResourceContainerClient GetResourceContainerClient(string resourceContainerName)
     {
         ResourceNames.ThrowIfInvalidContainerName(resourceContainerName);
-        // The URI comes from the URI provider rather than the store, so even a client made without a read has it.
-        return new ResourceContainerClient(resourceRepository, uriProvider, _options, new ResourceContainerInfo
-        {
-            Name = resourceContainerName,
-            Uri = uriProvider?.GetAbsoluteUri(new ResourcefullContext(resourceContainerName))
-        }, containerLogger);
+        return NewContainerClient(new ResourceContainerInfo { Name = resourceContainerName });
     }
 
     public Task<IResourceContainerClient> CreateResourceContainerAsync(string resourceContainerName, IDictionary<string, string>? metadata = null)
@@ -40,7 +35,7 @@ internal class ResourceServiceClient(IResourceRepository resourceRepository, IOp
 
         // The usual case is a container that already exists; finding it with a read avoids a failed insert each time.
         if (await resourceRepository.GetResourceContainerInfoAsync(resourceContainerName, cancellationToken) is { } existing)
-            return new ResourceContainerClient(resourceRepository, uriProvider, _options, existing, containerLogger);
+            return NewContainerClient(existing);
 
         try
         {
@@ -51,22 +46,34 @@ internal class ResourceServiceClient(IResourceRepository resourceRepository, IOp
             // Created concurrently; the caller gets a client for it all the same, with what was stored (or, should it
             // already be gone again, what a client made without a read has).
             return await resourceRepository.GetResourceContainerInfoAsync(resourceContainerName, cancellationToken) is { } stored
-                ? new ResourceContainerClient(resourceRepository, uriProvider, _options, stored, containerLogger)
+                ? NewContainerClient(stored)
                 : GetResourceContainerClient(resourceContainerName);
         }
     }
 
     private async Task<IResourceContainerClient> CreateContainerCoreAsync(string resourceContainerName, IDictionary<string, string>? metadata, CancellationToken cancellationToken)
     {
-        var containerInfo = new ResourceContainerInfo
+        // The URI is stored too, for applications on 2.x, which read it from storage, while they share a database with
+        // this release during an upgrade.
+        ResourceContainerInfo containerInfo = WithUri(new ResourceContainerInfo
         {
             Name = resourceContainerName,
-            Metadata = metadata ?? new Dictionary<string, string>(),
-            Uri = uriProvider?.GetAbsoluteUri(new ResourcefullContext(resourceContainerName))
-        };
+            Metadata = metadata ?? new Dictionary<string, string>()
+        });
 
         await resourceRepository.AddResourceContainerAsync(containerInfo, cancellationToken);
         return new ResourceContainerClient(resourceRepository, uriProvider, _options, containerInfo, containerLogger);
+    }
+
+    private ResourceContainerClient NewContainerClient(ResourceContainerInfo containerInfo)
+        => new(resourceRepository, uriProvider, _options, WithUri(containerInfo), containerLogger);
+
+    // URIs come from the URI provider whenever a container is returned, not from storage, so a changed provider or base
+    // URL applies to containers created before the change as well.
+    private ResourceContainerInfo WithUri(ResourceContainerInfo containerInfo)
+    {
+        containerInfo.Uri = uriProvider?.GetAbsoluteUri(new ResourcefullContext(containerInfo.Name));
+        return containerInfo;
     }
 
     public Task<ResourceContainerInfo?> GetResourceContainerInfoAsync(string resourceContainerName)
@@ -75,20 +82,28 @@ internal class ResourceServiceClient(IResourceRepository resourceRepository, IOp
     public async Task<ResourceContainerInfo?> GetResourceContainerInfoAsync(string resourceContainerName, CancellationToken cancellationToken)
     {
         ResourceNames.ThrowIfInvalidContainerName(resourceContainerName);
-        return await resourceRepository.GetResourceContainerInfoAsync(resourceContainerName, cancellationToken);
+        ResourceContainerInfo? containerInfo = await resourceRepository.GetResourceContainerInfoAsync(resourceContainerName, cancellationToken);
+        return containerInfo is null ? null : WithUri(containerInfo);
     }
 
     public Task<IReadOnlyList<ResourceContainerInfo>> GetResourceContainersAsync()
         => GetResourceContainersAsync(CancellationToken.None);
 
     public async Task<IReadOnlyList<ResourceContainerInfo>> GetResourceContainersAsync(CancellationToken cancellationToken)
-        => await resourceRepository.GetAllResourceContainerInfoAsync(cancellationToken);
+    {
+        List<ResourceContainerInfo> containers = await resourceRepository.GetAllResourceContainerInfoAsync(cancellationToken);
+        foreach (ResourceContainerInfo containerInfo in containers) WithUri(containerInfo);
+        return containers;
+    }
 
     public Task<bool> ContainerExistsAsync(string resourceContainerName)
         => ContainerExistsAsync(resourceContainerName, CancellationToken.None);
 
     public async Task<bool> ContainerExistsAsync(string resourceContainerName, CancellationToken cancellationToken)
-        => await GetResourceContainerInfoAsync(resourceContainerName, cancellationToken) != null;
+    {
+        ResourceNames.ThrowIfInvalidContainerName(resourceContainerName);
+        return await resourceRepository.GetResourceContainerInfoAsync(resourceContainerName, cancellationToken) != null;
+    }
 
     public Task<bool> DeleteResourceContainerIfExistsAsync(string resourceContainerName)
         => DeleteResourceContainerIfExistsAsync(resourceContainerName, CancellationToken.None);

@@ -11,7 +11,8 @@ public class ResourceContainerInfo
     public required string Name { get; set; }
 
     /// <summary>
-    /// The URI of the resource container.
+    /// The URI of the resource container, from the URI provider each time the container is returned;
+    /// <see langword="null"/> without one.
     /// </summary>
     public string? Uri { get; set; }
 

@@ -89,7 +89,9 @@ internal partial class ResourceContainerClient(IResourceRepository resourceRepos
 
     private async Task<ResourceInfo> SaveNewResourceVersionAsync(Stream stream, string resourceName, ResourceInfo resourceInfo, bool createOnly, CancellationToken cancellationToken)
     {
-        resourceInfo.Uri = uriProvider?.GetAbsoluteUri(new ResourcefullContext(ContainerName, resourceName, resourceInfo.VersionId));
+        // Stored too, for applications on 2.x, which read it from storage, while they share a database with this release
+        // during an upgrade.
+        WithUri(resourceInfo);
 
         WrittenContent written = await resourceRepository.AddResourceAsync(ContainerName, resourceInfo, stream, createOnly, cancellationToken);
 
@@ -147,6 +149,8 @@ internal partial class ResourceContainerClient(IResourceRepository resourceRepos
 
         ResourceInfo? resourceInfo = await resourceRepository.GetResourceInfoAsync(ContainerName, resourceName, versionId, cancellationToken);
         if (resourceInfo == null) return null;
+        // Before the stream opens, so a URI provider that throws can't leave it undisposed.
+        WithUri(resourceInfo);
 
         // Read the version just resolved, not "current" again: an upload in between would pair this info with other content.
         Stream? stream = await resourceRepository.GetResourceStreamAsync(ContainerName, resourceName, resourceInfo.VersionId, cancellationToken);
@@ -175,14 +179,15 @@ internal partial class ResourceContainerClient(IResourceRepository resourceRepos
     public async Task<ResourceInfo?> GetResourceInfoAsync(string resourceName, string? versionId, CancellationToken cancellationToken)
     {
         ResourceNames.ThrowIfInvalidResourceName(resourceName);
-        return await resourceRepository.GetResourceInfoAsync(ContainerName, resourceName, versionId, cancellationToken);
+        ResourceInfo? resourceInfo = await resourceRepository.GetResourceInfoAsync(ContainerName, resourceName, versionId, cancellationToken);
+        return resourceInfo is null ? null : WithUri(resourceInfo);
     }
 
     public Task<IReadOnlyList<ResourceInfo>> GetResourcesAsync()
         => GetResourcesAsync(CancellationToken.None);
 
     public async Task<IReadOnlyList<ResourceInfo>> GetResourcesAsync(CancellationToken cancellationToken)
-        => await resourceRepository.GetAllResourceInfoAsync(ContainerName, cancellationToken);
+        => WithUris(await resourceRepository.GetAllResourceInfoAsync(ContainerName, cancellationToken));
 
     public Task<IReadOnlyList<ResourceInfo>> GetResourceVersionsAsync(string resourceName)
         => GetResourceVersionsAsync(resourceName, CancellationToken.None);
@@ -190,7 +195,21 @@ internal partial class ResourceContainerClient(IResourceRepository resourceRepos
     public async Task<IReadOnlyList<ResourceInfo>> GetResourceVersionsAsync(string resourceName, CancellationToken cancellationToken)
     {
         ResourceNames.ThrowIfInvalidResourceName(resourceName);
-        return await resourceRepository.GetResourceVersionsAsync(ContainerName, resourceName, cancellationToken);
+        return WithUris(await resourceRepository.GetResourceVersionsAsync(ContainerName, resourceName, cancellationToken));
+    }
+
+    // URIs come from the URI provider whenever a version is returned, not from storage, so a changed provider or base URL
+    // applies to versions stored before the change as well.
+    private ResourceInfo WithUri(ResourceInfo resourceInfo)
+    {
+        resourceInfo.Uri = uriProvider?.GetAbsoluteUri(new ResourcefullContext(ContainerName, resourceInfo.Name, resourceInfo.VersionId));
+        return resourceInfo;
+    }
+
+    private List<ResourceInfo> WithUris(List<ResourceInfo> resources)
+    {
+        foreach (ResourceInfo resourceInfo in resources) WithUri(resourceInfo);
+        return resources;
     }
 
     public Task<bool> DeleteResourceIfExistsAsync(string resourceName, string? versionId = null)

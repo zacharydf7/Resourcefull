@@ -47,7 +47,8 @@ The XML documentation on each member states its contract in full. In short, a pr
 - **Return content as a read-only, forward-only stream:** `CanSeek` and `CanWrite` are `false`, `Length` is the
   content's full length, `Position` counts the bytes read, and seeking, setting `Position`, writing and `SetLength`
   throw `NotSupportedException`.
-- **Store container metadata and URIs**, and return copies, so callers can't change what's stored.
+- **Store container metadata**, and return copies, so callers can't change what's stored. Storing `Uri` is optional:
+  the clients replace it with the URI provider's whenever they return a container or version.
 - **Honor cancellation:** a cancelled operation throws `OperationCanceledException` and leaves nothing half-done. The
   one exception is deleting a container, which may stop between whole versions, as long as each remaining name keeps a
   current version and calling it again finishes the job.

@@ -1,5 +1,0 @@
-# EF Core migrations are public only because EF Core generates them that way; they aren't part of the API.
-apiRules:
-- exclude:
-    uidRegex: ^Resourcefull\.SqlServer\.Migrations$
-    type: Namespace

@@ -5,7 +5,7 @@
 namespace Resourcefull.SqlServer.Migrations
 {
     /// <inheritdoc />
-    public partial class NameLimitsAndCaseSensitiveNames : Migration
+    internal partial class NameLimitsAndCaseSensitiveNames : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)

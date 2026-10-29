@@ -34,7 +34,6 @@ builder.Services.AddResourcefull(options => options
   through `Uri.EscapeDataString`.
 - **The provider is a scoped service**, so it can depend on configuration or other services, but not on the current
   request unless you inject `IHttpContextAccessor`.
-- **URIs are stored when they're made.** A container gets its URI when it's created, and a version when it's
-  uploaded, and reads return the URI stored with it. Changing the provider or its base URL therefore changes only what's
-  created afterwards. (`GetResourceContainerClient` asks the provider each time, so its client's URI is always
-  current.)
+- **URIs are made whenever they're returned.** Every container and version the clients return gets its URI from the
+  provider at that moment, so changing the provider or its base URL applies to everything already stored. Without a
+  provider, `Uri` is `null`.

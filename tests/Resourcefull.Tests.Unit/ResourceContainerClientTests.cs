@@ -112,6 +112,83 @@ public class ResourceContainerClientTests
         Assert.Equal("http://resources/x", result.Uri);
     }
 
+    private static IUriProvider NewBaseUrlUriProvider()
+    {
+        var uriProvider = new Mock<IUriProvider>();
+        uriProvider.Setup(p => p.GetAbsoluteUri(It.IsAny<ResourcefullContext>())).Returns((ResourcefullContext context)
+            => $"https://new.test/{context.ContainerName}/{context.ResourceName}/{context.ResourceVersionId}");
+        return uriProvider.Object;
+    }
+
+    private static ResourceInfo StoredVersion(string versionId) => new()
+    {
+        ContainerName = Container,
+        Name = "report.pdf",
+        VersionId = versionId,
+        Uri = $"https://old.test/{Container}/report.pdf/{versionId}"
+    };
+
+    private static Mock<IResourceRepository> NewRepositoryWithStoredUris()
+    {
+        var repository = new Mock<IResourceRepository>();
+        repository.Setup(r => r.GetResourceInfoAsync(Container, "report.pdf", It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => StoredVersion("v2"));
+        repository.Setup(r => r.GetResourceStreamAsync(Container, "report.pdf", "v2", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => new MemoryStream());
+        repository.Setup(r => r.GetAllResourceInfoAsync(Container, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => [StoredVersion("v2")]);
+        repository.Setup(r => r.GetResourceVersionsAsync(Container, "report.pdf", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => [StoredVersion("v2"), StoredVersion("v1")]);
+        return repository;
+    }
+
+    [Fact]
+    public async Task EveryReadOfAVersion_ShouldReturnTheUriProvidersUri_WhenTheStoredUriIsOutOfDate()
+    {
+        // Arrange
+        var client = NewClient(NewRepositoryWithStoredUris().Object, uriProvider: NewBaseUrlUriProvider());
+        string current = $"https://new.test/{Container}/report.pdf/v2";
+
+        // Act & Assert
+        Assert.Equal(current, (await client.GetResourceInfoAsync("report.pdf"))!.Uri);
+        Assert.Equal(current, (await client.DownloadStreamingAsync("report.pdf"))!.ResourceInfo.Uri);
+        Assert.Equal(current, (await client.DownloadContentAsync("report.pdf"))!.ResourceInfo.Uri);
+        Assert.Equal([current], (await client.GetResourcesAsync()).Select(r => r.Uri));
+        Assert.Equal([current, $"https://new.test/{Container}/report.pdf/v1"],
+            (await client.GetResourceVersionsAsync("report.pdf")).Select(r => r.Uri));
+    }
+
+    [Fact]
+    public async Task DownloadStreamingAsync_ShouldNotOpenTheStream_WhenTheUriProviderThrows()
+    {
+        // Arrange
+        var repository = NewRepositoryWithStoredUris();
+        var uriProvider = new Mock<IUriProvider>();
+        uriProvider.Setup(p => p.GetAbsoluteUri(It.IsAny<ResourcefullContext>())).Throws<InvalidOperationException>();
+        var client = NewClient(repository.Object, uriProvider: uriProvider.Object);
+
+        // Act
+        Task act() => client.DownloadStreamingAsync("report.pdf");
+
+        // Assert: a stream opened here would never reach the caller to be disposed.
+        await Assert.ThrowsAsync<InvalidOperationException>(act);
+        repository.Verify(r => r.GetResourceStreamAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(),
+            It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task GetResourceInfoAsync_ShouldReturnNoUri_WhenNoUriProviderIsConfigured()
+    {
+        // Arrange
+        var client = NewClient(NewRepositoryWithStoredUris().Object);
+
+        // Act
+        ResourceInfo? resourceInfo = await client.GetResourceInfoAsync("report.pdf");
+
+        // Assert
+        Assert.Null(resourceInfo!.Uri);
+    }
+
     [Fact]
     public async Task UploadAsync_ShouldUploadResource_WhenContentIsBinaryData()
     {

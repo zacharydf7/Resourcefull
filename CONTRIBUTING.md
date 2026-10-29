@@ -85,6 +85,9 @@ match.
    dotnet ef migrations add <Name> --project src/Resourcefull.SqlServer
    ```
 
+   EF Core generates the migration as a `public` class; make it `internal`, like the others, so it doesn't become
+   public API. A unit test fails otherwise.
+
 2. Regenerate the scripts. Each one is the output of `dotnet ef migrations script --idempotent`, after a short preamble
    that's the same in every file:
 

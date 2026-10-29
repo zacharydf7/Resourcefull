@@ -68,6 +68,9 @@ These apply coming from 1.x or 2.x. Check them even where your code still compil
 - **A container client needs no disposing** (from 1.x). It still implements `IDisposable`, but disposing it does
   nothing.
 - **A failed prune is logged** as a warning through `ILogger` instead of being silent.
+- **URIs come from your URI provider on every read**, rather than being the one stored when the item was created. If
+  your application's base URL has changed, existing containers and versions now report the new URI, and without a URI
+  provider `Uri` is `null` even for items stored with one. See [URI providers](uri-providers.md).
 
 ### Custom providers
 

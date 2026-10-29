@@ -5,7 +5,7 @@ namespace Resourcefull.Tests.Contract;
 public abstract partial class ResourcefullContractTests
 {
     [SkippableFact]
-    public async Task CreateResourceContainerAsync_ShouldStoreTheMetadataAndUri_WhenAUriProviderIsConfigured()
+    public async Task CreateResourceContainerAsync_ShouldStoreTheMetadataAndReturnTheUri_WhenAUriProviderIsConfigured()
     {
         // Arrange
         using ServiceProvider provider = BuildServiceProvider(o => o.SetUriProvider<PathUriProvider>());
@@ -27,7 +27,7 @@ public abstract partial class ResourcefullContractTests
     }
 
     [SkippableFact]
-    public async Task CreateResourceContainerIfNotExistsAsync_ShouldReturnAClientWithTheStoredMetadataAndUri_WhenTheContainerExists()
+    public async Task CreateResourceContainerIfNotExistsAsync_ShouldReturnAClientWithTheStoredMetadataAndTheProvidersUri_WhenTheContainerExists()
     {
         // Arrange
         using ServiceProvider provider = BuildServiceProvider(o => o.SetUriProvider<PathUriProvider>());

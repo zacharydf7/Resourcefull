@@ -52,7 +52,8 @@ public class ResourceInfo
     public string? ContentHash { get; set; }
 
     /// <summary>
-    /// The URI of a stored resource.
+    /// The URI of a stored resource, from the URI provider each time the version is returned; <see langword="null"/>
+    /// without one.
     /// </summary>
     public string? Uri { get; set; }
 

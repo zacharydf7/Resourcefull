@@ -17,6 +17,8 @@ needs from you. Items marked *(from 1.x)* were already in 2.x.
   succeed.
 - **Provisioning from code** with `MigrateResourcefullDatabaseAsync`, into any database the connection string names.
 - **Writing a provider.** `IResourceRepository` is public, with a documented contract.
+- **Name checks.** `ResourceNames.IsValidContainerName` and `IsValidResourceName` check a name against the rules
+  before you use it.
 - **Logging.** A version prune that fails after its upload was stored is logged as a warning.
 - **Documentation** for every concept, both providers, ASP.NET Core and upgrading, and an API reference generated from
   the XML documentation that ships in the packages.
@@ -32,6 +34,9 @@ needs from you. Items marked *(from 1.x)* were already in 2.x.
 - Uploads read from the stream's current position, without rewinding it first.
 - `LastModified` is when the version became current, by the storing server's clock.
 - Download streams can't seek, and with SQL Server, a download whose version is deleted midway throws `IOException`.
+- `Uri` comes from the URI provider whenever a container or version is returned, so a changed base URL applies to
+  everything already stored.
+- The SQL Server package's EF Core migration classes are internal.
 - SQL Server provisioning scripts no longer name a database, and ship in the package's `scripts` folder rather than
   being added to consuming projects.
 

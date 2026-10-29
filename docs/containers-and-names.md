@@ -45,7 +45,9 @@ Any other character is allowed, including `/`, so `2026/10/report.pdf` is a vali
 though: the slash is just part of the name.
 
 Every method that takes a name checks it before contacting storage, and throws `ArgumentNullException` for `null` and
-`ArgumentException` for a name that breaks the rules, so an API can turn that into a 400.
+`ArgumentException` for a name that breaks the rules, so an API can turn that into a 400. To check a name yourself
+first, for example to validate a whole request before acting on any of it, call `ResourceNames.IsValidContainerName`
+or `ResourceNames.IsValidResourceName`.
 
 Names appear in URIs and file names that you build from them, so escape them there; see
 [URI providers](uri-providers.md) and the [ASP.NET Core recipes](recipes/aspnet-core.md).

@@ -5,7 +5,7 @@
 namespace Resourcefull.SqlServer.Migrations
 {
     /// <inheritdoc />
-    public partial class UniqueLatestVersion : Migration
+    internal partial class UniqueLatestVersion : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)

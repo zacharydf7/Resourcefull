@@ -5,7 +5,7 @@
 namespace Resourcefull.SqlServer.Migrations
 {
     /// <inheritdoc />
-    public partial class AddContentHash : Migration
+    internal partial class AddContentHash : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)

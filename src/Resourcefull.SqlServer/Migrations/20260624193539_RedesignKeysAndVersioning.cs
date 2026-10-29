@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace Resourcefull.SqlServer.Migrations
 {
     /// <inheritdoc />
-    public partial class RedesignKeysAndVersioning : Migration
+    internal partial class RedesignKeysAndVersioning : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)

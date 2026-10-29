@@ -104,20 +104,21 @@ public interface IResourceRepository
     // Resource Containers
 
     /// <summary>
-    /// Adds a container, storing its <see cref="ResourceContainerInfo.Uri"/> and a copy of its
-    /// <see cref="ResourceContainerInfo.Metadata"/>. Like <see cref="AddResourceAsync"/>, a duplicate is detected by
-    /// the write itself.
+    /// Adds a container, storing a copy of its <see cref="ResourceContainerInfo.Metadata"/>. Like
+    /// <see cref="AddResourceAsync"/>, a duplicate is detected by the write itself. Storing
+    /// <see cref="ResourceContainerInfo.Uri"/> is optional: the clients replace it with the URI provider's whenever
+    /// they return a container or version.
     /// </summary>
     /// <exception cref="ResourceConflictException">A container with the same name already exists.</exception>
     Task AddResourceContainerAsync(ResourceContainerInfo resourceContainerInfo, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Lists every container, each with its stored URI and its own copy of the stored metadata.
+    /// Lists every container, each with its own copy of the stored metadata.
     /// </summary>
     Task<List<ResourceContainerInfo>> GetAllResourceContainerInfoAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Gets a container, with its stored URI and its own copy of the stored metadata.
+    /// Gets a container, with its own copy of the stored metadata.
     /// </summary>
     /// <returns>The container, or <see langword="null"/> when it does not exist.</returns>
     Task<ResourceContainerInfo?> GetResourceContainerInfoAsync(string resourceContainerName, CancellationToken cancellationToken = default);
