@@ -62,6 +62,15 @@
     "Seconds": 0.0046,
     "ContentBytes": 0
   },
+  "list-page-100-of-500": {
+    "RoundTrips": 1,
+    "LogicalReads": 7,
+    "LogBytes": 0,
+    "AllocatedBytes": 287056,
+    "PeakHeapBytes": 295912,
+    "Seconds": 0.002,
+    "ContentBytes": 0
+  },
   "upload-16MiB": {
     "RoundTrips": 25,
     "LogicalReads": 4896,
