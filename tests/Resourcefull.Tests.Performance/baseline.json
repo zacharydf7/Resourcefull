@@ -80,6 +80,15 @@
     "Seconds": 0.3141,
     "ContentBytes": 16777216
   },
+  "upload-16MiB-traced": {
+    "RoundTrips": 25,
+    "LogicalReads": 4896,
+    "LogBytes": 18892390,
+    "AllocatedBytes": 3823304,
+    "PeakHeapBytes": 3844072,
+    "Seconds": 0.1629,
+    "ContentBytes": 16777216
+  },
   "upload-1MiB": {
     "RoundTrips": 10,
     "LogicalReads": 326,
