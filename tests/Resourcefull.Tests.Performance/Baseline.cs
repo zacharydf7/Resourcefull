@@ -5,8 +5,8 @@ using Xunit.Abstractions;
 namespace Resourcefull.Tests.Performance;
 
 /// <summary>What one scenario cost: medians over its repetitions.</summary>
-internal sealed record Measurement(long RoundTrips, long LogicalReads, long AllocatedBytes, long PeakHeapBytes, double Seconds,
-    long ContentBytes)
+internal sealed record Measurement(long RoundTrips, long LogicalReads, long LogBytes, long AllocatedBytes,
+    long PeakHeapBytes, double Seconds, long ContentBytes)
 {
     [JsonIgnore]
     public double MebibytesPerSecond => ContentBytes / 1024.0 / 1024.0 / Seconds;
@@ -20,12 +20,14 @@ internal sealed record Measurement(long RoundTrips, long LogicalReads, long Allo
 /// </summary>
 internal static class Baseline
 {
-    // Round trips don't vary from run to run, so any increase fails. Reads and allocations vary a little with SQL
-    // Server's plans and SqlClient's buffering, and reads also by a page or two with how the rows lie on their pages.
-    // Peak heap depends on when the GC runs, and time on how busy the machine is, so those two only catch large
-    // regressions.
+    // Round trips don't vary from run to run, so any increase fails. Reads, log bytes and allocations vary a little
+    // with SQL Server's plans, its log blocks and SqlClient's buffering; reads also by a page or two with how the rows
+    // lie on their pages, and log bytes by a block or two. Peak heap depends on when the GC runs, and time on how busy
+    // the machine is, so those two only catch large regressions.
     private const double ReadsTolerance = 0.10;
     private const long ReadsSlackPages = 2;
+    private const double LogTolerance = 0.10;
+    private const long LogSlackBytes = 64 * 1024;
     private const double AllocationTolerance = 0.10;
     private const double PeakHeapTolerance = 0.50;
     private const long PeakHeapSlackBytes = 1024 * 1024;
@@ -53,6 +55,7 @@ internal static class Baseline
         Compare("round trips", measured.RoundTrips, baseline?.RoundTrips, 0, 0, failures, output);
         Compare("logical reads", measured.LogicalReads, baseline?.LogicalReads, ReadsTolerance, ReadsSlackPages, failures,
             output);
+        Compare("log bytes", measured.LogBytes, baseline?.LogBytes, LogTolerance, LogSlackBytes, failures, output);
         Compare("allocated bytes", measured.AllocatedBytes, baseline?.AllocatedBytes, AllocationTolerance, 0, failures, output);
         Compare("peak heap bytes", measured.PeakHeapBytes, baseline?.PeakHeapBytes, PeakHeapTolerance, PeakHeapSlackBytes,
             failures, output);

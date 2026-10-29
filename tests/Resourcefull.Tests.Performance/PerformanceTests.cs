@@ -159,6 +159,9 @@ public sealed class PerformanceTests(SqlServerFixture fixture, ITestOutputHelper
 
         await run(0);
 
+        // The log is read around all the repetitions rather than each one: reading it between repetitions added
+        // allocations to the next one's measurements. Each repetition logs the same, so the average is what one logs.
+        long logBefore = await LogBytesWrittenAsync();
         var samples = new List<Measurement>();
         for (int iteration = 1; iteration <= Repetitions; iteration++)
         {
@@ -174,13 +177,27 @@ public sealed class PerformanceTests(SqlServerFixture fixture, ITestOutputHelper
 
             stopwatch.Stop();
             long allocated = GC.GetTotalAllocatedBytes(precise: true) - allocatedBefore;
-            samples.Add(new Measurement(_activity.RoundTrips, _activity.LogicalReads, allocated, heap.Stop(),
+            samples.Add(new Measurement(_activity.RoundTrips, _activity.LogicalReads, 0, allocated, heap.Stop(),
                 stopwatch.Elapsed.TotalSeconds, contentBytes));
         }
+        long logBytes = (await LogBytesWrittenAsync() - logBefore) / Repetitions;
 
         Baseline.Check(scenario, new Measurement(
-            Median(samples, s => s.RoundTrips), Median(samples, s => s.LogicalReads), Median(samples, s => s.AllocatedBytes),
-            Median(samples, s => s.PeakHeapBytes), Math.Round(Median(samples, s => s.Seconds), 4), contentBytes), output);
+            Median(samples, s => s.RoundTrips), Median(samples, s => s.LogicalReads), logBytes,
+            Median(samples, s => s.AllocatedBytes), Median(samples, s => s.PeakHeapBytes),
+            Math.Round(Median(samples, s => s.Seconds), 4), contentBytes), output);
+    }
+
+    /// <summary>
+    /// What SQL Server has written to the test database's transaction log so far. Each write's log records are flushed
+    /// by the time it commits, so the difference across a scenario is what it logged.
+    /// </summary>
+    private async Task<long> LogBytesWrittenAsync()
+    {
+        await using SqlConnection connection = await fixture.OpenConnectionAsync();
+        await using SqlCommand command = connection.CreateCommand();
+        command.CommandText = "SELECT [num_of_bytes_written] FROM sys.dm_io_virtual_file_stats(DB_ID(), 2);";
+        return (long)(await command.ExecuteScalarAsync())!;
     }
 
     private static T Median<T>(List<Measurement> samples, Func<Measurement, T> metric)

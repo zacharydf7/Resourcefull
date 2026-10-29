@@ -35,8 +35,8 @@ every push and pull request.
 
 `tests/Resourcefull.Tests.Performance` measures uploads, downloads, listings and deletes through the public clients
 against SQL Server: the round trips each makes (commands, savepoints, and beginning and committing transactions), the
-logical reads they cost, the bytes it allocates, how far the heap grows, and how long it takes. It needs SQL Server
-like the integration tests:
+logical reads they cost, the bytes it writes to the transaction log, the bytes it allocates, how far the heap grows,
+and how long it takes. It needs SQL Server like the integration tests:
 
 ```shell
 dotnet test tests/Resourcefull.Tests.Performance -c Release --logger "console;verbosity=detailed"
@@ -49,6 +49,7 @@ worse than its baseline allows:
 |---|---|
 | Round trips | any more than the baseline |
 | Logical reads | more than 10% (plus 2 pages) over the baseline |
+| Transaction log bytes | more than 10% (plus 64 KiB) over the baseline |
 | Allocated bytes | more than 10% over the baseline |
 | Peak heap growth | more than 50% (plus 1 MiB) over the baseline |
 | Time | more than twice the baseline, plus 50 ms |

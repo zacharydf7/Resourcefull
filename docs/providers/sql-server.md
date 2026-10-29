@@ -93,6 +93,9 @@ reads a few chunks at a time as its stream is read, so memory use stays flat wha
 - **Throughput is the server's.** With the client and SQL Server on the same machine, uploads of large files run at
   roughly 60 to 120 MiB/s and downloads at 150 to 375 MiB/s. On a network, latency and bandwidth set the pace, and
   the round trips above are what latency multiplies.
+- **The transaction log takes about as much as the content.** An upload writes about 1.13 times its size to the log,
+  and deleting a version about 1.07 times its size, since SQL Server logs the content it frees. Size the log for the
+  largest uploads and deletes you expect to run at once, and back it up regularly under the full recovery model.
 - **Concurrent writers don't wait for each other's content.** Uploads to different names run fully in parallel, and
   uploads to the same name wait for each other only while making their versions current.
 
