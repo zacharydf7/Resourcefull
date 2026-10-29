@@ -8,6 +8,7 @@ using System.Text;
 
 [assembly: InternalsVisibleTo("Resourcefull.Tests.Unit")]
 [assembly: InternalsVisibleTo("Resourcefull.Tests.Integration")]
+[assembly: InternalsVisibleTo("Resourcefull.Tests.Performance")]
 
 namespace Resourcefull.SqlServer;
 
