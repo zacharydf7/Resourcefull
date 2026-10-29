@@ -3,6 +3,9 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Resourcefull.SqlServer;
 
+/// <summary>
+/// Provisions and upgrades the SQL Server database that holds Resourcefull's tables.
+/// </summary>
 public static class ResourcefullSqlDatabaseExtensions
 {
     /// <summary>

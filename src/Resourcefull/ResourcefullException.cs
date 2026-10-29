@@ -6,8 +6,13 @@ namespace Resourcefull;
 /// </summary>
 public class ResourcefullException : Exception
 {
+    /// <summary>Creates the exception with a message.</summary>
+    /// <param name="message">The message that describes the error.</param>
     public ResourcefullException(string message) : base(message) { }
 
+    /// <summary>Creates the exception with a message and the exception that caused it.</summary>
+    /// <param name="message">The message that describes the error.</param>
+    /// <param name="innerException">The exception that caused this one.</param>
     public ResourcefullException(string message, Exception innerException) : base(message, innerException) { }
 }
 
@@ -18,8 +23,13 @@ public class ResourcefullException : Exception
 /// </summary>
 public sealed class ResourceConflictException : ResourcefullException
 {
+    /// <summary>Creates the exception with a message.</summary>
+    /// <param name="message">The message that describes the error.</param>
     public ResourceConflictException(string message) : base(message) { }
 
+    /// <summary>Creates the exception with a message and the exception that caused it.</summary>
+    /// <param name="message">The message that describes the error.</param>
+    /// <param name="innerException">The exception that caused this one.</param>
     public ResourceConflictException(string message, Exception innerException) : base(message, innerException) { }
 }
 
@@ -29,6 +39,8 @@ public sealed class ResourceConflictException : ResourcefullException
 /// </summary>
 public sealed class ResourceContentLengthMismatchException : ResourcefullException
 {
+    /// <summary>Creates the exception with a message.</summary>
+    /// <param name="message">The message that describes the error.</param>
     public ResourceContentLengthMismatchException(string message) : base(message) { }
 }
 
@@ -39,7 +51,12 @@ public sealed class ResourceContentLengthMismatchException : ResourcefullExcepti
 /// </summary>
 public sealed class ResourceContainerNotFoundException : ResourcefullException
 {
+    /// <summary>Creates the exception with a message.</summary>
+    /// <param name="message">The message that describes the error.</param>
     public ResourceContainerNotFoundException(string message) : base(message) { }
 
+    /// <summary>Creates the exception with a message and the exception that caused it.</summary>
+    /// <param name="message">The message that describes the error.</param>
+    /// <param name="innerException">The exception that caused this one.</param>
     public ResourceContainerNotFoundException(string message, Exception innerException) : base(message, innerException) { }
 }

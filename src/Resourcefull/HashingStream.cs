@@ -15,11 +15,16 @@ public sealed class HashingStream(Stream source) : Stream
     private readonly IncrementalHash _hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
     private long _bytesRead;
 
+    /// <inheritdoc />
     public override bool CanRead => true;
+    /// <inheritdoc />
     public override bool CanSeek => false;
+    /// <inheritdoc />
     public override bool CanWrite => false;
+    /// <inheritdoc />
     public override long Length => throw new NotSupportedException();
 
+    /// <inheritdoc />
     public override long Position
     {
         get => _bytesRead;
@@ -44,8 +49,10 @@ public sealed class HashingStream(Stream source) : Stream
         return new WrittenContent(_bytesRead, HashPrefix + Convert.ToHexStringLower(_hash.GetCurrentHash()), lastModified);
     }
 
+    /// <inheritdoc />
     public override int Read(byte[] buffer, int offset, int count) => Read(buffer.AsSpan(offset, count));
 
+    /// <inheritdoc />
     public override int Read(Span<byte> buffer)
     {
         int bytesRead = source.Read(buffer);
@@ -53,9 +60,11 @@ public sealed class HashingStream(Stream source) : Stream
         return bytesRead;
     }
 
+    /// <inheritdoc />
     public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
         => ReadAsync(buffer.AsMemory(offset, count), cancellationToken).AsTask();
 
+    /// <inheritdoc />
     public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
     {
         int bytesRead = await source.ReadAsync(buffer, cancellationToken);
@@ -63,16 +72,21 @@ public sealed class HashingStream(Stream source) : Stream
         return bytesRead;
     }
 
+    /// <inheritdoc />
     public override void Flush()
     {
     }
 
+    /// <inheritdoc />
     public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
 
+    /// <inheritdoc />
     public override void SetLength(long value) => throw new NotSupportedException();
 
+    /// <inheritdoc />
     public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
 
+    /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
         if (disposing) _hash.Dispose();

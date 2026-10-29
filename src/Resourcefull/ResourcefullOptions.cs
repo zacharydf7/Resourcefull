@@ -1,5 +1,9 @@
 ﻿namespace Resourcefull;
 
+/// <summary>
+/// The options Resourcefull runs with, as configured through <see cref="ResourcefullOptionsBuilder"/>. Inject
+/// <c>IOptions&lt;ResourcefullOptions&gt;</c> to read them.
+/// </summary>
 public class ResourcefullOptions
 {
     /// <summary>

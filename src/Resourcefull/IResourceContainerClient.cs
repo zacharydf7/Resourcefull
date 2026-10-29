@@ -1,3 +1,7 @@
+// The compiler doesn't expand <inheritdoc cref>, so it reports the parameters an overload inherits through it as
+// undocumented.
+#pragma warning disable CS1573
+
 namespace Resourcefull;
 
 /// <summary>
@@ -54,6 +58,7 @@ public interface IResourceContainerClient : IDisposable
     /// <summary>
     /// Uploads a resource to the container from an in-memory payload.
     /// </summary>
+    /// <param name="content">The content to upload.</param>
     /// <inheritdoc cref="UploadAsync(string, Stream, ResourceUploadOptions?)"/>
     public Task<ResourceInfo> UploadAsync(string resourceName, BinaryData content, ResourceUploadOptions? uploadOptions = null);
 

@@ -4,13 +4,27 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 namespace Resourcefull;
 
 /// <summary>
-/// Adds options for the configuration of Resourcefull service
+/// Configures Resourcefull inside <see cref="ResourcefullServiceCollectionExtensions.AddResourcefull"/>: its storage
+/// provider, versioning and URI provider.
 /// </summary>
 public class ResourcefullOptionsBuilder
 {
+    /// <summary>
+    /// Gets whether a storage provider has been configured. Exactly one must be, through a provider package's
+    /// <c>Use…</c> extension or <see cref="UseProvider{TRepository}"/>.
+    /// </summary>
     public bool ProviderConfigured { get; private set; }
+
+    /// <summary>
+    /// Gets the application's service collection, for provider extensions to register their services in.
+    /// </summary>
     public IServiceCollection Services { get; init; }
 
+    /// <summary>
+    /// Creates a builder that registers into <paramref name="services"/>. Applications get one from
+    /// <see cref="ResourcefullServiceCollectionExtensions.AddResourcefull"/> rather than creating it.
+    /// </summary>
+    /// <param name="services">The application's service collection.</param>
     public ResourcefullOptionsBuilder(IServiceCollection services) => Services = services;
 
     /// <summary>
@@ -34,6 +48,11 @@ public class ResourcefullOptionsBuilder
         return this;
     }
 
+    /// <summary>
+    /// Uses <typeparamref name="T"/> to give containers and resources their <c>Uri</c>, replacing any URI provider set
+    /// before. It is registered as a scoped service, so it can depend on other services.
+    /// </summary>
+    /// <typeparam name="T">The <see cref="IUriProvider"/> implementation.</typeparam>
     public ResourcefullOptionsBuilder SetUriProvider<T>() where T : class, IUriProvider
     {
         ServiceDescriptor? descriptor = Services.SingleOrDefault(
@@ -49,6 +68,13 @@ public class ResourcefullOptionsBuilder
         return this;
     }
 
+    /// <summary>
+    /// Turns on versioning: each upload of a name stores a new version and keeps up to <paramref name="maxVersions"/>
+    /// of them, pruning the oldest. Without versioning, a name holds one version, which an upload with
+    /// <see cref="ResourceUploadOptions.Overwrite"/> replaces.
+    /// </summary>
+    /// <param name="maxVersions">How many versions of each name to keep, including the current one; 100 when null.</param>
+    /// <exception cref="InvalidOperationException"><paramref name="maxVersions"/> is zero or negative.</exception>
     public ResourcefullOptionsBuilder UseVersioning(int? maxVersions = null)
     {
         if (maxVersions <= 0)

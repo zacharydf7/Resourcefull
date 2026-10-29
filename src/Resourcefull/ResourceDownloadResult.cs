@@ -1,8 +1,10 @@
 ﻿namespace Resourcefull;
 
 /// <summary>
-/// Represents a container for the results of a download request.
+/// The result of a streaming download: the version's attributes and a stream of its content.
 /// </summary>
-/// <param name="ResourceInfo"></param>
-/// <param name="Stream">A <see cref="System.IO.Stream"/> containing the retrieved resource.</param>
+/// <param name="ResourceInfo">The attributes of the downloaded version.</param>
+/// <param name="Stream">
+/// The content, read-only and forward-only; it is read from the store as it is read. The caller disposes it.
+/// </param>
 public record ResourceDownloadResult(ResourceInfo ResourceInfo, Stream Stream);

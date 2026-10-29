@@ -2,11 +2,11 @@
 
 /// <summary>
 /// A version's content, fetched a page of chunks at a time as the caller reads, so only one page is held at once.
-/// Disposing it releases <paramref name="owner"/>, which the pages are read through.
 /// </summary>
 /// <param name="nextPage">Fetches the next chunks' data in index order, with the token of the read that needs them;
 /// empty once the content is exhausted.</param>
 /// <param name="length">The content's full length; a read that ends before it throws, as the content was cut short.</param>
+/// <param name="owner">What the pages are read through, such as the database context; disposed with the stream.</param>
 internal class ResourceStream(Func<CancellationToken, Task<IReadOnlyList<byte[]>>> nextPage, long length, IAsyncDisposable? owner = null) : Stream
 {
     private IReadOnlyList<byte[]> _page = [];

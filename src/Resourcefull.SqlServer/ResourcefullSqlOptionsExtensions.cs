@@ -3,14 +3,21 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Resourcefull.SqlServer;
 
+/// <summary>
+/// Configures Resourcefull to store resources in SQL Server.
+/// </summary>
 public static class ResourcefullSqlOptionsExtensions
 {
     /// <summary>
-    /// Configures Resourcefull to connect to a a Microsoft SQL Server database.
+    /// Stores resources in the SQL Server database that <paramref name="connectionString"/> names, retrying transient
+    /// failures (including deadlocks). Provision the database with
+    /// <see cref="ResourcefullSqlDatabaseExtensions.MigrateResourcefullDatabaseAsync"/> or the packaged scripts.
+    /// Also registers <see cref="ContentHashBackfill"/>.
     /// </summary>
-    /// <param name="builder"></param>
-    /// <param name="connectionString">Specifies the connection information to connect to a Microsoft SQL Server database</param>
-    /// <exception cref="InvalidOperationException"></exception>
+    /// <param name="builder">The builder passed to <c>AddResourcefull</c>.</param>
+    /// <param name="connectionString">The connection string of the database that holds Resourcefull's tables.</param>
+    /// <returns><paramref name="builder"/>, for chaining.</returns>
+    /// <exception cref="InvalidOperationException">A provider has already been configured.</exception>
     public static ResourcefullOptionsBuilder UseSqlServer(this ResourcefullOptionsBuilder builder, string connectionString)
     {
         builder.UseProvider<ResourceSqlRepository>();

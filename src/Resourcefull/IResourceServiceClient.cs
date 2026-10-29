@@ -1,8 +1,12 @@
+// The compiler doesn't expand <inheritdoc cref>, so it reports the parameters each CancellationToken overload
+// inherits as undocumented.
+#pragma warning disable CS1573
+
 namespace Resourcefull;
 
 /// <summary>
-/// The entry point for working with resource containers. Mirrors the shape of Azure Blob Storage's
-/// <c>BlobServiceClient</c> so usage and a future migration feel familiar.
+/// The entry point for working with resource containers. Inject it, then get an <see cref="IResourceContainerClient"/>
+/// for the resources in one container.
 /// </summary>
 /// <remarks>
 /// Every operation that contacts the store has an overload that takes a <see cref="CancellationToken"/> as
@@ -13,8 +17,7 @@ public interface IResourceServiceClient
 {
     /// <summary>
     /// Returns a client for a container without contacting the store. The container need not exist
-    /// yet; operations report absence at the time they run. This is the cheap, lazy equivalent of
-    /// Azure's <c>GetBlobContainerClient</c>. Since nothing is read, the client's
+    /// yet; operations report absence at the time they run. Since nothing is read, the client's
     /// <see cref="IResourceContainerClient.ResourceContainerInfo"/> carries the name and the URI provider's URI but no
     /// metadata; use <see cref="GetResourceContainerInfoAsync(string)"/> for the stored metadata.
     /// </summary>
