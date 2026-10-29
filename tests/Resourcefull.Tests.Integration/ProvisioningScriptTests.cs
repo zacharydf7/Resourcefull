@@ -46,7 +46,7 @@ public class ProvisioningScriptTests(SqlServerFixture fixture)
                 $"{script.RelativePath} no longer matches the migrations in Resourcefull.SqlServer.{Environment.NewLine}" +
                 $"{ProvisioningScripts.DescribeFirstDifference(expected, actual)}{Environment.NewLine}" +
                 $"Regenerate it with:{Environment.NewLine}  {script.Command}{Environment.NewLine}" +
-                "then put the preamble back at the top (see docs-v2-reference.md, Regenerating the scripts).");
+                "then put the preamble back at the top (see CONTRIBUTING.md, Changing the database schema).");
         }
     }
 

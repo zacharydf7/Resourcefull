@@ -35,6 +35,25 @@ jobs:
           ./nupkg/*.nupkg
           ./nupkg/*.snupkg
 
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v7
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v6
+      with:
+        dotnet-version: 10.0.x
+    - name: Build the docs site
+      # Warnings include broken links and missing API docs, so they fail the build.
+      run: |
+        dotnet tool restore
+        dotnet docfx docfx.json --warningsAsErrors
+    - name: Upload the docs site
+      uses: actions/upload-artifact@v7
+      with:
+        name: docs-site
+        path: _site
+
   integration-tests:
     runs-on: ubuntu-latest
     services:

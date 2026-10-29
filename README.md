@@ -1,9 +1,8 @@
 # Resourcefull
 
-Resourcefull stores and serves files of any size from your own infrastructure. Upload, download, list
-and version **resources** in named **containers** through one client API, and keep the bytes in SQL
-Server, in memory for tests, or in a storage provider of your own. If you know the Azure Blob Storage
-SDK, the clients will feel familiar.
+Resourcefull stores and serves files of any type and size from infrastructure you run yourself. Upload, download,
+list and version **resources** in named **containers** through one client API, and keep the bytes in SQL Server, in
+memory for tests, or in a storage provider of your own.
 
 | Package | What it's for |
 |---|---|
@@ -13,31 +12,33 @@ SDK, the clients will feel familiar.
 
 ## Features
 
-- **Any size:** uploads and downloads stream in chunks, so memory use stays flat whatever the file size.
-- **Versioning:** keep up to N versions of each resource, list them, download any of them, and restore
-  an older one.
-- **Integrity:** every version records its length and SHA-256, measured as it is written. An upload
-  whose declared length doesn't match is rejected, and nothing is stored.
-- **Safe under concurrency:** each name always has exactly one current version, and create-only uploads
-  can't overwrite each other.
+- **Any size:** uploads and downloads stream, so memory use stays flat whatever the file size.
+- **Versioning:** keep up to N versions of each resource, list them, download any of them, and restore an older one.
+- **Integrity:** every version records its length and SHA-256 hash, measured as it's written. An upload whose
+  declared length doesn't match its content is rejected, and nothing is stored.
+- **Safe under concurrency:** each name always has exactly one current version, and create-only uploads can't
+  overwrite each other.
 - **Your own storage:** implement `IResourceRepository` and register it with `UseProvider`.
 
-## Getting started
+## Quick start
 
 ```shell
 dotnet add package Resourcefull
 dotnet add package Resourcefull.SqlServer   # or Resourcefull.InMemory
 ```
 
-Register Resourcefull with a provider:
+Register Resourcefull with a provider, and provision the database:
 
 ```csharp
 builder.Services.AddResourcefull(options => options
     .UseSqlServer(builder.Configuration.GetConnectionString("Resources")!)
     .UseVersioning(maxVersions: 10));
+
+var app = builder.Build();
+await app.Services.MigrateResourcefullDatabaseAsync();
 ```
 
-Then use `IResourceServiceClient` for containers and `IResourceContainerClient` for the resources in one:
+Then use `IResourceServiceClient` for containers, and a container client for the resources in one:
 
 ```csharp
 public class Reports(IResourceServiceClient resources)
@@ -47,41 +48,30 @@ public class Reports(IResourceServiceClient resources)
         IResourceContainerClient reports = await resources.CreateResourceContainerIfNotExistsAsync("reports");
         return await reports.UploadAsync(name, content, new ResourceUploadOptions
         {
+            Overwrite = true,
             Headers = new ResourceHeaders("application/pdf", null)
         });
     }
 
-    public async Task<Stream?> OpenAsync(string name)
-    {
-        ResourceDownloadResult? download = await resources.GetResourceContainerClient("reports").DownloadStreamingAsync(name);
-        return download?.Stream;
-    }
+    public async Task<ResourceDownloadResult?> OpenAsync(string name)
+        => await resources.GetResourceContainerClient("reports").DownloadStreamingAsync(name);
 }
 ```
 
-## SQL Server
-
-Point `UseSqlServer` at the database that should hold Resourcefull's tables, either its own or your
-application's. Provisioning turns on `READ_COMMITTED_SNAPSHOT` for that whole database, so give Resourcefull
-a database of its own if your application relies on read-committed locking. To provision it from the
-application, call `MigrateResourcefullDatabaseAsync`:
-
-```csharp
-var app = builder.Build();
-await app.Services.MigrateResourcefullDatabaseAsync();
-```
-
-`Resourcefull.SqlServer` also ships idempotent scripts in its `scripts` folder. Run `Resourcefull.sql`
-connected to the database to provision it. To bring an existing database up to date step by step, run the
-scripts under `scripts/Migrations/` that it is missing, oldest first, after reading the
-[upgrade guide](https://github.com/zacharydf7/Resourcefull/blob/main/docs/docs-v2-reference.md#upgrading-the-database-schema).
-The [reference](https://github.com/zacharydf7/Resourcefull/blob/main/docs/docs-v2-reference.md#sql-server-provider)
-covers provisioning and the recommended database settings.
-
 ## Documentation
 
-The [reference documentation](https://github.com/zacharydf7/Resourcefull/blob/main/docs/docs-v2-reference.md)
-covers every client method, the name rules, versioning, cancellation, errors and writing a provider.
+- [Getting started](https://github.com/zacharydf7/Resourcefull/blob/main/docs/getting-started.md)
+- [Concepts](https://github.com/zacharydf7/Resourcefull/blob/main/docs/index.md#concepts): containers and names,
+  uploads and downloads, versioning, concurrency, errors
+- [SQL Server](https://github.com/zacharydf7/Resourcefull/blob/main/docs/providers/sql-server.md): provisioning,
+  permissions and upgrades
+- [ASP.NET Core recipes](https://github.com/zacharydf7/Resourcefull/blob/main/docs/recipes/aspnet-core.md)
+- [Upgrading to 3.0](https://github.com/zacharydf7/Resourcefull/blob/main/docs/upgrading.md)
+- [All documentation](https://github.com/zacharydf7/Resourcefull/blob/main/docs/index.md)
+
+## Contributing
+
+See [CONTRIBUTING.md](https://github.com/zacharydf7/Resourcefull/blob/main/CONTRIBUTING.md).
 
 ## License
 

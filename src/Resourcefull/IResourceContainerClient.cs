@@ -59,7 +59,7 @@ public interface IResourceContainerClient : IDisposable
     /// Uploads a resource to the container from an in-memory payload.
     /// </summary>
     /// <param name="content">The content to upload.</param>
-    /// <inheritdoc cref="UploadAsync(string, Stream, ResourceUploadOptions?)"/>
+    /// <inheritdoc cref="UploadAsync(string, Stream, ResourceUploadOptions?)" path="/*[not(self::param[@name='content'])]"/>
     public Task<ResourceInfo> UploadAsync(string resourceName, BinaryData content, ResourceUploadOptions? uploadOptions = null);
 
     /// <inheritdoc cref="UploadAsync(string, BinaryData, ResourceUploadOptions?)"/>

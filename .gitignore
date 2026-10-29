@@ -398,3 +398,8 @@ FodyWeavers.xsd
 
 # JetBrains Rider
 *.sln.iml
+
+# The docs site (docfx.json): its build output and the generated API pages
+_site/
+api/*.yml
+api/.manifest

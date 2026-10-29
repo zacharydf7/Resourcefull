@@ -1,0 +1,38 @@
+- name: Overview
+  href: index.md
+- name: Getting started
+  href: getting-started.md
+- name: Concepts
+  items:
+  - name: Containers and names
+    href: containers-and-names.md
+  - name: Uploads and downloads
+    href: uploads-and-downloads.md
+  - name: Versioning
+    href: versioning.md
+  - name: Concurrency
+    href: concurrency.md
+  - name: Errors
+    href: errors.md
+  - name: URI providers
+    href: uri-providers.md
+- name: Providers
+  items:
+  - name: SQL Server
+    href: providers/sql-server.md
+  - name: In-memory
+    href: providers/in-memory.md
+  - name: Writing a provider
+    href: providers/writing-a-provider.md
+- name: Guides
+  items:
+  - name: ASP.NET Core recipes
+    href: recipes/aspnet-core.md
+  - name: Upgrading to 3.0
+    href: upgrading.md
+  - name: Troubleshooting
+    href: troubleshooting.md
+  - name: Samples
+    href: ../samples/README.md
+  - name: Contributing
+    href: ../CONTRIBUTING.md
