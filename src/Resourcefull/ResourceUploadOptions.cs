@@ -19,6 +19,14 @@ public class ResourceUploadOptions
     public bool CreateOnly { get; set; }
 
     /// <summary>
+    /// Store the upload only if the name's current version meets these, decided by the write itself; otherwise
+    /// <see cref="ResourcePreconditionFailedException"/> is thrown and nothing is stored. An upload that meets them
+    /// replaces the current version, as if <see cref="Overwrite"/> were set. Can't be combined with
+    /// <see cref="CreateOnly"/>.
+    /// </summary>
+    public ResourceConditions? Conditions { get; set; }
+
+    /// <summary>
     /// <inheritdoc cref="ResourceHeaders(string?, long?)"/>
     /// </summary>
     public ResourceHeaders? Headers { get; set; }

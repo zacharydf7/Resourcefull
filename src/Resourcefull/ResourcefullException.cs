@@ -34,6 +34,30 @@ public sealed class ResourceConflictException : ResourcefullException
 }
 
 /// <summary>
+/// Thrown when an upload or delete with <see cref="ResourceConditions"/> finds that the name's current version doesn't
+/// meet them. Nothing is changed. Maps naturally to an HTTP 412.
+/// </summary>
+public sealed class ResourcePreconditionFailedException : ResourcefullException
+{
+    /// <summary>Creates the exception with a message and what the name's current version was when it was checked.</summary>
+    /// <param name="message">The message that describes the error.</param>
+    /// <param name="currentVersionId">The current version's ID, or <see langword="null"/> when the name had none.</param>
+    /// <param name="currentContentHash">The current version's content hash, or <see langword="null"/> when it had none.</param>
+    public ResourcePreconditionFailedException(string message, string? currentVersionId, string? currentContentHash)
+        : base(message)
+    {
+        CurrentVersionId = currentVersionId;
+        CurrentContentHash = currentContentHash;
+    }
+
+    /// <summary>The name's current version ID when the conditions were checked; <see langword="null"/> when it had none.</summary>
+    public string? CurrentVersionId { get; }
+
+    /// <summary>The current version's content hash when the conditions were checked, if it had one.</summary>
+    public string? CurrentContentHash { get; }
+}
+
+/// <summary>
 /// Thrown when an upload declares a content length that differs from the bytes it supplies. Nothing is
 /// stored. Maps naturally to an HTTP 400.
 /// </summary>

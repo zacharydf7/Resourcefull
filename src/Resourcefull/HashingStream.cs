@@ -5,7 +5,7 @@ namespace Resourcefull;
 /// <summary>
 /// Passes reads through from another stream while counting and hashing every byte read. Providers read the content
 /// they store through one and return <see cref="Complete(long?, DateTimeOffset)"/>, with the time the version became
-/// current, from <see cref="IResourceRepository.AddResourceAsync"/>.
+/// current, from <see cref="IResourceRepository.AddResourceAsync(string, ResourceInfo, Stream, bool, CancellationToken)"/>.
 /// Disposing it does not dispose the source stream.
 /// </summary>
 public sealed class HashingStream(Stream source) : Stream

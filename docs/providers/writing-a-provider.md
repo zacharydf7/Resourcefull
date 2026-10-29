@@ -54,6 +54,19 @@ The XML documentation on each member states its contract in full. In short, a pr
   current version and calling it again finishes the job.
 - **Be safe to call concurrently** for the lifetime it registers with.
 
+### Conditional uploads and deletes
+
+The overloads of `AddResourceAsync` and `DeleteResourceAsync` that take conditions were added in 3.1, with default
+implementations, so a provider written for 3.0 still compiles. Those defaults throw `NotSupportedException` for an
+upload or delete with `ResourceConditions`, so an application using them gets a clear error instead of an unchecked
+write. The clients call these overloads only when a caller sets conditions. To support them, implement both overloads
+and:
+
+- **Decide the conditions in the write itself,** at the moment the version would become current, or under whatever
+  serializes writes to the name, so no other write can come between the check and the change.
+- **Treat a name with no current version as meeting no condition,** and empty conditions as none.
+- **Throw `ResourcePreconditionFailedException`** with the current version's ID and content hash, and change nothing.
+
 ## Testing a provider
 
 The repository's contract test suite, `tests/Resourcefull.Tests.Contract`, is an abstract xUnit class that runs the

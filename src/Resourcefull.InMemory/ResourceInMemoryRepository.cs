@@ -13,8 +13,27 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : I
     private readonly Dictionary<string, InMemoryResourceContainer> _containers = new(StringComparer.Ordinal);
     private long _lastSequence;
 
-    public async Task<WrittenContent> AddResourceAsync(string resourceContainerName, ResourceInfo resourceInfo, Stream stream, bool createOnly = false, CancellationToken cancellationToken = default)
+    public Task<WrittenContent> AddResourceAsync(string resourceContainerName, ResourceInfo resourceInfo, Stream stream, bool createOnly = false, CancellationToken cancellationToken = default) =>
+        AddResourceAsync(resourceContainerName, resourceInfo, stream, new ResourceWriteCondition { CreateOnly = createOnly }, cancellationToken);
+
+    public async Task<WrittenContent> AddResourceAsync(string resourceContainerName, ResourceInfo resourceInfo, Stream stream,
+        ResourceWriteCondition condition, CancellationToken cancellationToken = default)
     {
+        bool createOnly = condition.CreateOnly;
+        ResourceConditions? conditions = condition.Conditions;
+
+        // Checked again with the insert below; this only spares reading the content of an upload that will fail. A
+        // missing container is left for the insert to report, rather than unmet conditions.
+        if (conditions is not null)
+        {
+            await UnderLockAsync(() =>
+            {
+                if (_containers.ContainsKey(resourceContainerName))
+                    ThrowIfNotMet(conditions, resourceInfo.Name, VersionsOf(resourceContainerName, resourceInfo.Name).MaxBy(r => r.Sequence));
+                return true;
+            }, cancellationToken);
+        }
+
         using var buffer = new MemoryStream();
         using var content = new HashingStream(stream);
         await content.CopyToAsync(buffer, cancellationToken);
@@ -33,6 +52,7 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : I
             container.Resources.TryGetValue(resourceInfo.Name, out List<InMemoryResource>? versions);
             if (versions != null && versions.Any(v => v.ResourceInfo.VersionId == resourceInfo.VersionId))
                 throw new ResourceConflictException($"Resource {resourceInfo.Name} already has a version {resourceInfo.VersionId}.");
+            if (conditions is not null) ThrowIfNotMet(conditions, resourceInfo.Name, versions?.MaxBy(r => r.Sequence));
 
             // Stamped as the version becomes current, not before its content was read. A wrong declared length throws
             // here, before anything is stored.
@@ -85,8 +105,14 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : I
             : null, cancellationToken);
 
     public Task<bool> DeleteResourceAsync(string resourceContainerName, string resourceName, string? versionId = null, CancellationToken cancellationToken = default) =>
+        DeleteResourceAsync(resourceContainerName, resourceName, versionId, new ResourceConditions(), cancellationToken);
+
+    public Task<bool> DeleteResourceAsync(string resourceContainerName, string resourceName, string? versionId,
+        ResourceConditions conditions, CancellationToken cancellationToken = default) =>
         UnderLockAsync(() =>
         {
+            ThrowIfNotMet(conditions, resourceName, VersionsOf(resourceContainerName, resourceName).MaxBy(r => r.Sequence));
+
             if (_containers.GetValueOrDefault(resourceContainerName) is not { } container
                 || !container.Resources.TryGetValue(resourceName, out List<InMemoryResource>? versions))
                 return false;
@@ -138,6 +164,22 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : I
         finally
         {
             _gate.Release();
+        }
+    }
+
+    /// <summary>A name with no current version meets no condition; empty conditions are no conditions.</summary>
+    private static void ThrowIfNotMet(ResourceConditions conditions, string resourceName, InMemoryResource? current)
+    {
+        if (conditions.IfMatchVersionId is null && conditions.IfMatchContentHash is null) return;
+
+        string? versionId = current?.ResourceInfo.VersionId, contentHash = current?.ResourceInfo.ContentHash;
+        if (current is null
+            || (conditions.IfMatchVersionId is { } id && id != versionId)
+            || (conditions.IfMatchContentHash is { } hash && hash != contentHash))
+        {
+            throw new ResourcePreconditionFailedException(current is null
+                ? $"Resource {resourceName} has no current version to meet the conditions."
+                : $"Resource {resourceName}'s current version {versionId} doesn't meet the conditions.", versionId, contentHash);
         }
     }
 

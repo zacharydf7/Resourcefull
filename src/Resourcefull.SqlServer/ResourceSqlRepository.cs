@@ -35,8 +35,15 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
     /// </summary>
     internal int ChunksPerDeleteBatch { get; init; } = 256;
 
-    public async Task<WrittenContent> AddResourceAsync(string resourceContainerName, ResourceInfo resourceInfo, Stream stream, bool createOnly = false, CancellationToken cancellationToken = default)
+    public Task<WrittenContent> AddResourceAsync(string resourceContainerName, ResourceInfo resourceInfo, Stream stream, bool createOnly = false, CancellationToken cancellationToken = default) =>
+        AddResourceAsync(resourceContainerName, resourceInfo, stream, new ResourceWriteCondition { CreateOnly = createOnly }, cancellationToken);
+
+    public async Task<WrittenContent> AddResourceAsync(string resourceContainerName, ResourceInfo resourceInfo, Stream stream,
+        ResourceWriteCondition condition, CancellationToken cancellationToken = default)
     {
+        bool createOnly = condition.CreateOnly;
+        ResourceConditions? conditions = condition.Conditions;
+
         // The content streams into the version's chunks a batch at a time, so memory stays bounded whatever its size,
         // all in one transaction, so none of it is visible until the version is complete and current. The name's lock
         // is taken only at the end, to make the version current, so writers of one name queue for that switch rather
@@ -88,6 +95,11 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
             // Untracked while the chunks go in, or each would be added to its Chunks collection and kept.
             attempt.Entry(resource).State = EntityState.Detached;
 
+            // Checked again under the lock below, like create-only; this only spares reading the content of an upload
+            // that will fail. After the insert, so a missing container is reported rather than unmet conditions.
+            if (conditions is not null)
+                await ThrowIfNotMetAsync(attempt, conditions, resourceContainerName, resourceInfo.Name, ct);
+
             contentRead = true;
             using var content = new HashingStream(stream);
             var batch = new List<ResourceChunkModel>(ChunksPerUploadBatch);
@@ -109,6 +121,11 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
                 .ToListAsync(ct);
             if (createOnly && priorLatest.Count > 0)
                 throw new ResourceConflictException($"Resource with name {resourceInfo.Name} already exists.");
+            if (conditions is not null)
+            {
+                ResourceModel? current = priorLatest.FirstOrDefault();
+                ThrowIfNotMet(conditions, resourceInfo.Name, current?.VersionId, current?.ContentHash);
+            }
 
             // Stamped under the name's lock as the version becomes current, not before its content was read. A wrong
             // declared length throws here, before anything about the name changes.
@@ -217,6 +234,37 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
             EXEC @result = sp_getapplock @Resource = {lockName}, @LockMode = 'Exclusive', @LockOwner = 'Transaction';
             IF @result < 0 THROW 50000, 'Could not lock the resource name for writing.', 1;
             """, cancellationToken);
+    }
+
+    private static async Task ThrowIfNotMetAsync(ResourceDbContext dbContext, ResourceConditions conditions,
+        string resourceContainerName, string resourceName, CancellationToken cancellationToken)
+    {
+        if (conditions.IfMatchVersionId is null && conditions.IfMatchContentHash is null) return;
+
+        var current = await dbContext.Resources
+            .Where(r => r.ContainerName == resourceContainerName && r.Name == resourceName && r.IsLatest)
+            .Select(r => new { r.VersionId, r.ContentHash })
+            .FirstOrDefaultAsync(cancellationToken);
+        ThrowIfNotMet(conditions, resourceName, current?.VersionId, current?.ContentHash);
+    }
+
+    /// <summary>
+    /// A <see langword="null"/> <paramref name="currentVersionId"/> means the name has no current version, which meets
+    /// no condition; empty conditions are no conditions.
+    /// </summary>
+    private static void ThrowIfNotMet(ResourceConditions conditions, string resourceName, string? currentVersionId, string? currentContentHash)
+    {
+        if (conditions.IfMatchVersionId is null && conditions.IfMatchContentHash is null) return;
+
+        if (currentVersionId is null
+            || (conditions.IfMatchVersionId is { } id && id != currentVersionId)
+            || (conditions.IfMatchContentHash is { } hash && hash != currentContentHash))
+        {
+            throw new ResourcePreconditionFailedException(currentVersionId is null
+                ? $"Resource {resourceName} has no current version to meet the conditions."
+                : $"Resource {resourceName}'s current version {currentVersionId} doesn't meet the conditions.",
+                currentVersionId, currentContentHash);
+        }
     }
 
     private static bool IsUniqueViolation(DbUpdateException exception) =>
@@ -393,9 +441,29 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
     }
 
     public Task<bool> DeleteResourceAsync(string resourceContainerName, string resourceName, string? versionId = null, CancellationToken cancellationToken = default) =>
-        // Under the name's lock, so a concurrent delete of the same version finds it gone instead of failing, and the
-        // promotion of the next version can't race a write.
-        WriteNameAsync(resourceContainerName, resourceName, async (dbContext, ct) =>
+        DeleteResourceAsync(resourceContainerName, resourceName, versionId, new ResourceConditions(), cancellationToken);
+
+    public Task<bool> DeleteResourceAsync(string resourceContainerName, string resourceName, string? versionId,
+        ResourceConditions conditions, CancellationToken cancellationToken = default)
+    {
+        bool deletedInAnEarlierAttempt = false;
+
+        // Under the name's lock, so a concurrent delete of the same version finds it gone instead of failing, the
+        // promotion of the next version can't race a write, and the conditions hold until the delete commits.
+        return WriteNameAsync(resourceContainerName, resourceName, async (dbContext, ct) =>
+        {
+            // A retry after a commit whose acknowledgement was lost finds what it deleted gone. The conditions it met
+            // no longer hold then, and it mustn't report that nothing was deleted.
+            if (deletedInAnEarlierAttempt && !await dbContext.Resources.AnyAsync(r => r.ContainerName == resourceContainerName
+                && r.Name == resourceName && (versionId == null || r.VersionId == versionId), ct))
+                return true;
+
+            await ThrowIfNotMetAsync(dbContext, conditions, resourceContainerName, resourceName, ct);
+            deletedInAnEarlierAttempt = await DeleteVersionsAsync(dbContext, ct);
+            return deletedInAnEarlierAttempt;
+        }, cancellationToken);
+
+        async Task<bool> DeleteVersionsAsync(ResourceDbContext dbContext, CancellationToken ct)
         {
             if (versionId == null)
             {
@@ -423,7 +491,8 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
             }
 
             return await dbContext.SaveChangesAsync(ct) > 0;
-        }, cancellationToken);
+        }
+    }
 
     public async Task AddResourceContainerAsync(ResourceContainerInfo resourceContainerInfo, CancellationToken cancellationToken = default)
     {

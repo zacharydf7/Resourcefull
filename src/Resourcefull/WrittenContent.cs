@@ -1,7 +1,7 @@
 namespace Resourcefull;
 
 /// <summary>
-/// What a repository wrote, as returned by <see cref="IResourceRepository.AddResourceAsync"/>: the length and hash of
+/// What a repository wrote, as returned by <see cref="IResourceRepository.AddResourceAsync(string, ResourceInfo, Stream, bool, CancellationToken)"/>: the length and hash of
 /// the bytes stored, and when the version became current.
 /// </summary>
 /// <param name="ContentLength">The number of bytes stored.</param>

@@ -21,9 +21,16 @@ internal partial class ResourceContainerClient(IResourceRepository resourceRepos
         ResourceNames.ThrowIfInvalidResourceName(resourceName);
 
         uploadOptions ??= new ResourceUploadOptions();
+        ResourceConditions? conditions = uploadOptions.Conditions is { IsEmpty: false } set ? set : null;
+        if (uploadOptions.CreateOnly && conditions is not null)
+            throw new ArgumentException(
+                $"{nameof(ResourceUploadOptions.CreateOnly)} and {nameof(ResourceUploadOptions.Conditions)} can't both be set: " +
+                "a create-only upload requires that the name has no current version, and conditions require one.", nameof(uploadOptions));
 
-        // Without versioning, an upload that may not overwrite is a create-only write.
-        bool createOnly = uploadOptions.CreateOnly || (!options.IsVersioningEnabled && !uploadOptions.Overwrite);
+        // Without versioning, an upload that may not overwrite is a create-only write; one with conditions replaces
+        // the version they match.
+        bool createOnly = uploadOptions.CreateOnly
+            || (!options.IsVersioningEnabled && !uploadOptions.Overwrite && conditions is null);
 
         var resourceInfo = new ResourceInfo
         {
@@ -37,7 +44,7 @@ internal partial class ResourceContainerClient(IResourceRepository resourceRepos
 
         try
         {
-            return await SaveNewResourceVersionAsync(content, resourceName, resourceInfo, createOnly, cancellationToken);
+            return await SaveNewResourceVersionAsync(content, resourceName, resourceInfo, createOnly, conditions, cancellationToken);
         }
         catch (ResourceConflictException exception) when (!uploadOptions.CreateOnly)
         {
@@ -84,16 +91,21 @@ internal partial class ResourceContainerClient(IResourceRepository resourceRepos
             Metadata = resourceInfo.Metadata
         };
 
-        return await SaveNewResourceVersionAsync(stream, resourceName, newResourceInfo, createOnly: false, cancellationToken);
+        return await SaveNewResourceVersionAsync(stream, resourceName, newResourceInfo, createOnly: false, conditions: null, cancellationToken);
     }
 
-    private async Task<ResourceInfo> SaveNewResourceVersionAsync(Stream stream, string resourceName, ResourceInfo resourceInfo, bool createOnly, CancellationToken cancellationToken)
+    private async Task<ResourceInfo> SaveNewResourceVersionAsync(Stream stream, string resourceName, ResourceInfo resourceInfo, bool createOnly,
+        ResourceConditions? conditions, CancellationToken cancellationToken)
     {
         // Stored too, for applications on 2.x, which read it from storage, while they share a database with this release
         // during an upgrade.
         WithUri(resourceInfo);
 
-        WrittenContent written = await resourceRepository.AddResourceAsync(ContainerName, resourceInfo, stream, createOnly, cancellationToken);
+        // Only a conditional upload takes the newer overload, so a provider written for 3.0 handles every other upload.
+        WrittenContent written = conditions is null
+            ? await resourceRepository.AddResourceAsync(ContainerName, resourceInfo, stream, createOnly, cancellationToken)
+            : await resourceRepository.AddResourceAsync(ContainerName, resourceInfo, stream,
+                new ResourceWriteCondition { CreateOnly = createOnly, Conditions = conditions }, cancellationToken);
 
         // Report what was stored rather than what was asked for.
         resourceInfo.ContentLength = written.ContentLength;
@@ -219,6 +231,16 @@ internal partial class ResourceContainerClient(IResourceRepository resourceRepos
     {
         ResourceNames.ThrowIfInvalidResourceName(resourceName);
         return await resourceRepository.DeleteResourceAsync(ContainerName, resourceName, versionId, cancellationToken);
+    }
+
+    public async Task<bool> DeleteResourceIfExistsAsync(string resourceName, string? versionId, ResourceConditions? conditions,
+        CancellationToken cancellationToken)
+    {
+        if (conditions is null or { IsEmpty: true })
+            return await DeleteResourceIfExistsAsync(resourceName, versionId, cancellationToken);
+
+        ResourceNames.ThrowIfInvalidResourceName(resourceName);
+        return await resourceRepository.DeleteResourceAsync(ContainerName, resourceName, versionId, conditions, cancellationToken);
     }
 
     public Task<bool> ExistsAsync(string resourceName, string? versionId = null)

@@ -22,7 +22,7 @@ namespace Resourcefull;
 /// <item>Treat a version as current when it was stored most recently, never by <see cref="ResourceInfo.LastModified"/>,
 /// and never leave a name with more than one current version, however writes and deletes interleave.</item>
 /// <item>Store the <see cref="WrittenContent.ContentLength"/>, <see cref="WrittenContent.ContentHash"/> and
-/// <see cref="WrittenContent.LastModified"/> that <see cref="AddResourceAsync"/> returns with the version, and return
+/// <see cref="WrittenContent.LastModified"/> that <see cref="AddResourceAsync(string, ResourceInfo, Stream, bool, CancellationToken)"/> returns with the version, and return
 /// them on every read.</item>
 /// <item>Observe every <c>cancellationToken</c>: a cancelled operation throws <see cref="OperationCanceledException"/>
 /// and never reports success or a partial result.</item>
@@ -65,6 +65,30 @@ public interface IResourceRepository
     Task<WrittenContent> AddResourceAsync(string resourceContainerName, ResourceInfo resourceInfo, Stream stream, bool createOnly = false, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Adds a resource as <see cref="AddResourceAsync(string, ResourceInfo, Stream, bool, CancellationToken)"/> does,
+    /// storing it only if the name meets <paramref name="condition"/>. The clients call this only for an upload with
+    /// <see cref="ResourceUploadOptions.Conditions"/>. A provider that supports conditions must decide them from the
+    /// write itself, at the point the version would become current, so a concurrent change to the name can't come
+    /// between the check and the write. The default implementation handles an upload without conditions and throws
+    /// <see cref="NotSupportedException"/> for one with them.
+    /// </summary>
+    /// <param name="resourceContainerName">The container to add to.</param>
+    /// <param name="resourceInfo">The version to store.</param>
+    /// <param name="stream">The content, as for the other overload.</param>
+    /// <param name="condition">What the name must be like for the version to be stored.</param>
+    /// <param name="cancellationToken">Cancels the write; a cancelled write stores nothing.</param>
+    /// <returns>As for the other overload.</returns>
+    /// <exception cref="ResourcePreconditionFailedException">
+    /// The name's current version doesn't meet <see cref="ResourceWriteCondition.Conditions"/>; nothing was stored.
+    /// </exception>
+    /// <exception cref="NotSupportedException">The provider doesn't support conditional writes.</exception>
+    Task<WrittenContent> AddResourceAsync(string resourceContainerName, ResourceInfo resourceInfo, Stream stream,
+        ResourceWriteCondition condition, CancellationToken cancellationToken = default)
+        => condition.Conditions is null or { IsEmpty: true }
+            ? AddResourceAsync(resourceContainerName, resourceInfo, stream, condition.CreateOnly, cancellationToken)
+            : throw new NotSupportedException($"{GetType().Name} doesn't support conditional uploads.");
+
+    /// <summary>
     /// Lists the current version of every resource in a container, each with <see cref="ResourceInfo.IsLatest"/> set.
     /// </summary>
     /// <returns>The resources; empty when the container is empty or does not exist.</returns>
@@ -101,11 +125,33 @@ public interface IResourceRepository
     /// including when a concurrent delete removed it first.</returns>
     Task<bool> DeleteResourceAsync(string resourceContainerName, string resourceName, string? versionId = null, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Deletes as <see cref="DeleteResourceAsync(string, string, string?, CancellationToken)"/> does, only if the name's
+    /// current version meets <paramref name="conditions"/>, decided by the delete itself. A name with no current
+    /// version meets no condition. The clients call this only for a delete with conditions. The default implementation
+    /// handles empty conditions and throws <see cref="NotSupportedException"/> otherwise.
+    /// </summary>
+    /// <param name="resourceContainerName">The container of the resource.</param>
+    /// <param name="resourceName">The resource's name.</param>
+    /// <param name="versionId">The version to delete, or <see langword="null"/> for every version.</param>
+    /// <param name="conditions">What the name's current version must be like.</param>
+    /// <param name="cancellationToken">Cancels the delete; a cancelled delete deletes nothing.</param>
+    /// <returns>As for the other overload.</returns>
+    /// <exception cref="ResourcePreconditionFailedException">
+    /// The name's current version doesn't meet <paramref name="conditions"/>, or the name doesn't exist; nothing was deleted.
+    /// </exception>
+    /// <exception cref="NotSupportedException">The provider doesn't support conditional deletes.</exception>
+    Task<bool> DeleteResourceAsync(string resourceContainerName, string resourceName, string? versionId,
+        ResourceConditions conditions, CancellationToken cancellationToken = default)
+        => conditions.IsEmpty
+            ? DeleteResourceAsync(resourceContainerName, resourceName, versionId, cancellationToken)
+            : throw new NotSupportedException($"{GetType().Name} doesn't support conditional deletes.");
+
     // Resource Containers
 
     /// <summary>
     /// Adds a container, storing a copy of its <see cref="ResourceContainerInfo.Metadata"/>. Like
-    /// <see cref="AddResourceAsync"/>, a duplicate is detected by the write itself. Storing
+    /// <see cref="AddResourceAsync(string, ResourceInfo, Stream, bool, CancellationToken)"/>, a duplicate is detected by the write itself. Storing
     /// <see cref="ResourceContainerInfo.Uri"/> is optional: the clients replace it with the URI provider's whenever
     /// they return a container or version.
     /// </summary>

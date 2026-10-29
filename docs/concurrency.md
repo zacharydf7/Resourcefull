@@ -25,8 +25,39 @@ same guarantees:
   deadlocks that contention still causes are retried for you.
 
 What isn't coordinated is the order of independent operations. Two overwriting uploads that run at once both succeed,
-and the one that's made current last wins. If an application needs "update only if unchanged", it has to check
-`VersionId` or `ContentHash` itself, and accept that another upload can land between its check and its write.
+and the one that's made current last wins.
+
+## Updating only if unchanged
+
+When a client reads a resource, changes it and uploads it again, another client can do the same in between, and one
+of the two changes is silently lost. Make the upload conditional on the version you read:
+
+```csharp
+ResourceInfo read = (await container.GetResourceInfoAsync("report.docx"))!;
+// ... edit ...
+await container.UploadAsync("report.docx", edited, new ResourceUploadOptions
+{
+    Conditions = new ResourceConditions { IfMatchVersionId = read.VersionId }
+});
+```
+
+The condition is checked by the write itself, at the moment it would make the new version current, so of several
+clients that read the same version, exactly one succeeds. The others get `ResourcePreconditionFailedException`, which
+carries the version that's current now (`CurrentVersionId` and `CurrentContentHash`), and nothing of theirs is stored.
+They can read again, reapply their change and retry.
+
+- **`IfMatchContentHash`** compares the content hash instead. The [ASP.NET Core recipe](recipes/aspnet-core.md)
+  sends it as the `ETag`, in quotes as HTTP requires, so pass the tag from an `If-Match` header without its quotes,
+  and handle `*`, weak tags (`W/"…"`) and lists of tags yourself. Versions stored before 3.0 have no hash until the
+  [backfill](providers/sql-server.md#recording-hashes-for-older-versions) records one, and until then they meet no
+  hash condition.
+- **Set both** and both must hold.
+- **A name with no current version meets no condition.** For "only if it doesn't exist yet", use `CreateOnly`; it
+  can't be combined with conditions.
+- **A conditional upload replaces the version it matched**, even without versioning or `Overwrite`.
+- **Deletes take conditions too**, with
+  `DeleteResourceIfExistsAsync(name, versionId, conditions, cancellationToken)`. The conditions apply to the name's
+  current version, and a name that doesn't exist throws rather than returning `false`.
 
 Clients are safe to share. `IResourceServiceClient` is registered as a scoped service, and a container client is a
 lightweight handle over it, so create them freely per request or per unit of work.

@@ -35,7 +35,11 @@ public interface IResourceContainerClient : IDisposable
     /// What was stored: the new version, its measured <see cref="ResourceInfo.ContentLength"/> and
     /// <see cref="ResourceInfo.ContentHash"/>, and <see cref="ResourceInfo.IsLatest"/> set.
     /// </returns>
-    /// <exception cref="ArgumentException"><paramref name="resourceName"/> is null, empty, longer than 256 characters, or starts or ends with whitespace (<see cref="ArgumentNullException"/> when null).</exception>
+    /// <exception cref="ArgumentException">
+    /// <paramref name="resourceName"/> is null, empty, longer than 256 characters, or starts or ends with whitespace
+    /// (<see cref="ArgumentNullException"/> when null); or <see cref="ResourceUploadOptions.CreateOnly"/> and
+    /// <see cref="ResourceUploadOptions.Conditions"/> are both set.
+    /// </exception>
     /// <exception cref="ArgumentNullException"><paramref name="content"/> is null.</exception>
     /// <exception cref="ResourceContentLengthMismatchException">
     /// <see cref="ResourceUploadOptions.Headers"/> declares a content length that differs from the content; nothing was stored.
@@ -45,8 +49,14 @@ public interface IResourceContainerClient : IDisposable
     /// <see cref="ResourceUploadOptions.CreateOnly"/> is set, or versioning is disabled and
     /// <see cref="ResourceUploadOptions.Overwrite"/> is <see langword="false"/>.
     /// </exception>
+    /// <exception cref="ResourcePreconditionFailedException">
+    /// The name's current version doesn't meet <see cref="ResourceUploadOptions.Conditions"/>; nothing was stored.
+    /// </exception>
     /// <exception cref="ResourceContainerNotFoundException">
     /// The container does not exist: it was never created, or it was deleted before the write.
+    /// </exception>
+    /// <exception cref="NotSupportedException">
+    /// <see cref="ResourceUploadOptions.Conditions"/> is set and the storage provider doesn't support conditional uploads.
     /// </exception>
     public Task<ResourceInfo> UploadAsync(string resourceName, Stream content, ResourceUploadOptions? uploadOptions = null);
 
@@ -167,6 +177,32 @@ public interface IResourceContainerClient : IDisposable
     /// <param name="cancellationToken">Cancels the delete.</param>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was cancelled.</exception>
     public Task<bool> DeleteResourceIfExistsAsync(string resourceName, string? versionId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Deletes as <see cref="DeleteResourceIfExistsAsync(string, string?, CancellationToken)"/> does, only if the
+    /// name's current version meets <paramref name="conditions"/>, decided by the delete itself. The conditions apply to
+    /// the current version even when <paramref name="versionId"/> names another one. A name that doesn't exist meets no
+    /// condition, so with conditions this throws rather than returning <see langword="false"/> for it.
+    /// </summary>
+    /// <param name="resourceName">The name of the resource to delete.</param>
+    /// <param name="versionId">The one version to delete, or <see langword="null"/> for the resource and every version.</param>
+    /// <param name="conditions">What the name's current version must be like; <see langword="null"/> for none.</param>
+    /// <param name="cancellationToken">Cancels the delete.</param>
+    /// <returns><see langword="true"/> if anything was deleted; otherwise <see langword="false"/>.</returns>
+    /// <exception cref="ResourcePreconditionFailedException">
+    /// The name's current version doesn't meet <paramref name="conditions"/>, or the name doesn't exist; nothing was deleted.
+    /// </exception>
+    /// <exception cref="ArgumentException"><paramref name="resourceName"/> is null, empty, longer than 256 characters, or starts or ends with whitespace (<see cref="ArgumentNullException"/> when null).</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was cancelled.</exception>
+    /// <exception cref="NotSupportedException">
+    /// The implementation doesn't support conditions: this default implementation, kept so implementations written for
+    /// 3.0 still compile, supports only <see langword="null"/> or empty <paramref name="conditions"/>.
+    /// </exception>
+    public Task<bool> DeleteResourceIfExistsAsync(string resourceName, string? versionId, ResourceConditions? conditions,
+        CancellationToken cancellationToken)
+        => conditions is null or { IsEmpty: true }
+            ? DeleteResourceIfExistsAsync(resourceName, versionId, cancellationToken)
+            : throw new NotSupportedException($"{GetType().Name} doesn't support conditional deletes.");
 
     /// <summary>
     /// Checks whether a resource (or a specific version) exists in the container.

@@ -9,7 +9,7 @@ using Resourcefull.SqlServer;
 namespace Resourcefull.Tests.Integration;
 
 /// <summary>
-/// An upload or download the execution strategy retries after a transient failure. An upload's retry needs a real
+/// An upload, download or delete the execution strategy retries after a transient failure. An upload's retry needs a real
 /// transaction to roll back, and a download's a real connection to read pages through, so these run against SQL Server,
 /// with one simulated failure injected at a chosen point.
 /// </summary>
@@ -99,7 +99,27 @@ public class UploadRetryIntegrationTests(SqlServerFixture fixture)
         Assert.Equal(Payload, await ReadAsync(repository, c));
     }
 
-    private async Task<(ResourceSqlRepository, string)> NewRepositoryAsync(FailOnceInterceptor failure)
+    [SkippableFact]
+    public async Task DeleteResourceAsync_ShouldReportTheDelete_WhenAConditionalDeleteCommitsButItsAcknowledgementIsLost()
+    {
+        fixture.SkipIfUnavailable();
+
+        // Arrange: the retry finds the version it matched gone, so its conditions no longer hold.
+        var failure = new FailOnceInterceptor(failAfterCommit: true);
+        (ResourceSqlRepository repository, string c) = await NewRepositoryAsync(failure, arm: false);
+        await repository.AddResourceAsync(c, Version(c), new MemoryStream(Payload));
+        failure.Arm();
+
+        // Act
+        bool deleted = await repository.DeleteResourceAsync(c, "n", null, new ResourceConditions { IfMatchVersionId = "v1" });
+
+        // Assert
+        Assert.True(failure.Failed);
+        Assert.True(deleted);
+        Assert.Empty(await repository.GetResourceVersionsAsync(c, "n"));
+    }
+
+    private async Task<(ResourceSqlRepository, string)> NewRepositoryAsync(FailOnceInterceptor failure, bool arm = true)
     {
         DbContextOptions<ResourceDbContext> options = new DbContextOptionsBuilder<ResourceDbContext>()
             .UseSqlServer(fixture.ConnectionString, sql => sql.ExecutionStrategy(dependencies => new RetryOnSimulatedFailure(dependencies)))
@@ -108,7 +128,7 @@ public class UploadRetryIntegrationTests(SqlServerFixture fixture)
         var repository = new ResourceSqlRepository(new PooledDbContextFactory<ResourceDbContext>(options));
         string containerName = $"c-{Guid.NewGuid():N}";
         await repository.AddResourceContainerAsync(new ResourceContainerInfo { Name = containerName });
-        failure.Arm();
+        if (arm) failure.Arm();
         return (repository, containerName);
     }
 

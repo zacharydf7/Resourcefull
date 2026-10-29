@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **Conditional uploads and deletes.** `ResourceUploadOptions.Conditions` and a `DeleteResourceIfExistsAsync`
+  overload take `ResourceConditions`, so a write goes ahead only if the name's current version still has the version
+  ID or content hash you read. The write decides it, so of concurrent writers that read the same version exactly one
+  succeeds; the rest throw the new `ResourcePreconditionFailedException` (HTTP 412). See
+  [Updating only if unchanged](docs/concurrency.md#updating-only-if-unchanged).
+- **For provider authors:** conditional overloads of `IResourceRepository.AddResourceAsync` and
+  `DeleteResourceAsync`, with default implementations, so providers written for 3.0 keep compiling and refuse
+  conditional writes with `NotSupportedException`.
+
+### Fixed
+
+- With SQL Server, a delete whose commit succeeded but whose acknowledgement was lost to a transient error, and was
+  retried, reported that nothing was deleted. It now reports the delete.
+
 ## 3.0.0
 
 The first release of Resourcefull for general use. Coming from an earlier release, read

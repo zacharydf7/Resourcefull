@@ -113,6 +113,7 @@ public sealed class ResourcefullExceptionHandler(IProblemDetailsService problemD
             ResourceConflictException => StatusCodes.Status409Conflict,
             ResourceContainerNotFoundException => StatusCodes.Status404NotFound,
             ResourceContentLengthMismatchException => StatusCodes.Status400BadRequest,
+            ResourcePreconditionFailedException => StatusCodes.Status412PreconditionFailed,
             // A name that breaks the name rules, or an empty version ID; other ArgumentExceptions are bugs.
             ArgumentException { ParamName: "resourceName" or "resourceContainerName" or "versionId" }
                 => StatusCodes.Status400BadRequest,
