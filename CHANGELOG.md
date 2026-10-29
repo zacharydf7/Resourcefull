@@ -4,6 +4,13 @@
 
 ### Added
 
+- **Container policies.** `UseContainerPolicies` sets limits for every container, and `UsePolicyProvider` gives any
+  container its own, such as a quota for each user's container that an admin can change while the application runs:
+  `MaxResourceSize`, `MaxContainerSize`, `MaxResourceCount`, `AllowedContentTypes` and `ReadOnly`. Sizes are
+  `ResourceSize` values, such as `ResourceSize.Megabytes(100)`, or `"100 MB"` in configuration. A refused write throws
+  `ResourcePolicyViolationException` and stores nothing, and `AddResourcefullExceptionHandler` turns it into 413, 403
+  or 415. `GetUsageAsync` reports what a container holds. Providers get `GetContainerUsageAsync` with a default
+  implementation, so providers written for 3.1 keep working. See [Container policies](docs/container-policies.md).
 - **Range downloads.** A `DownloadStreamingAsync` overload takes a `ResourceRange` and reads only those bytes from
   storage, for resuming downloads and seeking in media; every download's result now has `TotalLength`, and `Range`
   for a range. `Results.Resource(container, name)` in `Resourcefull.AspNetCore` looks the resource up itself and

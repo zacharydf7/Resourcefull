@@ -12,7 +12,12 @@ public class ResourcefullExceptionHandlerTests
         { new ResourceContainerNotFoundException("Resource Container files does not exist."), HttpStatusCode.NotFound },
         { new ResourceContentLengthMismatchException("The length doesn't match."), HttpStatusCode.BadRequest },
         { new ResourceNameException("Name must not start or end with whitespace.", "resourceName"), HttpStatusCode.BadRequest },
-        { new ResourcePreconditionFailedException("Resource report.txt doesn't meet the conditions.", "v2", "sha256:current"), HttpStatusCode.PreconditionFailed }
+        { new ResourcePreconditionFailedException("Resource report.txt doesn't meet the conditions.", "v2", "sha256:current"), HttpStatusCode.PreconditionFailed },
+        { new ResourcePolicyViolationException("Too large.", ResourcePolicyRule.MaxResourceSize, 10), HttpStatusCode.RequestEntityTooLarge },
+        { new ResourcePolicyViolationException("No room.", ResourcePolicyRule.MaxContainerSize, 10), HttpStatusCode.RequestEntityTooLarge },
+        { new ResourcePolicyViolationException("Too many.", ResourcePolicyRule.MaxResourceCount, 10), HttpStatusCode.Forbidden },
+        { new ResourcePolicyViolationException("Not that type.", ResourcePolicyRule.AllowedContentTypes), HttpStatusCode.UnsupportedMediaType },
+        { new ResourcePolicyViolationException("Read-only.", ResourcePolicyRule.ReadOnly), HttpStatusCode.Forbidden }
     };
 
     [Theory]

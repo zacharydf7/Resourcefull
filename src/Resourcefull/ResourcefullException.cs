@@ -98,3 +98,31 @@ public sealed class ResourceContainerNotFoundException : ResourcefullException
     /// <param name="innerException">The exception that caused this one.</param>
     public ResourceContainerNotFoundException(string message, Exception innerException) : base(message, innerException) { }
 }
+
+/// <summary>
+/// Thrown when a write breaks its container's <see cref="ResourceContainerPolicy"/>. Nothing is changed. Maps naturally
+/// to an HTTP 413 for content too large for the limits, 403 for a container that's read-only or holds as many
+/// resources as it may, and 415 for a content type that isn't allowed.
+/// </summary>
+public sealed class ResourcePolicyViolationException : ResourcefullException
+{
+    /// <summary>Creates the exception with a message, the rule that was broken, and its limit.</summary>
+    /// <param name="message">The message that describes the error.</param>
+    /// <param name="rule">The rule the write broke.</param>
+    /// <param name="limit">The rule's limit, for the size and count rules.</param>
+    public ResourcePolicyViolationException(string message, ResourcePolicyRule rule, long? limit = null) : base(message)
+    {
+        Rule = rule;
+        Limit = limit;
+    }
+
+    /// <summary>The rule the write broke.</summary>
+    public ResourcePolicyRule Rule { get; }
+
+    /// <summary>
+    /// The rule's limit: bytes for <see cref="ResourcePolicyRule.MaxResourceSize"/> and
+    /// <see cref="ResourcePolicyRule.MaxContainerSize"/>, a number of resources for
+    /// <see cref="ResourcePolicyRule.MaxResourceCount"/>, and <see langword="null"/> for the other rules.
+    /// </summary>
+    public long? Limit { get; }
+}

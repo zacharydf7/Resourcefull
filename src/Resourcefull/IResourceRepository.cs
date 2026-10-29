@@ -243,4 +243,29 @@ public interface IResourceRepository
     /// </summary>
     /// <returns><see langword="true"/> if the container existed and was deleted; otherwise <see langword="false"/>.</returns>
     Task<bool> DeleteResourceContainerAsync(string resourceContainerName, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Gets what a container holds: the total <see cref="ResourceInfo.ContentLength"/> of every version, and how many
+    /// resources and versions there are. Container policies read it before each write they limit, so a provider should
+    /// answer it without reading content. The default implementation lists every resource's versions, one name at a
+    /// time; override it if the store can add them up itself.
+    /// </summary>
+    /// <param name="resourceContainerName">The container.</param>
+    /// <param name="cancellationToken">Cancels the lookup.</param>
+    /// <returns>The container's usage; nothing stored when the container doesn't exist.</returns>
+    async Task<ResourceContainerUsage> GetContainerUsageAsync(string resourceContainerName, CancellationToken cancellationToken = default)
+    {
+        List<ResourceInfo> resources = await GetAllResourceInfoAsync(resourceContainerName, cancellationToken);
+        long storedBytes = 0, versionCount = 0;
+        foreach (ResourceInfo resource in resources)
+        {
+            foreach (ResourceInfo version in await GetResourceVersionsAsync(resourceContainerName, resource.Name, cancellationToken))
+            {
+                storedBytes += version.ContentLength ?? 0;
+                versionCount++;
+            }
+        }
+
+        return new ResourceContainerUsage(storedBytes, resources.Count, versionCount);
+    }
 }

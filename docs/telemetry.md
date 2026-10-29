@@ -57,6 +57,7 @@ metrics. It also has:
 | `download` | `DownloadStreamingAsync`, `DownloadContentAsync` | for a range, `resourcefull.range`, as HTTP writes it: `100-199`, or `100-` to the end |
 | `get_info` | `GetResourceInfoAsync` | |
 | `exists` | `ExistsAsync` | |
+| `get_usage` | `GetUsageAsync` | |
 | `list` | `GetResourcesAsync` | |
 | `list_page` | `GetResourcePageAsync`, and each page `ListResourcesAsync` fetches | `resourcefull.page_size` |
 | `list_versions` | `GetResourceVersionsAsync` | |
@@ -70,7 +71,10 @@ metrics. It also has:
 | `backfill` | `ContentHashBackfill.RunAsync` (SQL Server) | span only; `resourcefull.hashed`, `resourcefull.mismatches` |
 | `health_check` | `AddResourcefullCheck`; `AddResourcefullSqlServerCheck` (span only) | for SQL Server, `resourcefull.pending_migrations` |
 
-`GetResourceContainerClient` doesn't contact storage, so it records nothing.
+`GetResourceContainerClient` doesn't contact storage, so it records nothing. With
+[container policies](container-policies.md), every operation that checks one (`upload`, `restore`, `delete` and
+`delete_container`) records a `resourcefull get_policy` child span when it asks the policy provider, and
+`resourcefull.policy_rule` when the policy refuses it.
 
 ## ASP.NET Core
 

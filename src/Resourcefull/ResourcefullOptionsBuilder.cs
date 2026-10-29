@@ -5,7 +5,7 @@ namespace Resourcefull;
 
 /// <summary>
 /// Configures Resourcefull inside <see cref="ResourcefullServiceCollectionExtensions.AddResourcefull"/>: its storage
-/// provider, versioning and URI provider.
+/// provider, versioning, URI provider, telemetry and container policies.
 /// </summary>
 public class ResourcefullOptionsBuilder
 {
@@ -99,6 +99,41 @@ public class ResourcefullOptionsBuilder
     {
         ArgumentNullException.ThrowIfNull(configure);
         Services.Configure<ResourcefullOptions>(options => configure(options.Telemetry));
+        return this;
+    }
+
+    /// <summary>
+    /// Turns on container policies, with <paramref name="defaults"/> for every container, replacing any set before.
+    /// Add <see cref="UsePolicyProvider{TProvider}"/> to give containers their own. Without either, no policy is checked.
+    /// </summary>
+    /// <param name="defaults">The policy every container has, unless its own says otherwise; none when null.</param>
+    /// <param name="cacheFor">
+    /// How long a container's policy is kept before the policy provider is asked again, so how long a change can take
+    /// to apply: 5 seconds when null, and zero to ask on every write.
+    /// </param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="cacheFor"/> is negative.</exception>
+    public ResourcefullOptionsBuilder UseContainerPolicies(ResourceContainerPolicy? defaults = null, TimeSpan? cacheFor = null)
+    {
+        if (cacheFor < TimeSpan.Zero)
+            throw new ArgumentOutOfRangeException(nameof(cacheFor), cacheFor, "The cache time can't be negative.");
+
+        Services.RemoveAll<ContainerPolicySettings>();
+        Services.AddSingleton(_ => new ContainerPolicySettings(defaults ?? new ResourceContainerPolicy(), cacheFor ?? TimeSpan.FromSeconds(5)));
+        Services.TryAddScoped<ContainerPolicies>();
+        return this;
+    }
+
+    /// <summary>
+    /// Uses <typeparamref name="TProvider"/> to give containers their own policies, replacing any policy provider set
+    /// before, and turns on container policies with no defaults if <see cref="UseContainerPolicies"/> hasn't. It's
+    /// registered as a scoped service, so it can depend on other services, such as the application's database context.
+    /// </summary>
+    /// <typeparam name="TProvider">The <see cref="IResourcePolicyProvider"/> implementation.</typeparam>
+    public ResourcefullOptionsBuilder UsePolicyProvider<TProvider>() where TProvider : class, IResourcePolicyProvider
+    {
+        Services.RemoveAll<IResourcePolicyProvider>();
+        Services.AddScoped<IResourcePolicyProvider, TProvider>();
+        if (!Services.Any(d => d.ServiceType == typeof(ContainerPolicySettings))) UseContainerPolicies();
         return this;
     }
 }

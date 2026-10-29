@@ -30,6 +30,8 @@
   items:
   - name: ASP.NET Core
     href: recipes/aspnet-core.md
+  - name: Container policies
+    href: container-policies.md
   - name: Health checks
     href: health-checks.md
   - name: Upgrading to 3.0

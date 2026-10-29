@@ -202,6 +202,51 @@ public sealed class TelemetryTests : IDisposable
         Assert.Equal(5, _measurements.Where(m => m.Instrument == "resourcefull.client.downloaded").Sum(m => m.Value));
     }
 
+    private sealed class TextOnlyProvider : IResourcePolicyProvider
+    {
+        public ValueTask<ResourceContainerPolicy?> GetPolicyAsync(string containerName, CancellationToken cancellationToken) =>
+            ValueTask.FromResult<ResourceContainerPolicy?>(new ResourceContainerPolicy { AllowedContentTypes = ["text/plain"] });
+    }
+
+    [Fact]
+    public async Task UploadAsync_ShouldTagTheBrokenRuleAndAskThePolicyProviderOnce_WhenUploadsAreRefused()
+    {
+        // Arrange
+        using ServiceProvider provider = new ServiceCollection()
+            .AddResourcefull(o => o.UseInMemory().UsePolicyProvider<TextOnlyProvider>()).BuildServiceProvider();
+        IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>().CreateResourceContainerAsync("c");
+        using Activity root = TestSource.StartActivity("test")!;
+        var html = new ResourceUploadOptions { Headers = new ResourceHeaders("text/html", null) };
+
+        // Act: the second upload finds the policy cached.
+        await Record.ExceptionAsync(() => container.UploadAsync("a.html", BinaryData.FromString("x"), html));
+        await Record.ExceptionAsync(() => container.UploadAsync("b.html", BinaryData.FromString("x"), html));
+
+        // Assert
+        List<Activity> uploads = [.. SpansIn(root).Where(s => s.OperationName == "resourcefull upload")];
+        Assert.Equal(2, uploads.Count);
+        Assert.All(uploads, s => Assert.Equal("allowed_content_types", s.GetTagItem("resourcefull.policy_rule")));
+        Assert.All(uploads, s => Assert.Equal(typeof(ResourcePolicyViolationException).FullName, s.GetTagItem("error.type")));
+        Activity lookup = Assert.Single(SpansIn(root), s => s.OperationName == "resourcefull get_policy");
+        Assert.Contains(uploads, s => s.SpanId == lookup.ParentSpanId);
+    }
+
+    [Fact]
+    public async Task GetUsageAsync_ShouldRecordAGetUsageOperation_WhenCalled()
+    {
+        // Arrange
+        using ServiceProvider provider = NewServices();
+        IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>().CreateResourceContainerAsync("c");
+        using Activity root = TestSource.StartActivity("test")!;
+
+        // Act
+        await container.GetUsageAsync();
+
+        // Assert
+        Activity span = Assert.Single(SpansIn(root));
+        Assert.Equal(("resourcefull get_usage", "c"), (span.OperationName, span.GetTagItem("resourcefull.container")));
+    }
+
     [Fact]
     public async Task DownloadContentAsync_ShouldRecordOneDownload_WhenCalled()
     {

@@ -132,6 +132,18 @@ internal sealed class ClientTelemetry(string provider, ResourcefullOptions optio
         if (activity is null) return;
         string? errorType = exception.GetType().FullName;
         activity.SetTag("error.type", errorType);
+        if (exception is ResourcePolicyViolationException violation)
+        {
+            activity.SetTag("resourcefull.policy_rule", violation.Rule switch
+            {
+                ResourcePolicyRule.MaxResourceSize => "max_resource_size",
+                ResourcePolicyRule.MaxContainerSize => "max_container_size",
+                ResourcePolicyRule.MaxResourceCount => "max_resource_count",
+                ResourcePolicyRule.AllowedContentTypes => "allowed_content_types",
+                ResourcePolicyRule.ReadOnly => "read_only",
+                _ => violation.Rule.ToString()
+            });
+        }
         if (options.Telemetry.RecordResourceNames)
         {
             activity.SetStatus(ActivityStatusCode.Error, exception.Message);

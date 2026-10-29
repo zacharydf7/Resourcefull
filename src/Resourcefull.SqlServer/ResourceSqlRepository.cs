@@ -593,6 +593,24 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
         }).FirstOrDefaultAsync(cancellationToken);
     }
 
+    public async Task<ResourceContainerUsage> GetContainerUsageAsync(string resourceContainerName, CancellationToken cancellationToken = default)
+    {
+        using ResourceDbContext dbContext = dbContextFactory.CreateDbContext();
+
+        // One aggregate over the container's version rows, from their recorded lengths. Only a version without one, as
+        // stored by an early release, has its chunks' lengths added up instead.
+        UsageRow usage = (await dbContext.Database.SqlQuery<UsageRow>($"""
+            SELECT COALESCE(SUM(COALESCE(r.[ContentLength], c.[Length])), 0) AS [StoredSize],
+                COUNT_BIG(CASE WHEN r.[IsLatest] = 1 THEN 1 END) AS [ResourceCount],
+                COUNT_BIG(*) AS [VersionCount]
+            FROM [Resources] r
+            OUTER APPLY (SELECT SUM(CAST(DATALENGTH(ch.[Data]) AS bigint)) AS [Length] FROM [ResourceChunks] ch
+                WHERE ch.[ResourceId] = r.[Id] AND r.[ContentLength] IS NULL) c
+            WHERE r.[ContainerName] = {resourceContainerName}
+            """).ToListAsync(cancellationToken))[0];
+        return new ResourceContainerUsage(usage.StoredSize, usage.ResourceCount, usage.VersionCount);
+    }
+
     public async Task<bool> DeleteResourceContainerAsync(string resourceContainerName, CancellationToken cancellationToken = default)
     {
         using ResourceDbContext dbContext = dbContextFactory.CreateDbContext();
@@ -653,6 +671,14 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
         return versionId == null
             ? query.Where(r => r.IsLatest)
             : query.Where(r => r.VersionId == versionId);
+    }
+
+    /// <summary>What <see cref="GetContainerUsageAsync"/> reads, named as its query's columns.</summary>
+    internal sealed class UsageRow
+    {
+        public long StoredSize { get; set; }
+        public long ResourceCount { get; set; }
+        public long VersionCount { get; set; }
     }
 
     /// <summary>

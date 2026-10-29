@@ -294,4 +294,17 @@ public interface IResourceContainerClient : IDisposable
     /// <param name="cancellationToken">Cancels the check.</param>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was cancelled.</exception>
     public Task<bool> ExistsAsync(string resourceName, string? versionId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Gets what the container holds: the size of every version, and how many resources and versions there are. Use it
+    /// to show a user their storage, or against <see cref="ResourceContainerPolicy.MaxContainerSize"/>.
+    /// </summary>
+    /// <param name="cancellationToken">Cancels the lookup.</param>
+    /// <returns>The container's usage; nothing stored when the container doesn't exist.</returns>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
+    /// <exception cref="NotSupportedException">
+    /// This default implementation, kept so implementations written for 3.1 still compile, doesn't report usage.
+    /// </exception>
+    public Task<ResourceContainerUsage> GetUsageAsync(CancellationToken cancellationToken = default)
+        => throw new NotSupportedException($"{GetType().Name} doesn't report usage.");
 }

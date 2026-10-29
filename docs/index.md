@@ -19,6 +19,7 @@ bytes: SQL Server, process memory for tests, or a provider you write.
 - [Errors](errors.md): what each operation returns or throws.
 - [URI providers](uri-providers.md): giving containers and resources the URIs your API serves them at.
 - [Telemetry](telemetry.md): the spans and metrics every operation records.
+- [Container policies](container-policies.md): size limits, quotas, allowed file types and read-only containers.
 - [Health checks](health-checks.md): reporting whether storage can be reached and the schema is current.
 
 ## Providers

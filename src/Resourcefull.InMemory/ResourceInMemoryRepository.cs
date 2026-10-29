@@ -169,6 +169,12 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : I
     public Task<bool> DeleteResourceContainerAsync(string resourceContainerName, CancellationToken cancellationToken = default) =>
         UnderLockAsync(() => _containers.Remove(resourceContainerName), cancellationToken);
 
+    public Task<ResourceContainerUsage> GetContainerUsageAsync(string resourceContainerName, CancellationToken cancellationToken = default) =>
+        UnderLockAsync(() => _containers.GetValueOrDefault(resourceContainerName) is { } container
+            ? new ResourceContainerUsage(container.Resources.Values.Sum(versions => versions.Sum(v => (long)v.Content.Length)),
+                container.Resources.Count, container.Resources.Values.Sum(versions => (long)versions.Count))
+            : new ResourceContainerUsage(0, 0, 0), cancellationToken);
+
     private async Task<T> UnderLockAsync<T>(Func<T> action, CancellationToken cancellationToken)
     {
         await _gate.WaitAsync(cancellationToken);

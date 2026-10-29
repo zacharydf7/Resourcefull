@@ -7,7 +7,7 @@ using System.Runtime.CompilerServices;
 namespace Resourcefull;
 
 internal class ResourceServiceClient(IResourceRepository resourceRepository, IOptions<ResourcefullOptions> options, IUriProvider? uriProvider = null,
-    ILogger<ResourceContainerClient>? containerLogger = null) : IResourceServiceClient
+    ILogger<ResourceContainerClient>? containerLogger = null, ContainerPolicies? policies = null) : IResourceServiceClient
 {
     private readonly ResourcefullOptions _options = options.Value;
     private readonly ClientTelemetry _telemetry = new(Telemetry.ProviderName(resourceRepository), options.Value);
@@ -68,11 +68,11 @@ internal class ResourceServiceClient(IResourceRepository resourceRepository, IOp
         });
 
         await resourceRepository.AddResourceContainerAsync(containerInfo, cancellationToken);
-        return new ResourceContainerClient(resourceRepository, uriProvider, _options, containerInfo, containerLogger);
+        return new ResourceContainerClient(resourceRepository, uriProvider, _options, containerInfo, containerLogger, policies);
     }
 
     private ResourceContainerClient NewContainerClient(ResourceContainerInfo containerInfo)
-        => new(resourceRepository, uriProvider, _options, WithUri(containerInfo), containerLogger);
+        => new(resourceRepository, uriProvider, _options, WithUri(containerInfo), containerLogger, policies);
 
     // URIs come from the URI provider whenever a container is returned, not from storage, so a changed provider or base
     // URL applies to containers created before the change as well.
@@ -121,6 +121,7 @@ internal class ResourceServiceClient(IResourceRepository resourceRepository, IOp
         => _telemetry.RunAsync("delete_container", resourceContainerName, null, async () =>
         {
             ResourceNames.ThrowIfInvalidContainerName(resourceContainerName);
+            if (policies is not null) await policies.ThrowIfReadOnlyAsync(resourceContainerName, _telemetry, cancellationToken);
 
             // Through the repository rather than ContainerExistsAsync, so the delete records one operation, not two.
             if (await resourceRepository.GetResourceContainerInfoAsync(resourceContainerName, cancellationToken) is null)

@@ -14,6 +14,7 @@ Resourcefull reports an expected absence with a return value and everything else
 | Uploading into a container that doesn't exist | `ResourceContainerNotFoundException` |
 | An upload or delete whose `ResourceConditions` the current version doesn't meet | `ResourcePreconditionFailedException` (nothing changes) |
 | An upload whose declared length differs from its content | `ResourceContentLengthMismatchException` (nothing is stored) |
+| A write that breaks its container's [policy](container-policies.md) | `ResourcePolicyViolationException` (nothing changes) |
 | Restoring a version while versioning is off | `InvalidOperationException` |
 | Configuring no provider, or two | `InvalidOperationException` from `AddResourcefull` |
 | A cancelled operation | `OperationCanceledException` |
@@ -29,6 +30,7 @@ All of them derive from `ResourcefullException`, so one `catch` handles any of t
 | `ResourceContainerNotFoundException` | The container was never created, or was deleted before the write. | 404 Not Found |
 | `ResourceContentLengthMismatchException` | The upload's declared length didn't match its content. | 400 Bad Request |
 | `ResourcePreconditionFailedException` | The name's current version didn't meet the upload's or delete's conditions. | 412 Precondition Failed |
+| `ResourcePolicyViolationException` | The write broke its container's policy; `Rule` says which rule, and `Limit` its limit. | 413 for the size limits, 403 for `MaxResourceCount` and `ReadOnly`, 415 for `AllowedContentTypes` |
 
 `ResourceNameException` derives from `ArgumentException` rather than `ResourcefullException`, so existing
 `catch (ArgumentException)` code still catches it; it maps to 400 Bad Request.

@@ -73,6 +73,14 @@ returns correct ranges, just without the savings. To answer it directly, return 
 - **Reading may go on past the range.** The client reads only `length` bytes, so a provider can stop reading storage
   there or carry on to the end, whichever is simpler.
 
+### Container usage
+
+`GetContainerUsageAsync` was also added in 3.2. Its default implementation lists every resource's versions, one name
+at a time, and adds up their `ContentLength`, so a provider written for 3.1 reports usage correctly, just slowly for
+large containers. [Container policies](../container-policies.md) call it before each upload they limit by size or
+count, so if your store can add up a container's versions in one query, override it. Count every version in
+`StoredSize` and `VersionCount`, and each name once in `ResourceCount`.
+
 ### Conditional uploads and deletes
 
 The overloads of `AddResourceAsync` and `DeleteResourceAsync` that take conditions were added in 3.1, with default

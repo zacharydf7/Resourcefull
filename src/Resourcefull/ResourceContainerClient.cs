@@ -5,7 +5,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace Resourcefull;
 
 internal partial class ResourceContainerClient(IResourceRepository resourceRepository, IUriProvider? uriProvider,
-    ResourcefullOptions options, ResourceContainerInfo containerInfo, ILogger? logger) : IResourceContainerClient
+    ResourcefullOptions options, ResourceContainerInfo containerInfo, ILogger? logger, ContainerPolicies? policies = null) : IResourceContainerClient
 {
     private readonly ILogger _logger = logger ?? NullLogger.Instance;
     private readonly ClientTelemetry _telemetry = new(Telemetry.ProviderName(resourceRepository), options);
@@ -37,6 +37,11 @@ internal partial class ResourceContainerClient(IResourceRepository resourceRepos
         // the version they match.
         bool createOnly = uploadOptions.CreateOnly
             || (!options.IsVersioningEnabled && !uploadOptions.Overwrite && conditions is null);
+        if (policies is not null)
+        {
+            content = await policies.CheckNewVersionAsync(ContainerName, resourceName, restore: false, uploadOptions.Headers?.ContentType,
+                uploadOptions.Headers?.ContentLength, content, _telemetry, cancellationToken);
+        }
 
         var resourceInfo = new ResourceInfo
         {
@@ -88,6 +93,8 @@ internal partial class ResourceContainerClient(IResourceRepository resourceRepos
 
         await using Stream? stream = await resourceRepository.GetResourceStreamAsync(ContainerName, resourceName, versionId, cancellationToken);
         if (stream == null) return null;
+        Stream content = policies is null ? stream
+            : await policies.CheckNewVersionAsync(ContainerName, resourceName, restore: true, null, null, stream, _telemetry, cancellationToken);
 
         var newResourceInfo = new ResourceInfo
         {
@@ -100,7 +107,7 @@ internal partial class ResourceContainerClient(IResourceRepository resourceRepos
             Metadata = resourceInfo.Metadata
         };
 
-        return await SaveNewResourceVersionAsync("restore", stream, resourceName, newResourceInfo, createOnly: false, conditions: null, cancellationToken);
+        return await SaveNewResourceVersionAsync("restore", content, resourceName, newResourceInfo, createOnly: false, conditions: null, cancellationToken);
     }
 
     private async Task<ResourceInfo> SaveNewResourceVersionAsync(string operation, Stream stream, string resourceName, ResourceInfo resourceInfo,
@@ -305,11 +312,15 @@ internal partial class ResourceContainerClient(IResourceRepository resourceRepos
         => _telemetry.RunAsync("delete", ContainerName, resourceName, async () =>
         {
             ResourceNames.ThrowIfInvalidResourceName(resourceName);
+            if (policies is not null) await policies.ThrowIfReadOnlyAsync(ContainerName, _telemetry, cancellationToken);
             // Only a conditional delete takes the newer overload, so a provider written for 3.0 handles every other one.
             return conditions is null or { IsEmpty: true }
                 ? await resourceRepository.DeleteResourceAsync(ContainerName, resourceName, versionId, cancellationToken)
                 : await resourceRepository.DeleteResourceAsync(ContainerName, resourceName, versionId, conditions, cancellationToken);
         }, "resourcefull.conditional", conditions is { IsEmpty: false });
+
+    public Task<ResourceContainerUsage> GetUsageAsync(CancellationToken cancellationToken = default)
+        => _telemetry.RunAsync("get_usage", ContainerName, null, () => resourceRepository.GetContainerUsageAsync(ContainerName, cancellationToken));
 
     public Task<bool> ExistsAsync(string resourceName, string? versionId = null)
         => ExistsAsync(resourceName, versionId, CancellationToken.None);

@@ -160,6 +160,7 @@ app.UseExceptionHandler();
 | `ResourceContentLengthMismatchException` | 400 Bad Request |
 | `ResourceNameException`, for a name that breaks the [name rules](../containers-and-names.md#names) | 400 Bad Request |
 | `ResourcePreconditionFailedException` | 412 Precondition Failed |
+| `ResourcePolicyViolationException`, for a write that breaks its [container's policy](../container-policies.md) | 413 Content Too Large for the size limits, 403 Forbidden for `MaxResourceCount` and `ReadOnly`, 415 Unsupported Media Type for `AllowedContentTypes` |
 
 The responses are [problem details](https://www.rfc-editor.org/rfc/rfc9457) whose title is the exception's message.
 Resourcefull's messages name the resource or container involved, and sometimes the argument or option, but nothing
