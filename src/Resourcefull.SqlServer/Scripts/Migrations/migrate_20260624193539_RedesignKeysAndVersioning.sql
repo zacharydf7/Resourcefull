@@ -184,7 +184,7 @@ IF NOT EXISTS (
 )
 BEGIN
     INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
-    VALUES (N'20260624193539_RedesignKeysAndVersioning', N'10.0.5');
+    VALUES (N'20260624193539_RedesignKeysAndVersioning', N'10.0.14');
 END;
 
 COMMIT;

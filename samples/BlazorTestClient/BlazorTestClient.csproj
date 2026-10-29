@@ -7,13 +7,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="NuGet.CommandLine" Version="7.3.0">
-      <PrivateAssets>all</PrivateAssets>
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-    </PackageReference>
-  </ItemGroup>
-
-  <ItemGroup>
     <ProjectReference Include="..\..\src\Resourcefull.SqlServer\Resourcefull.SqlServer.csproj" />
     <ProjectReference Include="..\..\src\Resourcefull\Resourcefull.csproj" />
   </ItemGroup>

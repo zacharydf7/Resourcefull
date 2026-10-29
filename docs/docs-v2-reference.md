@@ -738,7 +738,7 @@ remaining scripts; the RCSI script turns RCSI on:
 
 ```sql
 INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
-VALUES (N'20260624193539_RedesignKeysAndVersioning', N'10.0.5');
+VALUES (N'20260624193539_RedesignKeysAndVersioning', N'10.0.14');
 ```
 
 `migrate_20261029021712_AddContentHash.sql` adds a nullable `ContentHash` column. It needs no preparation and

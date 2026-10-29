@@ -107,7 +107,7 @@ IF NOT EXISTS (
 )
 BEGIN
     INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
-    VALUES (N'20261028213132_NameLimitsAndCaseSensitiveNames', N'10.0.5');
+    VALUES (N'20261028213132_NameLimitsAndCaseSensitiveNames', N'10.0.14');
 END;
 
 COMMIT;

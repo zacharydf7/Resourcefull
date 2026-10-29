@@ -80,7 +80,7 @@ IF NOT EXISTS (
 )
 BEGIN
     INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
-    VALUES (N'20240611171637_InitialCreate', N'10.0.5');
+    VALUES (N'20240611171637_InitialCreate', N'10.0.14');
 END;
 
 COMMIT;
@@ -190,7 +190,7 @@ IF NOT EXISTS (
 )
 BEGIN
     INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
-    VALUES (N'20250513172319_AddVersioning', N'10.0.5');
+    VALUES (N'20250513172319_AddVersioning', N'10.0.14');
 END;
 
 COMMIT;
@@ -378,7 +378,7 @@ IF NOT EXISTS (
 )
 BEGIN
     INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
-    VALUES (N'20260624193539_RedesignKeysAndVersioning', N'10.0.5');
+    VALUES (N'20260624193539_RedesignKeysAndVersioning', N'10.0.14');
 END;
 
 COMMIT;
@@ -489,7 +489,7 @@ IF NOT EXISTS (
 )
 BEGIN
     INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
-    VALUES (N'20261028213132_NameLimitsAndCaseSensitiveNames', N'10.0.5');
+    VALUES (N'20261028213132_NameLimitsAndCaseSensitiveNames', N'10.0.14');
 END;
 
 COMMIT;
@@ -535,7 +535,7 @@ IF NOT EXISTS (
 )
 BEGIN
     INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
-    VALUES (N'20261028220856_UniqueLatestVersion', N'10.0.5');
+    VALUES (N'20261028220856_UniqueLatestVersion', N'10.0.14');
 END;
 
 COMMIT;
@@ -557,7 +557,7 @@ IF NOT EXISTS (
 )
 BEGIN
     INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
-    VALUES (N'20261029003116_EnableReadCommittedSnapshot', N'10.0.5');
+    VALUES (N'20261029003116_EnableReadCommittedSnapshot', N'10.0.14');
 END;
 GO
 
@@ -576,7 +576,7 @@ IF NOT EXISTS (
 )
 BEGIN
     INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
-    VALUES (N'20261029021712_AddContentHash', N'10.0.5');
+    VALUES (N'20261029021712_AddContentHash', N'10.0.14');
 END;
 
 COMMIT;

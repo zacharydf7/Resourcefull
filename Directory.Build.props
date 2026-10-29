@@ -1,0 +1,9 @@
+<Project>
+
+  <PropertyGroup>
+    <!-- A dependency, direct or transitive, with a known moderate, high or critical vulnerability fails the build. -->
+    <NuGetAuditMode>all</NuGetAuditMode>
+    <WarningsAsErrors>$(WarningsAsErrors);NU1902;NU1903;NU1904</WarningsAsErrors>
+  </PropertyGroup>
+
+</Project>
