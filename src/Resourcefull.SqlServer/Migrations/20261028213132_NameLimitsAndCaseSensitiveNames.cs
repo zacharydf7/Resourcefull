@@ -10,6 +10,26 @@ namespace Resourcefull.SqlServer.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
+            // Names compared without regard to case until now, so one container or resource name can be stored in
+            // several spellings. While they still compare that way, give each the one spelling it will keep: a
+            // resource its container's, so the foreign key holds once names are case-sensitive, and every version of a
+            // name that of its most recently stored current version (or, with none current, its most recently stored
+            // version), so the name keeps all its versions and its current one.
+            migrationBuilder.Sql("""
+                UPDATE r SET [ContainerName] = c.[Name]
+                FROM [Resources] r
+                JOIN [ResourceContainers] c ON c.[Name] = r.[ContainerName]
+                WHERE CAST(r.[ContainerName] AS varbinary(900)) <> CAST(c.[Name] AS varbinary(900));
+
+                UPDATE r SET [Name] = latest.[Name]
+                FROM [Resources] r
+                CROSS APPLY (
+                    SELECT TOP (1) l.[Name] FROM [Resources] l
+                    WHERE l.[ContainerName] = r.[ContainerName] AND l.[Name] = r.[Name]
+                    ORDER BY l.[IsLatest] DESC, l.[Id] DESC) latest
+                WHERE CAST(r.[Name] AS varbinary(900)) <> CAST(latest.[Name] AS varbinary(900));
+                """);
+
             // EF rebuilds the indexes on altered columns but not keys, and SQL Server refuses to alter a column a key
             // depends on, so the container key and the foreign key onto it are dropped first and recreated last.
             DropContainerKeys(migrationBuilder);

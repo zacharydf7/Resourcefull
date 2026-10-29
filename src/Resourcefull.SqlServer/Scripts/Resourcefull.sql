@@ -381,6 +381,25 @@ IF NOT EXISTS (
     WHERE [MigrationId] = N'20261028213132_NameLimitsAndCaseSensitiveNames'
 )
 BEGIN
+    UPDATE r SET [ContainerName] = c.[Name]
+    FROM [Resources] r
+    JOIN [ResourceContainers] c ON c.[Name] = r.[ContainerName]
+    WHERE CAST(r.[ContainerName] AS varbinary(900)) <> CAST(c.[Name] AS varbinary(900));
+
+    UPDATE r SET [Name] = latest.[Name]
+    FROM [Resources] r
+    CROSS APPLY (
+        SELECT TOP (1) l.[Name] FROM [Resources] l
+        WHERE l.[ContainerName] = r.[ContainerName] AND l.[Name] = r.[Name]
+        ORDER BY l.[IsLatest] DESC, l.[Id] DESC) latest
+    WHERE CAST(r.[Name] AS varbinary(900)) <> CAST(latest.[Name] AS varbinary(900));
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261028213132_NameLimitsAndCaseSensitiveNames'
+)
+BEGIN
     ALTER TABLE [Resources] DROP CONSTRAINT [FK_Resources_ResourceContainers_ContainerName];
 END;
 

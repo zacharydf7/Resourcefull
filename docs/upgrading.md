@@ -5,7 +5,7 @@ changed and how to move your code and your database across.
 
 ## Upgrading your code
 
-### Results instead of `ErrorOr`
+### Results instead of `ErrorOr` (from 1.x)
 
 Methods return their value directly and report failures with exceptions, following .NET conventions. A missing item is
 `null`, an empty listing is an empty list, and conflicts and missing containers throw (see [Errors](errors.md)).
@@ -25,7 +25,9 @@ try
 catch (ResourceConflictException) { /* ... */ }
 ```
 
-### Renamed methods
+### Renamed methods (from 1.x)
+
+2.x already has these names.
 
 | Before | 3.0 |
 |---|---|
@@ -42,11 +44,11 @@ catch (ResourceConflictException) { /* ... */ }
 | `DeleteIfExistsAsync(name, versionId?)` | `DeleteResourceIfExistsAsync(name, versionId?)` |
 | `ResourceExistsAsync(name, versionId?)` | `ExistsAsync(name, versionId?)` |
 
-Every method that contacts storage also has an overload that takes a `CancellationToken`.
+Every method that contacts storage also has an overload that takes a `CancellationToken`, as in 2.x.
 
 ### Behavior changes
 
-Check these even where your code still compiles:
+These apply coming from 1.x or 2.x. Check them even where your code still compiles:
 
 - **Uploads read from the stream's current position.** Earlier releases rewound a seekable stream to the start before
   uploading. Rewind a stream you've just written (`stream.Position = 0`), or the upload stores an empty version, which
@@ -59,10 +61,12 @@ Check these even where your code still compiles:
   length differs throws `ResourceContentLengthMismatchException`. `LastModified` is when the version became current,
   by the storing server's clock. Every new version has a `ContentHash`.
 - **One current version per name.** `ResourceInfo.IsLatest` marks it, and `GetResourceVersionsAsync` lists it first.
-- **Download streams can't seek**, and `ResourceDownloadResult.Stream` is never `null`.
+- **Download streams can't seek**, and `ResourceDownloadResult.Stream` is never `null`. (With SQL Server, 2.x streams
+  couldn't seek either; the in-memory provider's could.)
 - **A failed upload from a non-seekable stream isn't retried** once its content has started. See
   [Large files](uploads-and-downloads.md#large-files).
-- **A container client needs no disposing.** It still implements `IDisposable`, but disposing it does nothing.
+- **A container client needs no disposing** (from 1.x). It still implements `IDisposable`, but disposing it does
+  nothing.
 - **A failed prune is logged** as a warning through `ILogger` instead of being silent.
 
 ### Custom providers
@@ -74,9 +78,9 @@ Check these even where your code still compiles:
 
 1. **Back up the database.**
 2. **Plan a maintenance window** if any migration the database is missing needs one in the table below. Stop the
-   application for `RedesignKeysAndVersioning`, which every database from before 3.0 needs. Turning on
-   `READ_COMMITTED_SNAPSHOT` (check `is_read_committed_snapshot_on` in `sys.databases`) disconnects every other
-   session.
+   application for `RedesignKeysAndVersioning`, which databases from 1.x need; databases from 2.x already have it.
+   Turning on `READ_COMMITTED_SNAPSHOT` (check `is_read_committed_snapshot_on` in `sys.databases`) disconnects every
+   other session; 2.x turned it on already.
 3. **Prepare for case-sensitive names** (below).
 4. **Apply the migrations**: `MigrateResourcefullDatabaseAsync`, or the scripts under `scripts/Migrations/` that the
    database is missing, oldest first, or `Resourcefull.sql` for all of them at once. See
@@ -90,8 +94,8 @@ What each migration does, and what it needs from you:
 |---|---|---|
 | `AddVersioning` | adds version IDs to a database from before versioning | nothing |
 | `RedesignKeysAndVersioning` | rebuilds the keys and indexes for streaming and concurrency, and adds `IsLatest` | stop the application: it rebuilds the tables |
-| `NameLimitsAndCaseSensitiveNames` | sizes the name columns to their limits and makes them case-sensitive | see below |
-| `UniqueLatestVersion` | makes one current version per name a database constraint, repairing any name with two | nothing |
+| `NameLimitsAndCaseSensitiveNames` | sizes the name columns to their limits and makes them case-sensitive, giving each name one spelling | see below; reads and writes of Resourcefull's tables wait while it runs |
+| `UniqueLatestVersion` | makes one current version per name a database constraint, repairing any name with two | nothing; reads and writes of Resourcefull's tables wait while it runs |
 | `EnableReadCommittedSnapshot` | turns on `READ_COMMITTED_SNAPSHOT` | a maintenance window, unless it's already on |
 | `AddContentHash` | adds the nullable `ContentHash` column | nothing |
 
@@ -101,6 +105,15 @@ What each migration does, and what it needs from you:
 
 - **Lookups become case-sensitive.** Callers that relied on SQL Server's usual case-insensitive comparison must use
   names in their stored case.
+- **Each name keeps one spelling.** Earlier releases treated `Q1.pdf` and `q1.pdf` as one name, so one name's versions,
+  or a container's resources, could be stored in several spellings. The upgrade gives every resource its container's
+  stored spelling, and every version of a name the spelling of its current version (or, if none is current, of its
+  most recently stored one), so each name keeps all its versions. This finds the names that will change:
+
+  ```sql
+  SELECT [ContainerName], MIN([Name]) AS [Name], COUNT(DISTINCT CAST([Name] AS varbinary(900))) AS [Spellings]
+  FROM [Resources] GROUP BY [ContainerName], [Name] HAVING COUNT(DISTINCT CAST([Name] AS varbinary(900))) > 1;
+  ```
 - **Names that are too long stop the upgrade.** It fails, and changes nothing, if a container name is longer than 128
   characters or a resource name longer than 256.
 - **Names that break the other rules become unreachable.** Earlier releases accepted empty container names and names
@@ -112,3 +125,26 @@ What each migration does, and what it needs from you:
   SELECT [Name] FROM [ResourceContainers] WHERE DATALENGTH([Name]) = 0 OR DATALENGTH([Name]) <> DATALENGTH(TRIM([Name]));
   SELECT [ContainerName], [Name] FROM [Resources] WHERE DATALENGTH([Name]) <> DATALENGTH(TRIM([Name]));
   ```
+
+## Upgrading a running application
+
+The schema can be upgraded before the application. An application on 2.x keeps working against an upgraded database:
+it reads, uploads, lists, deletes and creates containers as before. So for a database from 2.x:
+
+1. **Upgrade the database** while the old version of the application runs, after backing it up. While
+   `NameLimitsAndCaseSensitiveNames` and `UniqueLatestVersion` run, the application's requests to Resourcefull wait,
+   for seconds on a small database and longer on a large one, and can time out; upgrade when traffic is light.
+2. **Deploy the new version** of the application.
+3. **Run the backfill** once no instance of the old version is left. Versions the old version stored in the meantime
+   have no hash until then, and keep the length their caller declared.
+
+While both versions run, two uploads of one name at the same moment can fail with a duplicate-key error, because 2.x
+doesn't lock the name while it makes a version current and the upgraded database allows only one current version.
+Nothing is stored wrongly; upload again. Databases from 1.x need the application stopped for
+`RedesignKeysAndVersioning`, so upgrade those during the maintenance window instead.
+
+To roll back:
+
+- **The application only:** redeploy the old version. It works against the upgraded database, as above.
+- **The database too:** restore the backup from step 1. Anything stored since the upgrade is lost, and the migrations
+  have no scripts to undo them.

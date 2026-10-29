@@ -299,6 +299,43 @@ public class ProvisioningScriptTests(SqlServerFixture fixture)
     }
 
     [SkippableFact]
+    public async Task NameLimitsUpgradeScript_ShouldGiveEachNameOneSpellingAndKeepItsCurrentVersion_WhenNamesDifferOnlyInCase()
+    {
+        fixture.SkipIfUnavailable();
+
+        // Arrange: a database one migration behind, where names compared without regard to case: a resource stored
+        // under its container's name in another case, a name whose current version isn't its most recently stored
+        // one, and a name with no current version, each with versions stored in two spellings.
+        const string migrationId = "20261028213132_NameLimitsAndCaseSensitiveNames";
+        ProvisioningScript upgrade = ProvisioningScripts.Expected().Single(s => s.ToMigration == migrationId);
+        string connectionString = fixture.AllocateDatabase("MixedCaseNames");
+        await using (ResourceDbContext context = SqlServerFixture.CreateDbContext(connectionString))
+        {
+            await context.Database.MigrateAsync(upgrade.FromMigration);
+        }
+        await ScalarAsync(connectionString, """
+            INSERT INTO [ResourceContainers] ([Name], [Uri], [Metadata]) VALUES ('reports', NULL, '{}');
+            INSERT INTO [Resources] ([ContainerName], [Name], [VersionId], [LastModified], [IsLatest], [Metadata])
+            VALUES ('Reports', 'other.txt', 'v1', SYSDATETIMEOFFSET(), 1, '{}'),
+                   ('reports', 'q1.pdf', 'v1', SYSDATETIMEOFFSET(), 1, '{}'),
+                   ('reports', 'Q1.pdf', 'v2', SYSDATETIMEOFFSET(), 0, '{}'),
+                   ('reports', 'X.txt', 'v1', SYSDATETIMEOFFSET(), 0, '{}'),
+                   ('reports', 'x.txt', 'v2', SYSDATETIMEOFFSET(), 0, '{}');
+            """);
+
+        // Act
+        await ProvisioningScripts.ApplyAsync(ProvisioningScripts.ReadCommitted(upgrade), connectionString);
+
+        // Assert
+        Assert.Equal(1, await ScalarAsync(connectionString, $"SELECT COUNT(*) FROM [__EFMigrationsHistory] WHERE [MigrationId] = '{migrationId}'"));
+        Assert.Equal(5, await ScalarAsync(connectionString, "SELECT COUNT(*) FROM [Resources] WHERE [ContainerName] = 'reports'"));
+        Assert.Equal(2, await ScalarAsync(connectionString, "SELECT COUNT(*) FROM [Resources] WHERE [Name] = 'q1.pdf'"));
+        Assert.Equal(1, await ScalarAsync(connectionString, "SELECT COUNT(*) FROM [Resources] WHERE [Name] = 'q1.pdf' AND [IsLatest] = 1"));
+        Assert.Equal(2, await ScalarAsync(connectionString, "SELECT COUNT(*) FROM [Resources] WHERE [Name] = 'x.txt'"));
+        Assert.Equal(1, await ScalarAsync(connectionString, "SELECT COUNT(*) FROM sys.foreign_keys WHERE [name] = 'FK_Resources_ResourceContainers_ContainerName'"));
+    }
+
+    [SkippableFact]
     public async Task UniqueLatestVersionUpgradeScript_ShouldKeepTheLastStoredVersionCurrent_WhenANameHasTwoCurrentVersions()
     {
         fixture.SkipIfUnavailable();

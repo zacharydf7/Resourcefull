@@ -66,7 +66,8 @@ public class Reports(IResourceServiceClient resources)
 - [SQL Server](https://github.com/zacharydf7/Resourcefull/blob/main/docs/providers/sql-server.md): provisioning,
   permissions and upgrades
 - [ASP.NET Core recipes](https://github.com/zacharydf7/Resourcefull/blob/main/docs/recipes/aspnet-core.md)
-- [Upgrading to 3.0](https://github.com/zacharydf7/Resourcefull/blob/main/docs/upgrading.md)
+- [Upgrading to 3.0](https://github.com/zacharydf7/Resourcefull/blob/main/docs/upgrading.md) and the
+  [changelog](https://github.com/zacharydf7/Resourcefull/blob/main/CHANGELOG.md)
 - [All documentation](https://github.com/zacharydf7/Resourcefull/blob/main/docs/index.md)
 
 ## Contributing

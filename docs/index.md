@@ -30,7 +30,7 @@ bytes: SQL Server, process memory for tests, or a provider you write.
 
 - [ASP.NET Core recipes](recipes/aspnet-core.md): serving downloads, accepting uploads, large files, and turning
   exceptions into status codes.
-- [Upgrading](upgrading.md): moving to 3.0 from earlier releases.
+- [Upgrading](upgrading.md): moving to 3.0 from earlier releases, and the [changelog](../CHANGELOG.md).
 - [Troubleshooting](troubleshooting.md): common errors and what they mean.
 - [API reference](../api/index.md): every public type and member, generated from the XML documentation.
 

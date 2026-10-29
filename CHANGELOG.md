@@ -1,0 +1,43 @@
+# Changelog
+
+## 3.0.0
+
+The first release of Resourcefull for general use. Coming from an earlier release, read
+[Upgrading to 3.0](docs/upgrading.md) first: it lists every change to code, behavior and the database, with what each
+needs from you. Items marked *(from 1.x)* were already in 2.x.
+
+### Added
+
+- **Content hashes.** Every version records the SHA-256 of its content, measured as it's written, as
+  `ResourceInfo.ContentHash`. `ContentHashBackfill` records hashes for versions stored earlier.
+- **Measured lengths.** `ContentLength` is measured from the stored content, and an upload whose declared length
+  differs throws `ResourceContentLengthMismatchException` and stores nothing.
+- **Cancellation.** Every method that contacts storage has an overload that takes a `CancellationToken`. *(from 1.x)*
+- **Create-only uploads** with `ResourceUploadOptions.CreateOnly`, decided by the write, so concurrent ones can't both
+  succeed.
+- **Provisioning from code** with `MigrateResourcefullDatabaseAsync`, into any database the connection string names.
+- **Writing a provider.** `IResourceRepository` is public, with a documented contract.
+- **Logging.** A version prune that fails after its upload was stored is logged as a warning.
+- **Documentation** for every concept, both providers, ASP.NET Core and upgrading, and an API reference generated from
+  the XML documentation that ships in the packages.
+
+### Changed
+
+- Methods return values and throw exceptions instead of returning `ErrorOr`, and several were renamed. *(from 1.x)*
+- Names are case-sensitive and limited to 128 characters for a container and 256 for a resource, with no whitespace at
+  either end.
+- Deleting a name without a version ID deletes all its versions.
+- New version IDs are GUIDs (older ones stay valid), to compare rather than parse, and storage decides which version is
+  current and the order versions are listed in.
+- Uploads read from the stream's current position, without rewinding it first.
+- `LastModified` is when the version became current, by the storing server's clock.
+- Download streams can't seek, and with SQL Server, a download whose version is deleted midway throws `IOException`.
+- SQL Server provisioning scripts no longer name a database, and ship in the package's `scripts` folder rather than
+  being added to consuming projects.
+
+### Fixed
+
+- Concurrent uploads of one name always leave exactly one current version.
+- Uploads and downloads of any size use a fixed amount of memory, and uploads make about half as many round trips.
+- An upload into a container deleted moments before reports the missing container. *(from 1.x)*
+- Deleting a large container works in bounded batches, and can be resumed if it stops partway.

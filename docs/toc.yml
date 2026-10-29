@@ -30,6 +30,8 @@
     href: recipes/aspnet-core.md
   - name: Upgrading to 3.0
     href: upgrading.md
+  - name: Changelog
+    href: ../CHANGELOG.md
   - name: Troubleshooting
     href: troubleshooting.md
   - name: Samples
