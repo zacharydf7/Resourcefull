@@ -104,6 +104,19 @@ of taking shared locks, which removes a class of reader/writer deadlocks under c
 The provider also enables a **retry policy** (including SQL Server deadlock victims, error 1205) so
 transient contention does not surface to your code.
 
+#### Large resources
+
+Content moves to and from the database a little at a time, so memory use stays roughly constant whatever the
+size of a resource:
+
+- **Uploads** stream into the database in one transaction, so a version isn't visible until all of its content
+  is stored. The resource name is locked only at the end, to make the new version current, so concurrent uploads
+  of one name don't wait for each other's content. A transient failure partway through is retried only when
+  the content stream can seek (a `MemoryStream`, a `FileStream`, or the `BinaryData` overload). A non-seekable
+  stream, such as a request body, fails instead, and the caller can upload again.
+- **Downloads** read the content as the returned stream is read. If the version is deleted while it is being
+  read, the stream throws an `IOException` rather than ending early.
+
 ### Writing a provider
 
 To store resources somewhere else (a file system, object storage, another database), implement

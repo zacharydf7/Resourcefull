@@ -26,7 +26,8 @@ public class CancellationIntegrationTests(SqlServerFixture fixture)
         IReadOnlyList<ResourceInfo> versionsBefore = await container.GetResourceVersionsAsync("doc");
         int chunksBefore = await CountChunksAsync(containerName);
         using var cts = new CancellationTokenSource();
-        var content = new CancelAfterReadsStream(new byte[200_000], cts, readsBeforeCancel: 1);
+        // Cancelled after 20 of 32 chunks, once the first batch of chunks has been written to the database.
+        var content = new CancelAfterReadsStream(new byte[65_535 * 32], cts, readsBeforeCancel: 20);
 
         // Act
         Task act() => container.UploadAsync("doc", content, null, cts.Token);

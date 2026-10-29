@@ -19,7 +19,7 @@ public class ResourceChunkerTests
         Stream stream = new MemoryStream(bytes);
 
         // Act
-        List<ResourceChunkModel> chunks = await ResourceChunker.ChunksAsync(stream);
+        List<ResourceChunkModel> chunks = await ResourceChunker.ChunksAsync(stream).ToListAsync();
 
         // Assert
         Assert.Collection(chunks,
@@ -45,7 +45,7 @@ public class ResourceChunkerTests
         Stream stream = new MemoryStream(bytes);
 
         // Act
-        List<ResourceChunkModel> chunks = await ResourceChunker.ChunksAsync(stream);
+        List<ResourceChunkModel> chunks = await ResourceChunker.ChunksAsync(stream).ToListAsync();
 
         // Assert
         Assert.Equal([1, 2, 3], chunks.Select(c => c.Index));
@@ -58,7 +58,7 @@ public class ResourceChunkerTests
         Stream stream = new MemoryStream();
 
         // Act
-        List<ResourceChunkModel> chunks = await ResourceChunker.ChunksAsync(stream);
+        List<ResourceChunkModel> chunks = await ResourceChunker.ChunksAsync(stream).ToListAsync();
 
         // Assert
         Assert.Empty(chunks);
@@ -72,6 +72,29 @@ public class ResourceChunkerTests
         var stream = new CancelAfterReadsStream(new byte[65535 * 3], cts, readsBeforeCancel: 1);
 
         // Act & Assert
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => ResourceChunker.ChunksAsync(stream, cts.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => ResourceChunker.ChunksAsync(stream, cts.Token).ToListAsync().AsTask());
+    }
+
+    [Fact]
+    public async Task ChunksAsync_ShouldFillEveryChunkButTheLast_WhenTheStreamReturnsShortReads()
+    {
+        // Arrange
+        byte[] bytes = new byte[65535 * 2 + 10];
+        new Random(1).NextBytes(bytes);
+        var stream = new ShortReadStream(bytes, maxRead: 1000);
+
+        // Act
+        List<ResourceChunkModel> chunks = await ResourceChunker.ChunksAsync(stream).ToListAsync();
+
+        // Assert
+        Assert.Equal([65535, 65535, 10], chunks.Select(c => c.Data.Length));
+        Assert.Equal(bytes, chunks.SelectMany(c => c.Data));
+    }
+
+    /// <summary>Returns at most <paramref name="maxRead"/> bytes per read, as a network stream may.</summary>
+    private sealed class ShortReadStream(byte[] content, int maxRead) : MemoryStream(content)
+    {
+        public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+            => base.ReadAsync(buffer[..Math.Min(buffer.Length, maxRead)], cancellationToken);
     }
 }

@@ -66,7 +66,7 @@ internal class ResourceContainerClient(IResourceRepository resourceRepository, I
         ResourceInfo? resourceInfo = await resourceRepository.GetResourceInfoAsync(ContainerName, resourceName, versionId, cancellationToken);
         if (resourceInfo == null) return null;
 
-        Stream? stream = await resourceRepository.GetResourceStreamAsync(ContainerName, resourceName, versionId, cancellationToken);
+        await using Stream? stream = await resourceRepository.GetResourceStreamAsync(ContainerName, resourceName, versionId, cancellationToken);
         if (stream == null) return null;
 
         var newResourceInfo = new ResourceInfo
@@ -151,8 +151,9 @@ internal class ResourceContainerClient(IResourceRepository resourceRepository, I
         ResourceDownloadResult? result = await DownloadStreamingAsync(resourceName, versionId, cancellationToken);
         if (result?.Stream == null) return null;
 
+        await using Stream stream = result.Stream;
         using var memoryStream = new MemoryStream();
-        await result.Stream.CopyToAsync(memoryStream, cancellationToken);
+        await stream.CopyToAsync(memoryStream, cancellationToken);
         return new ResourceContent(result.ResourceInfo, BinaryData.FromBytes(memoryStream.ToArray()));
     }
 

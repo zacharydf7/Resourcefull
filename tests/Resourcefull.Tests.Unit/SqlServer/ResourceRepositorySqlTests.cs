@@ -714,11 +714,12 @@ public class ResourceSqlRepositoryTests
     }
 
     [Fact]
-    public async Task AddResourceAsync_ShouldThrowOperationCanceledAndStoreNothing_WhenTokenIsCancelledMidStream()
+    public async Task AddResourceAsync_ShouldThrowOperationCanceledAndLeaveNoCurrentVersion_WhenTokenIsCancelledMidStream()
     {
-        // Arrange
+        // Arrange: the in-memory provider can't roll back the content already saved; that the transaction leaves
+        // nothing behind is covered against SQL Server by CancellationIntegrationTests.
         var containerName = "containerName";
-        (ResourceDbContext resourceDbContext, var dbContextFactory) = NewDatabase();
+        (_, var dbContextFactory) = NewDatabase();
         var resourceRepository = new ResourceSqlRepository(dbContextFactory);
         await resourceRepository.AddResourceContainerAsync(new ResourceContainerInfo { Name = containerName });
         using var cts = new CancellationTokenSource();
@@ -729,8 +730,8 @@ public class ResourceSqlRepositoryTests
 
         // Assert
         await Assert.ThrowsAnyAsync<OperationCanceledException>(act);
-        Assert.Empty(resourceDbContext.Resources);
-        Assert.Empty(resourceDbContext.ResourceChunks);
+        Assert.Null(await resourceRepository.GetResourceInfoAsync(containerName, "resourceName"));
+        Assert.Empty(await resourceRepository.GetAllResourceInfoAsync(containerName));
     }
 
     [Fact]
@@ -929,23 +930,48 @@ public class ResourceSqlRepositoryTests
     }
 
     [Fact]
-    public async Task AddResourceAsync_ShouldStoreNothingMore_WhenTheSameVersionIsWrittenAgain()
+    public async Task AddResourceAsync_ShouldThrowConflictAndStoreNothingMore_WhenTheVersionIdIsAlreadyStored()
     {
-        // Arrange: a retried write whose first commit succeeded, including a create-only one that must not conflict
-        // with itself.
+        // Arrange
         (ResourceDbContext resourceDbContext, var dbContextFactory) = NewDatabase();
         await resourceDbContext.ResourceContainers.AddAsync(new ResourceContainerModel { Name = "c" });
         await resourceDbContext.SaveChangesAsync();
         var resourceRepository = new ResourceSqlRepository(dbContextFactory);
         var version = new ResourceInfo { ContainerName = "c", Name = "n", VersionId = "v1" };
-        await resourceRepository.AddResourceAsync("c", version, new MemoryStream(), createOnly: true);
+        await resourceRepository.AddResourceAsync("c", version, new MemoryStream([1]));
 
         // Act
-        await resourceRepository.AddResourceAsync("c", version, new MemoryStream(), createOnly: true);
+        Task act() => resourceRepository.AddResourceAsync("c", version, new MemoryStream([2]));
 
         // Assert
+        await Assert.ThrowsAsync<ResourceConflictException>(act);
         ResourceInfo stored = Assert.Single(await resourceRepository.GetResourceVersionsAsync("c", "n"));
         Assert.True(stored.IsLatest);
+    }
+
+    [Fact]
+    public async Task GetResourceStreamAsync_ShouldReturnTheChunksInIndexOrder_WhenTheyWereStoredOutOfOrder()
+    {
+        // Arrange
+        (ResourceDbContext resourceDbContext, var dbContextFactory) = NewDatabase();
+        await resourceDbContext.ResourceContainers.AddAsync(new ResourceContainerModel { Name = "c" });
+        var resource = new ResourceModel { ContainerName = "c", Name = "n", VersionId = "v1", IsLatest = true };
+        await resourceDbContext.Resources.AddAsync(resource);
+        await resourceDbContext.SaveChangesAsync();
+        foreach ((int index, string data) in new[] { (3, "ccc"), (1, "aaa"), (2, "bbb") })
+        {
+            await resourceDbContext.ResourceChunks.AddAsync(new ResourceChunkModel { ResourceId = resource.Id, Index = index, Data = Encoding.UTF8.GetBytes(data) });
+        }
+        await resourceDbContext.SaveChangesAsync();
+        var resourceRepository = new ResourceSqlRepository(dbContextFactory);
+
+        // Act
+        await using Stream stream = (await resourceRepository.GetResourceStreamAsync("c", "n"))!;
+        string content = await new StreamReader(stream).ReadToEndAsync();
+
+        // Assert
+        Assert.Equal("aaabbbccc", content);
+        Assert.Equal(9, stream.Length);
     }
 
     [Fact]

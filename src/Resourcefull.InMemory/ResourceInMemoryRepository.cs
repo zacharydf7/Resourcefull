@@ -33,6 +33,8 @@ internal class ResourceInMemoryRepository : IResourceRepository
 
             if (!container.Resources.TryGetValue(resourceInfo.Name, out List<InMemoryResource>? versions))
                 container.Resources[resourceInfo.Name] = versions = [];
+            else if (versions.Any(v => v.ResourceInfo.VersionId == resourceInfo.VersionId))
+                throw new ResourceConflictException($"Resource {resourceInfo.Name} already has a version {resourceInfo.VersionId}.");
 
             versions.Add(new InMemoryResource
             {

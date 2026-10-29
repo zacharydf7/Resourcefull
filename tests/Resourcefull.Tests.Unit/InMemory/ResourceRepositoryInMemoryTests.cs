@@ -798,6 +798,22 @@ public class ResourceInMemoryRepositoryTests
     }
 
     [Fact]
+    public async Task AddResourceAsync_ShouldThrowConflictAndStoreNothingMore_WhenTheVersionIdIsAlreadyStored()
+    {
+        // Arrange
+        var repository = new ResourceInMemoryRepository();
+        await repository.AddResourceContainerAsync(new ResourceContainerInfo { Name = "c" });
+        await repository.AddResourceAsync("c", new ResourceInfo { ContainerName = "c", Name = "n", VersionId = "v1" }, new MemoryStream([1]));
+
+        // Act
+        Task act() => repository.AddResourceAsync("c", new ResourceInfo { ContainerName = "c", Name = "n", VersionId = "v1" }, new MemoryStream([2]));
+
+        // Assert
+        await Assert.ThrowsAsync<ResourceConflictException>(act);
+        Assert.Single(await repository.GetResourceVersionsAsync("c", "n"));
+    }
+
+    [Fact]
     public async Task AddResourceAsync_ShouldStore_WhenCreateOnlyAndTheNameIsNew()
     {
         // Arrange

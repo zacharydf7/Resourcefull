@@ -1,35 +1,55 @@
-﻿using Resourcefull.SqlServer.Models;
+﻿namespace Resourcefull.SqlServer;
 
-namespace Resourcefull.SqlServer;
-
-internal class ResourceStream(List<ResourceChunkModel> fileChunks) : Stream
+/// <summary>
+/// A version's content, fetched a page of chunks at a time as the caller reads, so only one page is held at once.
+/// Disposing it releases <paramref name="owner"/>, which the pages are read through.
+/// </summary>
+/// <param name="nextPage">Fetches the next chunks' data in index order, with the token of the read that needs them;
+/// empty once the content is exhausted.</param>
+/// <param name="length">The content's full length; a read that ends before it throws, as the content was cut short.</param>
+internal class ResourceStream(Func<CancellationToken, Task<IReadOnlyList<byte[]>>> nextPage, long length, IAsyncDisposable? owner = null) : Stream
 {
-    private readonly Queue<ResourceChunkModel> _chunks = new(fileChunks.OrderBy(c => c.Index));
-    private readonly long _length = fileChunks.Sum(c => (long)c.Data.Length);
-    private long _position = 0;
-    private byte[]? _currentChunkData;
+    private IReadOnlyList<byte[]> _page = [];
+    private int _pageIndex = 0;
+    private bool _exhausted = false;
+    private byte[] _currentChunkData = [];
     private int _currentChunkPosition = 0;
+    private long _position = 0;
 
+    // Awaits don't resume on the caller's context: Read blocks on ReadAsync, and would deadlock a single-threaded one.
     public override async Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        if (_chunks.Count == 0 && (_currentChunkData == null || _currentChunkPosition >= _currentChunkData.Length)) return 0;
-
-        if (_currentChunkData == null || _currentChunkPosition >= _currentChunkData.Length)
+        while (_currentChunkPosition >= _currentChunkData.Length)
         {
-            _currentChunkData = _chunks.Dequeue().Data;
-            _currentChunkPosition = 0;
+            if (_pageIndex < _page.Count)
+            {
+                _currentChunkData = _page[_pageIndex++];
+                _currentChunkPosition = 0;
+            }
+            else if (!_exhausted)
+            {
+                _page = await nextPage(cancellationToken).ConfigureAwait(false);
+                _pageIndex = 0;
+                _exhausted = _page.Count == 0;
+            }
+            else
+            {
+                if (_position < length)
+                    throw new IOException($"The content ended after {_position} of its {length} bytes; it may have been deleted while it was read.");
+                return 0;
+            }
         }
 
         var bytesToCopy = Math.Min(count, _currentChunkData.Length - _currentChunkPosition);
 
-        Array.Copy(_currentChunkData, _currentChunkPosition, buffer, offset, bytesToCopy);
+        _currentChunkData.AsSpan(_currentChunkPosition, bytesToCopy).CopyTo(buffer.AsSpan(offset, bytesToCopy));
 
         _currentChunkPosition += bytesToCopy;
         _position += bytesToCopy;
 
-        return await Task.FromResult(bytesToCopy);
+        return bytesToCopy;
     }
 
     public override bool CanRead => true;
@@ -38,7 +58,7 @@ internal class ResourceStream(List<ResourceChunkModel> fileChunks) : Stream
 
     public override bool CanWrite => false;
 
-    public override long Length => _length;
+    public override long Length => length;
 
     public override long Position
     {
@@ -56,7 +76,7 @@ internal class ResourceStream(List<ResourceChunkModel> fileChunks) : Stream
 
     public override int Read(byte[] buffer, int offset, int count)
     {
-        return ReadAsync(buffer, offset, count).Result;
+        return ReadAsync(buffer, offset, count).GetAwaiter().GetResult();
     }
 
     public override long Seek(long offset, SeekOrigin origin)
@@ -72,5 +92,23 @@ internal class ResourceStream(List<ResourceChunkModel> fileChunks) : Stream
     public override void Write(byte[] buffer, int offset, int count)
     {
         throw new NotSupportedException();
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing) ReleaseAsync().AsTask().GetAwaiter().GetResult();
+        base.Dispose(disposing);
+    }
+
+    public override async ValueTask DisposeAsync()
+    {
+        await ReleaseAsync().ConfigureAwait(false);
+        await base.DisposeAsync().ConfigureAwait(false);
+    }
+
+    private async ValueTask ReleaseAsync()
+    {
+        if (owner != null) await owner.DisposeAsync().ConfigureAwait(false);
+        owner = null;
     }
 }

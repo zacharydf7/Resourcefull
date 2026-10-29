@@ -18,6 +18,10 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
     private const int SqlUniqueConstraintViolation = 2627;
     private const int MaxResourcesPerDeleteBatch = 100;
 
+    // About 1 MB of content per round trip while uploading and downloading.
+    private const int ChunksPerUploadBatch = 16;
+    private const int ChunksPerReadPage = 16;
+
     /// <summary>
     /// Caps the content one batch of a container delete removes, counted in chunks, so no single transaction has to log
     /// a whole container. A resource bigger than the cap still goes in a batch of its own.
@@ -26,50 +30,108 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
 
     public async Task<WrittenContent> AddResourceAsync(string resourceContainerName, ResourceInfo resourceInfo, Stream stream, bool createOnly = false, CancellationToken cancellationToken = default)
     {
-        // The caller's stream can only be read once, so it is chunked, and measured, before the write, which may be
-        // retried.
-        if (stream.CanSeek) stream.Position = 0;
-        using var content = new HashingStream(stream);
-        List<ResourceChunkModel> chunks = await ResourceChunker.ChunksAsync(content, cancellationToken);
-        WrittenContent written = content.Complete(resourceInfo.ContentLength);
+        // The content streams into the version's chunks a batch at a time, so memory stays bounded whatever its size,
+        // all in one transaction, so none of it is visible until the version is complete and current. The name's lock
+        // is taken only at the end, to make the version current, so writers of one name queue for that switch rather
+        // than for each other's content.
+        WrittenContent? written = null;
+        bool contentRead = false;
+        Exception? lastFailure = null;
+
+        async Task AttemptAsync(CancellationToken ct)
+        {
+            using ResourceDbContext attempt = dbContextFactory.CreateDbContext();
+
+            if (await attempt.Resources.AnyAsync(r => r.ContainerName == resourceContainerName
+                && r.Name == resourceInfo.Name && r.VersionId == resourceInfo.VersionId, ct))
+            {
+                // A retry after a commit whose acknowledgement was lost finds its own version already stored.
+                if (written != null) return;
+                throw new ResourceConflictException($"Resource {resourceInfo.Name} already has a version {resourceInfo.VersionId}.");
+            }
+
+            // Any other retry has to read the content again, once some of it has been read.
+            if (contentRead && !stream.CanSeek)
+                throw new InvalidOperationException($"Storing resource {resourceInfo.Name} failed with a transient error, and its content can't be read again to retry.", lastFailure);
+            if (stream.CanSeek) stream.Position = 0;
+
+            await using var transaction = await attempt.Database.BeginTransactionAsync(ct);
+
+            // Checked again under the lock below; this only spares reading the content of an upload that will fail.
+            if (createOnly && await attempt.Resources.AnyAsync(r => r.ContainerName == resourceContainerName
+                && r.Name == resourceInfo.Name && r.IsLatest, ct))
+                throw new ResourceConflictException($"Resource with name {resourceInfo.Name} already exists.");
+
+            // Inserted first, so a missing container is reported before any content is read.
+            var resource = new ResourceModel
+            {
+                ContainerName = resourceContainerName,
+                Name = resourceInfo.Name,
+                VersionId = resourceInfo.VersionId,
+                LastModified = resourceInfo.LastModified,
+                IsLatest = false,
+                ContentType = resourceInfo.ContentType,
+                Uri = resourceInfo.Uri,
+                Metadata = resourceInfo.Metadata
+            };
+            attempt.Resources.Add(resource);
+            await attempt.SaveChangesAsync(ct);
+            // Untracked while the chunks go in, or each would be added to its Chunks collection and kept.
+            attempt.Entry(resource).State = EntityState.Detached;
+
+            contentRead = true;
+            using var content = new HashingStream(stream);
+            var batch = new List<ResourceChunkModel>(ChunksPerUploadBatch);
+            await foreach (ResourceChunkModel chunk in ResourceChunker.ChunksAsync(content, ct))
+            {
+                chunk.ResourceId = resource.Id;
+                batch.Add(chunk);
+                if (batch.Count == ChunksPerUploadBatch) await SaveChunksAsync(attempt, batch, ct);
+            }
+            await SaveChunksAsync(attempt, batch, ct);
+            written = content.Complete(resourceInfo.ContentLength);
+
+            // The in-memory provider the unit tests use has no locks.
+            if (attempt.Database.IsRelational())
+                await LockNameAsync(attempt, resourceContainerName, resourceInfo.Name, ct);
+
+            List<ResourceModel> priorLatest = await attempt.Resources
+                .Where(r => r.ContainerName == resourceContainerName && r.Name == resourceInfo.Name && r.IsLatest)
+                .ToListAsync(ct);
+            if (createOnly && priorLatest.Count > 0)
+                throw new ResourceConflictException($"Resource with name {resourceInfo.Name} already exists.");
+
+            // Clear the old current version before setting the new one, so the unique "latest" index never holds
+            // two rows for the name in the middle of the write.
+            foreach (ResourceModel prior in priorLatest) prior.IsLatest = false;
+            await attempt.SaveChangesAsync(ct);
+
+            attempt.Attach(resource);
+            resource.IsLatest = true;
+            resource.ContentLength = written.ContentLength;
+            await attempt.SaveChangesAsync(ct);
+
+            await transaction.CommitAsync(ct);
+        }
 
         try
         {
-            await WriteNameAsync(resourceContainerName, resourceInfo.Name, async (dbContext, ct) =>
+            using ResourceDbContext dbContext = dbContextFactory.CreateDbContext();
+            await dbContext.Database.CreateExecutionStrategy().ExecuteAsync(async ct =>
             {
-                // A retry after a commit whose acknowledgement was lost finds its own version already stored.
-                if (await dbContext.Resources.AnyAsync(r => r.ContainerName == resourceContainerName && r.Name == resourceInfo.Name
-                    && r.VersionId == resourceInfo.VersionId, ct))
-                    return 0;
-
-                List<ResourceModel> priorLatest = await dbContext.Resources
-                    .Where(r => r.ContainerName == resourceContainerName && r.Name == resourceInfo.Name && r.IsLatest)
-                    .ToListAsync(ct);
-                if (createOnly && priorLatest.Count > 0)
-                    throw new ResourceConflictException($"Resource with name {resourceInfo.Name} already exists.");
-
-                // Clear the old current version before inserting the new one, so the unique "latest" index never
-                // holds two rows for the name in the middle of the write.
-                foreach (ResourceModel prior in priorLatest) prior.IsLatest = false;
-                await dbContext.SaveChangesAsync(ct);
-
-                dbContext.Resources.Add(new ResourceModel
+                try
                 {
-                    ContainerName = resourceContainerName,
-                    Name = resourceInfo.Name,
-                    VersionId = resourceInfo.VersionId,
-                    LastModified = resourceInfo.LastModified,
-                    IsLatest = true,
-                    ContentType = resourceInfo.ContentType,
-                    ContentLength = written.ContentLength,
-                    Uri = resourceInfo.Uri,
-                    Metadata = resourceInfo.Metadata,
-                    Chunks = [.. chunks.Select(c => new ResourceChunkModel { Index = c.Index, Data = c.Data })]
-                });
-                return await dbContext.SaveChangesAsync(ct);
+                    await AttemptAsync(ct);
+                }
+                catch (Exception exception)
+                {
+                    // Kept for the refusal above, should the execution strategy retry after it.
+                    lastFailure = exception;
+                    throw;
+                }
             }, cancellationToken);
 
-            return written;
+            return written!;
         }
         catch (DbUpdateException exception) when (exception.InnerException is SqlException { Number: SqlForeignKeyViolation })
         {
@@ -79,6 +141,15 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
 
             throw new ResourceContainerNotFoundException($"Resource Container with the name {resourceContainerName} does not exist.", exception);
         }
+    }
+
+    /// <summary>Inserts a batch of chunks and stops tracking them, so the context doesn't keep the content.</summary>
+    private static async Task SaveChunksAsync(ResourceDbContext dbContext, List<ResourceChunkModel> batch, CancellationToken cancellationToken)
+    {
+        dbContext.ResourceChunks.AddRange(batch);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        foreach (ResourceChunkModel chunk in batch) dbContext.Entry(chunk).State = EntityState.Detached;
+        batch.Clear();
     }
 
     /// <summary>
@@ -194,14 +265,54 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
 
     public async Task<Stream?> GetResourceStreamAsync(string resourceContainerName, string resourceName, string? versionId = null, CancellationToken cancellationToken = default)
     {
-        using ResourceDbContext dbContext = dbContextFactory.CreateDbContext();
+        // The stream reads the chunks through this context as the caller reads, and disposes it.
+        ResourceDbContext dbContext = dbContextFactory.CreateDbContext();
+        try
+        {
+            // One statement, so the length belongs to the version found even if it is deleted right after.
+            var existingResource = await Version(dbContext.Resources, resourceContainerName, resourceName, versionId)
+                .Select(r => new { r.Id, Length = r.Chunks!.Sum(c => (long?)c.Data.Length) ?? 0 })
+                .FirstOrDefaultAsync(cancellationToken);
+            if (existingResource == null)
+            {
+                await dbContext.DisposeAsync();
+                return null;
+            }
 
-        ResourceModel? existingResource = await ResolveAsync(
-            dbContext.Resources.Include(r => r.Chunks), resourceContainerName, resourceName, versionId, cancellationToken);
+            return new ResourceStream(PageReader(dbContext, existingResource.Id), existingResource.Length, dbContext);
+        }
+        catch
+        {
+            await dbContext.DisposeAsync();
+            throw;
+        }
+    }
 
-        return existingResource != null
-            ? new ResourceStream([.. existingResource.Chunks!])
-            : null;
+    /// <summary>
+    /// Reads a version's chunks a page at a time, each page its own short query. One query for them all would hold
+    /// them all, because EF buffers query results when it may retry them.
+    /// </summary>
+    private static Func<CancellationToken, Task<IReadOnlyList<byte[]>>> PageReader(ResourceDbContext dbContext, long resourceId)
+    {
+        // No assumption about where indexes start: the first release numbered chunks from zero.
+        int? lastIndex = null;
+        bool exhausted = false;
+
+        return async cancellationToken =>
+        {
+            if (exhausted) return [];
+
+            List<ResourceChunkModel> page = await dbContext.ResourceChunks.AsNoTracking()
+                .Where(c => c.ResourceId == resourceId && (lastIndex == null || c.Index > lastIndex))
+                .OrderBy(c => c.Index)
+                .Take(ChunksPerReadPage)
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false);
+
+            exhausted = page.Count < ChunksPerReadPage;
+            if (page.Count > 0) lastIndex = page[^1].Index;
+            return [.. page.Select(c => c.Data)];
+        };
     }
 
     public Task<bool> DeleteResourceAsync(string resourceContainerName, string resourceName, string? versionId = null, CancellationToken cancellationToken = default) =>
@@ -331,13 +442,17 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
         return await dbContext.SaveChangesAsync(cancellationToken) > 0;
     }
 
-    private static async Task<ResourceModel?> ResolveAsync(IQueryable<ResourceModel> query,
-        string resourceContainerName, string resourceName, string? versionId, CancellationToken cancellationToken)
+    private static Task<ResourceModel?> ResolveAsync(IQueryable<ResourceModel> query,
+        string resourceContainerName, string resourceName, string? versionId, CancellationToken cancellationToken) =>
+        Version(query, resourceContainerName, resourceName, versionId).FirstOrDefaultAsync(cancellationToken);
+
+    /// <summary>The named version, or the current one when <paramref name="versionId"/> is null.</summary>
+    private static IQueryable<ResourceModel> Version(IQueryable<ResourceModel> query, string resourceContainerName, string resourceName, string? versionId)
     {
         query = query.Where(r => r.ContainerName == resourceContainerName && r.Name == resourceName);
 
         return versionId == null
-            ? await query.FirstOrDefaultAsync(r => r.IsLatest, cancellationToken)
-            : await query.FirstOrDefaultAsync(r => r.VersionId == versionId, cancellationToken);
+            ? query.Where(r => r.IsLatest)
+            : query.Where(r => r.VersionId == versionId);
     }
 }

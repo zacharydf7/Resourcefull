@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using Resourcefull.SqlServer.Models;
 
 namespace Resourcefull.SqlServer.Utilities;
@@ -6,30 +7,27 @@ internal class ResourceChunker
 {
     private static readonly int _chunkSize = 65535; // The maximum amount of data that can be transmitted over a network in a single TCP packet
 
-    public static async Task<List<ResourceChunkModel>> ChunksAsync(Stream stream, CancellationToken cancellationToken = default)
+    /// <summary>
+    /// Reads the stream one chunk at a time, so the caller can store each before the next is read. Every chunk but the
+    /// last is full, even from a stream that returns short reads.
+    /// </summary>
+    public static async IAsyncEnumerable<ResourceChunkModel> ChunksAsync(Stream stream, [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        if (stream.CanSeek) stream.Position = 0;
-
-        var chunks = new List<ResourceChunkModel>();
         var index = 0;
         var buffer = new byte[_chunkSize];
 
         while (true)
         {
-            cancellationToken.ThrowIfCancellationRequested();
+            int bytesRead = await stream.ReadAtLeastAsync(buffer, _chunkSize, throwOnEndOfStream: false, cancellationToken);
+            if (bytesRead == 0) yield break;
 
-            var bytesRead = await stream.ReadAsync(buffer, cancellationToken);
-            if (bytesRead == 0) break;
-
-            ++index;
-
-            chunks.Add(new ResourceChunkModel
+            yield return new ResourceChunkModel
             {
-                Index = index,
-                Data = buffer.Take(bytesRead).ToArray()
-            });
-        }
+                Index = ++index,
+                Data = buffer.AsSpan(0, bytesRead).ToArray()
+            };
 
-        return chunks;
+            if (bytesRead < _chunkSize) yield break;
+        }
     }
 }

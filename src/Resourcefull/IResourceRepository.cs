@@ -48,7 +48,10 @@ public interface IResourceRepository
     /// <paramref name="resourceInfo"/> declares a content length that differs from the stream; nothing was stored.
     /// </exception>
     /// <exception cref="ResourceContainerNotFoundException">The named container does not exist.</exception>
-    /// <exception cref="ResourceConflictException"><paramref name="createOnly"/> is set and the name already exists.</exception>
+    /// <exception cref="ResourceConflictException">
+    /// <paramref name="createOnly"/> is set and the name already exists, or the name already has a version with this
+    /// <see cref="ResourceInfo.VersionId"/>.
+    /// </exception>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was cancelled; nothing was stored.</exception>
     Task<WrittenContent> AddResourceAsync(string resourceContainerName, ResourceInfo resourceInfo, Stream stream, bool createOnly = false, CancellationToken cancellationToken = default);
 
