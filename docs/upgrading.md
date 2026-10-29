@@ -138,6 +138,10 @@ it reads, uploads, lists, deletes and creates containers as before. So for a dat
 3. **Run the backfill** once no instance of the old version is left. Versions the old version stored in the meantime
    have no hash until then, and keep the length their caller declared.
 
+From the moment the schema is upgraded, the old version's lookups are case-sensitive too: a name requested in another
+case than it's stored in is not found, and an upload under it starts a separate name. Check
+[the spellings your callers use](#case-sensitive-names) before you start.
+
 While both versions run, two uploads of one name at the same moment can fail with a duplicate-key error, because 2.x
 doesn't lock the name while it makes a version current and the upgraded database allows only one current version.
 Nothing is stored wrongly; upload again. Databases from 1.x need the application stopped for
