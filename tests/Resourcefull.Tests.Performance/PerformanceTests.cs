@@ -4,6 +4,7 @@ using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Resourcefull.SqlServer;
+using Resourcefull.SqlServer.Utilities;
 using Resourcefull.Tests.Integration;
 using Xunit.Abstractions;
 
@@ -61,6 +62,40 @@ public sealed class PerformanceTests(SqlServerFixture fixture, ITestOutputHelper
             await using Stream content = download!.Stream;
             await content.CopyToAsync(Stream.Null);
         });
+    }
+
+    [SkippableFact]
+    public async Task DownloadStreamingAsync_ShouldCountTheReadsOfItsContent_WhenReadingAMebibyte()
+    {
+        // The baseline catches reads that grow, not reads that stop being counted: a page query whose reader is
+        // disposed without reaching the end of its results loses the STATISTICS IO message carrying its reads.
+        IResourceContainerClient container = await NewContainerAsync();
+        await container.UploadAsync("r", new GeneratedStream(Mebibyte));
+        _activity.Reset();
+
+        ResourceDownloadResult? download = await container.DownloadStreamingAsync("r");
+        await using (Stream content = download!.Stream) await content.CopyToAsync(Stream.Null);
+
+        // Every full 64 KB chunk lies on at least eight 8 KB pages.
+        long fullChunks = Mebibyte / ResourceChunker.ChunkSize;
+        Assert.True(_activity.LogicalReads >= fullChunks * 8,
+            $"Only {_activity.LogicalReads} logical reads were counted for {fullChunks} full chunks.");
+    }
+
+    [SkippableFact]
+    public async Task DownloadStreamingAsync_ShouldStayWithinItsBaseline_WhenEightClientsDownloadDifferentNamesAtOnce()
+    {
+        IResourceContainerClient container = await NewContainerAsync();
+        long length = 4L * Mebibyte;
+        for (int client = 0; client < ConcurrentClients; client++) await container.UploadAsync($"r{client}", new GeneratedStream(length));
+
+        await MeasureAsync($"download-{ConcurrentClients}-at-once-4MiB", ConcurrentClients * length,
+            run: _ => Task.WhenAll(Enumerable.Range(0, ConcurrentClients).Select(async client =>
+            {
+                ResourceDownloadResult? download = await container.DownloadStreamingAsync($"r{client}");
+                await using Stream content = download!.Stream;
+                await content.CopyToAsync(Stream.Null);
+            })));
     }
 
     [SkippableFact]

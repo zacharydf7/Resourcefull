@@ -373,6 +373,10 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
                         }
                         page.Add(buffer.AsMemory(0, dataLength));
                     }
+
+                    // What the server sends after the rows (its messages, or an error) reaches the connection only if
+                    // the reader moves past them; disposing it drops them. EF Core reads its own results to the end too.
+                    await reader.NextResultAsync(ct).ConfigureAwait(false);
                 }
                 finally
                 {
