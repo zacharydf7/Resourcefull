@@ -4,9 +4,11 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <UserSecretsId>9ac12ef2-10d0-4fd5-b33b-834159243ee3</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\src\Resourcefull.InMemory\Resourcefull.InMemory.csproj" />
     <ProjectReference Include="..\..\src\Resourcefull.SqlServer\Resourcefull.SqlServer.csproj" />
     <ProjectReference Include="..\..\src\Resourcefull\Resourcefull.csproj" />
   </ItemGroup>

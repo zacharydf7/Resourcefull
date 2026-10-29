@@ -1,6 +1,45 @@
-@TestApiClient_HostAddress = http://localhost:5087
+@host = http://localhost:5087
+@container = reports
 
-GET {{TestApiClient_HostAddress}}/weatherforecast/
-Accept: application/json
+### Create a container
+POST {{host}}/api/containers/{{container}}
+Content-Type: multipart/form-data; boundary=boundary
 
-###
+--boundary
+Content-Disposition: form-data; name="metadataJson"
+
+{"owner":"samples"}
+--boundary--
+
+### List containers
+GET {{host}}/api/containers
+
+### Upload a resource (409 if it exists; add ?overwrite=true to replace it)
+POST {{host}}/api/resources/{{container}}
+Content-Type: multipart/form-data; boundary=boundary
+
+--boundary
+Content-Disposition: form-data; name="file"; filename="hello.txt"
+Content-Type: text/plain
+
+Hello from Resourcefull.
+--boundary
+Content-Disposition: form-data; name="metadataJson"
+
+{"author":"me"}
+--boundary--
+
+### List the container's resources
+GET {{host}}/api/containers/{{container}}
+
+### Get a resource's info
+GET {{host}}/api/resources/{{container}}?resourceName=hello.txt
+
+### Download a resource
+GET {{host}}/api/resources/{{container}}?resourceName=hello.txt&stream=true
+
+### Delete a resource
+DELETE {{host}}/api/resources/{{container}}?resourceName=hello.txt
+
+### Delete the container
+DELETE {{host}}/api/containers/{{container}}

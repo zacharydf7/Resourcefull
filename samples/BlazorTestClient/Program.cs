@@ -2,6 +2,7 @@ using BlazorTestClient.Components;
 using BlazorTestClient.Utilities;
 using Microsoft.AspNetCore.StaticFiles;
 using Resourcefull;
+using Resourcefull.InMemory;
 using Resourcefull.SqlServer;
 
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
@@ -11,16 +12,23 @@ var provider = new FileExtensionContentTypeProvider();
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
+// Resources are kept in memory unless a SQL Server connection string is configured (see the samples README).
+string? connectionString = builder.Configuration.GetConnectionString("Resources");
 builder.Services.AddResourcefull(options =>
 {
-    options.UseSqlServer("Data Source=(localdb)\\MSSQLLocalDB;Initial Catalog=ResourceDB;Integrated Security=True;Connect Timeout=30;Encrypt=False;Trust Server Certificate=True;Application Intent=ReadWrite;Multi Subnet Failover=False");
-    //options.UseInMemory();
+    if (string.IsNullOrWhiteSpace(connectionString)) options.UseInMemory();
+    else options.UseSqlServer(connectionString);
     options.SetUriProvider<TestUriProvider>();
     //options.UseVersioning();
 });
 builder.Services.AddSingleton(provider);
 
 WebApplication app = builder.Build();
+
+if (!string.IsNullOrWhiteSpace(connectionString))
+{
+    await app.Services.MigrateResourcefullDatabaseAsync();
+}
 
 if (!app.Environment.IsDevelopment())
 {

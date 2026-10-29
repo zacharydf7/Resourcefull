@@ -1,24 +1,35 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 using Resourcefull;
+using Resourcefull.InMemory;
 using Resourcefull.SqlServer;
 using System.Net.Mime;
 using System.Text.Json;
 using TestApiClient;
+
+const string InvalidMetadata = "metadataJson must be a JSON object whose values are strings, such as {\"author\":\"me\"}.";
 
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
+// Resources are kept in memory unless a SQL Server connection string is configured (see the samples README).
+string? connectionString = builder.Configuration.GetConnectionString("Resources");
 builder.Services.AddResourcefull(options =>
 {
-    options.UseSqlServer("Data Source=(localdb)\\MSSQLLocalDB;Initial Catalog=ResourceDB;Integrated Security=True;Connect Timeout=30;Encrypt=False;Trust Server Certificate=True;Application Intent=ReadWrite;Multi Subnet Failover=False");
-    //options.UseInMemory();     //uncomment and comment out the line above to use the InMemory Database
+    if (string.IsNullOrWhiteSpace(connectionString)) options.UseInMemory();
+    else options.UseSqlServer(connectionString);
     options.SetUriProvider<TestUriProvider>();
     //options.UseVersioning();
 });
 
 WebApplication app = builder.Build();
+
+if (!string.IsNullOrWhiteSpace(connectionString))
+{
+    await app.Services.MigrateResourcefullDatabaseAsync();
+}
 
 if (app.Environment.IsDevelopment())
 {
@@ -51,7 +62,7 @@ app.MapGet("/api/resources/{containerName}", async (string containerName, IResou
 {
     if (string.IsNullOrEmpty(resourceName))
     {
-        return Results.Problem("Resource name cannot be null or empty");
+        return Results.BadRequest("Resource name cannot be null or empty");
     }
 
     if (!await resourceServiceClient.ContainerExistsAsync(containerName)) return Results.NotFound("Resource Container not found.");
@@ -85,6 +96,7 @@ app.MapGet("/api/resources/{containerName}", async (string containerName, IResou
 app.MapPost("/api/resources/{containerName}", async (string containerName, IResourceServiceClient resourceServiceClient, IFormFile file,
     [FromForm] string? metadataJson = null, bool overwrite = false) =>
 {
+    if (!TryReadMetadata(metadataJson, out Dictionary<string, string> metadata)) return Results.BadRequest(InvalidMetadata);
     if (!await resourceServiceClient.ContainerExistsAsync(containerName)) return Results.NotFound("Resource Container not found.");
 
     IResourceContainerClient containerClient = resourceServiceClient.GetResourceContainerClient(containerName);
@@ -93,7 +105,7 @@ app.MapPost("/api/resources/{containerName}", async (string containerName, IReso
     {
         Overwrite = overwrite,
         Headers = new(file.ContentType, file.Length),
-        Metadata = string.IsNullOrEmpty(metadataJson) ? [] : JsonSerializer.Deserialize<Dictionary<string, string>>(metadataJson)!
+        Metadata = metadata
     };
 
     try
@@ -103,14 +115,14 @@ app.MapPost("/api/resources/{containerName}", async (string containerName, IReso
     }
     catch (ResourceConflictException)
     {
-        return Results.Problem($"Resource with name '{file.FileName}' already exists in container '{containerName}'. Set 'overwrite' to true to replace the existing resource.");
+        return Results.Conflict($"Resource with name '{file.FileName}' already exists in container '{containerName}'. Set 'overwrite' to true to replace the existing resource.");
     }
 }).DisableAntiforgery();
 
 app.MapPost("/api/containers/{containerName}", async (string containerName, IResourceServiceClient resourceServiceClient,
     [FromForm] string? metadataJson = null) =>
 {
-    var metadata = string.IsNullOrEmpty(metadataJson) ? [] : JsonSerializer.Deserialize<Dictionary<string, string>>(metadataJson)!;
+    if (!TryReadMetadata(metadataJson, out Dictionary<string, string> metadata)) return Results.BadRequest(InvalidMetadata);
 
     try
     {
@@ -128,7 +140,7 @@ app.MapDelete("/api/resources/{containerName}", async (string containerName, IRe
 {
     if (string.IsNullOrEmpty(resourceName))
     {
-        return Results.Problem("Resource name cannot be null or empty");
+        return Results.BadRequest("Resource name cannot be null or empty");
     }
 
     if (!await resourceServiceClient.ContainerExistsAsync(containerName)) return Results.NotFound("Resource Container not found.");
@@ -147,29 +159,40 @@ app.MapDelete("/api/containers/{containerName}", async (string containerName, IR
 }).DisableAntiforgery();
 
 app.MapPost("/api/resources/{containerName}/restore", async (string containerName,
-    string resourceName, string versionId, IResourceServiceClient resourceServiceClient) =>
+    string resourceName, string versionId, IResourceServiceClient resourceServiceClient, IOptions<ResourcefullOptions> options) =>
 {
     if (string.IsNullOrEmpty(resourceName) || string.IsNullOrEmpty(versionId))
     {
-        return Results.Problem("Resource name and versionId cannot be null or empty");
+        return Results.BadRequest("Resource name and versionId cannot be null or empty");
     }
+
+    if (!options.Value.IsVersioningEnabled)
+        return Results.BadRequest("Versioning isn't enabled, so there are no versions to restore.");
 
     if (!await resourceServiceClient.ContainerExistsAsync(containerName))
         return Results.NotFound("Resource Container not found.");
 
     IResourceContainerClient containerClient = resourceServiceClient.GetResourceContainerClient(containerName);
 
-    try
-    {
-        ResourceInfo? restored = await containerClient.RestoreVersionAsync(resourceName, versionId);
-        return restored is null
-            ? Results.NotFound($"Resource '{resourceName}' with version '{versionId}' not found.")
-            : Results.Ok(restored);
-    }
-    catch (InvalidOperationException ex)
-    {
-        return Results.Problem(ex.Message);
-    }
+    ResourceInfo? restored = await containerClient.RestoreVersionAsync(resourceName, versionId);
+    return restored is null
+        ? Results.NotFound($"Resource '{resourceName}' with version '{versionId}' not found.")
+        : Results.Ok(restored);
 });
 
 app.Run();
+
+static bool TryReadMetadata(string? metadataJson, out Dictionary<string, string> metadata)
+{
+    metadata = [];
+    if (string.IsNullOrEmpty(metadataJson)) return true;
+    try
+    {
+        metadata = JsonSerializer.Deserialize<Dictionary<string, string>>(metadataJson) ?? [];
+        return true;
+    }
+    catch (JsonException)
+    {
+        return false;
+    }
+}

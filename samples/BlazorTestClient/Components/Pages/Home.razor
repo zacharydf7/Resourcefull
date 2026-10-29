@@ -196,18 +196,19 @@
         }
     }
 
-    public async void DownloadResource(ResourceInfo resourceInfo)
+    public async Task DownloadResource(ResourceInfo resourceInfo)
     {
         var containerClient = ResourceServiceClient.GetResourceContainerClient(resourceInfo.ContainerName);
         var result = await containerClient.DownloadStreamingAsync(resourceInfo.Name, resourceInfo.VersionId);
-        if (result?.Stream is null) return;
+        if (result is null) return;
+        await using Stream stream = result.Stream;
         using var ms = new MemoryStream();
-        await result.Stream.CopyToAsync(ms);
+        await stream.CopyToAsync(ms);
         var fileContent = ms.ToArray();
         await JSRuntime.InvokeVoidAsync("downloadFile", result.ResourceInfo.Name, fileContent);
     }
 
-    public async void UploadResource(InputFileChangeEventArgs args, string containerName)
+    public async Task UploadResource(InputFileChangeEventArgs args, string containerName)
     {
         FileExtensionContentTypeProvider.TryGetContentType(args.File.Name, out var contentType);
         ResourceUploadOptions resourceUploadOptions = new()
@@ -228,7 +229,7 @@
         await PopulateResourceContainers();
     }
 
-    public async void AddContainer()
+    public async Task AddContainer()
     {
         if (string.IsNullOrWhiteSpace(_newContainerName)) return;
         await ResourceServiceClient.CreateResourceContainerIfNotExistsAsync(_newContainerName);
@@ -264,11 +265,7 @@
             {
                 _restoreMessage = $"Restored version {resourceInfo.VersionId} as new version for {resourceInfo.Name}.";
                 await PopulateResourceContainers();
-
-                _resources.ForEach(async x =>
-                {
-                    await ToggleVersionHistory(x);
-                });
+                await ToggleVersionHistory(restored);
             }
         }
         catch (Exception ex)
