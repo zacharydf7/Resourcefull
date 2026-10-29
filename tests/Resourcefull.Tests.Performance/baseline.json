@@ -86,7 +86,7 @@
     "LogBytes": 37902745,
     "AllocatedBytes": 16659664,
     "PeakHeapBytes": 16698856,
-    "Seconds": 0.2885,
+    "Seconds": 0.8615,
     "ContentBytes": 33554432
   },
   "upload-same-name-8-at-once-1MiB": {
