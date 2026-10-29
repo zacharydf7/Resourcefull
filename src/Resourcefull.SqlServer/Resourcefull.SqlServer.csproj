@@ -4,15 +4,8 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-	<Description>Required services for SQL Server implementation.</Description>
-	<Title>Resourcefull.SqlServer</Title>
-	<Copyright>©2024</Copyright>
-	<PackageProjectUrl>https://github.com/zacharydf7/Resourcefull</PackageProjectUrl>
-	<RepositoryUrl>https://github.com/zacharydf7/Resourcefull</RepositoryUrl>
-	<RepositoryType>git</RepositoryType>
-	<PackageLicenseExpression>MIT</PackageLicenseExpression>
-	<EnablePackageValidation>true</EnablePackageValidation>
-    <Version>2.2.0.0</Version>
+    <Description>SQL Server storage for Resourcefull: streams content in chunks with bounded memory, keeps versions and content hashes, and ships idempotent provisioning and upgrade scripts.</Description>
+    <Title>Resourcefull.SqlServer</Title>
   </PropertyGroup>
 
 	<ItemGroup>

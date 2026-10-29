@@ -5,14 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <Title>Resourcefull</Title>
-    <Description>Resourcefull is a NuGet package that streamlines the handling of file uploads and downloads across various data providers such as SqlServer, AzureBlobStorage and InMemory, offering a unified interface.</Description>
-    <Copyright>©2024</Copyright>
-    <RepositoryUrl>https://github.com/zacharydf7/Resourcefull</RepositoryUrl>
-    <PackageProjectUrl>https://github.com/zacharydf7/Resourcefull</PackageProjectUrl>
-    <RepositoryType>git</RepositoryType>
-    <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <EnablePackageValidation>true</EnablePackageValidation>
-	<Version>2.2.0.0</Version>
+    <Description>Store and serve files of any size on your own infrastructure: upload, download, list and version resources in named containers through one client API, on SQL Server, in memory, or a provider of your own.</Description>
   </PropertyGroup>
 
   <ItemGroup>

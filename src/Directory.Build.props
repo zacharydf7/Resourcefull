@@ -1,0 +1,35 @@
+<Project>
+
+  <!-- The repository-wide settings still apply. -->
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
+
+  <!-- Package metadata shared by every Resourcefull package; each project adds its own Title and Description. -->
+  <PropertyGroup>
+    <Version>3.0.0</Version>
+    <Authors>Zachary Fry</Authors>
+    <Copyright>Copyright (c) Zachary Fry</Copyright>
+    <PackageTags>file-storage;uploads;downloads;versioning;sqlserver;streaming</PackageTags>
+    <PackageProjectUrl>https://github.com/zacharydf7/Resourcefull</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/zacharydf7/Resourcefull</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageIcon>icon.png</PackageIcon>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <EnablePackageValidation>true</EnablePackageValidation>
+
+    <!-- A symbol package, so consumers can step into the library. -->
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+  </PropertyGroup>
+
+  <!-- Deterministic paths in what CI builds and publishes. -->
+  <PropertyGroup Condition="'$(GITHUB_ACTIONS)' == 'true'">
+    <ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="$(MSBuildThisFileDirectory)../README.md" Pack="true" PackagePath="/" Visible="false" />
+    <None Include="$(MSBuildThisFileDirectory)../assets/icon.png" Pack="true" PackagePath="/" Visible="false" />
+  </ItemGroup>
+
+</Project>
