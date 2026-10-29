@@ -53,6 +53,15 @@
     "Seconds": 0.1763,
     "ContentBytes": 33554432
   },
+  "download-range-1MiB-of-64MiB": {
+    "RoundTrips": 5,
+    "LogicalReads": 613,
+    "LogBytes": 0,
+    "AllocatedBytes": 1524104,
+    "PeakHeapBytes": 1551592,
+    "Seconds": 0.0076,
+    "ContentBytes": 1048576
+  },
   "get-info": {
     "RoundTrips": 1,
     "LogicalReads": 2,
