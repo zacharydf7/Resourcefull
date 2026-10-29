@@ -60,6 +60,9 @@ public class Reports(IResourceServiceClient resources)
 
 ## Documentation
 
+The [documentation site](https://zacharydf7.github.io/Resourcefull/) has everything below, plus the API
+reference.
+
 - [Getting started](https://github.com/zacharydf7/Resourcefull/blob/main/docs/getting-started.md)
 - [Concepts](https://github.com/zacharydf7/Resourcefull/blob/main/docs/index.md#concepts): containers and names,
   uploads and downloads, versioning, concurrency, errors

@@ -1,0 +1,42 @@
+name: Publish the docs site
+
+# Builds the docs site from main and publishes it to GitHub Pages. build.yml builds it too, on every push and pull
+# request, to catch broken links before they reach main.
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch: # manual trigger
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deployment at a time, and never cancel one partway.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+    - uses: actions/checkout@v7
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v6
+      with:
+        dotnet-version: 10.0.x
+    - name: Build the docs site
+      run: |
+        dotnet tool restore
+        dotnet docfx docfx.json --warningsAsErrors
+    - name: Upload the docs site
+      uses: actions/upload-pages-artifact@v5
+      with:
+        path: _site
+    - name: Publish to GitHub Pages
+      id: deployment
+      uses: actions/deploy-pages@v5

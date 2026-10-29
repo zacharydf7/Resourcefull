@@ -9,7 +9,7 @@
     <Authors>Zachary Fry</Authors>
     <Copyright>Copyright (c) Zachary Fry</Copyright>
     <PackageTags>file-storage;uploads;downloads;versioning;sqlserver;streaming</PackageTags>
-    <PackageProjectUrl>https://github.com/zacharydf7/Resourcefull</PackageProjectUrl>
+    <PackageProjectUrl>https://zacharydf7.github.io/Resourcefull/</PackageProjectUrl>
     <RepositoryUrl>https://github.com/zacharydf7/Resourcefull</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
