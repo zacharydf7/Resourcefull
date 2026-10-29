@@ -106,15 +106,19 @@ internal static partial class ProvisioningScripts
             : $"The texts agree for {limit} lines; expected {expectedLines.Length} lines but found {actualLines.Length}.";
     }
 
+    /// <summary>How many batches <see cref="ApplyAsync"/> runs for <paramref name="sql"/>.</summary>
+    public static int CountBatches(string sql) => SplitBatches(sql).Count;
+
     /// <summary>
     /// Runs the script batch by batch like <c>sqlcmd</c>, from <c>master</c>, with <c>ResourceDB</c> swapped for the
-    /// throwaway database in <paramref name="targetConnectionString"/> so a real one is never touched.
+    /// throwaway database in <paramref name="targetConnectionString"/> so a real one is never touched. With
+    /// <paramref name="batchCount"/>, stops after that many batches, as a run interrupted there would.
     /// </summary>
-    public static async Task ApplyAsync(string sql, string targetConnectionString)
+    public static async Task ApplyAsync(string sql, string targetConnectionString, int batchCount = int.MaxValue)
     {
         var target = new SqlConnectionStringBuilder(targetConnectionString);
         string replaced = Regex.Replace(sql, $@"\b{Regex.Escape(DatabaseName)}\b", target.InitialCatalog);
-        IReadOnlyList<string> batches = [.. BatchSeparatorPattern().Split(replaced).Where(batch => !string.IsNullOrWhiteSpace(batch))];
+        IReadOnlyList<string> batches = [.. SplitBatches(replaced).Take(batchCount)];
 
         var master = new SqlConnectionStringBuilder(targetConnectionString) { InitialCatalog = "master", Pooling = false };
         await using var connection = new SqlConnection(master.ConnectionString);
@@ -139,6 +143,9 @@ internal static partial class ProvisioningScripts
 
     public static string ReadCommitted(ProvisioningScript script) =>
         File.ReadAllText(Path.Combine(ScriptsDirectory, script.RelativePath));
+
+    private static List<string> SplitBatches(string sql) =>
+        [.. BatchSeparatorPattern().Split(sql).Where(batch => !string.IsNullOrWhiteSpace(batch))];
 
     /// <summary>
     /// Listing migrations and generating scripts only read the migrations assembly; EF never opens a connection for

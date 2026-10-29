@@ -667,7 +667,8 @@ v1 database:
    sessions).
 2. **Back up the database.**
 3. Run the scripts under `Scripts/Migrations/` that your database has not yet recorded, oldest first,
-   using a tool that halts on the first error (SSMS, or `sqlcmd -b`), during a **maintenance window**.
+   using a tool that halts on the first error (`sqlcmd -b`, or SSMS in SQLCMD mode with `:on error exit` at
+   the top; SSMS otherwise carries on with the next batch), during a **maintenance window**.
    Each script covers one migration, is data-preserving, skips itself when its migration is already in
    `__EFMigrationsHistory`, and is safe to re-run if it is interrupted. A database that predates
    versioning needs `migrate_20250513172319_AddVersioning.sql` before
@@ -697,6 +698,22 @@ collation. Three things to check before running it:
 Concurrent uploads in earlier releases could leave a name with two current versions; the script keeps the
 most recently stored one current before creating the constraint, so it needs no preparation.
 
+`migrate_20261029003116_EnableReadCommittedSnapshot.sql` turns on `READ_COMMITTED_SNAPSHOT`. Where RCSI is
+already on, as on any database an earlier release upgraded successfully, it only records itself; otherwise it disconnects
+open sessions, so it needs the maintenance window.
+
+**Recovering from an interrupted upgrade by an earlier release.** The `RedesignKeysAndVersioning` script shipped
+before this release could stop after committing the new keys but before recording them, for example when enabling
+RCSI failed. Re-running it then fails at `ALTER TABLE [Resources] ADD [Id]`. If the last object it creates, the
+foreign key `FK_ResourceChunks_Resources_ResourceId` (in `sys.foreign_keys`), exists but `__EFMigrationsHistory`
+has no `20260624193539_RedesignKeysAndVersioning` row, the schema change is complete. Record it, then run the
+remaining scripts; the RCSI script turns RCSI on:
+
+```sql
+INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+VALUES (N'20260624193539_RedesignKeysAndVersioning', N'10.0.5');
+```
+
 New databases provisioned from `Scripts/Resourcefull.sql` already include the v2 schema and RCSI — no
 upgrade step is required. `Scripts/Resourcefull.sql` is itself idempotent and can be used in place of the
 individual upgrade scripts; it applies whichever migrations the database is missing.
@@ -717,6 +734,7 @@ dotnet ef migrations script 20240611171637_InitialCreate 20250513172319_AddVersi
 dotnet ef migrations script 20250513172319_AddVersioning 20260624193539_RedesignKeysAndVersioning --idempotent --project src/Resourcefull.SqlServer --output src/Resourcefull.SqlServer/Scripts/Migrations/migrate_20260624193539_RedesignKeysAndVersioning.sql
 dotnet ef migrations script 20260624193539_RedesignKeysAndVersioning 20261028213132_NameLimitsAndCaseSensitiveNames --idempotent --project src/Resourcefull.SqlServer --output src/Resourcefull.SqlServer/Scripts/Migrations/migrate_20261028213132_NameLimitsAndCaseSensitiveNames.sql
 dotnet ef migrations script 20261028213132_NameLimitsAndCaseSensitiveNames 20261028220856_UniqueLatestVersion --idempotent --project src/Resourcefull.SqlServer --output src/Resourcefull.SqlServer/Scripts/Migrations/migrate_20261028220856_UniqueLatestVersion.sql
+dotnet ef migrations script 20261028220856_UniqueLatestVersion 20261029003116_EnableReadCommittedSnapshot --idempotent --project src/Resourcefull.SqlServer --output src/Resourcefull.SqlServer/Scripts/Migrations/migrate_20261029003116_EnableReadCommittedSnapshot.sql
 ```
 
 Then put the preamble back at the top of each file. The fresh-install preamble creates the database when
@@ -747,7 +765,7 @@ GO
 Add the new upgrade script to `Resourcefull.SqlServer.csproj` as `Content` like the existing ones so it
 ships in the package. The test that fails names the script and prints the command that regenerates it.
 
-Two rules keep the generated part generated:
+Three rules keep the generated part generated, and the scripts safe to re-run:
 
 - **Data fixes go in the migration**, as `migrationBuilder.Sql(...)`, never typed into a script by hand.
   The parity test compares text, so a hand-added statement fails it, and a regeneration would drop it.
@@ -755,6 +773,11 @@ Two rules keep the generated part generated:
   runs each migration as one batch, and SQL Server binds column names when it compiles the batch, before
   the `ALTER TABLE` earlier in the same batch has run. The backfills in `AddVersioning` and
   `RedesignKeysAndVersioning` are written this way.
+- **Give a step that can't run in a transaction a migration of its own.** A `suppressTransaction: true` step
+  (such as `ALTER DATABASE`) also moves the migration's history row out of its transaction, so a failure
+  between the two leaves the changes in place with no record of them. Make the step check whether its work is
+  already done, as `EnableReadCommittedSnapshot` does. The integration suite stops each script after every
+  batch and runs it again, and fails if any of those runs can't finish.
 
 Expect the whole file to change cosmetically when the EF Core tooling version changes; the parity test
 compares against the generator the package references, so regenerate and commit the result.

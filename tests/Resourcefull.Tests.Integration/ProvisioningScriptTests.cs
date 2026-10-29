@@ -184,6 +184,48 @@ public class ProvisioningScriptTests(SqlServerFixture fixture)
         await AssertCurrentSchemaAsync(connectionString);
     }
 
+    /// <summary>Every script paired with every point between two of its batches where a run could stop.</summary>
+    public static TheoryData<string, int> InterruptionPoints()
+    {
+        var points = new TheoryData<string, int>();
+        foreach (ProvisioningScript script in ProvisioningScripts.Expected())
+        {
+            int batches = ProvisioningScripts.CountBatches(ProvisioningScripts.ReadCommitted(script));
+            for (int completed = 1; completed < batches; completed++)
+            {
+                points.Add(script.RelativePath, completed);
+            }
+        }
+
+        return points;
+    }
+
+    [SkippableTheory]
+    [MemberData(nameof(InterruptionPoints))]
+    public async Task Script_ShouldFinishWhenRunAgain_WhenAnEarlierRunStoppedBetweenBatches(string relativePath, int completedBatches)
+    {
+        fixture.SkipIfUnavailable();
+
+        // Arrange: the database the script starts from, then a run that stops after the given batch.
+        ProvisioningScript script = ProvisioningScripts.Expected().Single(s => s.RelativePath == relativePath);
+        string sql = ProvisioningScripts.ReadCommitted(script);
+        string connectionString = fixture.AllocateDatabase($"Interrupted_{script.ToMigration?.Split('_')[0] ?? "Fresh"}_{completedBatches}");
+        if (script.FromMigration is not null)
+        {
+            await using ResourceDbContext context = SqlServerFixture.CreateDbContext(connectionString);
+            await context.Database.MigrateAsync(script.FromMigration);
+        }
+        await ProvisioningScripts.ApplyAsync(sql, connectionString, completedBatches);
+
+        // Act
+        await ProvisioningScripts.ApplyAsync(sql, connectionString);
+
+        // Assert
+        IReadOnlyList<string> ids = ProvisioningScripts.MigrationIds;
+        string target = script.ToMigration ?? ids[^1];
+        Assert.Equal(ids.Where(id => string.CompareOrdinal(id, target) <= 0), await ReadMigrationHistoryAsync(connectionString));
+    }
+
     [SkippableFact]
     public async Task NameLimitsUpgradeScript_ShouldChangeNothing_WhenAStoredNameIsLongerThanTheNewLimit()
     {

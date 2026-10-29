@@ -177,18 +177,6 @@ BEGIN
     ALTER TABLE [ResourceChunks] ADD CONSTRAINT [FK_ResourceChunks_Resources_ResourceId] FOREIGN KEY ([ResourceId]) REFERENCES [Resources] ([Id]) ON DELETE CASCADE;
 END;
 
-COMMIT;
-GO
-
-IF NOT EXISTS (
-    SELECT * FROM [__EFMigrationsHistory]
-    WHERE [MigrationId] = N'20260624193539_RedesignKeysAndVersioning'
-)
-BEGIN
-    ALTER DATABASE CURRENT SET READ_COMMITTED_SNAPSHOT ON WITH ROLLBACK IMMEDIATE;
-END;
-GO
-
 IF NOT EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
     WHERE [MigrationId] = N'20260624193539_RedesignKeysAndVersioning'
@@ -197,5 +185,7 @@ BEGIN
     INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
     VALUES (N'20260624193539_RedesignKeysAndVersioning', N'10.0.5');
 END;
+
+COMMIT;
 GO
 

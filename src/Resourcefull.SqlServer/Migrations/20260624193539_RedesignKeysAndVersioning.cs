@@ -145,24 +145,11 @@ namespace Resourcefull.SqlServer.Migrations
                 principalTable: "Resources",
                 principalColumn: "Id",
                 onDelete: ReferentialAction.Cascade);
-
-            // ----------------------------------------------------------------------------------
-            // 5. Enable row-versioned reads to remove the reader/writer deadlock class. Must run
-            //    outside the migration transaction. ROLLBACK IMMEDIATE forces other connections off,
-            //    so apply during a maintenance window.
-            // ----------------------------------------------------------------------------------
-            migrationBuilder.Sql(
-                "ALTER DATABASE CURRENT SET READ_COMMITTED_SNAPSHOT ON WITH ROLLBACK IMMEDIATE;",
-                suppressTransaction: true);
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.Sql(
-                "ALTER DATABASE CURRENT SET READ_COMMITTED_SNAPSHOT OFF WITH ROLLBACK IMMEDIATE;",
-                suppressTransaction: true);
-
             migrationBuilder.DropForeignKey(
                 name: "FK_ResourceChunks_Resources_ResourceId",
                 table: "ResourceChunks");
