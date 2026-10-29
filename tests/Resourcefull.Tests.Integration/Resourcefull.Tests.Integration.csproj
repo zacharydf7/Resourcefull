@@ -30,6 +30,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Resourcefull.SqlServer\Resourcefull.SqlServer.csproj" />
     <ProjectReference Include="..\..\src\Resourcefull\Resourcefull.csproj" />
+    <ProjectReference Include="..\Resourcefull.Tests.Contract\Resourcefull.Tests.Contract.csproj" />
   </ItemGroup>
 
   <ItemGroup>

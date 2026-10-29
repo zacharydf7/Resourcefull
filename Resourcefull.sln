@@ -24,6 +24,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "docs", "docs", "{D9B97653-C
 		docs\docs-v2-reference.md = docs\docs-v2-reference.md
 	EndProjectSection
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Resourcefull.Tests.Contract", "tests\Resourcefull.Tests.Contract\Resourcefull.Tests.Contract.csproj", "{36CA369C-3723-4A01-AE17-391E767BF1FE}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -118,6 +120,18 @@ Global
 		{8749398C-A253-4780-87E3-0934758BC18D}.Release|x64.Build.0 = Release|Any CPU
 		{8749398C-A253-4780-87E3-0934758BC18D}.Release|x86.ActiveCfg = Release|Any CPU
 		{8749398C-A253-4780-87E3-0934758BC18D}.Release|x86.Build.0 = Release|Any CPU
+		{36CA369C-3723-4A01-AE17-391E767BF1FE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{36CA369C-3723-4A01-AE17-391E767BF1FE}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{36CA369C-3723-4A01-AE17-391E767BF1FE}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{36CA369C-3723-4A01-AE17-391E767BF1FE}.Debug|x64.Build.0 = Debug|Any CPU
+		{36CA369C-3723-4A01-AE17-391E767BF1FE}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{36CA369C-3723-4A01-AE17-391E767BF1FE}.Debug|x86.Build.0 = Debug|Any CPU
+		{36CA369C-3723-4A01-AE17-391E767BF1FE}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{36CA369C-3723-4A01-AE17-391E767BF1FE}.Release|Any CPU.Build.0 = Release|Any CPU
+		{36CA369C-3723-4A01-AE17-391E767BF1FE}.Release|x64.ActiveCfg = Release|Any CPU
+		{36CA369C-3723-4A01-AE17-391E767BF1FE}.Release|x64.Build.0 = Release|Any CPU
+		{36CA369C-3723-4A01-AE17-391E767BF1FE}.Release|x86.ActiveCfg = Release|Any CPU
+		{36CA369C-3723-4A01-AE17-391E767BF1FE}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -126,6 +140,7 @@ Global
 		{A57DDAC2-2CDD-4218-8FCB-166B72C5F8C6} = {998D101E-5286-44C6-906F-74B71230C9FB}
 		{E4B5F1D5-C916-414A-9D80-21379EF520A9} = {998D101E-5286-44C6-906F-74B71230C9FB}
 		{0064A27B-A25D-465E-BB81-EC2650028804} = {998D101E-5286-44C6-906F-74B71230C9FB}
+		{36CA369C-3723-4A01-AE17-391E767BF1FE} = {998D101E-5286-44C6-906F-74B71230C9FB}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {5C5EC325-CFE1-43A9-A98C-90B4289978DC}

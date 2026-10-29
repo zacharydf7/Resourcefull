@@ -1,23 +1,18 @@
 using Microsoft.Extensions.DependencyInjection;
 
-namespace Resourcefull.Tests.Integration;
+namespace Resourcefull.Tests.Contract;
 
-/// <summary>
-/// Many callers writing the same resource or container name at once. Each test releases all its writers together so
-/// they genuinely race, then checks the state they leave behind.
-/// </summary>
-[Collection(SqlServerCollection.Name)]
-public class ConcurrentWriteIntegrationTests(SqlServerFixture fixture)
+public abstract partial class ResourcefullContractTests
 {
+    // Many callers writing the same resource or container name at once. Each test releases all its writers together
+    // so they genuinely race, then checks the state they leave behind.
     private const int Writers = 16;
 
     [SkippableFact]
     public async Task UploadAsync_ShouldLetExactlyOneSucceed_WhenConcurrentCreateOnlyUploadsTargetOneName()
     {
-        fixture.SkipIfUnavailable();
-
         // Arrange
-        using var provider = fixture.BuildServiceProvider(o => o.UseVersioning());
+        using ServiceProvider provider = BuildServiceProvider(o => o.UseVersioning());
         IResourceContainerClient container = await NewContainerAsync(provider);
 
         // Act
@@ -33,10 +28,8 @@ public class ConcurrentWriteIntegrationTests(SqlServerFixture fixture)
     [SkippableFact]
     public async Task UploadAsync_ShouldLetExactlyOneSucceed_WhenConcurrentUploadsWithoutOverwriteTargetOneNameWithoutVersioning()
     {
-        fixture.SkipIfUnavailable();
-
         // Arrange
-        using var provider = fixture.BuildServiceProvider();
+        using ServiceProvider provider = BuildServiceProvider();
         IResourceContainerClient container = await NewContainerAsync(provider);
 
         // Act
@@ -51,10 +44,8 @@ public class ConcurrentWriteIntegrationTests(SqlServerFixture fixture)
     [SkippableFact]
     public async Task UploadAsync_ShouldLeaveOneVersion_WhenConcurrentOverwritingUploadsTargetOneNameWithoutVersioning()
     {
-        fixture.SkipIfUnavailable();
-
         // Arrange
-        using var provider = fixture.BuildServiceProvider();
+        using ServiceProvider provider = BuildServiceProvider();
         IResourceContainerClient container = await NewContainerAsync(provider);
 
         // Act
@@ -70,10 +61,8 @@ public class ConcurrentWriteIntegrationTests(SqlServerFixture fixture)
     [SkippableFact]
     public async Task UploadAsync_ShouldKeepEveryVersionWithOneCurrent_WhenConcurrentUploadsTargetOneName()
     {
-        fixture.SkipIfUnavailable();
-
         // Arrange
-        using var provider = fixture.BuildServiceProvider(o => o.UseVersioning(maxVersions: 100));
+        using ServiceProvider provider = BuildServiceProvider(o => o.UseVersioning(maxVersions: 100));
         IResourceContainerClient container = await NewContainerAsync(provider);
 
         // Act
@@ -90,10 +79,8 @@ public class ConcurrentWriteIntegrationTests(SqlServerFixture fixture)
     [SkippableFact]
     public async Task UploadAsync_ShouldLeaveMaxVersions_WhenConcurrentUploadsTargetOneName()
     {
-        fixture.SkipIfUnavailable();
-
         // Arrange
-        using var provider = fixture.BuildServiceProvider(o => o.UseVersioning(maxVersions: 3));
+        using ServiceProvider provider = BuildServiceProvider(o => o.UseVersioning(maxVersions: 3));
         IResourceContainerClient container = await NewContainerAsync(provider);
 
         // Act
@@ -109,11 +96,9 @@ public class ConcurrentWriteIntegrationTests(SqlServerFixture fixture)
     [SkippableFact]
     public async Task CreateResourceContainerAsync_ShouldLetExactlyOneSucceed_WhenCalledConcurrently()
     {
-        fixture.SkipIfUnavailable();
-
         // Arrange
-        using var provider = fixture.BuildServiceProvider();
-        var name = $"c-{Guid.NewGuid():N}";
+        using ServiceProvider provider = BuildServiceProvider();
+        string name = NewContainerName();
 
         // Act
         Exception?[] outcomes = await RaceAsync(provider, (_, service) => service.CreateResourceContainerAsync(name));
@@ -126,22 +111,17 @@ public class ConcurrentWriteIntegrationTests(SqlServerFixture fixture)
     [SkippableFact]
     public async Task CreateResourceContainerIfNotExistsAsync_ShouldSucceedForEveryCaller_WhenCalledConcurrently()
     {
-        fixture.SkipIfUnavailable();
-
         // Arrange
-        using var provider = fixture.BuildServiceProvider();
-        var name = $"c-{Guid.NewGuid():N}";
+        using ServiceProvider provider = BuildServiceProvider();
+        string name = NewContainerName();
 
         // Act
         Exception?[] outcomes = await RaceAsync(provider, (_, service) => service.CreateResourceContainerIfNotExistsAsync(name));
 
         // Assert
         Assert.All(outcomes, Assert.Null);
-        Assert.Single(await provider.GetRequiredService<IResourceServiceClient>().GetResourceContainersAsync(), c => c.Name == name);
+        Assert.Single(await ServiceOf(provider).GetResourceContainersAsync(), c => c.Name == name);
     }
-
-    private static async Task<IResourceContainerClient> NewContainerAsync(ServiceProvider provider) =>
-        await provider.GetRequiredService<IResourceServiceClient>().CreateResourceContainerAsync($"c-{Guid.NewGuid():N}");
 
     private static Task<Exception?[]> RaceAsync(ServiceProvider provider, Func<int, Task> write) =>
         RaceAsync(provider, (i, _) => write(i));
