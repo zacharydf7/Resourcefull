@@ -1,6 +1,10 @@
 # Changelog
 
-## Unreleased
+## 3.1.0
+
+New features, all additive: code written for 3.0 keeps compiling, and custom providers keep working. The one thing to
+check is a test that expects exactly `ArgumentException` for a bad name; it's now the subclass
+`ResourceNameException`.
 
 ### Added
 

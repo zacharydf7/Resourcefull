@@ -5,7 +5,7 @@
 
   <!-- Package metadata shared by every Resourcefull package; each project adds its own Title and Description. -->
   <PropertyGroup>
-    <Version>3.0.0</Version>
+    <Version>3.1.0</Version>
     <Authors>Zachary Fry</Authors>
     <Copyright>Copyright (c) Zachary Fry</Copyright>
     <PackageTags>file-storage;uploads;downloads;versioning;sqlserver;streaming</PackageTags>
