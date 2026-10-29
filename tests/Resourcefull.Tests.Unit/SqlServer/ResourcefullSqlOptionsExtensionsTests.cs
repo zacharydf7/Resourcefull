@@ -1,6 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Infrastructure;
-using Microsoft.Extensions.DependencyInjection;
+﻿using Microsoft.Extensions.DependencyInjection;
 using Resourcefull.InMemory;
 using Resourcefull.SqlServer;
 
@@ -20,25 +18,21 @@ public class ResourcefullSqlOptionsExtensionsTests
     }
 
     [Fact]
-    public void UseSqlServer_ShouldAddResourceRepository_WhenProviderIsConfigured()
+    public async Task UseSqlServer_ShouldProvideTheSqlRepositoryAndBackfill_WhenProviderIsConfigured()
     {
         // Arrange
         var services = new ServiceCollection();
         var resourcefullOptionsBuilder = new ResourcefullOptionsBuilder(services);
 
         // Act
-        resourcefullOptionsBuilder.UseSqlServer("");
+        resourcefullOptionsBuilder.UseSqlServer("Server=unused;Database=unused");
 
         // Assert
         Assert.True(resourcefullOptionsBuilder.ProviderConfigured, "Failure: Provider should be configured.");
-
-        ServiceProvider serviceProvider = services.BuildServiceProvider();
-        Assert.Contains(services, service => service.ServiceType == typeof(ServiceProviderAccessor));
-        Assert.Contains(services, service => service.ServiceType == typeof(DbContextOptions<ResourceDbContext>));
-        Assert.Contains(services, service => service.ServiceType == typeof(DbContextOptions));
-        Assert.Contains(services, service => service.ServiceType == typeof(IDbContextFactory<ResourceDbContext>));
-        Assert.Contains(services, service => service.ServiceType == typeof(ResourceDbContext));
-        Assert.Contains(services, service => service.ServiceType == typeof(IResourceRepository));
+        await using ServiceProvider provider = services.BuildServiceProvider();
+        using IServiceScope scope = provider.CreateScope();
+        Assert.IsType<ResourceSqlRepository>(scope.ServiceProvider.GetRequiredService<IResourceRepository>());
+        Assert.NotNull(scope.ServiceProvider.GetRequiredService<ContentHashBackfill>());
     }
 
     [Fact]

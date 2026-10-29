@@ -83,7 +83,7 @@ public class ResourceStreamTests
         // Arrange
         var owner = new TrackingDisposable();
         var stream = new ResourceStream(Pages("abc"u8.ToArray()), length: 3, owner);
-        await stream.ReadAsync(new byte[1]);
+        await stream.ReadExactlyAsync(new byte[1]);
 
         // Act
         await stream.DisposeAsync();
@@ -179,7 +179,7 @@ public class ResourceStreamTests
         using var second = new CancellationTokenSource();
 
         // Act
-        await stream.ReadAsync(new byte[1], 0, 1, first.Token);
+        await stream.ReadExactlyAsync(new byte[1], 0, 1, first.Token);
         first.Cancel();
         int read = await stream.ReadAsync(new byte[1], 0, 1, second.Token);
 

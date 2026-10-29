@@ -757,6 +757,26 @@ public class ResourceContainerClientTests
     }
 
     [Fact]
+    public async Task DownloadContentAsync_ShouldStopCopyingAndReleaseTheStream_WhenCancelledMidCopy()
+    {
+        // Arrange
+        using var cts = new CancellationTokenSource();
+        var content = new CancelAfterReadsStream(new byte[1024 * 1024], cts, readsBeforeCancel: 1);
+        var repository = NewRepository();
+        repository.Setup(r => r.GetResourceInfoAsync(Container, "name", null, cts.Token))
+            .ReturnsAsync(new ResourceInfo { ContainerName = Container, Name = "name", VersionId = "v1" });
+        repository.Setup(r => r.GetResourceStreamAsync(Container, "name", "v1", cts.Token)).ReturnsAsync(content);
+        var client = NewClient(repository.Object);
+
+        // Act
+        Task act() => client.DownloadContentAsync("name", null, cts.Token);
+
+        // Assert
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(act);
+        Assert.False(content.CanRead);
+    }
+
+    [Fact]
     public async Task GetResourceInfoAsync_ShouldPassTheToken_WhenCalledWithOne()
     {
         // Arrange

@@ -23,7 +23,7 @@ public class ConcurrencyIntegrationTests(SqlServerFixture fixture)
         var payload = new byte[256 * 1024];
         Random.Shared.NextBytes(payload);
 
-        IEnumerable<Task> workflows = Enumerable.Range(0, workers).Select(async index =>
+        IEnumerable<Task<Workflow>> workflows = Enumerable.Range(0, workers).Select(async index =>
         {
             using var scope = provider.CreateScope();
             var service = scope.ServiceProvider.GetRequiredService<IResourceServiceClient>();
@@ -32,15 +32,29 @@ public class ConcurrencyIntegrationTests(SqlServerFixture fixture)
             await service.CreateResourceContainerAsync(containerName);
             var container = service.GetResourceContainerClient(containerName);
 
-            await container.UploadAsync($"artifact-{Guid.NewGuid():N}", new MemoryStream(payload));
-            _ = await container.GetResourcesAsync();
-            await service.DeleteResourceContainerIfExistsAsync(containerName);
+            var artifactName = $"artifact-{Guid.NewGuid():N}";
+            await container.UploadAsync(artifactName, new MemoryStream(payload));
+            IReadOnlyList<ResourceInfo> listed = await container.GetResourcesAsync();
+            ResourceContent? downloaded = await container.DownloadContentAsync(artifactName);
+            bool deleted = await service.DeleteResourceContainerIfExistsAsync(containerName);
+            return new Workflow(containerName, artifactName, listed, downloaded?.Content.ToArray(), deleted);
         });
 
         // Act
-        var exception = await Record.ExceptionAsync(() => Task.WhenAll(workflows));
+        Workflow[] results = await Task.WhenAll(workflows);
 
-        // Assert
-        Assert.Null(exception);
+        // Assert: each job saw exactly its own upload, whole, and removed its container.
+        using var checkScope = provider.CreateScope();
+        var check = checkScope.ServiceProvider.GetRequiredService<IResourceServiceClient>();
+        foreach (Workflow result in results)
+        {
+            Assert.Equal(payload, result.Downloaded);
+            Assert.Equal(result.ArtifactName, Assert.Single(result.Listed).Name);
+            Assert.True(result.Deleted);
+            Assert.False(await check.ContainerExistsAsync(result.ContainerName));
+        }
     }
+
+    private sealed record Workflow(string ContainerName, string ArtifactName, IReadOnlyList<ResourceInfo> Listed, byte[]? Downloaded,
+        bool Deleted);
 }

@@ -234,21 +234,14 @@ public class ResourceInMemoryRepositoryTests
         var resourceInfo = new ResourceInfo { ContainerName = containerName, Name = resourceName };
         var resourceContainerInfo = new ResourceContainerInfo() { Name = containerName };
         await repository.AddResourceContainerAsync(resourceContainerInfo);
-        var stream = new MemoryStream();
-        var writer = new StreamWriter(stream);
-        writer.Write("Test");
-        stream.Position = 0;
+        var stream = new MemoryStream("Test"u8.ToArray());
         await repository.AddResourceAsync(containerName, resourceInfo, stream);
 
         // Act
         Stream? outputStream = await repository.GetResourceStreamAsync(containerName, resourceName);
 
         // Assert
-        var readerOriginal = new StreamReader(stream);
-        var readerOutput = new StreamReader(outputStream!);
-        var originalContent = readerOriginal.ReadToEnd();
-        var outputContent = readerOutput.ReadToEnd();
-        Assert.Equal(originalContent, outputContent);
+        Assert.Equal("Test", new StreamReader(outputStream!).ReadToEnd());
     }
 
     [Fact]
@@ -261,10 +254,7 @@ public class ResourceInMemoryRepositoryTests
         var resourceInfo = new ResourceInfo { ContainerName = containerName, Name = resourceName };
         var resourceContainerInfo = new ResourceContainerInfo() { Name = containerName };
         await repository.AddResourceContainerAsync(resourceContainerInfo);
-        var stream = new MemoryStream();
-        var writer = new StreamWriter(stream);
-        writer.Write("Test");
-        stream.Position = 0;
+        var stream = new MemoryStream("Test"u8.ToArray());
         await repository.AddResourceAsync(containerName, resourceInfo, stream);
 
         // Act
@@ -284,10 +274,7 @@ public class ResourceInMemoryRepositoryTests
         var resourceInfo = new ResourceInfo { ContainerName = containerName, Name = resourceName };
         var resourceContainerInfo = new ResourceContainerInfo() { Name = containerName };
         await repository.AddResourceContainerAsync(resourceContainerInfo);
-        var stream = new MemoryStream();
-        var writer = new StreamWriter(stream);
-        writer.Write("Test");
-        stream.Position = 0;
+        var stream = new MemoryStream("Test"u8.ToArray());
         await repository.AddResourceAsync(containerName, resourceInfo, stream);
 
         // Act
