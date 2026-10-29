@@ -12,11 +12,12 @@ public class TestUriProvider(IConfiguration configuration) : IUriProvider
 
         if (!string.IsNullOrEmpty(context.ResourceName))
         {
-            return $"{_baseUrl.Trim('/')}/resources/{context.ContainerName}/?resourceName={context.ResourceName}&versionId={context.ResourceVersionId}";
+            return $"{_baseUrl.Trim('/')}/resources/{Uri.EscapeDataString(context.ContainerName)}/" +
+                $"?resourceName={Uri.EscapeDataString(context.ResourceName)}&versionId={Uri.EscapeDataString(context.ResourceVersionId ?? "")}";
         }
         else
         {
-            return $"{_baseUrl.Trim('/')}/containers/{context.ContainerName}";
+            return $"{_baseUrl.Trim('/')}/containers/{Uri.EscapeDataString(context.ContainerName)}";
         }
     }
 }

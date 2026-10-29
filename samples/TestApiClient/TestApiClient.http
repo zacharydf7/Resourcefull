@@ -35,8 +35,27 @@ GET {{host}}/api/containers/{{container}}
 ### Get a resource's info
 GET {{host}}/api/resources/{{container}}?resourceName=hello.txt
 
-### Download a resource
+### Download a resource (add &inline=true to display images, PDFs and plain text in the browser)
+# @name download
 GET {{host}}/api/resources/{{container}}?resourceName=hello.txt&stream=true
+
+### Download it again only if it changed: 304 Not Modified while the ETag still matches
+GET {{host}}/api/resources/{{container}}?resourceName=hello.txt&stream=true
+If-None-Match: {{download.response.headers.ETag}}
+
+### Upload the request body (201 for a new name, 200 when it replaces one)
+# @name put
+PUT {{host}}/api/resources/{{container}}?resourceName=notes.txt
+Content-Type: text/plain
+
+Written with a PUT.
+
+### Replace it only if it's still the version you read: 412 Precondition Failed if it changed since
+PUT {{host}}/api/resources/{{container}}?resourceName=notes.txt
+Content-Type: text/plain
+If-Match: {{put.response.headers.ETag}}
+
+Changed, but only if nobody else changed it first.
 
 ### Delete a resource
 DELETE {{host}}/api/resources/{{container}}?resourceName=hello.txt

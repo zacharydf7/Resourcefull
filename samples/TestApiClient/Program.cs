@@ -1,13 +1,17 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using Resourcefull;
+using Resourcefull.AspNetCore;
 using Resourcefull.InMemory;
 using Resourcefull.SqlServer;
-using System.Net.Mime;
 using System.Text.Json;
 using TestApiClient;
 
 const string InvalidMetadata = "metadataJson must be a JSON object whose values are strings, such as {\"author\":\"me\"}.";
+
+// The content types a download may be displayed inline as. The uploader chooses a resource's content type, so anything
+// else, such as HTML or SVG, which would run as a page of this site, is always offered as a download.
+HashSet<string> inlineContentTypes = new(StringComparer.OrdinalIgnoreCase) { "image/png", "image/jpeg", "image/gif", "application/pdf", "text/plain" };
 
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
@@ -23,8 +27,11 @@ builder.Services.AddResourcefull(options =>
     options.SetUriProvider<TestUriProvider>();
     //options.UseVersioning();
 });
+// Turns Resourcefull's exceptions into problem details: 409 for a conflict, 404 for a missing container, and so on.
+builder.Services.AddResourcefullExceptionHandler();
 
 WebApplication app = builder.Build();
+app.UseExceptionHandler();
 
 if (!string.IsNullOrWhiteSpace(connectionString))
 {
@@ -58,7 +65,7 @@ app.MapGet("/api/containers/{containerName}", async (string containerName, IReso
 });
 
 app.MapGet("/api/resources/{containerName}", async (string containerName, IResourceServiceClient resourceServiceClient,
-    HttpResponse response, string resourceName, bool stream = false, bool isAttachment = false, string? versionId = null) =>
+    string resourceName, bool stream = false, bool inline = false, string? versionId = null) =>
 {
     if (string.IsNullOrEmpty(resourceName))
     {
@@ -74,15 +81,8 @@ app.MapGet("/api/resources/{containerName}", async (string containerName, IResou
         ResourceDownloadResult? downloadResult = await containerClient.DownloadStreamingAsync(resourceName, versionId);
         if (downloadResult is null) return Results.NotFound("Resource not found.");
 
-        var contentDisposition = new ContentDisposition()
-        {
-            FileName = downloadResult.ResourceInfo.Name,
-            Inline = !isAttachment
-        };
-
-        response.Headers.ContentDisposition = contentDisposition.ToString();
-
-        return Results.Stream(downloadResult.Stream, downloadResult.ResourceInfo.ContentType);
+        bool displayInline = inline && inlineContentTypes.Contains(downloadResult.ResourceInfo.ContentType ?? "");
+        return Results.Resource(downloadResult, new ResourceResultOptions { Inline = displayInline });
     }
     else
     {
@@ -97,7 +97,6 @@ app.MapPost("/api/resources/{containerName}", async (string containerName, IReso
     [FromForm] string? metadataJson = null, bool overwrite = false) =>
 {
     if (!TryReadMetadata(metadataJson, out Dictionary<string, string> metadata)) return Results.BadRequest(InvalidMetadata);
-    if (!await resourceServiceClient.ContainerExistsAsync(containerName)) return Results.NotFound("Resource Container not found.");
 
     IResourceContainerClient containerClient = resourceServiceClient.GetResourceContainerClient(containerName);
 
@@ -108,32 +107,24 @@ app.MapPost("/api/resources/{containerName}", async (string containerName, IReso
         Metadata = metadata
     };
 
-    try
-    {
-        ResourceInfo resourceInfo = await containerClient.UploadAsync(file.FileName, file.OpenReadStream(), resourceUploadOptions);
-        return Results.Created(resourceInfo.Uri, resourceInfo);
-    }
-    catch (ResourceConflictException)
-    {
-        return Results.Conflict($"Resource with name '{file.FileName}' already exists in container '{containerName}'. Set 'overwrite' to true to replace the existing resource.");
-    }
+    ResourceInfo resourceInfo = await containerClient.UploadAsync(file.FileName, file.OpenReadStream(), resourceUploadOptions);
+    return Results.Created(resourceInfo.Uri, resourceInfo);
 }).DisableAntiforgery();
+
+// The request body is the content, streamed into storage. The request's If-Match and If-None-Match decide whether it's
+// stored, so a client can update only the version it read.
+app.MapPut("/api/resources/{containerName}", (string containerName, string resourceName, HttpRequest request,
+    IResourceServiceClient resourceServiceClient, CancellationToken cancellationToken) =>
+    resourceServiceClient.GetResourceContainerClient(containerName).UploadFromRequestAsync(resourceName, request, null, cancellationToken));
 
 app.MapPost("/api/containers/{containerName}", async (string containerName, IResourceServiceClient resourceServiceClient,
     [FromForm] string? metadataJson = null) =>
 {
     if (!TryReadMetadata(metadataJson, out Dictionary<string, string> metadata)) return Results.BadRequest(InvalidMetadata);
 
-    try
-    {
-        IResourceContainerClient containerClient = await resourceServiceClient.CreateResourceContainerAsync(containerName, metadata);
-        ResourceContainerInfo containerInfo = containerClient.ResourceContainerInfo;
-        return Results.Created(containerInfo.Uri, containerInfo);
-    }
-    catch (ResourceConflictException)
-    {
-        return Results.Conflict($"Resource Container with name {containerName} already exists.");
-    }
+    IResourceContainerClient containerClient = await resourceServiceClient.CreateResourceContainerAsync(containerName, metadata);
+    ResourceContainerInfo containerInfo = containerClient.ResourceContainerInfo;
+    return Results.Created(containerInfo.Uri, containerInfo);
 }).DisableAntiforgery();
 
 app.MapDelete("/api/resources/{containerName}", async (string containerName, IResourceServiceClient resourceServiceClient, string resourceName) =>
