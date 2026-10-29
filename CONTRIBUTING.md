@@ -52,7 +52,7 @@ worse than its baseline allows:
 | Transaction log bytes | more than 10% (plus 64 KiB) over the baseline |
 | Allocated bytes | more than 10% over the baseline |
 | Peak heap growth | more than 50% (plus 1 MiB) over the baseline |
-| Time | more than twice the baseline, plus 50 ms |
+| Time | more than five times the baseline, plus 50 ms |
 
 Locally the comparison is only reported, since your machine and SQL Server differ from CI's; set
 `RESOURCEFULL_PERF_ENFORCE=true` to fail as CI does. Every CI run uploads its measurements as the

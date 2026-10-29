@@ -22,8 +22,10 @@ internal static class Baseline
 {
     // Round trips don't vary from run to run, so any increase fails. Reads, log bytes and allocations vary a little
     // with SQL Server's plans, its log blocks and SqlClient's buffering; reads also by a page or two with how the rows
-    // lie on their pages, and log bytes by a block or two. Peak heap depends on when the GC runs, and time on how busy
-    // the machine is, so those two only catch large regressions.
+    // lie on their pages, and log bytes by a block or two. Peak heap depends on when the GC runs, so it only catches
+    // large regressions. Time varies with the machine and with what SQL Server is doing at the moment: CI's shared
+    // runners differ by up to about three times, and the 64 MiB upload alone has taken nearly four times as long on one
+    // run as on another, so time only catches a slowdown beyond that.
     private const double ReadsTolerance = 0.10;
     private const long ReadsSlackPages = 2;
     private const double LogTolerance = 0.10;
@@ -31,7 +33,7 @@ internal static class Baseline
     private const double AllocationTolerance = 0.10;
     private const double PeakHeapTolerance = 0.50;
     private const long PeakHeapSlackBytes = 1024 * 1024;
-    private const double TimeTolerance = 1.00;
+    private const double TimeTolerance = 4.00;
     private const double TimeSlackSeconds = 0.05;
 
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
