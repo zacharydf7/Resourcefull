@@ -2,6 +2,8 @@
 // undocumented.
 #pragma warning disable CS1573
 
+using System.Runtime.CompilerServices;
+
 namespace Resourcefull;
 
 /// <summary>
@@ -145,6 +147,55 @@ public interface IResourceContainerClient : IDisposable
     /// <param name="cancellationToken">Cancels the listing.</param>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was cancelled.</exception>
     public Task<IReadOnlyList<ResourceInfo>> GetResourcesAsync(CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Lists the current version of every resource in the container, or of those whose names start with
+    /// <see cref="ResourceListOptions.Prefix"/>, ordered by name, fetching a page at a time as you enumerate. A name
+    /// that exists for the whole listing appears exactly once; one created or deleted during it may or may not.
+    /// </summary>
+    /// <param name="options">The prefix and page size; <see langword="null"/> lists everything, 1,000 at a time.</param>
+    /// <param name="cancellationToken">Cancels the listing.</param>
+    /// <returns>The resources, ordered by name.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><see cref="ResourceListOptions.PageSize"/> is outside 1 to <see cref="ResourceListOptions.MaxPageSize"/>.</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was cancelled.</exception>
+    /// <remarks>
+    /// The default implementation, kept so implementations written for 3.0 still compile, fetches the pages through
+    /// <see cref="GetResourcePageAsync"/>.
+    /// </remarks>
+    public async IAsyncEnumerable<ResourceInfo> ListResourcesAsync(ResourceListOptions? options = null,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        string? continuationToken = null;
+        do
+        {
+            ResourcePage page = await GetResourcePageAsync(options, continuationToken, cancellationToken);
+            foreach (ResourceInfo resource in page.Resources) yield return resource;
+            continuationToken = page.ContinuationToken;
+        }
+        while (continuationToken is not null);
+    }
+
+    /// <summary>
+    /// Gets one page of the current resources, ordered by name, for an API that hands the continuation token to its
+    /// own callers. Each page is a query of its own, so there's no snapshot: a name that exists for the whole listing
+    /// appears exactly once, and one created or deleted during it may or may not.
+    /// </summary>
+    /// <param name="options">The prefix and page size; <see langword="null"/> lists everything, 1,000 at a time.</param>
+    /// <param name="continuationToken">
+    /// The previous page's <see cref="ResourcePage.ContinuationToken"/>, or <see langword="null"/> for the first page.
+    /// It must come from a listing with the same prefix; the page size can change.
+    /// </param>
+    /// <param name="cancellationToken">Cancels the listing.</param>
+    /// <returns>The page, and the token for the next one if there is one.</returns>
+    /// <exception cref="ArgumentException"><paramref name="continuationToken"/> is malformed or comes from a listing of another prefix.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><see cref="ResourceListOptions.PageSize"/> is outside 1 to <see cref="ResourceListOptions.MaxPageSize"/>.</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was cancelled.</exception>
+    /// <exception cref="NotSupportedException">
+    /// This default implementation, kept so implementations written for 3.0 still compile, doesn't list by page.
+    /// </exception>
+    public Task<ResourcePage> GetResourcePageAsync(ResourceListOptions? options = null, string? continuationToken = null,
+        CancellationToken cancellationToken = default)
+        => throw new NotSupportedException($"{GetType().Name} doesn't list resources by page.");
 
     /// <summary>
     /// Lists every stored version of a resource: the current version first, with

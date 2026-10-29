@@ -95,6 +95,29 @@ public interface IResourceRepository
     Task<List<ResourceInfo>> GetAllResourceInfoAsync(string resourceContainerName, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Lists up to <paramref name="pageSize"/> current versions in a container, ordered by name in ordinal order
+    /// (<see cref="StringComparer.Ordinal"/>), each with <see cref="ResourceInfo.IsLatest"/> set. A provider may use
+    /// its storage's binary order instead, as long as its ordering and its <paramref name="afterName"/> comparison agree:
+    /// SQL Server's binary collations, for one, sort a name after itself followed by characters below U+0020, since
+    /// they pad the shorter name with spaces. A provider should answer this without reading the whole container. The
+    /// default implementation, kept so providers written for 3.0 still compile and work, filters and sorts
+    /// <see cref="GetAllResourceInfoAsync"/> in memory.
+    /// </summary>
+    /// <param name="resourceContainerName">The container to list.</param>
+    /// <param name="prefix">Only names that start with this, ordinally; <see langword="null"/> for every name.</param>
+    /// <param name="afterName">Only names after this one, in the listing's order; <see langword="null"/> to start from the first.</param>
+    /// <param name="pageSize">The most versions to return.</param>
+    /// <param name="cancellationToken">Cancels the listing.</param>
+    /// <returns>The versions; empty when there are no more, or the container does not exist.</returns>
+    async Task<List<ResourceInfo>> GetResourcePageAsync(string resourceContainerName, string? prefix, string? afterName,
+        int pageSize, CancellationToken cancellationToken = default) =>
+        [.. (await GetAllResourceInfoAsync(resourceContainerName, cancellationToken))
+            .Where(r => (prefix is null || r.Name.StartsWith(prefix, StringComparison.Ordinal))
+                && (afterName is null || string.CompareOrdinal(r.Name, afterName) > 0))
+            .OrderBy(r => r.Name, StringComparer.Ordinal)
+            .Take(pageSize)];
+
+    /// <summary>
     /// Lists every stored version of a resource: the current version first, then the rest from the most recently
     /// stored to the oldest.
     /// </summary>

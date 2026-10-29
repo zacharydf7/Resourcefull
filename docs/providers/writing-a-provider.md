@@ -54,6 +54,14 @@ The XML documentation on each member states its contract in full. In short, a pr
   current version and calling it again finishes the job.
 - **Be safe to call concurrently** for the lifetime it registers with.
 
+### Listing by page
+
+`GetResourcePageAsync` was also added in 3.1. Its default implementation reads the whole container through
+`GetAllResourceInfoAsync` and sorts and filters it in memory, so a provider written for 3.0 lists correctly, just
+without the savings. To answer it directly, return at most `pageSize` current versions whose names start with
+`prefix`, ordinally, and come after `afterName`, ordered by name. Use ordinal order, or your storage's binary order
+if its ordering and its "after" comparison agree, so no name is skipped or repeated between pages.
+
 ### Conditional uploads and deletes
 
 The overloads of `AddResourceAsync` and `DeleteResourceAsync` that take conditions were added in 3.1, with default

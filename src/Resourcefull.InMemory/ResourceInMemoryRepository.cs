@@ -86,6 +86,17 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : I
             ? [.. container.Resources.Values.Select(versions => ToResourceInfo(versions.MaxBy(r => r.Sequence)!, isLatest: true))]
             : [], cancellationToken);
 
+    public Task<List<ResourceInfo>> GetResourcePageAsync(string resourceContainerName, string? prefix, string? afterName,
+        int pageSize, CancellationToken cancellationToken = default) =>
+        UnderLockAsync<List<ResourceInfo>>(() => _containers.GetValueOrDefault(resourceContainerName) is { } container
+            ? [.. container.Resources
+                .Where(pair => (prefix is null || pair.Key.StartsWith(prefix, StringComparison.Ordinal))
+                    && (afterName is null || string.CompareOrdinal(pair.Key, afterName) > 0))
+                .OrderBy(pair => pair.Key, StringComparer.Ordinal)
+                .Take(pageSize)
+                .Select(pair => ToResourceInfo(pair.Value.MaxBy(r => r.Sequence)!, isLatest: true))]
+            : [], cancellationToken);
+
     public Task<List<ResourceInfo>> GetResourceVersionsAsync(string resourceContainerName, string resourceName, CancellationToken cancellationToken = default) =>
         UnderLockAsync<List<ResourceInfo>>(() => [.. VersionsOf(resourceContainerName, resourceName)
             .OrderByDescending(r => r.Sequence)

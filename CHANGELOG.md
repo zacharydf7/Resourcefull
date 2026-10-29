@@ -9,6 +9,12 @@
   ID or content hash you read. The write decides it, so of concurrent writers that read the same version exactly one
   succeeds; the rest throw the new `ResourcePreconditionFailedException` (HTTP 412). See
   [Updating only if unchanged](docs/concurrency.md#updating-only-if-unchanged).
+- **Listing by prefix, a page at a time.** `ListResourcesAsync` enumerates a container's current resources, or those
+  under a prefix, fetching pages as you go, and `GetResourcePageAsync` returns one page with a continuation token for
+  APIs that page for their own callers. With SQL Server a page costs the same wherever it starts. See
+  [Listing resources](docs/containers-and-names.md#listing-resources).
+- **For provider authors:** `IResourceRepository.GetResourcePageAsync`, whose default implementation sorts and filters
+  the full listing, so providers written for 3.0 keep working until they answer it directly.
 - **For provider authors:** conditional overloads of `IResourceRepository.AddResourceAsync` and
   `DeleteResourceAsync`, with default implementations, so providers written for 3.0 keep compiling and refuse
   conditional writes with `NotSupportedException`.

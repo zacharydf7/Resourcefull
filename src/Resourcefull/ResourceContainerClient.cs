@@ -201,6 +201,27 @@ internal partial class ResourceContainerClient(IResourceRepository resourceRepos
     public async Task<IReadOnlyList<ResourceInfo>> GetResourcesAsync(CancellationToken cancellationToken)
         => WithUris(await resourceRepository.GetAllResourceInfoAsync(ContainerName, cancellationToken));
 
+    public async Task<ResourcePage> GetResourcePageAsync(ResourceListOptions? options = null, string? continuationToken = null,
+        CancellationToken cancellationToken = default)
+    {
+        options ??= new ResourceListOptions();
+        ArgumentOutOfRangeException.ThrowIfLessThan(options.PageSize, 1, nameof(options));
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(options.PageSize, ResourceListOptions.MaxPageSize, nameof(options));
+        string? prefix = string.IsNullOrEmpty(options.Prefix) ? null : options.Prefix;
+        string? afterName = continuationToken is null ? null : ResourcePageToken.Decode(continuationToken, prefix, nameof(continuationToken));
+
+        // One more than a page, to tell whether another page follows without returning an empty last page.
+        List<ResourceInfo> resources = await resourceRepository.GetResourcePageAsync(ContainerName, prefix, afterName,
+            options.PageSize + 1, cancellationToken);
+        string? next = null;
+        if (resources.Count > options.PageSize)
+        {
+            resources.RemoveRange(options.PageSize, resources.Count - options.PageSize);
+            next = ResourcePageToken.Encode(prefix, resources[^1].Name);
+        }
+        return new ResourcePage(WithUris(resources), next);
+    }
+
     public Task<IReadOnlyList<ResourceInfo>> GetResourceVersionsAsync(string resourceName)
         => GetResourceVersionsAsync(resourceName, CancellationToken.None);
 

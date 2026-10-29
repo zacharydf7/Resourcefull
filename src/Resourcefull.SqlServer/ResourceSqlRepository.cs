@@ -292,6 +292,36 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<List<ResourceInfo>> GetResourcePageAsync(string resourceContainerName, string? prefix, string? afterName,
+        int pageSize, CancellationToken cancellationToken = default)
+    {
+        using ResourceDbContext dbContext = dbContextFactory.CreateDbContext();
+
+        // A seek on the current-versions index, which holds (ContainerName, Name) in the names' binary order: the
+        // prefix and the name to continue after bound the range, so a page reads only its own rows.
+        IQueryable<ResourceModel> current = dbContext.Resources.Where(r => r.ContainerName == resourceContainerName && r.IsLatest);
+        if (prefix is not null) current = current.Where(r => r.Name.StartsWith(prefix));
+        if (afterName is not null) current = current.Where(r => string.Compare(r.Name, afterName) > 0);
+
+        return await current
+            .OrderBy(r => r.Name)
+            .Take(pageSize)
+            .Select(r => new ResourceInfo
+            {
+                ContainerName = r.ContainerName,
+                Name = r.Name,
+                VersionId = r.VersionId,
+                LastModified = r.LastModified,
+                IsLatest = r.IsLatest,
+                ContentType = r.ContentType,
+                ContentLength = r.ContentLength,
+                ContentHash = r.ContentHash,
+                Metadata = r.Metadata,
+                Uri = r.Uri
+            })
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task<List<ResourceInfo>> GetResourceVersionsAsync(string resourceContainerName, string resourceName, CancellationToken cancellationToken = default)
     {
         using ResourceDbContext dbContext = dbContextFactory.CreateDbContext();
