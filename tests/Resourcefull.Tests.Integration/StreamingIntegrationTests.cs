@@ -1,3 +1,4 @@
+using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Resourcefull.Tests.Integration;
@@ -62,6 +63,43 @@ public class StreamingIntegrationTests(SqlServerFixture fixture)
         // Assert
         Assert.Equal(size, uploaded.ContentLength);
         Assert.Equal(size, download.Length);
+    }
+
+    [SkippableFact]
+    public async Task DownloadStreamingAsync_ShouldReturnTheChunksInIndexOrder_WhenTheyWereStoredOutOfOrderFromZeroAndOfAnySize()
+    {
+        fixture.SkipIfUnavailable();
+
+        // Arrange: chunks numbered from zero, as the first release numbered them, stored out of order, with one bigger
+        // than the chunk size uploads use.
+        using ServiceProvider provider = fixture.BuildServiceProvider();
+        string containerName = $"c-{Guid.NewGuid():N}";
+        IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>().CreateResourceContainerAsync(containerName);
+        await container.UploadAsync("n", new MemoryStream());
+        await using (SqlConnection connection = await fixture.OpenConnectionAsync())
+        await using (SqlCommand command = connection.CreateCommand())
+        {
+            command.CommandText = @"
+                INSERT INTO ResourceChunks (ResourceId, [Index], Data)
+                SELECT r.Id, chunk.[Index], chunk.Data
+                FROM Resources r
+                CROSS JOIN (VALUES
+                    (2, CAST('ccc' AS varbinary(max))),
+                    (0, CAST('aaa' AS varbinary(max))),
+                    (1, CAST(REPLICATE(CAST('b' AS varchar(max)), 70000) AS varbinary(max)))) chunk([Index], Data)
+                WHERE r.ContainerName = @c AND r.Name = 'n'";
+            command.Parameters.AddWithValue("@c", containerName);
+            await command.ExecuteNonQueryAsync();
+        }
+
+        // Act
+        ResourceDownloadResult? download = await container.DownloadStreamingAsync("n");
+        await using Stream stream = download!.Stream;
+        string content = await new StreamReader(stream).ReadToEndAsync();
+
+        // Assert
+        Assert.Equal("aaa" + new string('b', 70000) + "ccc", content);
+        Assert.Equal(70006, stream.Length);
     }
 
     [SkippableFact]

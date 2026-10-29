@@ -4,15 +4,16 @@
 /// A version's content, fetched a page of chunks at a time as the caller reads, so only one page is held at once.
 /// </summary>
 /// <param name="nextPage">Fetches the next chunks' data in index order, with the token of the read that needs them;
-/// empty once the content is exhausted.</param>
+/// empty once the content is exhausted. A page's data need only stay valid until the next page is fetched.</param>
 /// <param name="length">The content's full length; a read that ends before it throws, as the content was cut short.</param>
 /// <param name="owner">What the pages are read through, such as the database context; disposed with the stream.</param>
-internal class ResourceStream(Func<CancellationToken, Task<IReadOnlyList<byte[]>>> nextPage, long length, IAsyncDisposable? owner = null) : Stream
+internal class ResourceStream(Func<CancellationToken, Task<IReadOnlyList<ReadOnlyMemory<byte>>>> nextPage, long length,
+    IAsyncDisposable? owner = null) : Stream
 {
-    private IReadOnlyList<byte[]> _page = [];
+    private IReadOnlyList<ReadOnlyMemory<byte>> _page = [];
     private int _pageIndex = 0;
     private bool _exhausted = false;
-    private byte[] _currentChunkData = [];
+    private ReadOnlyMemory<byte> _currentChunkData = ReadOnlyMemory<byte>.Empty;
     private int _currentChunkPosition = 0;
     private long _position = 0;
 
@@ -44,7 +45,7 @@ internal class ResourceStream(Func<CancellationToken, Task<IReadOnlyList<byte[]>
 
         var bytesToCopy = Math.Min(count, _currentChunkData.Length - _currentChunkPosition);
 
-        _currentChunkData.AsSpan(_currentChunkPosition, bytesToCopy).CopyTo(buffer.AsSpan(offset, bytesToCopy));
+        _currentChunkData.Span.Slice(_currentChunkPosition, bytesToCopy).CopyTo(buffer.AsSpan(offset, bytesToCopy));
 
         _currentChunkPosition += bytesToCopy;
         _position += bytesToCopy;

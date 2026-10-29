@@ -12,10 +12,10 @@ public class ResourceStreamTests
     }
 
     /// <summary>One chunk per page, then no more.</summary>
-    private static Func<CancellationToken, Task<IReadOnlyList<byte[]>>> Pages(params byte[][] chunks)
+    private static Func<CancellationToken, Task<IReadOnlyList<ReadOnlyMemory<byte>>>> Pages(params byte[][] chunks)
     {
         var remaining = new Queue<byte[]>(chunks);
-        return _ => Task.FromResult<IReadOnlyList<byte[]>>(remaining.Count > 0 ? [remaining.Dequeue()] : []);
+        return _ => Task.FromResult<IReadOnlyList<ReadOnlyMemory<byte>>>(remaining.Count > 0 ? [remaining.Dequeue()] : []);
     }
 
     [Fact]
@@ -173,7 +173,7 @@ public class ResourceStreamTests
         var stream = new ResourceStream(token =>
         {
             tokens.Add(token);
-            return Task.FromResult<IReadOnlyList<byte[]>>(remaining.Count > 0 ? [remaining.Dequeue()] : []);
+            return Task.FromResult<IReadOnlyList<ReadOnlyMemory<byte>>>(remaining.Count > 0 ? [remaining.Dequeue()] : []);
         }, length: 2);
         using var first = new CancellationTokenSource();
         using var second = new CancellationTokenSource();
@@ -196,7 +196,7 @@ public class ResourceStreamTests
         var stream = new ResourceStream(async _ =>
         {
             await Task.Delay(10).ConfigureAwait(false);
-            return ["abc"u8.ToArray()];
+            return [(ReadOnlyMemory<byte>)"abc"u8.ToArray()];
         }, length: 3);
         int read = -1;
         var thread = new Thread(() =>

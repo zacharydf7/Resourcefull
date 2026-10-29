@@ -287,58 +287,6 @@ public class ResourceSqlRepositoryTests
     }
 
     [Fact]
-    public async Task GetResourceStreamAsync_ShouldGetResourceStream_WhenSpecifiedResourceExistsInContainer()
-    {
-        // Arrange
-        var existingContainerName = "existingContainerName";
-        var resourceName = "existingResourceName";
-        var bytes = Encoding.UTF8.GetBytes("Hello, World!");
-        var existingResource = new ResourceModel { ContainerName = existingContainerName, Name = resourceName, IsLatest = true, Chunks = [new ResourceChunkModel { Index = 1, Data = bytes }] };
-        (ResourceDbContext resourceDbContext, var dbContextFactory) = NewDatabase();
-        await resourceDbContext.Resources.AddAsync(existingResource);
-        await resourceDbContext.SaveChangesAsync();
-        var existingResourceName = resourceDbContext.Resources.First().Name;
-
-        // Act
-        var resourceRepository = new ResourceSqlRepository(dbContextFactory);
-        Stream? outputStream = await resourceRepository.GetResourceStreamAsync(existingContainerName, existingResourceName);
-
-        // Assert
-        var readerOutput = new StreamReader(outputStream!);
-        var outputContent = readerOutput.ReadToEnd();
-        Assert.Equal("Hello, World!", outputContent);
-    }
-
-    [Fact]
-    public async Task GetResourceStreamAsync_ShouldReassembleChunksInIndexOrder_WhenChunksAreStoredOutOfOrder()
-    {
-        // Arrange
-        var container = "containerName";
-        var resourceName = "resourceName";
-        var existingResource = new ResourceModel
-        {
-            ContainerName = container,
-            Name = resourceName,
-            IsLatest = true,
-            Chunks =
-            [
-                new ResourceChunkModel { Index = 2, Data = Encoding.UTF8.GetBytes("World!") },
-                new ResourceChunkModel { Index = 1, Data = Encoding.UTF8.GetBytes("Hello, ") }
-            ]
-        };
-        (ResourceDbContext resourceDbContext, var dbContextFactory) = NewDatabase();
-        await resourceDbContext.Resources.AddAsync(existingResource);
-        await resourceDbContext.SaveChangesAsync();
-
-        // Act
-        var resourceRepository = new ResourceSqlRepository(dbContextFactory);
-        Stream? outputStream = await resourceRepository.GetResourceStreamAsync(container, resourceName);
-
-        // Assert
-        Assert.Equal("Hello, World!", new StreamReader(outputStream!).ReadToEnd());
-    }
-
-    [Fact]
     public async Task GetResourceStreamAsync_ShouldNotGetResourceStream_WhenSpecifiedResourceDoesNotExistInContainer()
     {
         // Arrange
@@ -785,14 +733,11 @@ public class ResourceSqlRepositoryTests
         // Act
         Exception? cancellation = await Record.ExceptionAsync(() => cancelledAfterOneBatch.DeleteResourceContainerAsync("c", cts.Token));
         List<ResourceInfo> remaining = await resourceRepository.GetAllResourceInfoAsync("c");
-        var remainingContent = new List<byte[]>();
-        foreach (ResourceInfo resource in remaining)
-        {
-            await using Stream stream = (await resourceRepository.GetResourceStreamAsync("c", resource.Name))!;
-            using var copy = new MemoryStream();
-            await stream.CopyToAsync(copy);
-            remainingContent.Add(copy.ToArray());
-        }
+        // Read from the store directly: the in-memory provider has no connection for the repository to stream from.
+        ResourceDbContext store = NewDatabase(databaseName).context;
+        List<byte[]> remainingContent = [.. store.Resources.Where(r => r.ContainerName == "c").AsEnumerable()
+            .Select(r => store.ResourceChunks.Where(ch => ch.ResourceId == r.Id).OrderBy(ch => ch.Index).AsEnumerable()
+                .SelectMany(ch => ch.Data).ToArray())];
         bool finished = await resourceRepository.DeleteResourceContainerAsync("c");
 
         // Assert
@@ -957,31 +902,6 @@ public class ResourceSqlRepositoryTests
         await Assert.ThrowsAsync<ResourceConflictException>(act);
         ResourceInfo stored = Assert.Single(await resourceRepository.GetResourceVersionsAsync("c", "n"));
         Assert.True(stored.IsLatest);
-    }
-
-    [Fact]
-    public async Task GetResourceStreamAsync_ShouldReturnTheChunksInIndexOrder_WhenTheyWereStoredOutOfOrder()
-    {
-        // Arrange
-        (ResourceDbContext resourceDbContext, var dbContextFactory) = NewDatabase();
-        await resourceDbContext.ResourceContainers.AddAsync(new ResourceContainerModel { Name = "c" });
-        var resource = new ResourceModel { ContainerName = "c", Name = "n", VersionId = "v1", IsLatest = true };
-        await resourceDbContext.Resources.AddAsync(resource);
-        await resourceDbContext.SaveChangesAsync();
-        foreach ((int index, string data) in new[] { (3, "ccc"), (1, "aaa"), (2, "bbb") })
-        {
-            await resourceDbContext.ResourceChunks.AddAsync(new ResourceChunkModel { ResourceId = resource.Id, Index = index, Data = Encoding.UTF8.GetBytes(data) });
-        }
-        await resourceDbContext.SaveChangesAsync();
-        var resourceRepository = new ResourceSqlRepository(dbContextFactory);
-
-        // Act
-        await using Stream stream = (await resourceRepository.GetResourceStreamAsync("c", "n"))!;
-        string content = await new StreamReader(stream).ReadToEndAsync();
-
-        // Assert
-        Assert.Equal("aaabbbccc", content);
-        Assert.Equal(9, stream.Length);
     }
 
     [Fact]

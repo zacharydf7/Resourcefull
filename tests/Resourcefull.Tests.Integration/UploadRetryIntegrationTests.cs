@@ -9,8 +9,9 @@ using Resourcefull.SqlServer;
 namespace Resourcefull.Tests.Integration;
 
 /// <summary>
-/// An upload the execution strategy retries after a transient failure. Retries need a real transaction to roll back,
-/// so these run against SQL Server, with one simulated failure injected at a chosen point of the write.
+/// An upload or download the execution strategy retries after a transient failure. An upload's retry needs a real
+/// transaction to roll back, and a download's a real connection to read pages through, so these run against SQL Server,
+/// with one simulated failure injected at a chosen point.
 /// </summary>
 [Collection(SqlServerCollection.Name)]
 public class UploadRetryIntegrationTests(SqlServerFixture fixture)
@@ -121,6 +122,38 @@ public class UploadRetryIntegrationTests(SqlServerFixture fixture)
         return copy.ToArray();
     }
 
+    [SkippableFact]
+    public async Task GetResourceStreamAsync_ShouldReadThePageAgainAndReturnTheExactContent_WhenReadingAPageFailsOnce()
+    {
+        fixture.SkipIfUnavailable();
+
+        // Arrange: content over three pages, and a failure armed once the first page has been read, so it strikes after
+        // the second page's rows are read.
+        var failure = new FailOnceOnCloseInterceptor();
+        DbContextOptions<ResourceDbContext> options = new DbContextOptionsBuilder<ResourceDbContext>()
+            .UseSqlServer(fixture.ConnectionString, sql => sql.ExecutionStrategy(dependencies => new RetryOnSimulatedFailure(dependencies)))
+            .AddInterceptors(failure)
+            .Options;
+        var repository = new ResourceSqlRepository(new PooledDbContextFactory<ResourceDbContext>(options));
+        string containerName = $"c-{Guid.NewGuid():N}";
+        await repository.AddResourceContainerAsync(new ResourceContainerInfo { Name = containerName });
+        byte[] payload = RandomNumberGenerator.GetBytes(65_535 * 40 + 7);
+        await repository.AddResourceAsync(containerName, Version(containerName), new MemoryStream(payload));
+        await using Stream stream = (await repository.GetResourceStreamAsync(containerName, "n"))!;
+        using var copy = new MemoryStream();
+        var first = new byte[1];
+        await stream.ReadExactlyAsync(first);
+        copy.Write(first);
+        failure.Arm();
+
+        // Act
+        await stream.CopyToAsync(copy);
+
+        // Assert
+        Assert.True(failure.Failed);
+        Assert.Equal(payload, copy.ToArray());
+    }
+
     private sealed class SimulatedTransientException() : Exception("A simulated transient failure.");
 
     private sealed class RetryOnSimulatedFailure(ExecutionStrategyDependencies dependencies)
@@ -155,6 +188,30 @@ public class UploadRetryIntegrationTests(SqlServerFixture fixture)
         {
             Failed = true;
             throw new SimulatedTransientException();
+        }
+    }
+
+    /// <summary>
+    /// Throws once, when a connection closes after <see cref="Arm"/>: a download closes its connection after reading
+    /// each page. (A failure as it opens wouldn't do: EF Core retries opening a connection by itself.)
+    /// </summary>
+    private sealed class FailOnceOnCloseInterceptor : DbConnectionInterceptor
+    {
+        private bool _armed;
+
+        public bool Failed { get; private set; }
+
+        public void Arm() => _armed = true;
+
+        public override ValueTask<InterceptionResult> ConnectionClosingAsync(DbConnection connection, ConnectionEventData eventData,
+            InterceptionResult result)
+        {
+            if (_armed && !Failed)
+            {
+                Failed = true;
+                throw new SimulatedTransientException();
+            }
+            return ValueTask.FromResult(result);
         }
     }
 

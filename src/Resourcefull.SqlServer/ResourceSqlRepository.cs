@@ -1,8 +1,12 @@
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Resourcefull.SqlServer.Models;
 using Resourcefull.SqlServer.Utilities;
+using System.Data;
+using System.Data.Common;
 using System.Runtime.CompilerServices;
+using System.Runtime.ExceptionServices;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -45,7 +49,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
 
         async Task AttemptAsync(CancellationToken ct)
         {
-            using ResourceDbContext attempt = dbContextFactory.CreateDbContext();
+            using ResourceDbContext attempt = NewWriteContext();
 
             if (await attempt.Resources.AnyAsync(r => r.ContainerName == resourceContainerName
                 && r.Name == resourceInfo.Name && r.VersionId == resourceInfo.VersionId, ct))
@@ -87,7 +91,8 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
             contentRead = true;
             using var content = new HashingStream(stream);
             var batch = new List<ResourceChunkModel>(ChunksPerUploadBatch);
-            await foreach (ResourceChunkModel chunk in ResourceChunker.ChunksAsync(content, ct))
+            // Each batch is stored before the next is read, so the batch's buffers can be reused for it.
+            await foreach (ResourceChunkModel chunk in ResourceChunker.ChunksAsync(content, ChunksPerUploadBatch, ct))
             {
                 chunk.ResourceId = resource.Id;
                 batch.Add(chunk);
@@ -174,7 +179,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
 
         return await dbContext.Database.CreateExecutionStrategy().ExecuteAsync(async ct =>
         {
-            using ResourceDbContext attempt = dbContextFactory.CreateDbContext();
+            using ResourceDbContext attempt = NewWriteContext();
             await using var transaction = await attempt.Database.BeginTransactionAsync(ct);
 
             // The in-memory provider the unit tests use has no locks.
@@ -185,6 +190,17 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
             await transaction.CommitAsync(ct);
             return result;
         }, cancellationToken);
+    }
+
+    /// <summary>
+    /// A context for a write that runs in a transaction of its own. A failure anywhere in that transaction rolls all of it
+    /// back, so the savepoint EF Core would otherwise set before each SaveChanges, a round trip apiece, is never used.
+    /// </summary>
+    private ResourceDbContext NewWriteContext()
+    {
+        ResourceDbContext dbContext = dbContextFactory.CreateDbContext();
+        dbContext.Database.AutoSavepointsEnabled = false;
+        return dbContext;
     }
 
     /// <summary>
@@ -302,29 +318,73 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
     }
 
     /// <summary>
-    /// Reads a version's chunks a page at a time, each page its own short query. One query for them all would hold
-    /// them all, because EF buffers query results when it may retry them.
+    /// Reads a version's chunks a page at a time, each page its own short query, retried as a whole after a transient
+    /// failure. The data streams from the reader into buffers the pages share, rather than a new array per chunk, so a
+    /// page's data is valid only until the next page is read.
     /// </summary>
-    internal static Func<CancellationToken, Task<IReadOnlyList<byte[]>>> PageReader(ResourceDbContext dbContext, long resourceId)
+    internal static Func<CancellationToken, Task<IReadOnlyList<ReadOnlyMemory<byte>>>> PageReader(ResourceDbContext dbContext,
+        long resourceId)
     {
         // No assumption about where indexes start: the first release numbered chunks from zero.
         int? lastIndex = null;
         bool exhausted = false;
+        var buffers = new byte[ChunksPerReadPage][];
+        IExecutionStrategy strategy = dbContext.Database.CreateExecutionStrategy();
 
         return async cancellationToken =>
         {
             if (exhausted) return [];
 
-            List<ResourceChunkModel> page = await dbContext.ResourceChunks.AsNoTracking()
-                .Where(c => c.ResourceId == resourceId && (lastIndex == null || c.Index > lastIndex))
-                .OrderBy(c => c.Index)
-                .Take(ChunksPerReadPage)
-                .ToListAsync(cancellationToken)
-                .ConfigureAwait(false);
+            (List<ReadOnlyMemory<byte>> page, int? pageLastIndex) = await strategy.ExecuteAsync(async ct =>
+            {
+                var page = new List<ReadOnlyMemory<byte>>(ChunksPerReadPage);
+                int? pageLastIndex = lastIndex;
+                await dbContext.Database.OpenConnectionAsync(ct).ConfigureAwait(false);
+                try
+                {
+                    await using DbCommand command = dbContext.Database.GetDbConnection().CreateCommand();
+                    command.CommandText =
+                        $"SELECT TOP ({ChunksPerReadPage}) [Index], DATALENGTH([Data]), [Data] FROM [ResourceChunks] " +
+                        "WHERE [ResourceId] = @resourceId AND (@lastIndex IS NULL OR [Index] > @lastIndex) ORDER BY [Index]";
+                    command.Parameters.Add(new SqlParameter("@resourceId", resourceId));
+                    command.Parameters.Add(new SqlParameter("@lastIndex", SqlDbType.Int) { Value = (object?)lastIndex ?? DBNull.Value });
+
+                    // Sequential access streams each chunk's data instead of buffering the row first.
+                    await using DbDataReader reader = await command.ExecuteReaderAsync(CommandBehavior.SequentialAccess, ct)
+                        .ConfigureAwait(false);
+                    while (await reader.ReadAsync(ct).ConfigureAwait(false))
+                    {
+                        pageLastIndex = reader.GetInt32(0);
+                        int dataLength = (int)reader.GetInt64(1);
+                        byte[] buffer = buffers[page.Count] is { } existing && existing.Length >= dataLength
+                            ? existing
+                            : buffers[page.Count] = new byte[Math.Max(dataLength, ResourceChunker.ChunkSize)];
+                        await using Stream data = reader.GetStream(2);
+                        try
+                        {
+                            await data.ReadExactlyAsync(buffer.AsMemory(0, dataLength), ct).ConfigureAwait(false);
+                        }
+                        catch (IOException exception) when (exception.InnerException is SqlException sqlException)
+                        {
+                            // The column stream wraps a failure to read from the server; unwrapped, the execution
+                            // strategy can recognize a transient one and read the page again, and a caller doesn't
+                            // mistake it for content cut short by a delete.
+                            ExceptionDispatchInfo.Throw(sqlException);
+                        }
+                        page.Add(buffer.AsMemory(0, dataLength));
+                    }
+                }
+                finally
+                {
+                    await dbContext.Database.CloseConnectionAsync().ConfigureAwait(false);
+                }
+
+                return (page, pageLastIndex);
+            }, cancellationToken).ConfigureAwait(false);
 
             exhausted = page.Count < ChunksPerReadPage;
-            if (page.Count > 0) lastIndex = page[^1].Index;
-            return [.. page.Select(c => c.Data)];
+            lastIndex = pageLastIndex;
+            return page;
         };
     }
 

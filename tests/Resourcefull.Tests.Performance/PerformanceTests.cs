@@ -97,7 +97,11 @@ public sealed class PerformanceTests(SqlServerFixture fixture, ITestOutputHelper
         await MeasureAsync("delete-16MiB", 0, run: iteration => container.DeleteResourceIfExistsAsync($"r{iteration}"));
     }
 
-    public void Dispose() => _provider?.Dispose();
+    public void Dispose()
+    {
+        _provider?.Dispose();
+        _activity.Dispose();
+    }
 
     private async Task<IResourceContainerClient> NewContainerAsync()
     {

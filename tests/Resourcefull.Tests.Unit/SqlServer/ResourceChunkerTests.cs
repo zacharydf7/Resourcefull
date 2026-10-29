@@ -19,7 +19,7 @@ public class ResourceChunkerTests
         Stream stream = new MemoryStream(bytes);
 
         // Act
-        List<ResourceChunkModel> chunks = await ResourceChunker.ChunksAsync(stream).ToListAsync();
+        List<ResourceChunkModel> chunks = await ResourceChunker.ChunksAsync(stream, reuseAfter: 16).ToListAsync();
 
         // Assert
         Assert.Collection(chunks,
@@ -45,7 +45,7 @@ public class ResourceChunkerTests
         Stream stream = new MemoryStream(bytes);
 
         // Act
-        List<ResourceChunkModel> chunks = await ResourceChunker.ChunksAsync(stream).ToListAsync();
+        List<ResourceChunkModel> chunks = await ResourceChunker.ChunksAsync(stream, reuseAfter: 16).ToListAsync();
 
         // Assert
         Assert.Equal([1, 2, 3], chunks.Select(c => c.Index));
@@ -58,7 +58,7 @@ public class ResourceChunkerTests
         Stream stream = new MemoryStream();
 
         // Act
-        List<ResourceChunkModel> chunks = await ResourceChunker.ChunksAsync(stream).ToListAsync();
+        List<ResourceChunkModel> chunks = await ResourceChunker.ChunksAsync(stream, reuseAfter: 16).ToListAsync();
 
         // Assert
         Assert.Empty(chunks);
@@ -72,7 +72,7 @@ public class ResourceChunkerTests
         var stream = new CancelAfterReadsStream(new byte[65535 * 3], cts, readsBeforeCancel: 1);
 
         // Act & Assert
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => ResourceChunker.ChunksAsync(stream, cts.Token).ToListAsync().AsTask());
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => ResourceChunker.ChunksAsync(stream, reuseAfter: 16, cts.Token).ToListAsync().AsTask());
     }
 
     [Fact]
@@ -84,11 +84,35 @@ public class ResourceChunkerTests
         var stream = new ShortReadStream(bytes, maxRead: 1000);
 
         // Act
-        List<ResourceChunkModel> chunks = await ResourceChunker.ChunksAsync(stream).ToListAsync();
+        List<ResourceChunkModel> chunks = await ResourceChunker.ChunksAsync(stream, reuseAfter: 16).ToListAsync();
 
         // Assert
         Assert.Equal([65535, 65535, 10], chunks.Select(c => c.Data.Length));
         Assert.Equal(bytes, chunks.SelectMany(c => c.Data));
+    }
+
+    [Fact]
+    public async Task ChunksAsync_ShouldShareFullChunksBuffersInTurnAndGiveTheLastItsOwn_WhenGivenReuseAfter()
+    {
+        // Arrange: five chunks, each filled with its own number, read two at a time as the repository stores them.
+        byte[] bytes = new byte[65535 * 4 + 10];
+        for (int i = 0; i < bytes.Length; i++) bytes[i] = (byte)(i / 65535);
+        var chunks = new List<ResourceChunkModel>();
+        var contentAsRead = new List<byte[]>();
+
+        // Act
+        await foreach (ResourceChunkModel chunk in ResourceChunker.ChunksAsync(new MemoryStream(bytes), reuseAfter: 2))
+        {
+            chunks.Add(chunk);
+            contentAsRead.Add(chunk.Data.ToArray());
+        }
+
+        // Assert
+        Assert.Equal(bytes, contentAsRead.SelectMany(data => data));
+        Assert.Same(chunks[0].Data, chunks[2].Data);
+        Assert.Same(chunks[1].Data, chunks[3].Data);
+        Assert.NotSame(chunks[0].Data, chunks[1].Data);
+        Assert.Equal(10, chunks[4].Data.Length);
     }
 
     /// <summary>Returns at most <paramref name="maxRead"/> bytes per read, as a network stream may.</summary>

@@ -1,20 +1,29 @@
 using System.Data.Common;
+using System.Diagnostics;
 using System.Text.RegularExpressions;
 using Microsoft.Data.SqlClient;
+using Microsoft.Data.SqlClient.Diagnostics;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 
 namespace Resourcefull.Tests.Performance;
 
 /// <summary>
-/// Counts the round trips EF Core makes (commands, savepoints, and beginning and committing transactions) and the pages
-/// SQL Server reads for them, so a change that adds a round trip or a scan shows up whatever the machine's speed. Reads
-/// come from <c>SET STATISTICS IO</c>, turned on for every connection as it opens; that statement isn't sent through EF
-/// Core, so it isn't counted as a round trip.
+/// Counts the round trips made to SQL Server (commands, savepoints, and beginning and committing transactions) and the
+/// pages it reads for them, so a change that adds a round trip or a scan shows up whatever the machine's speed.
+/// Commands are counted from SqlClient's diagnostics, so the ones the provider sends without EF Core count too;
+/// transactions and savepoints come from EF Core. Reads come from <c>SET STATISTICS IO</c>, turned on for every
+/// connection as it opens, and that statement isn't counted.
 /// </summary>
-internal sealed partial class SqlActivity : DbCommandInterceptor, IDbConnectionInterceptor, IDbTransactionInterceptor
+internal sealed partial class SqlActivity : IDbConnectionInterceptor, IDbTransactionInterceptor,
+    IObserver<DiagnosticListener>, IObserver<KeyValuePair<string, object?>>, IDisposable
 {
+    private const string StatisticsCommand = "SET STATISTICS IO ON;";
+
+    private readonly List<IDisposable> _subscriptions = [];
     private long _roundTrips;
     private long _logicalReads;
+
+    public SqlActivity() => _subscriptions.Add(DiagnosticListener.AllListeners.Subscribe(this));
 
     public long RoundTrips => Interlocked.Read(ref _roundTrips);
     public long LogicalReads => Interlocked.Read(ref _logicalReads);
@@ -25,24 +34,31 @@ internal sealed partial class SqlActivity : DbCommandInterceptor, IDbConnectionI
         Interlocked.Exchange(ref _logicalReads, 0);
     }
 
-    public override InterceptionResult<DbDataReader> ReaderExecuting(DbCommand command, CommandEventData eventData,
-        InterceptionResult<DbDataReader> result) => Count(result);
+    public void OnNext(DiagnosticListener listener)
+    {
+        if (listener.Name == "SqlClientDiagnosticListener")
+        {
+            lock (_subscriptions) _subscriptions.Add(listener.Subscribe(this));
+        }
+    }
 
-    public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(DbCommand command,
-        CommandEventData eventData, InterceptionResult<DbDataReader> result, CancellationToken cancellationToken = default)
-        => ValueTask.FromResult(Count(result));
+    public void OnNext(KeyValuePair<string, object?> diagnostic)
+    {
+        if (diagnostic.Value is SqlClientCommandBefore { Command.CommandText: not StatisticsCommand }) Count(diagnostic);
+    }
 
-    public override InterceptionResult<int> NonQueryExecuting(DbCommand command, CommandEventData eventData,
-        InterceptionResult<int> result) => Count(result);
+    public void OnCompleted() { }
 
-    public override ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(DbCommand command, CommandEventData eventData,
-        InterceptionResult<int> result, CancellationToken cancellationToken = default) => ValueTask.FromResult(Count(result));
+    public void OnError(Exception error) { }
 
-    public override InterceptionResult<object> ScalarExecuting(DbCommand command, CommandEventData eventData,
-        InterceptionResult<object> result) => Count(result);
-
-    public override ValueTask<InterceptionResult<object>> ScalarExecutingAsync(DbCommand command, CommandEventData eventData,
-        InterceptionResult<object> result, CancellationToken cancellationToken = default) => ValueTask.FromResult(Count(result));
+    public void Dispose()
+    {
+        lock (_subscriptions)
+        {
+            foreach (IDisposable subscription in _subscriptions) subscription.Dispose();
+            _subscriptions.Clear();
+        }
+    }
 
     public DbTransaction TransactionStarted(DbConnection connection, TransactionEndEventData eventData, DbTransaction result)
         => Count(result);
@@ -76,7 +92,7 @@ internal sealed partial class SqlActivity : DbCommandInterceptor, IDbConnectionI
         sqlConnection.InfoMessage -= OnInfoMessage;
         sqlConnection.InfoMessage += OnInfoMessage;
         await using SqlCommand command = sqlConnection.CreateCommand();
-        command.CommandText = "SET STATISTICS IO ON;";
+        command.CommandText = StatisticsCommand;
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
