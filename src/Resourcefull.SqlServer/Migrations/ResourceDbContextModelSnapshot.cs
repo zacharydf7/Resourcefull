@@ -72,6 +72,11 @@ namespace Resourcefull.SqlServer.Migrations
                         .HasColumnType("nvarchar(128)")
                         .UseCollation("Latin1_General_100_BIN2");
 
+                    b.Property<string>("ContentHash")
+                        .HasMaxLength(71)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(71)");
+
                     b.Property<long?>("ContentLength")
                         .HasColumnType("bigint");
 

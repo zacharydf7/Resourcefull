@@ -38,6 +38,11 @@ internal class ResourceConfiguration : IEntityTypeConfiguration<ResourceModel>
             .HasColumnType("varchar(MAX)")
             .HasConversion<MetadataConverter>();
 
+        // "sha256:" and 64 hex digits. Null for versions stored before hashes were kept, until ContentHashBackfill runs.
+        builder.Property(r => r.ContentHash)
+            .HasMaxLength(71)
+            .IsUnicode(false);
+
         builder.Property(r => r.VersionId)
             .HasColumnName("VersionId")
             .IsRequired()

@@ -178,9 +178,10 @@ public class ResourceInMemoryRepositoryTests
         // Act
         ResourceInfo? outputResource = await repository.GetResourceInfoAsync(containerName, resourceInfo.Name);
 
-        // Assert: stored as current, with the length measured from the (empty) stream and the time it was stored.
+        // Assert: stored as current, with the length and hash measured from the (empty) stream and the time it was stored.
         resourceInfo.IsLatest = true;
         resourceInfo.ContentLength = 0;
+        resourceInfo.ContentHash = "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
         resourceInfo.LastModified = clock.Now;
         Assert.Equivalent(resourceInfo, outputResource);
     }

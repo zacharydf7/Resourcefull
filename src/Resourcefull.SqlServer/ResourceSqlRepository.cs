@@ -114,6 +114,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
             attempt.Attach(resource);
             resource.IsLatest = true;
             resource.ContentLength = written.ContentLength;
+            resource.ContentHash = written.ContentHash;
             resource.LastModified = written.LastModified;
             await attempt.SaveChangesAsync(ct);
 
@@ -217,6 +218,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
                 IsLatest = r.IsLatest,
                 ContentType = r.ContentType,
                 ContentLength = r.ContentLength,
+                ContentHash = r.ContentHash,
                 Metadata = r.Metadata,
                 Uri = r.Uri
             })
@@ -240,6 +242,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
                 IsLatest = r.IsLatest,
                 ContentType = r.ContentType,
                 ContentLength = r.ContentLength,
+                ContentHash = r.ContentHash,
                 Metadata = r.Metadata,
                 Uri = r.Uri
             })
@@ -264,6 +267,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
             IsLatest = existingResource.IsLatest,
             ContentType = existingResource.ContentType,
             ContentLength = existingResource.ContentLength,
+            ContentHash = existingResource.ContentHash,
             Metadata = existingResource.Metadata,
             Uri = existingResource.Uri
         };
@@ -298,7 +302,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
     /// Reads a version's chunks a page at a time, each page its own short query. One query for them all would hold
     /// them all, because EF buffers query results when it may retry them.
     /// </summary>
-    private static Func<CancellationToken, Task<IReadOnlyList<byte[]>>> PageReader(ResourceDbContext dbContext, long resourceId)
+    internal static Func<CancellationToken, Task<IReadOnlyList<byte[]>>> PageReader(ResourceDbContext dbContext, long resourceId)
     {
         // No assumption about where indexes start: the first release numbered chunks from zero.
         int? lastIndex = null;

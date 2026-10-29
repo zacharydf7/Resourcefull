@@ -10,6 +10,7 @@ internal class ResourceModel
     public bool IsLatest { get; set; }
     public string? ContentType { get; set; }
     public long? ContentLength { get; set; }
+    public string? ContentHash { get; set; }
     public string? Uri { get; set; }
     public IDictionary<string, string> Metadata { get; set; } = new Dictionary<string, string>();
 

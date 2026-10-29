@@ -45,9 +45,9 @@ public class ResourceInfo
     public long? ContentLength { get; set; }
 
     /// <summary>
-    /// The SHA-256 of the content, as <c>sha256:</c> followed by lowercase hex, computed as it was written. Set on the
-    /// <see cref="ResourceInfo"/> an upload or restore returns; the hash is not stored with the resource, so reads
-    /// return <see langword="null"/>.
+    /// The SHA-256 of the content, as <c>sha256:</c> followed by lowercase hex, computed as it was written and stored
+    /// with the version. <see langword="null"/> means not recorded yet (a version stored before hashes were kept, until
+    /// the SQL Server provider's ContentHashBackfill reaches it), never a mismatch.
     /// </summary>
     public string? ContentHash { get; set; }
 

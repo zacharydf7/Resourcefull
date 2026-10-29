@@ -54,6 +54,7 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : I
                     LastModified = written.LastModified,
                     ContentType = resourceInfo.ContentType,
                     ContentLength = written.ContentLength,
+                    ContentHash = written.ContentHash,
                     Metadata = new Dictionary<string, string>(resourceInfo.Metadata),
                     Uri = resourceInfo.Uri
                 }
@@ -165,6 +166,7 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : I
         IsLatest = isLatest,
         ContentType = resource.ResourceInfo.ContentType,
         ContentLength = resource.ResourceInfo.ContentLength,
+        ContentHash = resource.ResourceInfo.ContentHash,
         Metadata = new Dictionary<string, string>(resource.ResourceInfo.Metadata),
         Uri = resource.ResourceInfo.Uri
     };

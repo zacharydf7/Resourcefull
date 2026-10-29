@@ -21,6 +21,9 @@ namespace Resourcefull;
 /// <item>Compare container names, resource names and version IDs ordinally (case-sensitive, culture-insensitive).</item>
 /// <item>Treat a version as current when it was stored most recently, never by <see cref="ResourceInfo.LastModified"/>,
 /// and never leave a name with more than one current version, however writes and deletes interleave.</item>
+/// <item>Store the <see cref="WrittenContent.ContentLength"/>, <see cref="WrittenContent.ContentHash"/> and
+/// <see cref="WrittenContent.LastModified"/> that <see cref="AddResourceAsync"/> returns with the version, and return
+/// them on every read.</item>
 /// <item>Observe every <c>cancellationToken</c>: a cancelled operation throws <see cref="OperationCanceledException"/>
 /// and never reports success or a partial result.</item>
 /// <item>Be safe to call concurrently for the lifetime it is registered with.</item>

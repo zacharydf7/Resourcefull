@@ -157,6 +157,8 @@ The XML docs on each member state its contract. In short, a provider must:
   false, `Length` the content's full length, `Position` the bytes read so far, and `NotSupportedException` for
   seeking, setting `Position`, writing and `SetLength`.
 - **Store container metadata and URI**, and hand back copies so callers can't change what is stored.
+- **Store the content hash** from `WrittenContent` with the version, and return it as `ResourceInfo.ContentHash`
+  on every read.
 - **Honor cancellation:** a cancelled operation throws `OperationCanceledException` and leaves nothing half-done.
   The one exception is deleting a container, which may stop between whole versions, as long as each remaining name
   keeps its current version and calling it again finishes the job.
@@ -585,7 +587,8 @@ Configuration for an upload.
 - `ContentLength: long?` — measured from the bytes stored. Versions stored by earlier releases keep the
   length their caller declared.
 - `ContentHash: string?` — SHA-256 of the content as `sha256:` plus lowercase hex, computed while it was
-  written. Set on the `ResourceInfo` an upload or restore returns; it isn't stored, so reads return `null`.
+  written and stored with the version. `null` means not recorded yet, never a mismatch: versions stored before
+  hashes were kept have none until the [content hash backfill](#recording-hashes-for-older-versions) reaches them.
 - `Uri: string?`
 - `Metadata: IDictionary<string, string>`
 
@@ -738,6 +741,36 @@ INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
 VALUES (N'20260624193539_RedesignKeysAndVersioning', N'10.0.5');
 ```
 
+`migrate_20261029021712_AddContentHash.sql` adds a nullable `ContentHash` column. It needs no preparation and
+changes no existing row. Every version written after it is applied records its hash; versions stored before it
+report `ContentHash = null` until the backfill below reaches them.
+
+### Recording hashes for older versions
+
+`ContentHashBackfill`, registered by `UseSqlServer`, hashes every version that has no hash yet. It also reports
+every version whose recorded `ContentLength` doesn't match their stored content (a length an earlier release took from
+the caller).
+
+```csharp
+using IServiceScope scope = app.Services.CreateScope();
+ContentHashBackfillResult result = await scope.ServiceProvider.GetRequiredService<ContentHashBackfill>().RunAsync();
+foreach (ContentLengthMismatch mismatch in result.Mismatches)
+{
+    logger.LogWarning("{Container}/{Name} {Version}: recorded {Recorded} bytes, stored {Stored}",
+        mismatch.ContainerName, mismatch.Name, mismatch.VersionId, mismatch.RecordedLength, mismatch.StoredLength);
+}
+```
+
+- **It reads the content of each version without a hash once,** so run it when the load allows. The application
+  can keep running meanwhile.
+- **It is resumable:** it records each hash as soon as it is computed, so you can cancel it at any point, and a
+  later run carries on where it stopped. Once every version has a hash, a run reads no content.
+- **Every run reports every mismatch:** a version whose recorded length is wrong still gets its hash, and every
+  run reports it until you correct its `ContentLength`. A cancelled run therefore loses nothing.
+
+`ContentHash` stays nullable. Making it required would be a later, separate change, once every database has been
+backfilled.
+
 New databases provisioned from `Scripts/Resourcefull.sql` already include the v2 schema and RCSI — no
 upgrade step is required. `Scripts/Resourcefull.sql` is itself idempotent and can be used in place of the
 individual upgrade scripts; it applies whichever migrations the database is missing.
@@ -759,6 +792,7 @@ dotnet ef migrations script 20250513172319_AddVersioning 20260624193539_Redesign
 dotnet ef migrations script 20260624193539_RedesignKeysAndVersioning 20261028213132_NameLimitsAndCaseSensitiveNames --idempotent --project src/Resourcefull.SqlServer --output src/Resourcefull.SqlServer/Scripts/Migrations/migrate_20261028213132_NameLimitsAndCaseSensitiveNames.sql
 dotnet ef migrations script 20261028213132_NameLimitsAndCaseSensitiveNames 20261028220856_UniqueLatestVersion --idempotent --project src/Resourcefull.SqlServer --output src/Resourcefull.SqlServer/Scripts/Migrations/migrate_20261028220856_UniqueLatestVersion.sql
 dotnet ef migrations script 20261028220856_UniqueLatestVersion 20261029003116_EnableReadCommittedSnapshot --idempotent --project src/Resourcefull.SqlServer --output src/Resourcefull.SqlServer/Scripts/Migrations/migrate_20261029003116_EnableReadCommittedSnapshot.sql
+dotnet ef migrations script 20261029003116_EnableReadCommittedSnapshot 20261029021712_AddContentHash --idempotent --project src/Resourcefull.SqlServer --output src/Resourcefull.SqlServer/Scripts/Migrations/migrate_20261029021712_AddContentHash.sql
 ```
 
 Then put the preamble back at the top of each file. Both preambles switch to the database and turn on

@@ -31,7 +31,11 @@ public abstract partial class ResourcefullContractTests
         Assert.Equal(payload.Length, content.ResourceInfo.ContentLength);
         Assert.Equal("ada", content.ResourceInfo.Metadata["author"]);
         Assert.True(content.ResourceInfo.IsLatest);
-        Assert.Equal("report.pdf", Assert.Single(await container.GetResourcesAsync()).Name);
+        Assert.Equal(uploaded.ContentHash, content.ResourceInfo.ContentHash);
+        ResourceInfo listed = Assert.Single(await container.GetResourcesAsync());
+        Assert.Equal("report.pdf", listed.Name);
+        Assert.Equal(uploaded.ContentHash, listed.ContentHash);
+        Assert.Equal(uploaded.ContentHash, Assert.Single(await container.GetResourceVersionsAsync("report.pdf")).ContentHash);
     }
 
     [SkippableFact]
