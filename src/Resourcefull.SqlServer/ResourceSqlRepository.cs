@@ -16,6 +16,13 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
     private const int SqlForeignKeyViolation = 547;
     private const int SqlUniqueIndexViolation = 2601;
     private const int SqlUniqueConstraintViolation = 2627;
+    private const int MaxResourcesPerDeleteBatch = 100;
+
+    /// <summary>
+    /// Caps the content one batch of a container delete removes, counted in chunks, so no single transaction has to log
+    /// a whole container. A resource bigger than the cap still goes in a batch of its own.
+    /// </summary>
+    internal int ChunksPerDeleteBatch { get; init; } = 256;
 
     public async Task<WrittenContent> AddResourceAsync(string resourceContainerName, ResourceInfo resourceInfo, Stream stream, bool createOnly = false, CancellationToken cancellationToken = default)
     {
@@ -282,22 +289,39 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
 
         if (!await dbContext.ResourceContainers.AnyAsync(x => x.Name == resourceContainerName, cancellationToken)) return false;
 
-        const int batchSize = 100;
-        List<ResourceModel> batch;
-        do
+        // Each batch commits on its own, so no single transaction holds the whole container's content. A batch takes
+        // whole resources, each with its chunks, so a reader never sees part of one, until it reaches the chunk budget.
+        // Each pass removes only what earlier passes left, so a delete that is cancelled or fails partway is finished
+        // by calling it again.
+        while (true)
         {
-            batch = await dbContext.Resources
+            var candidates = await dbContext.Resources
                 .Where(r => r.ContainerName == resourceContainerName)
-                .Take(batchSize)
+                .OrderBy(r => r.Name).ThenBy(r => r.VersionId)
+                .Select(r => new { r.Id, r.Name, r.IsLatest, Chunks = r.Chunks!.Count })
+                .Take(MaxResourcesPerDeleteBatch)
                 .ToListAsync(cancellationToken);
+            if (candidates.Count == 0) break;
 
-            if (batch.Count > 0)
+            // A name's current version goes after all its others: deleting it first would leave the name with stored
+            // versions but none current. Candidates come grouped by name, so a current version waits while more of its
+            // name follow it, or while the list was cut short and more might.
+            bool cutShort = candidates.Count == MaxResourcesPerDeleteBatch;
+            var batch = new List<long>();
+            long chunks = 0;
+            for (int i = 0; i < candidates.Count; i++)
             {
-                dbContext.Resources.RemoveRange(batch);
-                await dbContext.SaveChangesAsync(cancellationToken);
+                var candidate = candidates[i];
+                bool moreOfName = i + 1 < candidates.Count ? candidates[i + 1].Name == candidate.Name : cutShort;
+                if (candidate.IsLatest && moreOfName) continue;
+                if (batch.Count > 0 && chunks + candidate.Chunks > ChunksPerDeleteBatch) break;
+                batch.Add(candidate.Id);
+                chunks += candidate.Chunks;
             }
+
+            dbContext.Resources.RemoveRange(await dbContext.Resources.Where(r => batch.Contains(r.Id)).ToListAsync(cancellationToken));
+            await dbContext.SaveChangesAsync(cancellationToken);
         }
-        while (batch.Count == batchSize);
 
         ResourceContainerModel? container = await dbContext.ResourceContainers
             .FirstOrDefaultAsync(x => x.Name == resourceContainerName, cancellationToken);

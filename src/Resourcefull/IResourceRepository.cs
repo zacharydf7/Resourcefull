@@ -111,7 +111,9 @@ public interface IResourceRepository
     Task<ResourceContainerInfo?> GetResourceContainerInfoAsync(string resourceContainerName, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Deletes a container and every resource and version in it.
+    /// Deletes a container and every resource and version in it. A provider may do this in several steps for a large
+    /// container: if it is cancelled or fails partway, every version it hasn't deleted must still be whole, each
+    /// remaining name must still have exactly one current version, and calling it again must finish the job.
     /// </summary>
     /// <returns><see langword="true"/> if the container existed and was deleted; otherwise <see langword="false"/>.</returns>
     Task<bool> DeleteResourceContainerAsync(string resourceContainerName, CancellationToken cancellationToken = default);

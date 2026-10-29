@@ -141,6 +141,8 @@ The XML docs on each member state its contract. In short, a provider must:
   seeking, setting `Position`, writing and `SetLength`.
 - **Store container metadata and URI**, and hand back copies so callers can't change what is stored.
 - **Honor cancellation:** a cancelled operation throws `OperationCanceledException` and leaves nothing half-done.
+  The one exception is deleting a container, which may stop between whole versions, as long as each remaining name
+  keeps its current version and calling it again finishes the job.
 - **Be safe to call concurrently** for the lifetime it registers with.
 
 ### URI Provider
@@ -357,7 +359,11 @@ bool exists = await resourceServiceClient.ContainerExistsAsync("my-container");
 
 #### DeleteResourceContainerIfExistsAsync
 
-Deletes a container (and everything in it) if it exists.
+Deletes a container (and everything in it) if it exists. The SQL Server provider deletes a large container in
+batches that each remove a bounded amount of content and commit one at a time, taking whole versions and each
+name's current version last. If the delete is cancelled or fails partway, the versions it reached are gone, every
+other version is still whole and each remaining name still has its current version, and the container still
+exists: call it again to finish.
 
 - `resourceContainerName: string`
 - **Returns** `Task<bool>` — `true` if deleted, `false` if it did not exist.

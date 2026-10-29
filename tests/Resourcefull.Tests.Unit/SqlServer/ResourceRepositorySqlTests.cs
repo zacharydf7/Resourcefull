@@ -9,13 +9,15 @@ using System.Text;
 namespace Resourcefull.Tests.Unit.SqlServer;
 public class ResourceSqlRepositoryTests
 {
-    private static (ResourceDbContext context, PooledDbContextFactory<ResourceDbContext> factory) NewDatabase()
+    /// <summary>A fresh database, or another handle on <paramref name="databaseName"/> when given.</summary>
+    private static (ResourceDbContext context, PooledDbContextFactory<ResourceDbContext> factory) NewDatabase(string? databaseName = null, params IInterceptor[] interceptors)
     {
         // The in-memory provider has no transactions; the writes' transactional behavior is covered by the
         // SQL Server integration tests.
         DbContextOptions<ResourceDbContext> options = new DbContextOptionsBuilder<ResourceDbContext>()
-            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .UseInMemoryDatabase(databaseName ?? Guid.NewGuid().ToString())
             .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning))
+            .AddInterceptors(interceptors)
             .Options;
         return (new ResourceDbContext(options), new PooledDbContextFactory<ResourceDbContext>(options));
     }
@@ -758,6 +760,97 @@ public class ResourceSqlRepositoryTests
 
         // Assert
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => resourceRepository.GetResourceStreamAsync(containerName, "resourceName", null, cts.Token));
+    }
+
+    [Fact]
+    public async Task DeleteResourceContainerAsync_ShouldLeaveTheRestWholeAndFinishWhenCalledAgain_WhenCancelledAfterABatchFilledByChunks()
+    {
+        // Arrange: three resources of two chunks each against a budget of three chunks, so a batch holds one resource,
+        // and a token cancelled as soon as the first batch is saved.
+        string databaseName = Guid.NewGuid().ToString();
+        using var cts = new CancellationTokenSource();
+        var resourceRepository = new ResourceSqlRepository(NewDatabase(databaseName).factory);
+        var cancelledAfterOneBatch = new ResourceSqlRepository(NewDatabase(databaseName, new CancelAfterSaveInterceptor(cts)).factory) { ChunksPerDeleteBatch = 3 };
+        await resourceRepository.AddResourceContainerAsync(new ResourceContainerInfo { Name = "c" });
+        byte[] payload = RandomNumberGenerator.GetBytes(70_000);
+        foreach (string name in new[] { "a", "b", "c" })
+        {
+            await resourceRepository.AddResourceAsync("c", new ResourceInfo { ContainerName = "c", Name = name, VersionId = "v1" }, new MemoryStream(payload));
+        }
+
+        // Act
+        Exception? cancellation = await Record.ExceptionAsync(() => cancelledAfterOneBatch.DeleteResourceContainerAsync("c", cts.Token));
+        List<ResourceInfo> remaining = await resourceRepository.GetAllResourceInfoAsync("c");
+        var remainingContent = new List<byte[]>();
+        foreach (ResourceInfo resource in remaining)
+        {
+            await using Stream stream = (await resourceRepository.GetResourceStreamAsync("c", resource.Name))!;
+            using var copy = new MemoryStream();
+            await stream.CopyToAsync(copy);
+            remainingContent.Add(copy.ToArray());
+        }
+        bool finished = await resourceRepository.DeleteResourceContainerAsync("c");
+
+        // Assert
+        Assert.IsAssignableFrom<OperationCanceledException>(cancellation);
+        Assert.Equal(["b", "c"], remaining.Select(r => r.Name).Order());
+        Assert.All(remainingContent, content => Assert.Equal(payload, content));
+        Assert.True(finished);
+        Assert.Null(await resourceRepository.GetResourceContainerInfoAsync("c"));
+        Assert.Empty(await resourceRepository.GetAllResourceInfoAsync("c"));
+    }
+
+    [Fact]
+    public async Task DeleteResourceContainerAsync_ShouldKeepTheNameAtItsCurrentVersion_WhenCancelledBetweenVersionsOfOneName()
+    {
+        // Arrange: the current version, "a", was stored last but sorts first, against a budget that fits one version
+        // per batch, and a token cancelled as soon as the first batch is saved.
+        string databaseName = Guid.NewGuid().ToString();
+        using var cts = new CancellationTokenSource();
+        var resourceRepository = new ResourceSqlRepository(NewDatabase(databaseName).factory);
+        var cancelledAfterOneBatch = new ResourceSqlRepository(NewDatabase(databaseName, new CancelAfterSaveInterceptor(cts)).factory) { ChunksPerDeleteBatch = 3 };
+        await resourceRepository.AddResourceContainerAsync(new ResourceContainerInfo { Name = "c" });
+        byte[] payload = RandomNumberGenerator.GetBytes(70_000);
+        await resourceRepository.AddResourceAsync("c", new ResourceInfo { ContainerName = "c", Name = "n", VersionId = "b" }, new MemoryStream(payload));
+        await resourceRepository.AddResourceAsync("c", new ResourceInfo { ContainerName = "c", Name = "n", VersionId = "a" }, new MemoryStream(payload));
+
+        // Act
+        Exception? cancellation = await Record.ExceptionAsync(() => cancelledAfterOneBatch.DeleteResourceContainerAsync("c", cts.Token));
+
+        // Assert
+        Assert.IsAssignableFrom<OperationCanceledException>(cancellation);
+        ResourceInfo current = Assert.Single(await resourceRepository.GetResourceVersionsAsync("c", "n"));
+        Assert.Equal("a", current.VersionId);
+        Assert.True(current.IsLatest);
+    }
+
+    [Fact]
+    public async Task DeleteResourceContainerAsync_ShouldFinish_WhenEveryResourceIsBiggerThanTheChunkBudget()
+    {
+        // Arrange
+        (_, var dbContextFactory) = NewDatabase();
+        var resourceRepository = new ResourceSqlRepository(dbContextFactory) { ChunksPerDeleteBatch = 1 };
+        await resourceRepository.AddResourceContainerAsync(new ResourceContainerInfo { Name = "c" });
+        foreach (string name in new[] { "a", "b" })
+        {
+            await resourceRepository.AddResourceAsync("c", new ResourceInfo { ContainerName = "c", Name = name, VersionId = "v1" }, new MemoryStream(new byte[70_000]));
+        }
+
+        // Act
+        bool deleted = await resourceRepository.DeleteResourceContainerAsync("c");
+
+        // Assert
+        Assert.True(deleted);
+        Assert.Null(await resourceRepository.GetResourceContainerInfoAsync("c"));
+    }
+
+    private sealed class CancelAfterSaveInterceptor(CancellationTokenSource source) : SaveChangesInterceptor
+    {
+        public override ValueTask<int> SavedChangesAsync(SaveChangesCompletedEventData eventData, int result, CancellationToken cancellationToken = default)
+        {
+            source.Cancel();
+            return ValueTask.FromResult(result);
+        }
     }
 
     [Fact]

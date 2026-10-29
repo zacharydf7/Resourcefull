@@ -86,7 +86,9 @@ public interface IResourceServiceClient
     public Task<bool> ContainerExistsAsync(string resourceContainerName, CancellationToken cancellationToken);
 
     /// <summary>
-    /// Deletes a container (and everything in it) if it exists.
+    /// Deletes a container (and everything in it) if it exists. A large container may be deleted in several steps: if
+    /// the delete is cancelled or fails partway, every version it didn't reach is still whole, each remaining name still
+    /// has its current version, and the container still exists, so calling it again finishes the job.
     /// </summary>
     /// <param name="resourceContainerName">The name of the container to delete.</param>
     /// <returns><see langword="true"/> if a container was deleted; otherwise <see langword="false"/>.</returns>
