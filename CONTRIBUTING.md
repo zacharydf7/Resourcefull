@@ -138,7 +138,7 @@ Three rules keep the scripts generated and safe to run again:
   `<div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 3.2</span></div>`. In tables and sentences,
   use `<span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span>`. A page that's entirely new also gets a
   sidebar marker in `template/public/main.css`, and new public types and members get `<para>Coming in 3.2.</para>`
-  in their XML docs.
+  in their XML docs, on a line of its own: on the same line as other text, the API reference shows it as code.
 
 ## Releasing
 
