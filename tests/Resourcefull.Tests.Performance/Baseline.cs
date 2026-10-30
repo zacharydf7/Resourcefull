@@ -6,7 +6,7 @@ namespace Resourcefull.Tests.Performance;
 
 /// <summary>What one scenario cost: medians over its repetitions.</summary>
 internal sealed record Measurement(long RoundTrips, long LogicalReads, long LogBytes, long AllocatedBytes,
-    long PeakHeapBytes, double Seconds, long ContentBytes)
+    long RetainedBytes, double Seconds, long ContentBytes)
 {
     [JsonIgnore]
     public double MebibytesPerSecond => ContentBytes / 1024.0 / 1024.0 / Seconds;
@@ -22,19 +22,17 @@ internal static class Baseline
 {
     // Round trips don't vary from run to run, so any increase fails. Reads, log bytes and allocations vary a little
     // with SQL Server's plans, its log blocks and SqlClient's buffering; reads also by a page or two with how the rows
-    // lie on their pages, and log bytes by a block or two. Peak heap depends on when the GC runs, so it only catches
-    // large regressions. Time varies with the machine and with what SQL Server is doing at the moment: CI's shared
-    // runners differ by up to about three times, and the 64 MiB upload alone has taken nearly four times as long on one
-    // run as on another, so time only catches a slowdown beyond that.
+    // lie on their pages, and log bytes by a block or two. Retained memory varies with what pools and caches keep, so
+    // it only catches large regressions, such as an operation that holds on to its content. Time is reported but never
+    // fails: CI's shared runners differ by up to about four times from run to run, which made it the most common reason
+    // the build failed while catching nothing the other measures miss.
     private const double ReadsTolerance = 0.10;
     private const long ReadsSlackPages = 2;
     private const double LogTolerance = 0.10;
     private const long LogSlackBytes = 64 * 1024;
     private const double AllocationTolerance = 0.10;
-    private const double PeakHeapTolerance = 0.50;
-    private const long PeakHeapSlackBytes = 1024 * 1024;
-    private const double TimeTolerance = 4.00;
-    private const double TimeSlackSeconds = 0.05;
+    private const double RetainedTolerance = 0.50;
+    private const long RetainedSlackBytes = 256 * 1024;
 
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
@@ -59,9 +57,10 @@ internal static class Baseline
             output);
         Compare("log bytes", measured.LogBytes, baseline?.LogBytes, LogTolerance, LogSlackBytes, failures, output);
         Compare("allocated bytes", measured.AllocatedBytes, baseline?.AllocatedBytes, AllocationTolerance, 0, failures, output);
-        Compare("peak heap bytes", measured.PeakHeapBytes, baseline?.PeakHeapBytes, PeakHeapTolerance, PeakHeapSlackBytes,
-            failures, output);
-        Compare("seconds", measured.Seconds, baseline?.Seconds, TimeTolerance, TimeSlackSeconds, failures, output);
+        Compare("retained bytes", measured.RetainedBytes, baseline?.RetainedBytes, RetainedTolerance,
+            RetainedSlackBytes, failures, output);
+        output.WriteLine($"seconds: {measured.Seconds:#,0.####}"
+            + (baseline is null ? "" : $" against {baseline.Seconds:#,0.####}"));
         if (measured.ContentBytes > 0) output.WriteLine($"throughput: {measured.MebibytesPerSecond:F1} MiB/s");
 
         if (failures.Count > 0 && Enforce)

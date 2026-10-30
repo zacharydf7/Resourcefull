@@ -100,7 +100,9 @@ jobs:
     runs-on: ubuntu-latest
     services:
       sqlserver:
-        image: mcr.microsoft.com/mssql/server:2022-latest
+        # Pinned, unlike the integration tests', so a new SQL Server release can't move the measurements: moving to one
+        # comes with a new baseline.
+        image: mcr.microsoft.com/mssql/server:2022-CU27-GDR1-ubuntu-22.04
         env:
           ACCEPT_EULA: "Y"
           MSSQL_SA_PASSWORD: "Resourcefull(!)Performance1"

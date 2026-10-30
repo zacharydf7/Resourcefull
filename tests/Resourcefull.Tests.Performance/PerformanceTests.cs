@@ -343,11 +343,8 @@ public sealed class PerformanceTests(SqlServerFixture fixture, ITestOutputHelper
         var samples = new List<Measurement>();
         for (int iteration = 1; iteration <= Repetitions; iteration++)
         {
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
-            GC.Collect();
+            long liveBefore = GC.GetTotalMemory(forceFullCollection: true);
             _activity.Reset();
-            using var heap = new PeakHeapSampler();
             long allocatedBefore = GC.GetTotalAllocatedBytes(precise: true);
             var stopwatch = Stopwatch.StartNew();
 
@@ -355,14 +352,17 @@ public sealed class PerformanceTests(SqlServerFixture fixture, ITestOutputHelper
 
             stopwatch.Stop();
             long allocated = GC.GetTotalAllocatedBytes(precise: true) - allocatedBefore;
-            samples.Add(new Measurement(_activity.RoundTrips, _activity.LogicalReads, 0, allocated, heap.Stop(),
+            // What the operation still holds once it's done, after collecting the heap, so garbage doesn't count. Below
+            // zero when what the repetition before it left, such as a pooled connection's buffers, was let go.
+            long retained = Math.Max(0, GC.GetTotalMemory(forceFullCollection: true) - liveBefore);
+            samples.Add(new Measurement(_activity.RoundTrips, _activity.LogicalReads, 0, allocated, retained,
                 stopwatch.Elapsed.TotalSeconds, contentBytes));
         }
         long logBytes = (await LogBytesWrittenAsync() - logBefore) / Repetitions;
 
         Baseline.Check(scenario, new Measurement(
             Median(samples, s => s.RoundTrips), Median(samples, s => s.LogicalReads), logBytes,
-            Median(samples, s => s.AllocatedBytes), Median(samples, s => s.PeakHeapBytes),
+            Median(samples, s => s.AllocatedBytes), Median(samples, s => s.RetainedBytes),
             Math.Round(Median(samples, s => s.Seconds), 4), contentBytes), output);
     }
 
@@ -413,44 +413,6 @@ public sealed class PerformanceTests(SqlServerFixture fixture, ITestOutputHelper
 
     private static T Median<T>(List<Measurement> samples, Func<Measurement, T> metric)
         => samples.Select(metric).Order().ElementAt(samples.Count / 2);
-
-    /// <summary>
-    /// Tracks how far the managed heap grows above where it started, from a thread of its own that allocates nothing,
-    /// so it doesn't add to the allocations being measured.
-    /// </summary>
-    private sealed class PeakHeapSampler : IDisposable
-    {
-        private readonly long _start = GC.GetTotalMemory(forceFullCollection: false);
-        private readonly Thread _thread;
-        private long _peak;
-        private volatile bool _stopped;
-
-        public PeakHeapSampler()
-        {
-            _peak = _start;
-            _thread = new Thread(() =>
-            {
-                while (!_stopped)
-                {
-                    _peak = Math.Max(_peak, GC.GetTotalMemory(forceFullCollection: false));
-                    Thread.Sleep(1);
-                }
-            }) { IsBackground = true };
-            _thread.Start();
-        }
-
-        public long Stop()
-        {
-            _stopped = true;
-            _thread.Join();
-            return Math.Max(_peak, GC.GetTotalMemory(forceFullCollection: false)) - _start;
-        }
-
-        public void Dispose()
-        {
-            if (!_stopped) Stop();
-        }
-    }
 
     /// <summary>Content that can't seek and never exists in memory all at once, like a request body.</summary>
     private sealed class GeneratedStream(long length) : Stream
