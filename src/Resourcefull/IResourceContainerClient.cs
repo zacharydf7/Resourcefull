@@ -316,11 +316,18 @@ public interface IResourceContainerClient : IDisposable
     /// <param name="options">Which version to copy, and how to treat an existing destination; the defaults when null.</param>
     /// <param name="cancellationToken">Cancels the copy; a canceled copy stores nothing.</param>
     /// <returns>The new version, or <see langword="null"/> if the resource or version doesn't exist.</returns>
-    /// <exception cref="ResourceConflictException">Versioning is off, the destination name exists, and <see cref="ResourceCopyOptions.Overwrite"/> isn't set.</exception>
+    /// <exception cref="ResourceConflictException">
+    /// The destination name exists and the copy is create-only: either <see cref="ResourceCopyOptions.CreateOnly"/> is
+    /// set, or versioning is off and <see cref="ResourceCopyOptions.Overwrite"/> isn't set.
+    /// </exception>
     /// <exception cref="ResourceContainerNotFoundException">The destination container doesn't exist.</exception>
     /// <exception cref="ResourcePreconditionFailedException">The destination's current version doesn't meet <see cref="ResourceCopyOptions.DestinationConditions"/>.</exception>
     /// <exception cref="ResourcePolicyViolationException">The destination container's policy refuses the copy.</exception>
-    /// <exception cref="ArgumentException">A name breaks the name rules (<see cref="ResourceNameException"/>), or is null (<see cref="ArgumentNullException"/>).</exception>
+    /// <exception cref="ArgumentException">
+    /// A name breaks the name rules (<see cref="ResourceNameException"/>), or is null (<see cref="ArgumentNullException"/>);
+    /// or <see cref="ResourceCopyOptions.CreateOnly"/> and <see cref="ResourceCopyOptions.DestinationConditions"/> are
+    /// both set.
+    /// </exception>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
     /// <exception cref="NotSupportedException">
     /// This default implementation, kept so implementations written for 3.1 still compile, doesn't copy.

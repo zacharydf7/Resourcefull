@@ -15,7 +15,8 @@ Both return `null` when the source doesn't exist.
 - **A copy is a new version** at the destination. It has its own `VersionId` and `LastModified`, and the source's
   content, hash, type and metadata. It's stored like an upload: without [versioning](versioning.md), an existing name
   is refused unless you set `Overwrite`, and with it the copy becomes the name's new current version and older ones
-  are pruned. `DestinationConditions` work as an upload's [conditions](concurrency.md#updating-only-if-unchanged) do.
+  are pruned. `CreateOnly` refuses an existing name with versioning on too, and `DestinationConditions` work as an
+  upload's [conditions](concurrency.md#updating-only-if-unchanged) do; the two can't be combined.
 - **A copy remembers its source.** `CopiedFrom` on its `ResourceInfo` names the container, name and version it was
   copied from, and stays even when that source is deleted. A restored version records the version it restored.
 - **A move keeps everything:** every version, with its `VersionId`, `LastModified` and `CopiedFrom`, all at once. The

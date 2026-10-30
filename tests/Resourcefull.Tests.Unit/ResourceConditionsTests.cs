@@ -38,6 +38,37 @@ public class ResourceConditionsTests
     }
 
     [Fact]
+    public async Task CopyResourceAsync_ShouldThrowArgumentException_WhenCreateOnlyAndDestinationConditionsAreBothSet()
+    {
+        // Arrange
+        var repository = new Mock<IResourceRepository>(MockBehavior.Strict);
+        var options = new ResourceCopyOptions { CreateOnly = true, DestinationConditions = new ResourceConditions { IfMatchVersionId = "v1" } };
+
+        // Act
+        Task act() => NewClient(repository.Object).CopyResourceAsync("r", Container, "copy", options);
+
+        // Assert
+        await Assert.ThrowsAsync<ArgumentException>(act);
+        repository.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task CopyResourceAsync_ShouldCopyCreateOnly_WhenGivenCreateOnlyAndOverwriteWithoutVersioning()
+    {
+        // Arrange
+        var repository = NewRepository();
+        repository.Setup(r => r.GetResourceInfoAsync(Container, "r", null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ResourceInfo { ContainerName = Container, Name = "r", VersionId = "v1" });
+
+        // Act
+        await NewClient(repository.Object).CopyResourceAsync("r", Container, "copy", new ResourceCopyOptions { CreateOnly = true, Overwrite = true });
+
+        // Assert
+        repository.Verify(r => r.CopyResourceAsync(new ResourceLocation(Container, "r"), "v1", It.IsAny<ResourceInfo>(),
+            It.Is<ResourceWriteCondition>(c => c.CreateOnly && c.Conditions == null), It.IsAny<CancellationToken>()));
+    }
+
+    [Fact]
     public async Task UploadAsync_ShouldPassTheConditionsAsAnOverwrite_WhenGivenConditionsWithoutVersioningOrOverwrite()
     {
         // Arrange

@@ -8,9 +8,18 @@ public sealed class ResourceCopyOptions
 
     /// <summary>
     /// Whether the copy may replace an existing resource at the destination when versioning is off. With versioning
-    /// on, a copy to an existing name is always stored as its new current version, as an upload would be.
+    /// on, a copy to an existing name is stored as its new current version, as an upload would be, unless
+    /// <see cref="CreateOnly"/> is set.
     /// </summary>
     public bool Overwrite { get; init; }
+
+    /// <summary>
+    /// Copy only if no resource with the destination name exists yet, whether or not versioning is enabled, as
+    /// <see cref="ResourceUploadOptions.CreateOnly"/> for an upload; otherwise <see cref="ResourceConflictException"/>
+    /// is thrown and nothing is stored. Takes precedence over <see cref="Overwrite"/>, and can't be combined with
+    /// <see cref="DestinationConditions"/>.
+    /// </summary>
+    public bool CreateOnly { get; init; }
 
     /// <summary>
     /// What the destination name's current version must be like, decided by the copy itself, as

@@ -346,8 +346,13 @@ internal partial class ResourceContainerClient(IResourceRepository resourceRepos
         ResourceNames.ThrowIfInvalidContainerName(destinationContainer);
         ResourceNames.ThrowIfInvalidResourceName(destinationName);
         ResourceConditions? conditions = copyOptions.DestinationConditions is { IsEmpty: false } set ? set : null;
+        if (copyOptions.CreateOnly && conditions is not null)
+            throw new ArgumentException(
+                $"{nameof(ResourceCopyOptions.CreateOnly)} and {nameof(ResourceCopyOptions.DestinationConditions)} can't both be set: " +
+                "a create-only copy requires that the destination has no current version, and conditions require one.",
+                "options"); // CopyResourceAsync's parameter; nameof(options) here is the client's own options
         // As for an upload: without versioning, a copy that may not overwrite is a create-only write.
-        bool createOnly = !options.IsVersioningEnabled && !copyOptions.Overwrite && conditions is null;
+        bool createOnly = copyOptions.CreateOnly || (!options.IsVersioningEnabled && !copyOptions.Overwrite && conditions is null);
 
         ResourceInfo? source = await resourceRepository.GetResourceInfoAsync(ContainerName, resourceName, copyOptions.VersionId, cancellationToken);
         if (source is null) return null;

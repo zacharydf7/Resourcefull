@@ -22,7 +22,8 @@
   [Expiring resources](docs/expiry.md).
 - **Copy, move and rename.** `CopyResourceAsync` copies a version to a name in the same or another container, as a
   new version there, and `MoveResourceAsync` moves a resource with every version, keeping their IDs; renaming is a
-  move within the container. With SQL Server, no content passes through the application. A copy or restore records
+  move within the container. With SQL Server, no content passes through the application. A copy can be
+  create-only or conditional, as an upload can. A copy or restore records
   its source in the new `ResourceInfo.CopiedFrom`. Providers get `CopyResourceAsync`, with a default implementation,
   and `MoveResourceAsync`, which throws `NotSupportedException` until implemented. The `AddCopiedFrom` migration adds
   three nullable columns. See [Copying and moving](docs/copying-and-moving.md).

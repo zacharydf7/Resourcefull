@@ -75,6 +75,29 @@ public abstract partial class ResourcefullContractTests
     }
 
     [SkippableFact]
+    public async Task CopyResourceAsync_ShouldRefuseAnExistingNameButCopyToANewOne_WhenCreateOnlyWithVersioning()
+    {
+        // Arrange
+        using ServiceProvider provider = BuildServiceProvider(o => o.UseVersioning());
+        IResourceContainerClient container = await NewContainerAsync(provider);
+        await container.UploadAsync("a", BinaryData.FromString("source"));
+        await container.UploadAsync("b", BinaryData.FromString("existing"));
+        string name = container.ResourceContainerInfo.Name;
+        var createOnly = new ResourceCopyOptions { CreateOnly = true, Overwrite = true };
+
+        // Act
+        Task refused() => container.CopyResourceAsync("a", name, "b", createOnly);
+        await Assert.ThrowsAsync<ResourceConflictException>(refused);
+        ResourceInfo? created = await container.CopyResourceAsync("a", name, "c", createOnly);
+
+        // Assert
+        Assert.Single(await container.GetResourceVersionsAsync("b"));
+        Assert.Equal("existing", (await container.DownloadContentAsync("b"))!.Content.ToString());
+        Assert.Equal("source", (await container.DownloadContentAsync("c"))!.Content.ToString());
+        Assert.Equal("c", created!.Name);
+    }
+
+    [SkippableFact]
     public async Task CopyResourceAsync_ShouldCopyOnlyIfTheDestinationStillMatches_WhenGivenDestinationConditions()
     {
         // Arrange
