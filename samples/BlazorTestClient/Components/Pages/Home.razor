@@ -199,7 +199,7 @@
     // this page's connection.
     private static string DownloadUrl(ResourceInfo resource) =>
         $"download/{Uri.EscapeDataString(resource.ContainerName)}/{string.Join('/', resource.Name.Split('/').Select(Uri.EscapeDataString))}" +
-        $"?versionId={Uri.EscapeDataString(resource.VersionId!)}";
+        $"?versionId={Uri.EscapeDataString(resource.VersionId)}";
 
     public async Task UploadResource(InputFileChangeEventArgs args, string containerName)
     {

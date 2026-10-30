@@ -86,7 +86,7 @@ internal static class ContainerArchive
                         contentSize += content.ContentLength;
                     }
 
-                    versions.Add(new ManifestVersion(version.VersionId!, version.LastModified, version.ContentType, content.ContentLength,
+                    versions.Add(new ManifestVersion(version.VersionId, version.LastModified, version.ContentType, content.ContentLength,
                         content.ContentHash, version.Metadata, version.CopiedFrom, version.ExpiresAt, entryName));
                 }
 

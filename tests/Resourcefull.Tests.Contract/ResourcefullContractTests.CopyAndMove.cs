@@ -26,7 +26,7 @@ public abstract partial class ResourcefullContractTests
         // Assert
         Assert.NotNull(copy);
         Assert.NotEqual(original.VersionId, copy.VersionId);
-        Assert.Equal(new ResourceOrigin(source.ResourceContainerInfo.Name, "report.pdf", original.VersionId!), copy.CopiedFrom);
+        Assert.Equal(new ResourceOrigin(source.ResourceContainerInfo.Name, "report.pdf", original.VersionId), copy.CopiedFrom);
         Assert.Equal((original.ContentHash, original.ContentLength, "application/pdf"), (copy.ContentHash, copy.ContentLength, copy.ContentType));
         Assert.Equal(payload, content!.Content.ToArray());
         Assert.Equal("ada", content.ResourceInfo.Metadata["author"]);
@@ -146,10 +146,10 @@ public abstract partial class ResourcefullContractTests
         await container.UploadAsync("notes.txt", BinaryData.FromString("second"));
 
         // Act
-        ResourceInfo? restored = await container.RestoreVersionAsync("notes.txt", first.VersionId!);
+        ResourceInfo? restored = await container.RestoreVersionAsync("notes.txt", first.VersionId);
 
         // Assert
-        var origin = new ResourceOrigin(container.ResourceContainerInfo.Name, "notes.txt", first.VersionId!);
+        var origin = new ResourceOrigin(container.ResourceContainerInfo.Name, "notes.txt", first.VersionId);
         Assert.Equal(origin, restored!.CopiedFrom);
         Assert.Equal(origin, (await container.GetResourceInfoAsync("notes.txt"))!.CopiedFrom);
     }

@@ -17,9 +17,10 @@ public class ResourceInfo
 
     /// <summary>
     /// The version ID of a stored resource: an opaque, unique string. Compare it for equality only; its format is not
-    /// part of the contract.
+    /// part of the contract. Every stored version has one, so a provider sets it on each <see cref="ResourceInfo"/> it
+    /// returns.
     /// </summary>
-    public string? VersionId { get; set; }
+    public string VersionId { get; set; } = null!;
 
     /// <summary>
     /// When the version became current, by the clock of the application server that stored it. Informational only:

@@ -67,6 +67,10 @@
 - **A new look.** The packages have a new icon, and the [documentation site](https://zacharydf7.github.io/Resourcefull/)
   has a new design, a home page, and a sidebar grouped by what you're trying to do. Pages that covered several topics
   are split into one page each; links to the old pages still work.
+- **`ResourceInfo.VersionId` is non-nullable,** since every stored version has one, so passing it to methods that
+  take a version ID no longer needs `!`. Only the annotation changed: code that checked it for `null` still compiles.
+  A provider must set it on every `ResourceInfo` it returns; one that assigns it from a nullable value now gets a
+  nullable warning.
 
 ## 3.1.0
 

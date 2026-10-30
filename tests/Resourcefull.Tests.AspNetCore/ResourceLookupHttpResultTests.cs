@@ -225,7 +225,7 @@ public class ResourceLookupHttpResultTests
         await app.Files.UploadAsync("digits.txt", BinaryData.FromString("abcdefghij"), new ResourceUploadOptions { Overwrite = true });
 
         // Act
-        HttpResponseMessage response = await app.Client.SendAsync(Get($"/ranged/digits.txt?versionId={Uri.EscapeDataString(older.VersionId!)}",
+        HttpResponseMessage response = await app.Client.SendAsync(Get($"/ranged/digits.txt?versionId={Uri.EscapeDataString(older.VersionId)}",
             h => h.Range = new RangeHeaderValue(2, 4)));
 
         // Assert

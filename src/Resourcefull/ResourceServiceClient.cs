@@ -148,7 +148,7 @@ internal class ResourceServiceClient(IResourceRepository resourceRepository, IOp
                         if (cleanupHandler is not null)
                             await cleanupHandler.OnCleanupAsync(new ResourceCleanup(version, ResourceCleanupReason.Expired, now), cancellationToken);
                         if (await resourceRepository.DeleteExpiredVersionAsync(new ResourceLocation(version.ContainerName, version.Name),
-                            version.VersionId!, now, cancellationToken))
+                            version.VersionId, now, cancellationToken))
                         {
                             deleted++;
                         }

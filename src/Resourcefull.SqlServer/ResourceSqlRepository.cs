@@ -476,7 +476,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
     {
         ContainerName = r.ContainerName,
         Name = r.Name,
-        VersionId = r.VersionId,
+        VersionId = r.VersionId!, // A required column, generated on insert.
         LastModified = r.LastModified,
         IsLatest = r.IsLatest,
         ContentType = r.ContentType,

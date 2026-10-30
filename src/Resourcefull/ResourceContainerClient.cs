@@ -371,7 +371,7 @@ internal partial class ResourceContainerClient(IResourceRepository resourceRepos
             VersionId = Guid.CreateVersion7().ToString(),
             ContentType = source.ContentType,
             Metadata = new Dictionary<string, string>(source.Metadata),
-            CopiedFrom = new ResourceOrigin(ContainerName, resourceName, source.VersionId!),
+            CopiedFrom = new ResourceOrigin(ContainerName, resourceName, source.VersionId),
             ExpiresAt = copyOptions.ExpiresAt
         });
         WrittenContent? written = await resourceRepository.CopyResourceAsync(new ResourceLocation(ContainerName, resourceName),

@@ -268,7 +268,7 @@ public sealed class TelemetryTests : IDisposable
         using Activity root = TestSource.StartActivity("test")!;
 
         // Act
-        await container.SetExpiryAsync("a", stored.VersionId!, DateTimeOffset.UtcNow.AddDays(1));
+        await container.SetExpiryAsync("a", stored.VersionId, DateTimeOffset.UtcNow.AddDays(1));
         await service.DeleteExpiredAsync();
 
         // Assert

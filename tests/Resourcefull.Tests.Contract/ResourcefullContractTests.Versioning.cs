@@ -188,7 +188,7 @@ public abstract partial class ResourcefullContractTests
         });
 
         // Act
-        ResourceInfo? restored = await container.RestoreVersionAsync("doc", first.VersionId!);
+        ResourceInfo? restored = await container.RestoreVersionAsync("doc", first.VersionId);
 
         // Assert
         IReadOnlyList<ResourceInfo> versions = await container.GetResourceVersionsAsync("doc");
