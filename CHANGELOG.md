@@ -109,6 +109,9 @@
   create, or a concurrency error for a delete; now it recognizes its own success, as uploads already did.
 - **A file moved out of a container while the container was being deleted on SQL Server** could be deleted from its
   new container. The delete now removes only what's still in the container it's deleting.
+- **A write on SQL Server whose wait for its name's write lock lost a deadlock or timed out** failed with "Could not
+  lock the resource name for writing" instead of being retried, as any other deadlock is. It now raises error 50001,
+  which the retry policy retries.
 
 ## [3.1.0] - 2026-10-29
 

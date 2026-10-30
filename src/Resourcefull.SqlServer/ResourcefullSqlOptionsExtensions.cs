@@ -26,7 +26,8 @@ public static class ResourcefullSqlOptionsExtensions
     /// Stores resources in SQL Server as <see cref="UseSqlServer(ResourcefullOptionsBuilder, string)"/> does, then
     /// applies <paramref name="configure"/> to EF Core's SQL Server options, to change the command timeout or the
     /// retries, for example. Replacing the retry policy, such as with <c>EnableRetryOnFailure</c>, also stops
-    /// Resourcefull counting retries in <c>resourcefull.sqlserver.retries</c>.
+    /// Resourcefull counting retries in <c>resourcefull.sqlserver.retries</c>; give it error 50001 to retry, which a
+    /// write whose lock on its resource name lost a deadlock raises.
     /// <para>Coming in 3.2.</para>
     /// </summary>
     /// <param name="builder">The builder passed to <c>AddResourcefull</c>.</param>
@@ -47,7 +48,7 @@ public static class ResourcefullSqlOptionsExtensions
                 sql.ExecutionStrategy(dependencies => new RetryCountingExecutionStrategy(dependencies,
                     maxRetryCount: 5,
                     maxRetryDelay: TimeSpan.FromSeconds(10),
-                    errorNumbersToAdd: [1205]));
+                    errorNumbersToAdd: [1205, ResourceSqlRepository.NameLockNotGrantedError]));
                 configure(sql);
             }));
         builder.Services.AddScoped(services => new ContentHashBackfill(services.GetRequiredService<IDbContextFactory<ResourceDbContext>>()));

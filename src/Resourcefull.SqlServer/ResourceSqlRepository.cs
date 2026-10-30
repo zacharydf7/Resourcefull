@@ -45,6 +45,12 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
     /// </summary>
     internal const int ChunksPerDeleteStatement = 1_000;
 
+    /// <summary>
+    /// The error a name's lock raises when SQL Server chooses it as a deadlock victim, or it times out: transient, like a
+    /// deadlock (1205), so the retry policy <c>UseSqlServer</c> sets retries the write.
+    /// </summary>
+    internal const int NameLockNotGrantedError = 50001;
+
     public Task<WrittenContent> AddResourceAsync(string resourceContainerName, ResourceInfo resourceInfo, Stream stream, bool createOnly = false, CancellationToken cancellationToken = default) =>
         AddResourceAsync(resourceContainerName, resourceInfo, stream, new ResourceWriteCondition { CreateOnly = createOnly }, cancellationToken);
 
@@ -418,7 +424,6 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
     /// <summary>
     /// Takes an exclusive application lock on the resource name for the rest of the current transaction. One lock per
     /// name, rather than key-range locks on its rows, so writers can't deadlock by taking locks in different orders.
-    /// Lock names are limited to 255 characters, so the name is hashed.
     /// </summary>
     private static Task LockNameAsync(ResourceDbContext dbContext, string resourceContainerName, string resourceName,
         CancellationToken cancellationToken) =>
@@ -433,15 +438,20 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
         var parameters = new object[names.Count];
         for (int i = 0; i < names.Count; i++)
         {
+            // -3 is a deadlock victim and -1 a timeout, either of which a retry can get past.
             sql.Append($"EXEC @result = sp_getapplock @Resource = @lock{i}, @LockMode = 'Exclusive', ")
                 .Append("@LockOwner = 'Transaction';")
+                .Append($"IF @result IN (-1, -3) THROW {NameLockNotGrantedError}, ")
+                .Append("'The resource name''s lock was chosen as a deadlock victim or timed out.', 1;")
                 .Append("IF @result < 0 THROW 50000, 'Could not lock the resource name for writing.', 1;");
-            string key = $"{names[i].ContainerName}\n{names[i].ResourceName}";
-            parameters[i] = new SqlParameter($"@lock{i}",
-                "Resourcefull:" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(key))));
+            parameters[i] = new SqlParameter($"@lock{i}", NameLockResource(names[i]));
         }
         await dbContext.Database.ExecuteSqlRawAsync(sql.ToString(), parameters, cancellationToken);
     }
+
+    /// <summary>The application lock resource for a name: lock resources are limited to 255 characters, so it's hashed.</summary>
+    internal static string NameLockResource(ResourceLocation name) =>
+        "Resourcefull:" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes($"{name.ContainerName}\n{name.ResourceName}")));
 
     private static async Task ThrowIfNotMetAsync(ResourceDbContext dbContext, ResourceConditions conditions,
         string resourceContainerName, string resourceName, CancellationToken cancellationToken)

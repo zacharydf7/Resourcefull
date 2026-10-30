@@ -75,7 +75,9 @@ but if yours relies on read-committed blocking, give Resourcefull a database of 
 ## Retries
 
 `UseSqlServer` turns on EF Core's retry policy for SQL Server's transient errors, including deadlocks (error 1205): up
-to 5 retries, at most 10 seconds apart. It stops once the operation's cancellation token is canceled. Each retry is
+to 5 retries, at most 10 seconds apart. It also retries error 50001, Resourcefull's own: a write waits for a lock on
+its resource name, so writers of a name take turns, and SQL Server can end that wait to break a deadlock, or time it
+out if you've set a lock timeout. It stops once the operation's cancellation token is canceled. Each retry is
 counted in the `resourcefull.sqlserver.retries` metric, with the error number; see [Telemetry](../telemetry.md).
 
 To change these or other connection settings <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span>, pass a second argument, which gets EF Core's SQL Server
@@ -88,7 +90,9 @@ builder.Services.AddResourcefull(options => options
 ```
 
 Replacing the retry policy, such as with `sql.EnableRetryOnFailure(...)`, works too, but then Resourcefull no longer
-counts retries in `resourcefull.sqlserver.retries`.
+counts retries in `resourcefull.sqlserver.retries`. Give it error 50001 to retry as well, as in
+`sql.EnableRetryOnFailure(5, TimeSpan.FromSeconds(10), [50001])`, or a write that loses a deadlock over its name's lock
+fails instead of being retried.
 
 An upload is retried as a whole, from its first byte. That's possible only when its stream can seek; an upload from a
 stream that can't, such as an HTTP request body, fails instead once its content has started, and stores nothing.
