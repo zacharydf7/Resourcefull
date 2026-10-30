@@ -248,6 +248,21 @@ public interface IResourceRepository
     Task<bool> DeleteResourceContainerAsync(string resourceContainerName, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Replaces a container's <see cref="ResourceContainerInfo.Metadata"/> with a copy of <paramref name="metadata"/>.
+    /// An import uses it to mark the container it's filling as unfinished, and to clear the mark once it's done. The
+    /// default implementation throws <see cref="NotSupportedException"/>, and imports then go unmarked.
+    /// <para>Coming in 3.2.</para>
+    /// </summary>
+    /// <param name="resourceContainerName">The container.</param>
+    /// <param name="metadata">Its new metadata.</param>
+    /// <param name="cancellationToken">Cancels the change.</param>
+    /// <returns><see langword="true"/> if the container exists; otherwise <see langword="false"/>.</returns>
+    /// <exception cref="NotSupportedException">The provider doesn't change container metadata, as by default.</exception>
+    Task<bool> SetResourceContainerMetadataAsync(string resourceContainerName, IDictionary<string, string> metadata,
+        CancellationToken cancellationToken = default)
+        => throw new NotSupportedException($"{GetType().Name} doesn't change container metadata.");
+
+    /// <summary>
     /// Stores a copy of one version of a resource, or of the current version when <paramref name="sourceVersionId"/> is
     /// null, as a new version described by <paramref name="destination"/>, with the source's content and hash. It's
     /// stored as <see cref="AddResourceAsync(string, ResourceInfo, Stream, ResourceWriteCondition, CancellationToken)"/>

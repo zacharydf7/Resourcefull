@@ -62,7 +62,7 @@ public abstract partial class ResourcefullContractTests
 
         // Assert
         IResourceContainerClient restored = service.GetResourceContainerClient(restoredName);
-        Assert.Equal("billing", (await service.GetResourceContainerInfoAsync(restoredName))!.Metadata["team"]);
+        Assert.Equal(new Dictionary<string, string> { ["team"] = "billing" }, (await service.GetResourceContainerInfoAsync(restoredName))!.Metadata);
         Assert.Equal((2L, 3L), (imported.ResourceCount, imported.VersionCount));
         foreach (string name in new[] { "report.pdf", "copy.pdf" })
         {

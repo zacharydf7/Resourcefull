@@ -252,6 +252,16 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : I
             return true;
         }, cancellationToken);
 
+    public Task<bool> SetResourceContainerMetadataAsync(string resourceContainerName, IDictionary<string, string> metadata,
+        CancellationToken cancellationToken = default) =>
+        UnderLockAsync(() =>
+        {
+            if (!_containers.TryGetValue(resourceContainerName, out InMemoryResourceContainer? container)) return false;
+            container.Metadata.Clear();
+            foreach (KeyValuePair<string, string> entry in metadata) container.Metadata[entry.Key] = entry.Value;
+            return true;
+        }, cancellationToken);
+
     public Task AddResourceContainerAsync(ResourceContainerInfo resourceContainerInfo, CancellationToken cancellationToken = default) =>
         UnderLockAsync(() =>
         {

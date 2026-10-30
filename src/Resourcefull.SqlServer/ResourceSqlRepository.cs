@@ -831,6 +831,15 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
         }, cancellationToken);
     }
 
+    public async Task<bool> SetResourceContainerMetadataAsync(string resourceContainerName, IDictionary<string, string> metadata,
+        CancellationToken cancellationToken = default)
+    {
+        using ResourceDbContext dbContext = dbContextFactory.CreateDbContext();
+        IDictionary<string, string> copy = new Dictionary<string, string>(metadata);
+        return await dbContext.ResourceContainers.Where(x => x.Name == resourceContainerName)
+            .ExecuteUpdateAsync(s => s.SetProperty(c => c.Metadata, copy), cancellationToken) > 0;
+    }
+
     public async Task<List<ResourceContainerInfo>> GetAllResourceContainerInfoAsync(CancellationToken cancellationToken = default)
     {
         using ResourceDbContext dbContext = dbContextFactory.CreateDbContext();

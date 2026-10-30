@@ -231,12 +231,20 @@ internal class ResourceServiceClient(IResourceRepository resourceRepository, IOp
             await using ZipArchive zip = await ZipArchive.CreateAsync(source, ZipArchiveMode.Read, leaveOpen: true,
                 entryNameEncoding: null, cancellationToken);
             ContainerArchive.Manifest manifest = await ContainerArchive.ReadManifestAsync(zip, cancellationToken);
-            await CreateContainerCoreAsync(resourceContainerName, manifest.Metadata, cancellationToken);
+            // Without the mark of an import the exported container may have been in the middle of.
+            var metadata = new Dictionary<string, string>(manifest.Metadata);
+            metadata.Remove(ImportMarkerKey);
+            await CreateContainerCoreAsync(resourceContainerName, metadata, cancellationToken);
             ResourceImportResult imported;
             try
             {
+                // Marked while it fills, so a container whose import never finished, such as when the application
+                // stopped partway, can be told from a finished one. A provider that can't change metadata goes unmarked.
+                bool marked = await TrySetMetadataAsync(resourceContainerName,
+                    new Dictionary<string, string>(metadata) { [ImportMarkerKey] = ImportMarkerValue }, cancellationToken);
                 imported = await ContainerArchive.ImportAsync(zip, manifest, resourceContainerName, resourceRepository, policies,
                     _telemetry, uriProvider, cancellationToken);
+                if (marked) await resourceRepository.SetResourceContainerMetadataAsync(resourceContainerName, metadata, cancellationToken);
             }
             catch (Exception failure)
             {
@@ -258,6 +266,23 @@ internal class ResourceServiceClient(IResourceRepository resourceRepository, IOp
             activity?.SetTag("resourcefull.versions", imported.VersionCount);
             return imported;
         });
+
+    /// <summary>The container metadata that marks an import still filling its container.</summary>
+    internal const string ImportMarkerKey = "resourcefull.import", ImportMarkerValue = "in-progress";
+
+    /// <returns><see langword="false"/> if the provider doesn't change container metadata.</returns>
+    private async Task<bool> TrySetMetadataAsync(string resourceContainerName, IDictionary<string, string> metadata,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await resourceRepository.SetResourceContainerMetadataAsync(resourceContainerName, metadata, cancellationToken);
+        }
+        catch (NotSupportedException)
+        {
+            return false;
+        }
+    }
 
     public Task<bool> DeleteResourceContainerIfExistsAsync(string resourceContainerName, CancellationToken cancellationToken)
         => _telemetry.RunAsync("delete_container", resourceContainerName, null, async () =>

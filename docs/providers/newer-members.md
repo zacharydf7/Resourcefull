@@ -53,6 +53,10 @@ in another store: with the `VersionId` and `LastModified` it's given, rather tha
 a wrong `ContentLength`, and make the version the name's current one. Its default throws `NotSupportedException`, so
 imports fail with a provider written for 3.1; exports work with any provider, because they only read.
 
+`SetResourceContainerMetadataAsync` was added with it, to replace a container's metadata: an import uses it to mark the
+container it's filling as unfinished, and to clear the mark at the end. Its default throws `NotSupportedException`, and
+imports then go unmarked.
+
 ## Expiry
 
 <div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 3.2</span></div>

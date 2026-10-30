@@ -495,6 +495,81 @@ public class ResourceServiceClientTests
         repository.Verify(r => r.GetResourceStreamAsync("name", "a", "v1", cts.Token), Times.Once);
     }
 
+    /// <summary>An export of one file, "a", whose container has the metadata team=billing.</summary>
+    private static async Task<MemoryStream> OneFileExportAsync()
+    {
+        using ServiceProvider services = new ServiceCollection().AddResourcefull(o => o.UseInMemory()).BuildServiceProvider();
+        IResourceServiceClient source = services.GetRequiredService<IResourceServiceClient>();
+        IResourceContainerClient container = await source.CreateResourceContainerAsync("c", new Dictionary<string, string> { ["team"] = "billing" });
+        await container.UploadAsync("a", BinaryData.FromString("hello"));
+        var export = new MemoryStream();
+        await source.ExportContainerAsync("c", export);
+        export.Position = 0;
+        return export;
+    }
+
+    private static readonly WrittenContent Hello =
+        new(5, "sha256:2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824", DateTimeOffset.UtcNow);
+
+    [Fact]
+    public async Task ImportContainerAsync_ShouldMarkTheContainerUntilEveryVersionIsStored_WhenImporting()
+    {
+        // Arrange: a provider that records what the import does, in order.
+        var steps = new List<string>();
+        var repository = new Mock<IResourceRepository>();
+        repository.Setup(r => r.SetResourceContainerMetadataAsync("d", It.IsAny<IDictionary<string, string>>(), It.IsAny<CancellationToken>()))
+            .Callback((string _, IDictionary<string, string> metadata, CancellationToken _) =>
+                steps.Add("metadata: " + string.Join(", ", metadata.OrderBy(e => e.Key).Select(e => $"{e.Key}={e.Value}"))))
+            .ReturnsAsync(true);
+        repository.Setup(r => r.ImportVersionAsync("d", It.IsAny<ResourceInfo>(), It.IsAny<Stream>(), It.IsAny<CancellationToken>()))
+            .Callback((string _, ResourceInfo version, Stream _, CancellationToken _) => steps.Add("version: " + version.Name))
+            .ReturnsAsync(Hello);
+        var client = new ResourceServiceClient(repository.Object, Options.Create(new ResourcefullOptions()));
+
+        // Act
+        await client.ImportContainerAsync("d", await OneFileExportAsync());
+
+        // Assert
+        Assert.Equal(["metadata: resourcefull.import=in-progress, team=billing", "version: a", "metadata: team=billing"], steps);
+    }
+
+    [Fact]
+    public async Task ImportContainerAsync_ShouldNotKeepTheMark_WhenTheExportedContainerWasMarked()
+    {
+        // Arrange: an export of a container whose own import hadn't finished.
+        using ServiceProvider services = new ServiceCollection().AddResourcefull(o => o.UseInMemory()).BuildServiceProvider();
+        IResourceServiceClient service = services.GetRequiredService<IResourceServiceClient>();
+        IResourceContainerClient marked = await service.CreateResourceContainerAsync("marked",
+            new Dictionary<string, string> { ["team"] = "billing", ["resourcefull.import"] = "in-progress" });
+        await marked.UploadAsync("a", BinaryData.FromString("hello"));
+        var export = new MemoryStream();
+        await service.ExportContainerAsync("marked", export);
+        export.Position = 0;
+
+        // Act
+        await service.ImportContainerAsync("restored", export);
+
+        // Assert
+        Assert.Equal(new Dictionary<string, string> { ["team"] = "billing" }, (await service.GetResourceContainerInfoAsync("restored"))!.Metadata);
+    }
+
+    [Fact]
+    public async Task ImportContainerAsync_ShouldImportUnmarked_WhenTheProviderCannotChangeContainerMetadata()
+    {
+        // Arrange: SetResourceContainerMetadataAsync keeps its default, which throws NotSupportedException.
+        var repository = new Mock<IResourceRepository> { CallBase = true };
+        repository.Setup(r => r.ImportVersionAsync("d", It.IsAny<ResourceInfo>(), It.IsAny<Stream>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Hello);
+        var client = new ResourceServiceClient(repository.Object, Options.Create(new ResourcefullOptions()));
+
+        // Act
+        ResourceImportResult imported = await client.ImportContainerAsync("d", await OneFileExportAsync());
+
+        // Assert
+        Assert.Equal(1, imported.VersionCount);
+        repository.Verify(r => r.DeleteResourceContainerAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
     [Fact]
     public async Task ImportContainerAsync_ShouldGiveTheProviderContentItCanReadAgain_WhenImporting()
     {

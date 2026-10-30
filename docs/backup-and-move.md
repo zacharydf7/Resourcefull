@@ -106,6 +106,20 @@ app.MapPost("/admin/containers/{name}/import", async (string name, HttpRequest r
   import deletes the container again. Fix the cause and import again. If the delete fails too, as it can when the
   database is unreachable or out of space, you get an `AggregateException` holding both errors, and should delete the
   container yourself before trying again; the same goes if the application stops partway through an import.
+- **An unfinished import is marked.** While an import fills its container, the container's metadata has
+  `resourcefull.import` set to `in-progress`, and the import removes it once every version is stored. A container that
+  still has it after the import has stopped didn't finish; delete it and import again. (The mark is set just after the
+  container is created, so an import stopped in that moment leaves an empty container without it. With a
+  [provider of your own](providers/newer-members.md#importing-versions) that doesn't implement
+  `SetResourceContainerMetadataAsync`, imports aren't marked.) This finds them:
+
+  ```csharp
+  foreach (ResourceContainerInfo container in await resources.GetResourceContainersAsync())
+  {
+      if (container.Metadata.TryGetValue("resourcefull.import", out string? state) && state == "in-progress")
+          Console.WriteLine($"{container.Name} is an unfinished import, unless one is running now.");
+  }
+  ```
 - **The new container's [policies](container-policies.md) apply,** as to any upload: a size limit, file-type list or
   read-only setting for the container's name refuses an import that breaks it.
 

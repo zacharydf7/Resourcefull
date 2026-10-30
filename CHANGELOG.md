@@ -8,7 +8,9 @@
   a zip, and `ImportContainerAsync` creates a new container from one, keeping each version's ID and `LastModified`.
   Imports check the manifest and every file's hash and length, and delete what they created if anything fails.
   Providers get `ImportVersionAsync`, which returns what it stored and whose default throws `NotSupportedException`.
-  With SQL Server, a version whose write hits a transient failure is retried, reading its file from the export again. See
+  With SQL Server, a version whose write hits a transient failure is retried, reading its file from the export again.
+  While an import runs, its container's metadata has `resourcefull.import: in-progress`, so one that never finished can
+  be found; providers get `SetResourceContainerMetadataAsync` for it, whose default leaves imports unmarked. See
   [Backing up and moving containers](docs/backup-and-move.md).
 - **Signed, expiring links.** `Resourcefull.AspNetCore` can create links that let anyone download one file, without
   signing in, until they expire: `AddResourcefullLinks`, `IResourceLinkSigner.CreateTokenAsync` and
