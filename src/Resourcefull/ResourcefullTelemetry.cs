@@ -78,7 +78,12 @@ internal sealed class ClientTelemetry(string provider, ResourcefullOptions optio
 {
     public string Provider { get; } = provider;
 
-    public async Task<T> RunAsync<T>(string operation, string? containerName, string? resourceName, Func<Task<T>> body,
+    public Task<T> RunAsync<T>(string operation, string? containerName, string? resourceName, Func<Task<T>> body,
+        string? extraTag = null, object? extraValue = null) =>
+        RunAsync(operation, containerName, resourceName, _ => body(), extraTag, extraValue);
+
+    /// <summary>As the other overload, passing the operation's span, if anything listens, to tag what it finds.</summary>
+    public async Task<T> RunAsync<T>(string operation, string? containerName, string? resourceName, Func<Activity?, Task<T>> body,
         string? extraTag = null, object? extraValue = null)
     {
         bool timed = Telemetry.Duration.Enabled;
@@ -93,7 +98,7 @@ internal sealed class ClientTelemetry(string provider, ResourcefullOptions optio
         string? errorType = null;
         try
         {
-            return await body();
+            return await body(activity);
         }
         catch (Exception exception)
         {

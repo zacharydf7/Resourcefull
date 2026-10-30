@@ -7,7 +7,8 @@ using System.Runtime.CompilerServices;
 namespace Resourcefull;
 
 internal class ResourceServiceClient(IResourceRepository resourceRepository, IOptions<ResourcefullOptions> options, IUriProvider? uriProvider = null,
-    ILogger<ResourceContainerClient>? containerLogger = null, ContainerPolicies? policies = null) : IResourceServiceClient
+    ILogger<ResourceContainerClient>? containerLogger = null, ContainerPolicies? policies = null,
+    IResourceCleanupHandler? cleanupHandler = null, TimeProvider? timeProvider = null) : IResourceServiceClient
 {
     private readonly ResourcefullOptions _options = options.Value;
     private readonly ClientTelemetry _telemetry = new(Telemetry.ProviderName(resourceRepository), options.Value);
@@ -68,11 +69,11 @@ internal class ResourceServiceClient(IResourceRepository resourceRepository, IOp
         });
 
         await resourceRepository.AddResourceContainerAsync(containerInfo, cancellationToken);
-        return new ResourceContainerClient(resourceRepository, uriProvider, _options, containerInfo, containerLogger, policies);
+        return new ResourceContainerClient(resourceRepository, uriProvider, _options, containerInfo, containerLogger, policies, cleanupHandler, timeProvider);
     }
 
     private ResourceContainerClient NewContainerClient(ResourceContainerInfo containerInfo)
-        => new(resourceRepository, uriProvider, _options, WithUri(containerInfo), containerLogger, policies);
+        => new(resourceRepository, uriProvider, _options, WithUri(containerInfo), containerLogger, policies, cleanupHandler, timeProvider);
 
     // URIs come from the URI provider whenever a container is returned, not from storage, so a changed provider or base
     // URL applies to containers created before the change as well.
@@ -116,6 +117,65 @@ internal class ResourceServiceClient(IResourceRepository resourceRepository, IOp
 
     public Task<bool> DeleteResourceContainerIfExistsAsync(string resourceContainerName)
         => DeleteResourceContainerIfExistsAsync(resourceContainerName, CancellationToken.None);
+
+    public async Task<int> DeleteExpiredAsync(CancellationToken cancellationToken = default)
+    {
+        DateTimeOffset now = (timeProvider ?? TimeProvider.System).GetUtcNow();
+        // Most sweeps find nothing expired, and record nothing. One that does is an operation, even when every version it
+        // finds is in a read-only container, which keeps them.
+        if ((await resourceRepository.GetExpiredAsync(now, 1, null, cancellationToken)).Count == 0) return 0;
+
+        return await _telemetry.RunAsync("expire", null, null, async activity =>
+        {
+            int deleted = 0, failed = 0;
+            // The first few failures are enough to say why; an outage of the handler's dependency fails every version.
+            var failures = new List<Exception>();
+            // Each batch starts after the last one ended, so the versions a sweep skips or fails on can't hold up the rest.
+            ResourceInfo? after = null;
+            while (true)
+            {
+                List<ResourceInfo> expired = await resourceRepository.GetExpiredAsync(now, ExpiredPerBatch, after, cancellationToken);
+                foreach (ResourceInfo version in expired)
+                {
+                    try
+                    {
+                        // A read-only container keeps its versions, expired or not, until it's writable again.
+                        if (policies is not null && await policies.IsReadOnlyAsync(version.ContainerName, _telemetry, cancellationToken))
+                            continue;
+
+                        // Told first, so a handler that fails leaves the version for the next sweep rather than deleted unreported.
+                        if (cleanupHandler is not null)
+                            await cleanupHandler.OnCleanupAsync(new ResourceCleanup(version, ResourceCleanupReason.Expired, now), cancellationToken);
+                        if (await resourceRepository.DeleteExpiredVersionAsync(new ResourceLocation(version.ContainerName, version.Name),
+                            version.VersionId!, now, cancellationToken))
+                        {
+                            deleted++;
+                        }
+                    }
+                    catch (Exception exception) when (exception is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+                    {
+                        // One version that keeps failing, a handler's timeout included, mustn't hold up the rest; only
+                        // canceling the sweep stops it.
+                        failed++;
+                        if (failures.Count < 10) failures.Add(exception);
+                    }
+                }
+
+                if (expired.Count < ExpiredPerBatch) break;
+                if (expired[^1].VersionId == after?.VersionId)
+                    throw new InvalidOperationException($"{resourceRepository.GetType().Name} listed the same expired versions again: its GetExpiredAsync must list the versions after the one given.");
+                after = expired[^1];
+            }
+
+            activity?.SetTag("resourcefull.expired", deleted);
+            if (failed > 0)
+                throw new AggregateException($"{failed} expired versions weren't deleted, and stay for the next sweep; {deleted} were. The first {failures.Count} failures follow.", failures);
+            return deleted;
+        });
+    }
+
+    /// <summary>How many expired versions one query lists, so a cleanup holds a bounded batch at a time.</summary>
+    private const int ExpiredPerBatch = 100;
 
     public Task<bool> DeleteResourceContainerIfExistsAsync(string resourceContainerName, CancellationToken cancellationToken)
         => _telemetry.RunAsync("delete_container", resourceContainerName, null, async () =>

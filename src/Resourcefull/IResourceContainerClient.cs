@@ -350,6 +350,25 @@ public interface IResourceContainerClient : IDisposable
         => throw new NotSupportedException($"{GetType().Name} doesn't move resources.");
 
     /// <summary>
+    /// Sets when a version expires, or with <see langword="null"/> makes it permanent, such as to extend a share. Only
+    /// the expiry changes: the version's content, <see cref="ResourceInfo.LastModified"/> and ETag stay as they are.
+    /// </summary>
+    /// <param name="resourceName">The resource.</param>
+    /// <param name="versionId">The version.</param>
+    /// <param name="expiresAt">When it expires; <see langword="null"/> never. Any time works, a past one included.</param>
+    /// <param name="cancellationToken">Cancels the change.</param>
+    /// <returns><see langword="true"/> if the version exists, <see langword="false"/> if not, as when expiry deleted it first.</returns>
+    /// <exception cref="ResourcePolicyViolationException">The container is read-only.</exception>
+    /// <exception cref="ArgumentException"><paramref name="resourceName"/> breaks the name rules, or <paramref name="versionId"/> is null or empty.</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
+    /// <exception cref="NotSupportedException">
+    /// The provider doesn't support expiry, or this is the default implementation, kept so implementations written for
+    /// 3.1 still compile.
+    /// </exception>
+    public Task<bool> SetExpiryAsync(string resourceName, string versionId, DateTimeOffset? expiresAt, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException($"{GetType().Name} doesn't support expiry.");
+
+    /// <summary>
     /// Gets what the container holds: the size of every version, and how many resources and versions there are. Use it
     /// to show a user their storage, or against <see cref="ResourceContainerPolicy.MaxContainerSize"/>.
     /// </summary>

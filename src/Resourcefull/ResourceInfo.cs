@@ -67,4 +67,10 @@ public class ResourceInfo
     /// stored by a provider that doesn't record it.
     /// </summary>
     public ResourceOrigin? CopiedFrom { get; set; }
+
+    /// <summary>
+    /// When the version expires and is deleted, within one interval, by <see cref="ResourcefullOptionsBuilder.UseExpiry"/>;
+    /// <see langword="null"/> for a version that doesn't expire.
+    /// </summary>
+    public DateTimeOffset? ExpiresAt { get; set; }
 }

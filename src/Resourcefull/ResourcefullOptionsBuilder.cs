@@ -1,11 +1,12 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Hosting;
 
 namespace Resourcefull;
 
 /// <summary>
 /// Configures Resourcefull inside <see cref="ResourcefullServiceCollectionExtensions.AddResourcefull"/>: its storage
-/// provider, versioning, URI provider, telemetry and container policies.
+/// provider, versioning, URI provider, telemetry, container policies and expiry.
 /// </summary>
 public class ResourcefullOptionsBuilder
 {
@@ -134,6 +135,39 @@ public class ResourcefullOptionsBuilder
         Services.RemoveAll<IResourcePolicyProvider>();
         Services.AddScoped<IResourcePolicyProvider, TProvider>();
         if (!Services.Any(d => d.ServiceType == typeof(ContainerPolicySettings))) UseContainerPolicies();
+        return this;
+    }
+
+    /// <summary>
+    /// Deletes expired versions in the background: a hosted service calls
+    /// <see cref="IResourceServiceClient.DeleteExpiredAsync"/> when the application starts and every
+    /// <paramref name="interval"/> after, so a version is gone within one interval of its
+    /// <see cref="ResourceInfo.ExpiresAt"/>. Every instance of the application can run it. With a provider that doesn't
+    /// support expiry, it logs a warning and stops.
+    /// </summary>
+    /// <param name="interval">How often to look for expired versions; one minute when null.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="interval"/> isn't positive.</exception>
+    public ResourcefullOptionsBuilder UseExpiry(TimeSpan? interval = null)
+    {
+        if (interval <= TimeSpan.Zero)
+            throw new ArgumentOutOfRangeException(nameof(interval), interval, "The interval must be positive.");
+
+        Services.RemoveAll<ExpirySettings>();
+        Services.AddSingleton(new ExpirySettings(interval ?? TimeSpan.FromMinutes(1)));
+        Services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, ExpiryService>());
+        return this;
+    }
+
+    /// <summary>
+    /// Uses <typeparamref name="THandler"/> to hear about every version Resourcefull deletes by itself, before it's
+    /// deleted, replacing any cleanup handler set before. It's registered as a scoped service, so it can depend on other
+    /// services, such as the application's audit client.
+    /// </summary>
+    /// <typeparam name="THandler">The <see cref="IResourceCleanupHandler"/> implementation.</typeparam>
+    public ResourcefullOptionsBuilder UseCleanupHandler<THandler>() where THandler : class, IResourceCleanupHandler
+    {
+        Services.RemoveAll<IResourceCleanupHandler>();
+        Services.AddScoped<IResourceCleanupHandler, THandler>();
         return this;
     }
 }

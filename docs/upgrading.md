@@ -102,6 +102,7 @@ What each migration does, and what it needs from you:
 | `EnableReadCommittedSnapshot` | turns on `READ_COMMITTED_SNAPSHOT` | a maintenance window, unless it's already on |
 | `AddContentHash` | adds the nullable `ContentHash` column | nothing |
 | `AddCopiedFrom` | adds three nullable columns recording the version a copy or restore came from | nothing |
+| `AddExpiresAt` | adds the nullable `ExpiresAt` column, and an index of the versions that expire | nothing |
 
 `NameLimitsAndCaseSensitiveNames` prints two warnings that the maximum key length of
 `UX_Resources_Container_Name_Version` is over 900 bytes. They describe the index partway through the migration, before

@@ -63,6 +63,12 @@ internal class ResourceConfiguration : IEntityTypeConfiguration<ResourceModel>
             .HasMaxLength(ResourceNames.MaxVersionIdLength)
             .UseCollation(ResourceDbContext.NameCollation);
 
+        // Only the versions that expire, in the order a sweep lists them, so each batch is a seek however many versions
+        // there are, expired ones that read-only containers keep included.
+        builder.HasIndex(r => new { r.ExpiresAt, r.VersionId })
+            .HasFilter("[ExpiresAt] IS NOT NULL")
+            .HasDatabaseName("IX_Resources_ExpiresAt");
+
         builder.HasMany(r => r.Chunks)
             .WithOne()
             .HasForeignKey(c => c.ResourceId)

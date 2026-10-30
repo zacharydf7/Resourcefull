@@ -5,7 +5,8 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace Resourcefull;
 
 internal partial class ResourceContainerClient(IResourceRepository resourceRepository, IUriProvider? uriProvider,
-    ResourcefullOptions options, ResourceContainerInfo containerInfo, ILogger? logger, ContainerPolicies? policies = null) : IResourceContainerClient
+    ResourcefullOptions options, ResourceContainerInfo containerInfo, ILogger? logger, ContainerPolicies? policies = null,
+    IResourceCleanupHandler? cleanupHandler = null, TimeProvider? timeProvider = null) : IResourceContainerClient
 {
     private readonly ILogger _logger = logger ?? NullLogger.Instance;
     private readonly ClientTelemetry _telemetry = new(Telemetry.ProviderName(resourceRepository), options);
@@ -50,7 +51,8 @@ internal partial class ResourceContainerClient(IResourceRepository resourceRepos
             VersionId = Guid.CreateVersion7().ToString(),
             ContentType = uploadOptions.Headers?.ContentType,
             ContentLength = uploadOptions.Headers?.ContentLength,
-            Metadata = new Dictionary<string, string>(uploadOptions.Metadata)
+            Metadata = new Dictionary<string, string>(uploadOptions.Metadata),
+            ExpiresAt = uploadOptions.ExpiresAt
         };
 
         try
@@ -174,8 +176,12 @@ internal partial class ResourceContainerClient(IResourceRepository resourceRepos
     {
         int keep = options.IsVersioningEnabled ? options.MaxVersions : 1;
         List<ResourceInfo> versions = await resourceRepository.GetResourceVersionsAsync(containerName, resourceName, cancellationToken);
+        DateTimeOffset now = (timeProvider ?? TimeProvider.System).GetUtcNow();
         foreach (ResourceInfo version in versions.Skip(keep))
         {
+            // Told first, so a handler that fails leaves the version for a later prune rather than deleted unreported.
+            if (cleanupHandler is not null)
+                await cleanupHandler.OnCleanupAsync(new ResourceCleanup(version, ResourceCleanupReason.Pruned, now), cancellationToken);
             await resourceRepository.DeleteResourceAsync(containerName, resourceName, version.VersionId, cancellationToken);
         }
     }
@@ -360,7 +366,8 @@ internal partial class ResourceContainerClient(IResourceRepository resourceRepos
             VersionId = Guid.CreateVersion7().ToString(),
             ContentType = source.ContentType,
             Metadata = new Dictionary<string, string>(source.Metadata),
-            CopiedFrom = new ResourceOrigin(ContainerName, resourceName, source.VersionId!)
+            CopiedFrom = new ResourceOrigin(ContainerName, resourceName, source.VersionId!),
+            ExpiresAt = copyOptions.ExpiresAt
         });
         WrittenContent? written = await resourceRepository.CopyResourceAsync(new ResourceLocation(ContainerName, resourceName),
             source.VersionId, copy, new ResourceWriteCondition { CreateOnly = createOnly, Conditions = conditions }, cancellationToken);
@@ -416,6 +423,16 @@ internal partial class ResourceContainerClient(IResourceRepository resourceRepos
         version.ContentLength = content?.Length;
         return content is not null;
     }
+
+    public Task<bool> SetExpiryAsync(string resourceName, string versionId, DateTimeOffset? expiresAt, CancellationToken cancellationToken = default)
+        => _telemetry.RunAsync("set_expiry", ContainerName, resourceName, async () =>
+        {
+            ResourceNames.ThrowIfInvalidResourceName(resourceName);
+            if (string.IsNullOrEmpty(versionId))
+                throw new ArgumentException($"{nameof(versionId)} cannot be empty.", nameof(versionId));
+            if (policies is not null) await policies.ThrowIfReadOnlyAsync(ContainerName, _telemetry, cancellationToken);
+            return await resourceRepository.SetExpiryAsync(new ResourceLocation(ContainerName, resourceName), versionId, expiresAt, cancellationToken);
+        });
 
     public Task<ResourceContainerUsage> GetUsageAsync(CancellationToken cancellationToken = default)
         => _telemetry.RunAsync("get_usage", ContainerName, null, () => resourceRepository.GetContainerUsageAsync(ContainerName, cancellationToken));

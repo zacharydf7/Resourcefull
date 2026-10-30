@@ -17,6 +17,12 @@ public sealed class ResourceCopyOptions
     /// <see cref="ResourceUploadOptions.Conditions"/> are for an upload.
     /// </summary>
     public ResourceConditions? DestinationConditions { get; init; }
+
+    /// <summary>
+    /// When the copy expires, as <see cref="ResourceUploadOptions.ExpiresAt"/> for an upload; the source's expiry isn't
+    /// copied, so <see langword="null"/> never expires.
+    /// </summary>
+    public DateTimeOffset? ExpiresAt { get; init; }
 }
 
 /// <summary>How <see cref="IResourceContainerClient.MoveResourceAsync"/> moves a resource.</summary>

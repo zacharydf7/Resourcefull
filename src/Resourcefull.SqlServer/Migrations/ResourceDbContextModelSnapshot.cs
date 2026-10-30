@@ -98,6 +98,9 @@ namespace Resourcefull.SqlServer.Migrations
                         .HasColumnType("nvarchar(36)")
                         .UseCollation("Latin1_General_100_BIN2");
 
+                    b.Property<DateTimeOffset?>("ExpiresAt")
+                        .HasColumnType("datetimeoffset");
+
                     b.Property<bool>("IsLatest")
                         .HasColumnType("bit");
 
@@ -132,6 +135,10 @@ namespace Resourcefull.SqlServer.Migrations
                         .IsUnique()
                         .HasDatabaseName("IX_Resources_Latest")
                         .HasFilter("[IsLatest] = 1");
+
+                    b.HasIndex("ExpiresAt", "VersionId")
+                        .HasDatabaseName("IX_Resources_ExpiresAt")
+                        .HasFilter("[ExpiresAt] IS NOT NULL");
 
                     b.HasIndex("ContainerName", "Name", "VersionId")
                         .IsUnique()

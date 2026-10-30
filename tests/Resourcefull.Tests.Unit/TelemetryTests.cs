@@ -66,11 +66,14 @@ public sealed class TelemetryTests : IDisposable
     [Fact]
     public async Task EveryClientOperation_ShouldEmitASpan_WhenCalled()
     {
-        // Arrange: a container with a version in it, so every operation has something to work on.
+        // Arrange: a container with a version in it, so every operation has something to work on, and an expired version
+        // in another container, which the operations on "c" leave for the expiry sweep to find.
         using ServiceProvider provider = NewServices();
         var service = provider.GetRequiredService<IResourceServiceClient>();
         IResourceContainerClient container = await service.CreateResourceContainerAsync("c");
         ResourceInfo version = await container.UploadAsync("r", BinaryData.FromString("x"));
+        await (await service.CreateResourceContainerAsync("expiring")).UploadAsync("r", BinaryData.FromString("x"),
+            new ResourceUploadOptions { ExpiresAt = DateTimeOffset.UtcNow.AddDays(-1) });
         var silent = new List<string>();
 
         // Act: every public method of both client interfaces, except the ones that don't contact storage.
@@ -251,6 +254,42 @@ public sealed class TelemetryTests : IDisposable
         Activity move = Assert.Single(SpansIn(root), s => s.OperationName == "resourcefull move");
         Assert.All(new[] { copy, move }, s => Assert.Equal(("c", "d"),
             (s.GetTagItem("resourcefull.container"), s.GetTagItem("resourcefull.destination_container"))));
+    }
+
+    [Fact]
+    public async Task DeleteExpiredAsync_ShouldRecordHowManyVersionsItDeleted_WhenCalled()
+    {
+        // Arrange
+        using ServiceProvider provider = NewServices();
+        IResourceServiceClient service = provider.GetRequiredService<IResourceServiceClient>();
+        IResourceContainerClient container = await service.CreateResourceContainerAsync("c");
+        ResourceInfo stored = await container.UploadAsync("a", BinaryData.FromString("x"), new ResourceUploadOptions { ExpiresAt = DateTimeOffset.UtcNow.AddDays(-1) });
+        await container.UploadAsync("b", BinaryData.FromString("x"), new ResourceUploadOptions { ExpiresAt = DateTimeOffset.UtcNow.AddDays(-1) });
+        using Activity root = TestSource.StartActivity("test")!;
+
+        // Act
+        await container.SetExpiryAsync("a", stored.VersionId!, DateTimeOffset.UtcNow.AddDays(1));
+        await service.DeleteExpiredAsync();
+
+        // Assert
+        Activity expire = Assert.Single(SpansIn(root), s => s.OperationName == "resourcefull expire");
+        Assert.Equal(1, expire.GetTagItem("resourcefull.expired"));
+        Assert.Single(SpansIn(root), s => s.OperationName == "resourcefull set_expiry");
+    }
+
+    [Fact]
+    public async Task DeleteExpiredAsync_ShouldRecordNothing_WhenNothingHasExpired()
+    {
+        // Arrange
+        using ServiceProvider provider = NewServices();
+        IResourceServiceClient service = provider.GetRequiredService<IResourceServiceClient>();
+        using Activity root = TestSource.StartActivity("test")!;
+
+        // Act
+        await service.DeleteExpiredAsync();
+
+        // Assert
+        Assert.Empty(SpansIn(root));
     }
 
     [Fact]

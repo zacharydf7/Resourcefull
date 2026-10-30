@@ -20,6 +20,7 @@ bytes: SQL Server, process memory for tests, or a provider you write.
 - [URI providers](uri-providers.md): giving containers and resources the URIs your API serves them at.
 - [Telemetry](telemetry.md): the spans and metrics every operation records.
 - [Container policies](container-policies.md): size limits, quotas, allowed file types and read-only containers.
+- [Expiring resources](expiry.md): uploads that delete themselves, and auditing what Resourcefull deletes.
 - [Health checks](health-checks.md): reporting whether storage can be reached and the schema is current.
 
 ## Providers

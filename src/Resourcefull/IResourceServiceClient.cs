@@ -104,4 +104,25 @@ public interface IResourceServiceClient
     /// <param name="cancellationToken">Cancels the delete.</param>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was cancelled.</exception>
     public Task<bool> DeleteResourceContainerIfExistsAsync(string resourceContainerName, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Deletes every version, in every container that isn't read-only, whose <see cref="ResourceInfo.ExpiresAt"/> has
+    /// passed, as a delete of that version would, a batch at a time, telling the <see cref="IResourceCleanupHandler"/>
+    /// about each one first. A read-only container keeps its expired versions until it's writable again.
+    /// <see cref="ResourcefullOptionsBuilder.UseExpiry"/> calls it every interval; call it yourself to run expiry another way.
+    /// </summary>
+    /// <param name="cancellationToken">Stops the cleanup; the versions already deleted stay deleted.</param>
+    /// <returns>How many versions were deleted.</returns>
+    /// <exception cref="AggregateException">
+    /// Some versions weren't deleted, because the cleanup handler or the delete failed; the others were, and those stay
+    /// for the next call. Its message counts them all, and it holds the first few failures.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">The provider listed the same expired versions twice, against its contract.</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
+    /// <exception cref="NotSupportedException">
+    /// The provider doesn't support expiry, or this is the default implementation, kept so implementations written for
+    /// 3.1 still compile.
+    /// </exception>
+    public Task<int> DeleteExpiredAsync(CancellationToken cancellationToken = default)
+        => throw new NotSupportedException($"{GetType().Name} doesn't support expiry.");
 }

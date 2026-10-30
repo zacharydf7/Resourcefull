@@ -60,6 +60,8 @@ metrics. It also has:
 | `get_usage` | `GetUsageAsync` | |
 | `copy` | `CopyResourceAsync` | `resourcefull.destination_container`; a `resourcefull prune` child span |
 | `move` | `MoveResourceAsync` | `resourcefull.destination_container` |
+| `set_expiry` | `SetExpiryAsync` | |
+| `expire` | `DeleteExpiredAsync`, and each sweep of [`UseExpiry`](expiry.md), when it finds expired versions, read-only containers' included | `resourcefull.expired`: how many versions it deleted |
 | `list` | `GetResourcesAsync` | |
 | `list_page` | `GetResourcePageAsync`, and each page `ListResourcesAsync` fetches | `resourcefull.page_size` |
 | `list_versions` | `GetResourceVersionsAsync` | |

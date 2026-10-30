@@ -35,4 +35,11 @@ public class ResourceUploadOptions
     /// Describes metadata to store with the uploaded resource.
     /// </summary>
     public IDictionary<string, string> Metadata { get; set; } = new Dictionary<string, string>();
+
+    /// <summary>
+    /// When the uploaded version expires: after it, <see cref="ResourcefullOptionsBuilder.UseExpiry"/> deletes it within
+    /// one interval, as a delete of that version would. Any time works, a past one included; <see langword="null"/>
+    /// never expires.
+    /// </summary>
+    public DateTimeOffset? ExpiresAt { get; set; }
 }

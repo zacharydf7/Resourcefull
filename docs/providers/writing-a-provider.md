@@ -87,6 +87,21 @@ returns correct ranges, just without the savings. To answer it directly, return 
   (`ResourceConflictException`) or whose container is missing (`ResourceContainerNotFoundException`), and decide the
   source conditions in the move itself.
 
+### Expiry
+
+`GetExpiredAsync`, `DeleteExpiredVersionAsync` and `SetExpiryAsync` were added in 3.2, and `AddResourceAsync` and
+`CopyResourceAsync` should store `ResourceInfo.ExpiresAt` with the version and return it on every read. Their default
+implementations throw `NotSupportedException`, so [expiry](../expiry.md) logs a warning and stops with a provider
+written for 3.1. To support it:
+
+- **List expired versions from an index, a batch at a time.** Expiry calls `GetExpiredAsync` every interval on every
+  instance, so it should cost little when nothing has expired. Order them by `ExpiresAt`, then ordinally by version
+  ID, and start after the `after` version you're given: a sweep pages through every expired version this way, and
+  fails if a provider lists the same batch twice.
+- **Decide expiry in the delete.** `DeleteExpiredVersionAsync` deletes a version only if it's still expired when the
+  delete runs, under whatever serializes writes to the name: `SetExpiryAsync` may have extended it since it was listed.
+- **Change nothing but the expiry** in `SetExpiryAsync`.
+
 ### Container usage
 
 `GetContainerUsageAsync` was also added in 3.2. Its default implementation lists every resource's versions, one name

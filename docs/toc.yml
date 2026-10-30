@@ -32,6 +32,8 @@
     href: recipes/aspnet-core.md
   - name: Container policies
     href: container-policies.md
+  - name: Expiring resources
+    href: expiry.md
   - name: Health checks
     href: health-checks.md
   - name: Upgrading to 3.0

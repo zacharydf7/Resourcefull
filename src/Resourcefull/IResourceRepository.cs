@@ -286,6 +286,45 @@ public interface IResourceRepository
         => throw new NotSupportedException($"{GetType().Name} doesn't move resources.");
 
     /// <summary>
+    /// Lists the versions, in every container, whose <see cref="ResourceInfo.ExpiresAt"/> is at or before
+    /// <paramref name="now"/>, ordered by <see cref="ResourceInfo.ExpiresAt"/> and then by version ID (ordinally), each
+    /// with <see cref="ResourceInfo.IsLatest"/> set. Expiry calls it every interval, so a provider should answer it from
+    /// an index of the versions that expire. The default implementation throws <see cref="NotSupportedException"/>:
+    /// listing every container to find them would cost too much.
+    /// </summary>
+    /// <param name="now">The time to compare expiries with.</param>
+    /// <param name="maxVersions">The most versions to return.</param>
+    /// <param name="after">
+    /// The last version of the previous batch, to list the ones after it in that order; <see langword="null"/> to start
+    /// from the first. A sweep goes through every expired version once this way, whatever it skips or fails to delete.
+    /// </param>
+    /// <param name="cancellationToken">Cancels the listing.</param>
+    /// <exception cref="NotSupportedException">The provider doesn't support expiry.</exception>
+    Task<List<ResourceInfo>> GetExpiredAsync(DateTimeOffset now, int maxVersions, ResourceInfo? after = null,
+        CancellationToken cancellationToken = default)
+        => throw new NotSupportedException($"{GetType().Name} doesn't support expiry.");
+
+    /// <summary>
+    /// Deletes one version, as <see cref="DeleteResourceAsync(string, string, string?, CancellationToken)"/> does, only
+    /// if its <see cref="ResourceInfo.ExpiresAt"/> is still at or before <paramref name="now"/>, decided by the delete
+    /// itself: <see cref="SetExpiryAsync"/> may have changed it since it was listed.
+    /// </summary>
+    /// <returns><see langword="true"/> if it was deleted; <see langword="false"/> if it's gone or no longer expired.</returns>
+    /// <exception cref="NotSupportedException">The provider doesn't support expiry, as by default.</exception>
+    Task<bool> DeleteExpiredVersionAsync(ResourceLocation resource, string versionId, DateTimeOffset now, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException($"{GetType().Name} doesn't support expiry.");
+
+    /// <summary>
+    /// Sets one version's <see cref="ResourceInfo.ExpiresAt"/>, or clears it with <see langword="null"/>, changing nothing
+    /// else about it. <see cref="AddResourceAsync(string, ResourceInfo, Stream, ResourceWriteCondition, CancellationToken)"/>
+    /// and <see cref="CopyResourceAsync"/> store it from the version they're given, and every read returns it.
+    /// </summary>
+    /// <returns><see langword="true"/> if the version exists; otherwise <see langword="false"/>.</returns>
+    /// <exception cref="NotSupportedException">The provider doesn't support expiry, as by default.</exception>
+    Task<bool> SetExpiryAsync(ResourceLocation resource, string versionId, DateTimeOffset? expiresAt, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException($"{GetType().Name} doesn't support expiry.");
+
+    /// <summary>
     /// Gets what a container holds: the total <see cref="ResourceInfo.ContentLength"/> of every version, and how many
     /// resources and versions there are. Container policies read it before each write they limit, so a provider should
     /// answer it without reading content. The default implementation lists every resource's versions, one name at a

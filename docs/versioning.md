@@ -40,6 +40,9 @@ upload of the name prunes them. Until then they're ordinary versions you can lis
 logged as a warning, with its exception, under the `Resourcefull.ResourceContainerClient` category, when your
 application has logging set up, so one that keeps failing doesn't go unnoticed.
 
+To record the versions that pruning deletes, such as for an audit, register a
+[cleanup handler](expiry.md#auditing-whats-deleted).
+
 ## Restoring
 
 `RestoreVersionAsync` copies an older version into a new current version. The older version stays where it is, so

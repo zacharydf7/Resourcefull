@@ -96,6 +96,20 @@ public sealed class PerformanceTests(SqlServerFixture fixture, ITestOutputHelper
     }
 
     [SkippableFact]
+    public async Task DeleteExpiredAsync_ShouldStayWithinItsBaseline_WhenNothingHasExpired()
+    {
+        // What expiry costs every interval on every instance when there's nothing to delete: a read of the index of
+        // versions that expire, whatever else the store holds.
+        IResourceContainerClient container = await NewContainerAsync();
+        for (int i = 0; i < 200; i++) await container.UploadAsync($"lasting{i}", BinaryData.FromString("x"));
+        for (int i = 0; i < 20; i++)
+            await container.UploadAsync($"expiring{i}", BinaryData.FromString("x"), new ResourceUploadOptions { ExpiresAt = DateTimeOffset.UtcNow.AddDays(1) });
+        IResourceServiceClient service = _provider!.GetRequiredService<IResourceServiceClient>();
+
+        await MeasureAsync("expire-nothing-due", 0, run: _ => service.DeleteExpiredAsync());
+    }
+
+    [SkippableFact]
     public async Task DownloadStreamingAsync_ShouldCountTheReadsOfItsContent_WhenReadingAMebibyte()
     {
         // The baseline catches reads that grow, not reads that stop being counted: a page query whose reader is

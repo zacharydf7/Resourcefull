@@ -16,6 +16,7 @@ internal class ResourceModel
     public string? CopiedFromContainerName { get; set; }
     public string? CopiedFromName { get; set; }
     public string? CopiedFromVersionId { get; set; }
+    public DateTimeOffset? ExpiresAt { get; set; }
 
     // Navigation properties
     public virtual ResourceContainerModel? ResourceContainer { get; set; }

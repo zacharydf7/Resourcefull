@@ -5,6 +5,7 @@ using Resourcefull.SqlServer.Models;
 using Resourcefull.SqlServer.Utilities;
 using System.Data;
 using System.Data.Common;
+using System.Linq.Expressions;
 using System.Runtime.CompilerServices;
 using System.Runtime.ExceptionServices;
 using System.Security.Cryptography;
@@ -175,7 +176,8 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
         Metadata = resourceInfo.Metadata,
         CopiedFromContainerName = resourceInfo.CopiedFrom?.ContainerName,
         CopiedFromName = resourceInfo.CopiedFrom?.ResourceName,
-        CopiedFromVersionId = resourceInfo.CopiedFrom?.VersionId
+        CopiedFromVersionId = resourceInfo.CopiedFrom?.VersionId,
+        ExpiresAt = resourceInfo.ExpiresAt
     };
 
     /// <summary>
@@ -403,21 +405,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
 
         return await dbContext.Resources
             .Where(r => r.ContainerName == resourceContainerName && r.IsLatest)
-            .Select(r => new ResourceInfo
-            {
-                ContainerName = r.ContainerName,
-                Name = r.Name,
-                VersionId = r.VersionId,
-                LastModified = r.LastModified,
-                IsLatest = r.IsLatest,
-                ContentType = r.ContentType,
-                ContentLength = r.ContentLength,
-                ContentHash = r.ContentHash,
-                Metadata = r.Metadata,
-                Uri = r.Uri,
-                CopiedFrom = r.CopiedFromVersionId == null ? null
-                    : new ResourceOrigin(r.CopiedFromContainerName!, r.CopiedFromName!, r.CopiedFromVersionId)
-            })
+            .Select(AsResourceInfo)
             .ToListAsync(cancellationToken);
     }
 
@@ -435,21 +423,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
         return await current
             .OrderBy(r => r.Name)
             .Take(pageSize)
-            .Select(r => new ResourceInfo
-            {
-                ContainerName = r.ContainerName,
-                Name = r.Name,
-                VersionId = r.VersionId,
-                LastModified = r.LastModified,
-                IsLatest = r.IsLatest,
-                ContentType = r.ContentType,
-                ContentLength = r.ContentLength,
-                ContentHash = r.ContentHash,
-                Metadata = r.Metadata,
-                Uri = r.Uri,
-                CopiedFrom = r.CopiedFromVersionId == null ? null
-                    : new ResourceOrigin(r.CopiedFromContainerName!, r.CopiedFromName!, r.CopiedFromVersionId)
-            })
+            .Select(AsResourceInfo)
             .ToListAsync(cancellationToken);
     }
 
@@ -461,21 +435,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
             .Where(r => r.ContainerName == resourceContainerName && r.Name == resourceName)
             .OrderByDescending(r => r.IsLatest)
             .ThenByDescending(r => r.Id)
-            .Select(r => new ResourceInfo
-            {
-                ContainerName = r.ContainerName,
-                Name = r.Name,
-                VersionId = r.VersionId,
-                LastModified = r.LastModified,
-                IsLatest = r.IsLatest,
-                ContentType = r.ContentType,
-                ContentLength = r.ContentLength,
-                ContentHash = r.ContentHash,
-                Metadata = r.Metadata,
-                Uri = r.Uri,
-                CopiedFrom = r.CopiedFromVersionId == null ? null
-                    : new ResourceOrigin(r.CopiedFromContainerName!, r.CopiedFromName!, r.CopiedFromVersionId)
-            })
+            .Select(AsResourceInfo)
             .ToListAsync(cancellationToken);
     }
 
@@ -488,22 +448,29 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
 
         if (existingResource is null) return null;
 
-        return new ResourceInfo
-        {
-            ContainerName = resourceContainerName,
-            Name = existingResource.Name,
-            VersionId = existingResource.VersionId,
-            LastModified = existingResource.LastModified,
-            IsLatest = existingResource.IsLatest,
-            ContentType = existingResource.ContentType,
-            ContentLength = existingResource.ContentLength,
-            ContentHash = existingResource.ContentHash,
-            Metadata = existingResource.Metadata,
-            Uri = existingResource.Uri,
-            CopiedFrom = existingResource.CopiedFromVersionId == null ? null
-                : new ResourceOrigin(existingResource.CopiedFromContainerName!, existingResource.CopiedFromName!, existingResource.CopiedFromVersionId)
-        };
+        return ToResourceInfo(existingResource);
     }
+
+    /// <summary>A stored version as the clients see it, for queries to project to.</summary>
+    private static readonly Expression<Func<ResourceModel, ResourceInfo>> AsResourceInfo = r => new ResourceInfo
+    {
+        ContainerName = r.ContainerName,
+        Name = r.Name,
+        VersionId = r.VersionId,
+        LastModified = r.LastModified,
+        IsLatest = r.IsLatest,
+        ContentType = r.ContentType,
+        ContentLength = r.ContentLength,
+        ContentHash = r.ContentHash,
+        Metadata = r.Metadata,
+        Uri = r.Uri,
+        CopiedFrom = r.CopiedFromVersionId == null ? null
+            : new ResourceOrigin(r.CopiedFromContainerName!, r.CopiedFromName!, r.CopiedFromVersionId),
+        ExpiresAt = r.ExpiresAt
+    };
+
+    /// <summary>A stored version already read, as the clients see it.</summary>
+    private static readonly Func<ResourceModel, ResourceInfo> ToResourceInfo = AsResourceInfo.Compile();
 
     public Task<Stream?> GetResourceStreamAsync(string resourceContainerName, string resourceName, string? versionId = null, CancellationToken cancellationToken = default) =>
         GetResourceStreamAsync(resourceContainerName, resourceName, versionId, 0, null, cancellationToken);
@@ -665,22 +632,73 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
 
             ResourceModel? existingResource = await ResolveAsync(dbContext.Resources, resourceContainerName, resourceName, versionId, ct);
 
-            if (existingResource == null) return false;
-
-            dbContext.Resources.Remove(existingResource);
-
-            if (existingResource.IsLatest)
-            {
-                ResourceModel? next = await dbContext.Resources
-                    .Where(r => r.ContainerName == resourceContainerName && r.Name == resourceName && r.Id != existingResource.Id)
-                    .OrderByDescending(r => r.Id)
-                    .FirstOrDefaultAsync(ct);
-                if (next != null) next.IsLatest = true;
-            }
-
-            return await dbContext.SaveChangesAsync(ct) > 0;
+            return existingResource != null && await DeleteVersionAsync(dbContext, existingResource, ct);
         }
     }
+
+    /// <summary>
+    /// Deletes one version, under its name's lock; when it's the current version, the most recently stored of the rest
+    /// becomes current.
+    /// </summary>
+    private static async Task<bool> DeleteVersionAsync(ResourceDbContext dbContext, ResourceModel version, CancellationToken cancellationToken)
+    {
+        dbContext.Resources.Remove(version);
+
+        if (version.IsLatest)
+        {
+            ResourceModel? next = await dbContext.Resources
+                .Where(r => r.ContainerName == version.ContainerName && r.Name == version.Name && r.Id != version.Id)
+                .OrderByDescending(r => r.Id)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (next != null) next.IsLatest = true;
+        }
+
+        return await dbContext.SaveChangesAsync(cancellationToken) > 0;
+    }
+
+    public async Task<List<ResourceInfo>> GetExpiredAsync(DateTimeOffset now, int maxVersions, ResourceInfo? after = null,
+        CancellationToken cancellationToken = default)
+    {
+        using ResourceDbContext dbContext = dbContextFactory.CreateDbContext();
+
+        // A seek on the index of versions that expire, so a sweep with nothing to delete reads only that.
+        IQueryable<ResourceModel> expired = dbContext.Resources.Where(r => r.ExpiresAt != null && r.ExpiresAt <= now);
+        if (after is { ExpiresAt: { } afterExpiry, VersionId: { } afterVersion })
+        {
+            // Written as a range on the index's first column, so it seeks to where the last batch ended.
+            expired = expired.Where(r => r.ExpiresAt >= afterExpiry
+                && (r.ExpiresAt > afterExpiry || string.Compare(r.VersionId, afterVersion) > 0));
+        }
+
+        return await expired
+            .OrderBy(r => r.ExpiresAt)
+            .ThenBy(r => r.VersionId)
+            .Take(maxVersions)
+            .Select(AsResourceInfo)
+            .ToListAsync(cancellationToken);
+    }
+
+    public Task<bool> DeleteExpiredVersionAsync(ResourceLocation resource, string versionId, DateTimeOffset now,
+        CancellationToken cancellationToken = default)
+    {
+        bool deletedInAnEarlierAttempt = false;
+
+        // Under the name's lock, so a change to the expiry can't come between the check and the delete.
+        return WriteNameAsync(resource.ContainerName, resource.ResourceName, async (dbContext, ct) =>
+        {
+            ResourceModel? version = await ResolveAsync(dbContext.Resources, resource.ContainerName, resource.ResourceName, versionId, ct);
+            // A retry after a commit whose acknowledgement was lost finds the version gone.
+            if (version is null) return deletedInAnEarlierAttempt;
+            if (!(version.ExpiresAt <= now)) return false;
+            return deletedInAnEarlierAttempt = await DeleteVersionAsync(dbContext, version, ct);
+        }, cancellationToken);
+    }
+
+    public Task<bool> SetExpiryAsync(ResourceLocation resource, string versionId, DateTimeOffset? expiresAt,
+        CancellationToken cancellationToken = default) =>
+        WriteNameAsync(resource.ContainerName, resource.ResourceName, async (dbContext, ct) =>
+            await Version(dbContext.Resources, resource.ContainerName, resource.ResourceName, versionId)
+                .ExecuteUpdateAsync(s => s.SetProperty(r => r.ExpiresAt, expiresAt), ct) > 0, cancellationToken);
 
     public async Task AddResourceContainerAsync(ResourceContainerInfo resourceContainerInfo, CancellationToken cancellationToken = default)
     {

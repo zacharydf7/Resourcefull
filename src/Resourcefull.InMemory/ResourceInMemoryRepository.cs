@@ -128,10 +128,54 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : I
                 ContentHash = written.ContentHash,
                 Metadata = new Dictionary<string, string>(resourceInfo.Metadata),
                 Uri = resourceInfo.Uri,
-                CopiedFrom = resourceInfo.CopiedFrom
+                CopiedFrom = resourceInfo.CopiedFrom,
+                ExpiresAt = resourceInfo.ExpiresAt
             }
         });
     }
+
+    public Task<List<ResourceInfo>> GetExpiredAsync(DateTimeOffset now, int maxVersions, ResourceInfo? after = null,
+        CancellationToken cancellationToken = default) =>
+        UnderLockAsync<List<ResourceInfo>>(() =>
+        [
+            .. _containers.Values
+                .SelectMany(container => container.Resources.Values)
+                .SelectMany(versions => versions
+                    .Where(v => v.ResourceInfo.ExpiresAt <= now)
+                    .Select(v => ToResourceInfo(v, isLatest: v == versions.MaxBy(r => r.Sequence))))
+                .Where(v => after is null || v.ExpiresAt > after.ExpiresAt
+                    || (v.ExpiresAt == after.ExpiresAt && string.CompareOrdinal(v.VersionId, after.VersionId) > 0))
+                .OrderBy(v => v.ExpiresAt)
+                .ThenBy(v => v.VersionId, StringComparer.Ordinal)
+                .Take(maxVersions)
+        ], cancellationToken);
+
+    public Task<bool> DeleteExpiredVersionAsync(ResourceLocation resource, string versionId, DateTimeOffset now,
+        CancellationToken cancellationToken = default) =>
+        UnderLockAsync(() =>
+        {
+            if (_containers.GetValueOrDefault(resource.ContainerName) is not { } container
+                || !container.Resources.TryGetValue(resource.ResourceName, out List<InMemoryResource>? versions)
+                || Resolve(versions, versionId) is not { } version
+                || !(version.ResourceInfo.ExpiresAt <= now))
+            {
+                return false;
+            }
+
+            versions.Remove(version);
+            if (versions.Count == 0) container.Resources.Remove(resource.ResourceName);
+            return true;
+        }, cancellationToken);
+
+    public Task<bool> SetExpiryAsync(ResourceLocation resource, string versionId, DateTimeOffset? expiresAt,
+        CancellationToken cancellationToken = default) =>
+        UnderLockAsync(() =>
+        {
+            if (Resolve(VersionsOf(resource.ContainerName, resource.ResourceName), versionId) is not { } version)
+                return false;
+            version.ResourceInfo.ExpiresAt = expiresAt;
+            return true;
+        }, cancellationToken);
 
     public Task<List<ResourceInfo>> GetAllResourceInfoAsync(string resourceContainerName, CancellationToken cancellationToken = default) =>
         UnderLockAsync<List<ResourceInfo>>(() => _containers.GetValueOrDefault(resourceContainerName) is { } container
@@ -282,6 +326,7 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : I
         ContentHash = resource.ResourceInfo.ContentHash,
         Metadata = new Dictionary<string, string>(resource.ResourceInfo.Metadata),
         Uri = resource.ResourceInfo.Uri,
-        CopiedFrom = resource.ResourceInfo.CopiedFrom
+        CopiedFrom = resource.ResourceInfo.CopiedFrom,
+        ExpiresAt = resource.ResourceInfo.ExpiresAt
     };
 }

@@ -28,6 +28,9 @@ internal sealed class ContainerPolicies(ContainerPolicySettings settings, IResou
     public async Task ThrowIfReadOnlyAsync(string containerName, ClientTelemetry telemetry, CancellationToken cancellationToken)
         => ThrowIfReadOnly(containerName, await GetAsync(containerName, telemetry, cancellationToken));
 
+    public async Task<bool> IsReadOnlyAsync(string containerName, ClientTelemetry telemetry, CancellationToken cancellationToken)
+        => (await GetAsync(containerName, telemetry, cancellationToken)).ReadOnly == true;
+
     /// <summary>
     /// Checks a new version against the policy before its content is read: an upload or a copy, or a restore, which
     /// keeps its name and type and so isn't checked against <see cref="ResourceContainerPolicy.MaxResourceCount"/> or
