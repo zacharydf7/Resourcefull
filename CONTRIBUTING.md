@@ -7,7 +7,7 @@ you start. Report a security vulnerability privately instead, as
 
 ## Building and testing
 
-You need the .NET 10 SDK.
+You need the .NET SDK that `global.json` names, or a later patch of the same feature band.
 
 ```shell
 dotnet build
@@ -139,14 +139,19 @@ Three rules keep the scripts generated and safe to run again:
 
 ## Releasing
 
-For maintainers: set `<Version>` in `src/Directory.Build.props`, and turn the release's labels from upcoming to added:
-in `docs/`, `index.md` and `src/`, replace `Coming in 3.2` with `Added in 3.2` and `rf-upcoming` with `rf-added`,
-remove the sidebar markers from `template/public/main.css`, and move the README's "Coming in" list into its features.
-Merge to `main`, then push a matching tag (`v3.0.0`). Once it's published, set `PackageValidationBaselineVersion` in
-`src/Directory.Build.props` to the version just released, so the next release is checked against it. The publish
-workflow runs every test, checks that the tag matches the version, and publishes the packages that it tested to
-nuget.org. In `CHANGELOG.md`, turn `[Unreleased]` into the version and date, start a new `[Unreleased]` section, and
-update the compare links at the bottom.
+For maintainers:
+
+1. **Before tagging,** check `<VersionPrefix>` in `src/Directory.Build.props` is the release's version (every build
+   but the release tag's adds `-ci.<run>` or `-dev` to it). Turn the release's labels from upcoming to added: in
+   `docs/`, `index.md` and `src/`, replace `Coming in 3.2` with `Added in 3.2` and `rf-upcoming` with `rf-added`,
+   remove the sidebar markers from `template/public/main.css`, and move the README's "Coming in" list into its
+   features. In `CHANGELOG.md`, turn `[Unreleased]` into `[3.2.0] - <date>`, start a new `[Unreleased]` section, and
+   update the compare links at the bottom.
+2. **Merge to `main`, then push the tag** (`v3.2.0`). The publish workflow runs every test, checks that the tag
+   matches the version, publishes the packages it tested to nuget.org, and creates a GitHub Release from the
+   version's changelog section.
+3. **After it's published,** set `PackageValidationBaselineVersion` in `src/Directory.Build.props` to the version just
+   released, so the next release is checked against it, and `<VersionPrefix>` to the next version.
 
 A release that adds a package ID needs it added to nuget.org's Trusted Publishing policy for this repository first, or
 pushed once by hand: until then nuget.org refuses the workflow's push of the new ID with 403 Forbidden.

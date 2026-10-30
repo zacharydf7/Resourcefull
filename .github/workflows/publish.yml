@@ -1,7 +1,7 @@
 name: Publish NuGet Packages
 
-# Pushing a v* tag publishes the packages built and tested from that commit. The tag must match <Version> in
-# src/Directory.Build.props.
+# Pushing a v* tag publishes the packages built and tested from that commit, then creates a GitHub Release from the
+# version's CHANGELOG.md section. The tag must match <VersionPrefix> in src/Directory.Build.props.
 on:
   push:
     tags: [ "v*" ]
@@ -13,8 +13,30 @@ jobs:
   build-and-test:
     uses: ./.github/workflows/build.yml
 
+  release-notes:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v7
+    - name: Take the version's section of the changelog
+      # Before publishing, which can't be undone, so a tag pushed before the changelog was finished stops here.
+      run: |
+        version="${GITHUB_REF_NAME#v}"
+        # From the version's heading up to the next release's.
+        awk -v heading="## [$version]" 'index($0, heading) == 1 { found = 1; next } found && /^## \[/ { exit } found' \
+          CHANGELOG.md > notes.md
+        if [ ! -s notes.md ]; then
+          echo "::error::CHANGELOG.md has no section headed \"## [$version]\"."
+          exit 1
+        fi
+        # The changelog's links are relative to the repository; a release's notes aren't in it.
+        sed -i "s#](docs/#](https://github.com/$GITHUB_REPOSITORY/blob/$GITHUB_REF_NAME/docs/#g" notes.md
+    - uses: actions/upload-artifact@v7
+      with:
+        name: release-notes
+        path: notes.md
+
   publish:
-    needs: build-and-test
+    needs: [ build-and-test, release-notes ]
     runs-on: ubuntu-latest
     environment: nuget
     permissions:
@@ -30,7 +52,7 @@ jobs:
         version="${GITHUB_REF_NAME#v}"
         for id in Resourcefull Resourcefull.SqlServer Resourcefull.InMemory Resourcefull.AspNetCore; do
           if [ ! -f "nupkg/$id.$version.nupkg" ]; then
-            echo "::error::$id $version wasn't built. The tag $GITHUB_REF_NAME must match <Version> in src/Directory.Build.props."
+            echo "::error::$id $version wasn't built. The tag $GITHUB_REF_NAME must match <VersionPrefix> in src/Directory.Build.props."
             exit 1
           fi
         done
@@ -45,3 +67,17 @@ jobs:
         user: ${{ vars.NUGET_USER }}
     - name: Publish to nuget.org
       run: dotnet nuget push "nupkg/*.nupkg" --api-key "${{ steps.login.outputs.NUGET_API_KEY }}" --source https://api.nuget.org/v3/index.json --skip-duplicate
+
+  release:
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # to create the release
+    steps:
+    - uses: actions/download-artifact@v8
+      with:
+        name: release-notes
+    - name: Create the GitHub Release
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --verify-tag --title "${GITHUB_REF_NAME#v}" --notes-file notes.md

@@ -16,6 +16,15 @@ updates:
         update-types: [ "version-update:semver-major" ]
       - dependency-name: "System.*"
         update-types: [ "version-update:semver-major" ]
+  # The SDK global.json pins, which every build uses. A new major SDK would be every contributor's to install, so
+  # moving to one is a deliberate change.
+  - package-ecosystem: dotnet-sdk
+    directory: /
+    schedule:
+      interval: weekly
+    ignore:
+      - dependency-name: "*"
+        update-types: [ "version-update:semver-major" ]
   - package-ecosystem: github-actions
     directory: /
     schedule:

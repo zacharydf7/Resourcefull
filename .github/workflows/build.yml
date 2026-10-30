@@ -22,7 +22,7 @@ jobs:
     - name: Setup .NET
       uses: actions/setup-dotnet@v6
       with:
-        dotnet-version: 10.0.x
+        global-json-file: global.json
     - name: Restore dependencies
       run: dotnet restore
     - name: Build
@@ -52,7 +52,7 @@ jobs:
     - name: Setup .NET
       uses: actions/setup-dotnet@v6
       with:
-        dotnet-version: 10.0.x
+        global-json-file: global.json
     - name: Build the docs site
       # Warnings include broken links and missing API docs, so they fail the build.
       run: |
@@ -66,9 +66,14 @@ jobs:
 
   integration-tests:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The SQL Server versions the integration tests cover.
+        sqlserver: [ "2019-latest", "2022-latest" ]
     services:
       sqlserver:
-        image: mcr.microsoft.com/mssql/server:2022-latest
+        image: mcr.microsoft.com/mssql/server:${{ matrix.sqlserver }}
         env:
           ACCEPT_EULA: "Y"
           MSSQL_SA_PASSWORD: "Resourcefull(!)Integration1"
@@ -83,7 +88,7 @@ jobs:
     - name: Setup .NET
       uses: actions/setup-dotnet@v6
       with:
-        dotnet-version: 10.0.x
+        global-json-file: global.json
     - name: Restore dependencies
       run: dotnet restore
     - name: Build
@@ -112,7 +117,7 @@ jobs:
     - name: Setup .NET
       uses: actions/setup-dotnet@v6
       with:
-        dotnet-version: 10.0.x
+        global-json-file: global.json
     - name: Restore dependencies
       run: dotnet restore
     - name: Build

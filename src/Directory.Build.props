@@ -5,7 +5,11 @@
 
   <!-- Package metadata shared by every Resourcefull package; each project adds its own Title and Description. -->
   <PropertyGroup>
-    <Version>3.1.0</Version>
+    <!-- The next release's version. Only a release's own build, from its tag, is exactly this: other CI builds are
+         -ci.<run> and local ones -dev, so a test package can't pass for the release. -->
+    <VersionPrefix>3.2.0</VersionPrefix>
+    <VersionSuffix Condition="'$(VersionSuffix)' == '' and '$(GITHUB_ACTIONS)' == 'true' and '$(GITHUB_REF_TYPE)' != 'tag'">ci.$(GITHUB_RUN_NUMBER)</VersionSuffix>
+    <VersionSuffix Condition="'$(VersionSuffix)' == '' and '$(GITHUB_ACTIONS)' != 'true'">dev</VersionSuffix>
     <Authors>Zachary Fry</Authors>
     <Copyright>Copyright (c) Zachary Fry</Copyright>
     <PackageTags>file-storage;file-upload;blob;blob-storage;object-storage;uploads;downloads;versioning;sqlserver;streaming;opentelemetry</PackageTags>

@@ -6,9 +6,10 @@ and [How SQL Server stores files](sql-server-storage.md) the details of storage.
 
 ## Choosing a SQL Server
 
-- **Versions.** Resourcefull is tested with SQL Server 2022 and LocalDB, on every change. It uses only standard
-  features (row versioning, application locks, filtered indexes), so SQL Server 2016 and later, Azure SQL Database and
-  Azure SQL Managed Instance are expected to work, but aren't tested yet; reports either way are welcome.
+- **Versions.** Resourcefull is tested with SQL Server 2019 and 2022 on every change, and with LocalDB in development.
+  It uses only standard features (row versioning, application locks, filtered indexes), so SQL Server 2016 and later,
+  Azure SQL Database and Azure SQL Managed Instance are expected to work, but aren't tested yet; reports either way
+  are welcome.
 - **Editions.** Express is free but stops each database at **10 GB** of data, which stored files reach quickly, and
   uses at most about 1.4 GB of memory. Use it for development and small installations; production usually needs
   Standard or above, or a hosted database.
