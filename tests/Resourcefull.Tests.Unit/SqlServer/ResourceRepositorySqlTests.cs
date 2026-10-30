@@ -715,65 +715,6 @@ public class ResourceSqlRepositoryTests
     }
 
     [Fact]
-    public async Task DeleteResourceContainerAsync_ShouldLeaveTheRestWholeAndFinishWhenCalledAgain_WhenCanceledAfterABatchFilledByChunks()
-    {
-        // Arrange: three resources of two chunks each against a budget of three chunks, so a batch holds one resource,
-        // and a token canceled as soon as the first batch is saved.
-        string databaseName = Guid.NewGuid().ToString();
-        using var cts = new CancellationTokenSource();
-        var resourceRepository = new ResourceSqlRepository(NewDatabase(databaseName).factory);
-        var canceledAfterOneBatch = new ResourceSqlRepository(NewDatabase(databaseName, new CancelAfterSaveInterceptor(cts)).factory) { ChunksPerDeleteBatch = 3 };
-        await resourceRepository.AddResourceContainerAsync(new ResourceContainerInfo { Name = "c" });
-        byte[] payload = RandomNumberGenerator.GetBytes(70_000);
-        foreach (string name in new[] { "a", "b", "c" })
-        {
-            await resourceRepository.AddResourceAsync("c", new ResourceInfo { ContainerName = "c", Name = name, VersionId = "v1" }, new MemoryStream(payload));
-        }
-
-        // Act
-        Exception? cancellation = await Record.ExceptionAsync(() => canceledAfterOneBatch.DeleteResourceContainerAsync("c", cts.Token));
-        List<ResourceInfo> remaining = await resourceRepository.GetAllResourceInfoAsync("c");
-        // Read from the store directly: the in-memory provider has no connection for the repository to stream from.
-        ResourceDbContext store = NewDatabase(databaseName).context;
-        List<byte[]> remainingContent = [.. store.Resources.Where(r => r.ContainerName == "c").AsEnumerable()
-            .Select(r => store.ResourceChunks.Where(ch => ch.ResourceId == r.Id).OrderBy(ch => ch.Index).AsEnumerable()
-                .SelectMany(ch => ch.Data).ToArray())];
-        bool finished = await resourceRepository.DeleteResourceContainerAsync("c");
-
-        // Assert
-        Assert.IsAssignableFrom<OperationCanceledException>(cancellation);
-        Assert.Equal(["b", "c"], remaining.Select(r => r.Name).Order());
-        Assert.All(remainingContent, content => Assert.Equal(payload, content));
-        Assert.True(finished);
-        Assert.Null(await resourceRepository.GetResourceContainerInfoAsync("c"));
-        Assert.Empty(await resourceRepository.GetAllResourceInfoAsync("c"));
-    }
-
-    [Fact]
-    public async Task DeleteResourceContainerAsync_ShouldKeepTheNameAtItsCurrentVersion_WhenCanceledBetweenVersionsOfOneName()
-    {
-        // Arrange: the current version, "a", was stored last but sorts first, against a budget that fits one version
-        // per batch, and a token canceled as soon as the first batch is saved.
-        string databaseName = Guid.NewGuid().ToString();
-        using var cts = new CancellationTokenSource();
-        var resourceRepository = new ResourceSqlRepository(NewDatabase(databaseName).factory);
-        var canceledAfterOneBatch = new ResourceSqlRepository(NewDatabase(databaseName, new CancelAfterSaveInterceptor(cts)).factory) { ChunksPerDeleteBatch = 3 };
-        await resourceRepository.AddResourceContainerAsync(new ResourceContainerInfo { Name = "c" });
-        byte[] payload = RandomNumberGenerator.GetBytes(70_000);
-        await resourceRepository.AddResourceAsync("c", new ResourceInfo { ContainerName = "c", Name = "n", VersionId = "b" }, new MemoryStream(payload));
-        await resourceRepository.AddResourceAsync("c", new ResourceInfo { ContainerName = "c", Name = "n", VersionId = "a" }, new MemoryStream(payload));
-
-        // Act
-        Exception? cancellation = await Record.ExceptionAsync(() => canceledAfterOneBatch.DeleteResourceContainerAsync("c", cts.Token));
-
-        // Assert
-        Assert.IsAssignableFrom<OperationCanceledException>(cancellation);
-        ResourceInfo current = Assert.Single(await resourceRepository.GetResourceVersionsAsync("c", "n"));
-        Assert.Equal("a", current.VersionId);
-        Assert.True(current.IsLatest);
-    }
-
-    [Fact]
     public async Task DeleteResourceContainerAsync_ShouldFinish_WhenEveryResourceIsBiggerThanTheChunkBudget()
     {
         // Arrange

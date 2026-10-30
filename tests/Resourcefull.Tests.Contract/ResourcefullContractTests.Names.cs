@@ -60,6 +60,71 @@ public abstract partial class ResourcefullContractTests
         Assert.Equal(payload, content!.Content.ToArray());
     }
 
+    [SkippableFact]
+    public async Task UploadAsync_ShouldKeepEachNameAsGiven_WhenNamesLookLikePaths()
+    {
+        // Arrange: names are opaque, so a provider that stores them as paths, such as on a file system, mustn't resolve
+        // "a/../b" to "b", or let ".." reach outside the container.
+        using ServiceProvider provider = BuildServiceProvider();
+        IResourceContainerClient container = await NewContainerAsync(provider);
+        string[] names = ["b", "..", ".", "./b", "a/../b", "a//b", "a/b", @"a\b", "/b", "b/", "../b"];
+
+        // Act
+        foreach (string name in names) await container.UploadAsync(name, BinaryData.FromString(name));
+
+        // Assert
+        Assert.Equal(names.Order(StringComparer.Ordinal),
+            (await container.GetResourcesAsync()).Select(r => r.Name).Order(StringComparer.Ordinal));
+        foreach (string name in names)
+            Assert.Equal(name, (await container.DownloadContentAsync(name))!.Content.ToString());
+    }
+
+    [SkippableFact]
+    public async Task CreateResourceContainerAsync_ShouldKeepContainersApart_WhenNamesLookLikePaths()
+    {
+        // Arrange
+        using ServiceProvider provider = BuildServiceProvider();
+        IResourceServiceClient service = ServiceOf(provider);
+        var suffix = Guid.NewGuid().ToString("N");
+        string[] names = [suffix, $"../{suffix}", $"x/../{suffix}", $"{suffix}/.."];
+
+        // Act
+        foreach (string name in names)
+            await (await service.CreateResourceContainerAsync(name)).UploadAsync("r", BinaryData.FromString(name));
+
+        // Assert
+        foreach (string name in names)
+        {
+            Assert.True(await service.ContainerExistsAsync(name));
+            ResourceContent? content = await service.GetResourceContainerClient(name).DownloadContentAsync("r");
+            Assert.Equal(name, content!.Content.ToString());
+        }
+    }
+
+    [SkippableFact]
+    public async Task ExistsAsync_ShouldFindNothing_WhenGivenAVersionIdThatLooksLikeAPath()
+    {
+        // Arrange: a provider that stores versions under their name, as paths, mustn't let "../a/<a's version>" reach
+        // another name's version through "b".
+        using ServiceProvider provider = BuildServiceProvider();
+        IResourceContainerClient container = await NewContainerAsync(provider);
+        ResourceInfo a = await container.UploadAsync("a", BinaryData.FromString("a"));
+        await container.UploadAsync("b", BinaryData.FromString("b"));
+        string escape = $"../a/{a.VersionId}";
+
+        // Act
+        bool exists = await container.ExistsAsync("b", escape);
+        ResourceContent? content = await container.DownloadContentAsync("b", escape);
+        bool deleted = await container.DeleteResourceIfExistsAsync("b", escape);
+
+        // Assert
+        Assert.False(exists);
+        Assert.Null(content);
+        Assert.False(deleted);
+        Assert.Equal("a", (await container.DownloadContentAsync("a"))!.Content.ToString());
+        Assert.Equal("b", (await container.DownloadContentAsync("b"))!.Content.ToString());
+    }
+
     public static TheoryData<string> InvalidContainerNames =>
         ["", " ", " leading", "trailing ", new string('c', ResourceNames.MaxContainerNameLength + 1)];
 

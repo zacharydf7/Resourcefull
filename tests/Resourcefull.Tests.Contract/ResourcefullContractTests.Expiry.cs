@@ -355,7 +355,8 @@ public abstract partial class ResourcefullContractTests
     [SkippableFact]
     public async Task GetExpiredAsync_ShouldListEachExpiredVersionOnceInOrder_WhenPagedOneAtATimeFromTheLast()
     {
-        // Arrange: expiries long before any other test's, two of them equal, so the version ID breaks the tie.
+        // Arrange: expiries long before any other test's, two of them equal, so the version ID breaks the tie. Versions
+        // an earlier run left behind in a persistent store can be listed too, so only this container's are compared.
         using ServiceProvider provider = BuildServiceProvider();
         IResourceContainerClient container = await NewContainerAsync(provider);
         var tied = new DateTimeOffset(1900, 1, 1, 0, 0, 0, TimeSpan.Zero);
@@ -371,7 +372,7 @@ public abstract partial class ResourcefullContractTests
         // Act
         var listed = new List<ResourceInfo>();
         ResourceInfo? after = null;
-        for (int page = 0; page < 10; page++)
+        for (int page = 0; page < 10_000; page++)
         {
             List<ResourceInfo> batch = await repository.GetExpiredAsync(now, 1, after);
             if (batch.Count == 0) break;
@@ -380,7 +381,7 @@ public abstract partial class ResourcefullContractTests
 
         // Assert
         Assert.Equal(stored.OrderBy(v => v.ExpiresAt).ThenBy(v => v.VersionId, StringComparer.Ordinal).Select(v => v.VersionId),
-            listed.Select(v => v.VersionId));
+            listed.Where(v => v.ContainerName == container.ResourceContainerInfo.Name).Select(v => v.VersionId));
         await ServiceOf(provider).DeleteExpiredAsync();
     }
 
