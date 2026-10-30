@@ -12,8 +12,8 @@ namespace Resourcefull.Tests.AspNetCore;
 /// <summary>
 /// A minimal API over the in-memory provider, served by the test server, with endpoints built from the package the way
 /// an application would: download, download inline under another name, download looked up by the result (which
-/// answers ranges), download through a signed link, upload, and one that throws a given exception. Each app has Data
-/// Protection keys of its own, held in memory, so one app's links don't work in another.
+/// answers ranges), download through a signed link, upload, one that throws a given exception, and a Razor page that
+/// downloads. Each app has Data Protection keys of its own, held in memory, so one app's links don't work in another.
 /// </summary>
 internal sealed class TestApp : IAsyncDisposable
 {
@@ -28,6 +28,8 @@ internal sealed class TestApp : IAsyncDisposable
     }
 
     public HttpClient Client { get; }
+
+    public IServiceProvider Services => _app.Services;
 
     public IResourceContainerClient Files => _app.Services.CreateScope().ServiceProvider
         .GetRequiredService<IResourceServiceClient>().GetResourceContainerClient(Container);
@@ -48,6 +50,7 @@ internal sealed class TestApp : IAsyncDisposable
             if (versioning) options.UseVersioning();
         });
         builder.Services.AddResourcefullExceptionHandler();
+        builder.Services.AddRazorPages().AddApplicationPart(typeof(TestApp).Assembly);
 
         WebApplication app = builder.Build();
         app.UseExceptionHandler();
@@ -70,6 +73,7 @@ internal sealed class TestApp : IAsyncDisposable
         app.MapPut("/files/{**name}", (string name, HttpRequest request, IResourceServiceClient resources, CancellationToken cancellationToken) =>
             resources.GetResourceContainerClient(Container).UploadFromRequestAsync(name, request, null, cancellationToken));
         app.MapGet("/throw", () => { throw toThrow!; });
+        app.MapRazorPages();
 
         await app.StartAsync();
         await app.Services.CreateScope().ServiceProvider.GetRequiredService<IResourceServiceClient>().CreateResourceContainerAsync(Container);

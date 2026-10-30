@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.Net.Http.Headers;
 
 namespace Resourcefull.AspNetCore;
@@ -12,7 +13,7 @@ namespace Resourcefull.AspNetCore;
 /// <c>Accept-Ranges: bytes</c>, and a resource that doesn't exist gets 404.
 /// <para>Coming in 3.2.</para>
 /// </summary>
-public sealed class ResourceLookupHttpResult : IResult
+public sealed class ResourceLookupHttpResult : IResult, IActionResult
 {
     internal ResourceLookupHttpResult(IResourceContainerClient container, string resourceName, ResourceResultOptions? options,
         string? versionId = null)
@@ -151,4 +152,10 @@ public sealed class ResourceLookupHttpResult : IResult
         range = new ResourceRange(offset, end - offset);
         return offset < end;
     }
+
+    /// <summary>
+    /// Runs the result as an MVC action result, so a Razor Pages handler, which can't return an <see cref="IResult"/>,
+    /// can return it.
+    /// </summary>
+    Task IActionResult.ExecuteResultAsync(ActionContext context) => ExecuteAsync(context.HttpContext);
 }

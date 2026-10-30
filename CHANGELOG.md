@@ -53,6 +53,9 @@
   [Telemetry](docs/telemetry.md).
 - **Disposable downloads.** `ResourceDownloadResult` implements `IDisposable` and `IAsyncDisposable`, disposing its
   stream, so `await using` works on the download itself.
+- **Razor Pages.** The results `TypedResults.Resource` and `TypedResults.SharedResource` return are also MVC action
+  results, so a Razor Pages handler, which can't return an `IResult`, can return them. See
+  [MVC, Razor Pages and Blazor](docs/aspnet-core/mvc-razor-blazor.md#razor-pages).
 
 ### Changed
 

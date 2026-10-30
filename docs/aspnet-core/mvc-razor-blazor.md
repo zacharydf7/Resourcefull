@@ -38,21 +38,31 @@ For a form upload in an MVC view, take an `IFormFile` and keep `[ValidateAntiFor
 ## Razor Pages
 
 A Razor page's handler can't return an `IResult`: ASP.NET Core refuses it at run time, with "Unsupported handler method
-return type". Two ways around it:
+return type". From 3.2 <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span>, the results `TypedResults.Resource` and `TypedResults.SharedResource` return are
+action results too, so a handler returns them as it would `File(...)`, conditional requests included, and ranges when
+the result looks the resource up, as here:
 
-- **Serve files from a minimal API endpoint** next to your pages, as in [Serving downloads](serving-downloads.md),
-  and link to it from the page. This is the simplest, and the endpoint answers range requests for video and resumable
-  downloads.
-- **Run the result yourself** in the handler, then return an empty result so the page doesn't render after it
-  (`Results.Resource(container, name)` is new in 3.2 <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span>):
+```csharp
+public IActionResult OnGet(string name) =>
+    TypedResults.Resource(_resources.GetResourceContainerClient("files"), name);
+```
 
-  ```csharp
-  public async Task<IActionResult> OnGetAsync(string name)
-  {
-      await Results.Resource(_resources.GetResourceContainerClient("files"), name).ExecuteAsync(HttpContext);
-      return new EmptyResult();
-  }
-  ```
+Use `TypedResults`, not `Results`: `Results.Resource` is declared to return `IResult`, which a handler can't return.
+
+With 3.1, serve files from a minimal API endpoint next to your pages, as in [Serving downloads](serving-downloads.md),
+and link to it from the page, or run the result yourself in the handler and return an empty result, so the page doesn't
+render after it:
+
+```csharp
+public async Task<IActionResult> OnGetAsync(string name, CancellationToken cancellationToken)
+{
+    ResourceDownloadResult? download = await _resources.GetResourceContainerClient("files")
+        .DownloadStreamingAsync(name, null, cancellationToken);
+    if (download is null) return NotFound();
+    await Results.Resource(download).ExecuteAsync(HttpContext);
+    return new EmptyResult();
+}
+```
 
 ## Blazor
 
