@@ -72,6 +72,12 @@
   A provider must set it on every `ResourceInfo` it returns; one that assigns it from a nullable value now gets a
   nullable warning.
 
+### Fixed
+
+- **Creating or deleting a container on SQL Server** no longer reports failure after succeeding. When the database
+  committed but the connection failed before saying so, the automatic retry ran again and reported a conflict for a
+  create, or a concurrency error for a delete; now it recognizes its own success, as uploads already did.
+
 ## 3.1.0
 
 New features, all additive: code written for 3.0 keeps compiling, and custom providers keep working. The one thing to

@@ -805,24 +805,30 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
 
     public async Task AddResourceContainerAsync(ResourceContainerInfo resourceContainerInfo, CancellationToken cancellationToken = default)
     {
-        using ResourceDbContext dbContext = dbContextFactory.CreateDbContext();
+        bool created = false;
+        await WriteNamesAsync([], async (attempt, ct) =>
+        {
+            attempt.ResourceContainers.Add(new ResourceContainerModel
+            {
+                Name = resourceContainerInfo.Name,
+                Uri = resourceContainerInfo.Uri,
+                Metadata = resourceContainerInfo.Metadata
+            });
 
-        var resourceContainerModel = new ResourceContainerModel
-        {
-            Name = resourceContainerInfo.Name,
-            Uri = resourceContainerInfo.Uri,
-            Metadata = resourceContainerInfo.Metadata
-        };
-        dbContext.ResourceContainers.Add(resourceContainerModel);
+            try
+            {
+                await attempt.SaveChangesAsync(ct);
+            }
+            catch (DbUpdateException exception) when (IsUniqueViolation(exception))
+            {
+                // A retry after a commit whose acknowledgement was lost finds the container it created. It can't tell
+                // that from a commit that failed while another caller created the name, which counts as created too.
+                if (created) return true;
+                throw new ResourceConflictException($"Resource Container with the name {resourceContainerInfo.Name} already exists.", exception);
+            }
 
-        try
-        {
-            await dbContext.SaveChangesAsync(cancellationToken);
-        }
-        catch (DbUpdateException exception) when (IsUniqueViolation(exception))
-        {
-            throw new ResourceConflictException($"Resource Container with the name {resourceContainerInfo.Name} already exists.", exception);
-        }
+            return created = true;
+        }, cancellationToken);
     }
 
     public async Task<List<ResourceContainerInfo>> GetAllResourceContainerInfoAsync(CancellationToken cancellationToken = default)
@@ -922,12 +928,17 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
             return batch.Count;
         }
 
-        ResourceContainerModel? container = await dbContext.ResourceContainers
-            .FirstOrDefaultAsync(x => x.Name == resourceContainerName, cancellationToken);
-        if (container == null) return false;
+        bool deleted = false;
+        return await WriteNamesAsync([], async (attempt, ct) =>
+        {
+            ResourceContainerModel? container = await attempt.ResourceContainers.FirstOrDefaultAsync(x => x.Name == resourceContainerName, ct);
+            // A retry after a commit whose acknowledgement was lost finds the container gone.
+            if (container is null) return deleted;
 
-        dbContext.ResourceContainers.Remove(container);
-        return await dbContext.SaveChangesAsync(cancellationToken) > 0;
+            attempt.ResourceContainers.Remove(container);
+            await attempt.SaveChangesAsync(ct);
+            return deleted = true;
+        }, cancellationToken);
     }
 
     private static Task<ResourceModel?> ResolveAsync(IQueryable<ResourceModel> query,
