@@ -21,6 +21,7 @@ bytes: SQL Server, process memory for tests, or a provider you write.
 - [Telemetry](telemetry.md): the spans and metrics every operation records.
 - [Container policies](container-policies.md): size limits, quotas, allowed file types and read-only containers.
 - [Expiring resources](expiry.md): uploads that delete themselves, and auditing what Resourcefull deletes.
+- [Sharing files with links](sharing-links.md): links that let anyone download one file, without signing in, until they expire.
 - [Health checks](health-checks.md): reporting whether storage can be reached and the schema is current.
 
 ## Providers

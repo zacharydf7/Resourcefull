@@ -75,6 +75,12 @@ It sends the same headers and answers the same conditional requests as above, an
 Conditional headers are evaluated first, so a matching `If-None-Match` gets 304 even with a `Range`. `TypedResults.Resource`
 takes the same arguments.
 
+## Sharing files with links
+
+To let someone without an account download a file, give them a signed link: a URL that works for one file until a time
+you choose. `AddResourcefullLinks`, `IResourceLinkSigner` and `Results.SharedResource` do this; see
+[Sharing files with links](../sharing-links.md) for the whole setup.
+
 ## Accepting uploads
 
 ```csharp

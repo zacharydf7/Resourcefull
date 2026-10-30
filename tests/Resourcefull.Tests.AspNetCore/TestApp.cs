@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.TestHost;
@@ -11,7 +12,8 @@ namespace Resourcefull.Tests.AspNetCore;
 /// <summary>
 /// A minimal API over the in-memory provider, served by the test server, with endpoints built from the package the way
 /// an application would: download, download inline under another name, download looked up by the result (which
-/// answers ranges), upload, and one that throws a given exception.
+/// answers ranges), download through a signed link, upload, and one that throws a given exception. Each app has Data
+/// Protection keys of its own, held in memory, so one app's links don't work in another.
 /// </summary>
 internal sealed class TestApp : IAsyncDisposable
 {
@@ -30,10 +32,16 @@ internal sealed class TestApp : IAsyncDisposable
     public IResourceContainerClient Files => _app.Services.CreateScope().ServiceProvider
         .GetRequiredService<IResourceServiceClient>().GetResourceContainerClient(Container);
 
-    public static async Task<TestApp> StartAsync(Exception? toThrow = null, bool versioning = true)
+    /// <summary>Creates signed links in this app.</summary>
+    public IResourceLinkSigner Links => _app.Services.CreateScope().ServiceProvider.GetRequiredService<IResourceLinkSigner>();
+
+    public static async Task<TestApp> StartAsync(Exception? toThrow = null, bool versioning = true, TimeProvider? clock = null)
     {
         WebApplicationBuilder builder = WebApplication.CreateSlimBuilder();
         builder.WebHost.UseTestServer();
+        if (clock is not null) builder.Services.AddSingleton(clock);
+        builder.Services.AddDataProtection().UseEphemeralDataProtectionProvider();
+        builder.Services.AddResourcefullLinks();
         builder.Services.AddResourcefull(options =>
         {
             options.UseInMemory();
@@ -57,6 +65,8 @@ internal sealed class TestApp : IAsyncDisposable
             Results.Resource(resources.GetResourceContainerClient(Container), name));
         app.MapGet("/ranged-inline/{**name}", (string name, IResourceServiceClient resources) =>
             TypedResults.Resource(resources.GetResourceContainerClient(Container), name, new ResourceResultOptions { Inline = true, FileName = "shown.txt" }));
+        app.MapMethods("/shared/{token}", ["GET", "HEAD"], (string token, IResourceServiceClient resources) =>
+            Results.SharedResource(resources, token));
         app.MapPut("/files/{**name}", (string name, HttpRequest request, IResourceServiceClient resources, CancellationToken cancellationToken) =>
             resources.GetResourceContainerClient(Container).UploadFromRequestAsync(name, request, null, cancellationToken));
         app.MapGet("/throw", () => { throw toThrow!; });

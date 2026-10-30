@@ -30,6 +30,16 @@ public static class ResourcefullResults
         /// <returns>The result, which opens the download when it runs and disposes it once it's sent.</returns>
         public static IResult Resource(IResourceContainerClient container, string resourceName, ResourceResultOptions? options = null) =>
             new ResourceLookupHttpResult(container, resourceName, options);
+
+        /// <summary>
+        /// Sends the resource a signed link grants, to whoever holds the link, without authentication. See
+        /// <see cref="SharedResourceHttpResult"/>, and <see cref="IResourceLinkSigner.CreateTokenAsync"/> to make links.
+        /// </summary>
+        /// <param name="resources">The client to read the resource through.</param>
+        /// <param name="token">The token from the link's URL.</param>
+        /// <returns>The result, which checks the token when it runs.</returns>
+        public static IResult SharedResource(IResourceServiceClient resources, string token) =>
+            new SharedResourceHttpResult(resources, token);
     }
 }
 
@@ -49,5 +59,9 @@ public static class ResourcefullTypedResults
         public static ResourceLookupHttpResult Resource(IResourceContainerClient container, string resourceName,
             ResourceResultOptions? options = null) =>
             new(container, resourceName, options);
+
+        /// <inheritdoc cref="ResourcefullResults.SharedResource(IResourceServiceClient, string)"/>
+        public static SharedResourceHttpResult SharedResource(IResourceServiceClient resources, string token) =>
+            new(resources, token);
     }
 }

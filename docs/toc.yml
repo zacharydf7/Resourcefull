@@ -34,6 +34,8 @@
     href: container-policies.md
   - name: Expiring resources
     href: expiry.md
+  - name: Sharing files with links
+    href: sharing-links.md
   - name: Health checks
     href: health-checks.md
   - name: Upgrading to 3.0

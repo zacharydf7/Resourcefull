@@ -31,6 +31,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Resourcefull.AspNetCore\Resourcefull.AspNetCore.csproj" />
     <ProjectReference Include="..\..\src\Resourcefull.InMemory\Resourcefull.InMemory.csproj" />
+    <ProjectReference Include="..\Resourcefull.Tests.Contract\Resourcefull.Tests.Contract.csproj" />
   </ItemGroup>
 
   <ItemGroup>

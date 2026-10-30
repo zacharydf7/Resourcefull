@@ -13,13 +13,15 @@ namespace Resourcefull.AspNetCore;
 /// </summary>
 public sealed class ResourceLookupHttpResult : IResult
 {
-    internal ResourceLookupHttpResult(IResourceContainerClient container, string resourceName, ResourceResultOptions? options)
+    internal ResourceLookupHttpResult(IResourceContainerClient container, string resourceName, ResourceResultOptions? options,
+        string? versionId = null)
     {
         ArgumentNullException.ThrowIfNull(container);
         ArgumentNullException.ThrowIfNull(resourceName);
         Container = container;
         ResourceName = resourceName;
         Options = options ?? new ResourceResultOptions();
+        VersionId = versionId;
     }
 
     /// <summary>The container the resource is in.</summary>
@@ -30,6 +32,9 @@ public sealed class ResourceLookupHttpResult : IResult
 
     /// <summary>How the resource is presented.</summary>
     public ResourceResultOptions Options { get; }
+
+    /// <summary>The version a signed link pins, which this result sends; the current version when <see langword="null"/>.</summary>
+    internal string? VersionId { get; }
 
     /// <inheritdoc />
     public async Task ExecuteAsync(HttpContext httpContext)
@@ -43,10 +48,10 @@ public sealed class ResourceLookupHttpResult : IResult
 
         // The range asked for is opened first, which is right unless it's a suffix, runs past the end, or If-Range
         // doesn't hold; then the version found is opened again for what to send. If that version is deleted in
-        // between, it starts over once with the version that's current then.
+        // between, it starts over once with the version that's current then, unless it was asked for that version.
         for (int attempt = 0; ; attempt++)
         {
-            ResourceDownloadResult? opened = await OpenAsync(null, requested is { From: { } from }
+            ResourceDownloadResult? opened = await OpenAsync(VersionId, requested is { From: { } from }
                 ? new ResourceRange(from, requested.To < long.MaxValue ? requested.To - from + 1 : null)
                 : null, cancellationToken);
             if (opened is null)
@@ -79,7 +84,7 @@ public sealed class ResourceLookupHttpResult : IResult
                 if (wanted != opened.Range)
                 {
                     download = await OpenAsync(resource.VersionId, wanted, cancellationToken);
-                    if (download is null && attempt == 0) continue;
+                    if (download is null && attempt == 0 && VersionId is null) continue;
                     if (download is null)
                     {
                         response.StatusCode = StatusCodes.Status404NotFound;

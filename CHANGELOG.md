@@ -4,6 +4,11 @@
 
 ### Added
 
+- **Signed, expiring links.** `Resourcefull.AspNetCore` can create links that let anyone download one file, without
+  signing in, until they expire: `AddResourcefullLinks`, `IResourceLinkSigner.CreateTokenAsync` and
+  `Results.SharedResource`. Links are sealed with ASP.NET Core Data Protection, can't be changed or read, and show the
+  version that was current when they were made unless they follow the current one. See
+  [Sharing files with links](docs/sharing-links.md).
 - **Expiring resources.** `ResourceUploadOptions.ExpiresAt` sets when a version expires, and `UseExpiry` runs a
   background service that deletes expired versions within one interval, on every instance safely. `SetExpiryAsync`
   changes or clears an expiry. An `IResourceCleanupHandler` hears about every version Resourcefull deletes by itself,

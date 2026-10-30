@@ -2,6 +2,8 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Headers;
+using Resourcefull.AspNetCore;
+using Resourcefull.Tests.Contract;
 
 namespace Resourcefull.Tests.AspNetCore;
 
@@ -15,7 +17,8 @@ public sealed class RequestTelemetryCollection
 [Collection(RequestTelemetryCollection.Name)]
 public sealed class PreconditionTelemetryTests
 {
-    private static async Task<(HttpStatusCode Status, object? Precondition)> SendAsync(TestApp app, HttpRequestMessage request)
+    private static async Task<(HttpStatusCode Status, object? Tag)> SendAsync(TestApp app, HttpRequestMessage request,
+        string tag = "resourcefull.precondition")
     {
         // ASP.NET Core starts a span per request only while something listens to its source.
         var requests = new ConcurrentQueue<Activity>();
@@ -28,7 +31,29 @@ public sealed class PreconditionTelemetryTests
         ActivitySource.AddActivityListener(listener);
 
         HttpResponseMessage response = await app.Client.SendAsync(request);
-        return (response.StatusCode, Assert.Single(requests).GetTagItem("resourcefull.precondition"));
+        return (response.StatusCode, Assert.Single(requests).GetTagItem(tag));
+    }
+
+    [Theory]
+    [InlineData("valid", HttpStatusCode.OK)]
+    [InlineData("expired", HttpStatusCode.Gone)]
+    [InlineData("invalid", HttpStatusCode.NotFound)]
+    public async Task SharedResource_ShouldRecordTheLinksStatusOnTheRequestSpan_WhenALinkIsOpened(string expected, HttpStatusCode expectedStatus)
+    {
+        // Arrange
+        var clock = new ManualTimeProvider();
+        await using TestApp app = await TestApp.StartAsync(clock: clock);
+        await app.Files.UploadAsync("report.txt", BinaryData.FromString("x"));
+        string token = expected == "invalid" ? "not-a-token"
+            : (await app.Links.CreateTokenAsync(new ResourceLink(TestApp.Container, "report.txt")))!;
+        if (expected == "expired") clock.Now = clock.Now.AddHours(2);
+
+        // Act
+        (HttpStatusCode status, object? link) = await SendAsync(app, new HttpRequestMessage(HttpMethod.Get, $"/shared/{token}"), "resourcefull.link");
+
+        // Assert
+        Assert.Equal(expectedStatus, status);
+        Assert.Equal(expected, link);
     }
 
     [Fact]

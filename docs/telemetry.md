@@ -88,3 +88,4 @@ name, so its 416 shows up as a failed `download` with `error.type` `System.Argum
 type out of storage error rates. ASP.NET
 Core records each request's status code, 304, 412 and 413 included, in its own metrics and spans. When a request has
 preconditions, the package adds `resourcefull.precondition` to the request's span: `met`, `not_modified` or `failed`.
+A request that opens a [signed link](sharing-links.md) gets `resourcefull.link`: `valid`, `expired` or `invalid`.
