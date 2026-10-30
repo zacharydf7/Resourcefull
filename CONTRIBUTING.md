@@ -5,6 +5,9 @@ Thanks for helping with Resourcefull. Bug reports, questions and ideas are welco
 you start. Report a security vulnerability privately instead, as
 [SECURITY.md](https://github.com/zacharydf7/Resourcefull/blob/main/SECURITY.md) explains.
 
+Everyone taking part is expected to follow the
+[code of conduct](https://github.com/zacharydf7/Resourcefull/blob/main/CODE_OF_CONDUCT.md).
+
 ## Building and testing
 
 You need the .NET SDK that `global.json` names, or a later patch of the same feature band.
