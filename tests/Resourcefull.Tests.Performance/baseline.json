@@ -71,6 +71,15 @@
     "Seconds": 0.0076,
     "ContentBytes": 1048576
   },
+  "expire-nothing-due": {
+    "RoundTrips": 1,
+    "LogicalReads": 2,
+    "LogBytes": 0,
+    "AllocatedBytes": 128984,
+    "PeakHeapBytes": 139592,
+    "Seconds": 0.0013,
+    "ContentBytes": 0
+  },
   "get-info": {
     "RoundTrips": 1,
     "LogicalReads": 2,
@@ -82,20 +91,20 @@
   },
   "list-100": {
     "RoundTrips": 1,
-    "LogicalReads": 10,
+    "LogicalReads": 9,
     "LogBytes": 0,
-    "AllocatedBytes": 278776,
-    "PeakHeapBytes": 287840,
-    "Seconds": 0.0046,
+    "AllocatedBytes": 290032,
+    "PeakHeapBytes": 298040,
+    "Seconds": 0.0023,
     "ContentBytes": 0
   },
   "list-page-100-of-500": {
     "RoundTrips": 1,
     "LogicalReads": 7,
     "LogBytes": 0,
-    "AllocatedBytes": 287056,
-    "PeakHeapBytes": 295912,
-    "Seconds": 0.002,
+    "AllocatedBytes": 299512,
+    "PeakHeapBytes": 314056,
+    "Seconds": 0.0019,
     "ContentBytes": 0
   },
   "upload-16MiB": {
@@ -154,10 +163,10 @@
   },
   "versions-20": {
     "RoundTrips": 1,
-    "LogicalReads": 3,
+    "LogicalReads": 2,
     "LogBytes": 0,
-    "AllocatedBytes": 157984,
-    "PeakHeapBytes": 164440,
+    "AllocatedBytes": 159168,
+    "PeakHeapBytes": 164384,
     "Seconds": 0.0015,
     "ContentBytes": 0
   }
