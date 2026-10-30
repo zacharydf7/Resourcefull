@@ -165,12 +165,13 @@ internal sealed class ContainerPolicies(ContainerPolicySettings settings, IResou
 
     /// <summary>
     /// Whether <paramref name="contentType"/> is one of <paramref name="allowed"/>, compared without parameters and
-    /// ignoring case, where <c>type/*</c> covers every subtype and <c>*/*</c> every type.
+    /// ignoring case, where <c>type/*</c> covers every subtype and <c>*/*</c> every type. It's parsed strictly: a value
+    /// holding more than one type, which browsers read as its last, isn't allowed because of its first.
     /// </summary>
     private static bool Allows(IReadOnlyCollection<string> allowed, string? contentType)
     {
-        if (contentType is null) return false;
-        string type = MediaType(contentType);
+        if (!System.Net.Http.Headers.MediaTypeHeaderValue.TryParse(contentType, out var parsed) || parsed.MediaType is not { } type)
+            return false;
         return allowed.Select(MediaType).Any(pattern => pattern == "*/*"
             || (pattern.EndsWith("/*", StringComparison.Ordinal)
                 ? type.StartsWith(pattern[..^1], StringComparison.OrdinalIgnoreCase)

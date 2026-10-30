@@ -112,7 +112,8 @@ public class UploadFromRequestTests
         var options = new ResourceUploadOptions
         {
             Headers = new ResourceHeaders("application/x-report", null),
-            Metadata = new Dictionary<string, string> { ["owner"] = "ops" }
+            Metadata = new Dictionary<string, string> { ["owner"] = "ops" },
+            ExpiresAt = new DateTimeOffset(2099, 1, 1, 0, 0, 0, TimeSpan.Zero)
         };
 
         // Act
@@ -122,6 +123,7 @@ public class UploadFromRequestTests
         ResourceInfo stored = (await app.Files.GetResourceInfoAsync("report.txt"))!;
         Assert.Equal("application/x-report", stored.ContentType);
         Assert.Equal("ops", stored.Metadata["owner"]);
+        Assert.Equal(options.ExpiresAt, stored.ExpiresAt);
         Assert.False(options.Overwrite);
         Assert.False(options.CreateOnly);
         Assert.Null(options.Conditions);

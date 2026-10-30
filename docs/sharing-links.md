@@ -93,8 +93,10 @@ The token is safe to put in a URL path: it only uses letters, digits, `-` and `_
 | `FollowCurrent` | off | Show whichever version is current each time the link is opened, instead of one version. |
 | `Inline` | off | Ask browsers to display the file, such as a PDF or an image, rather than download it. |
 
-Only set `Inline` for file types you're happy for browsers to display as part of your site. A file uploaded as a web
-page (`text/html`) or an SVG image and shown inline can run scripts as if it were one of your pages.
+`Inline` only displays types that are safe to show: common image formats (PNG, JPEG, GIF, WebP, AVIF and BMP; not
+SVG), PDF, audio, video and plain text. It's checked each time the link is opened, so if the file is replaced by a web
+page (`text/html`) or an SVG image, which can run scripts as if they were your pages, the link offers it as a download
+instead.
 
 ### Which version a link shows
 

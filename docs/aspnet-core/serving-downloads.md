@@ -1,7 +1,8 @@
 # Serving downloads
 
-An endpoint that serves files should do more than copy bytes: send the length, type and file name, let browsers and
-proxies cache what hasn't changed, and let video players and download managers ask for part of a file. `Results.Resource`
+An endpoint that serves files should do more than copy bytes: send the length, type and file name, let browsers
+reuse what hasn't changed without letting shared caches keep anyone's files, and let video players and download
+managers ask for part of a file. `Results.Resource`
 does all of that from a download.
 
 ```csharp
@@ -23,8 +24,18 @@ app.MapMethods("/files/{container}/{**name}", ["GET", "HEAD"], async (string con
 - **a strong `ETag`** from the content hash, and **`Last-Modified`**;
 - **`Content-Disposition: attachment`**, with the part of the name after its last `/` as the file name, encoded
   correctly whatever characters it contains. Pass `new ResourceResultOptions { Inline = true }` to let browsers
-  display the file, and `FileName` to offer another name. Display inline only content types your application allows:
-  a file uploaded as `text/html` or `image/svg+xml` and shown inline runs as a page of your site.
+  display the file, and `FileName` to offer another name. Only types that are safe to display are shown inline
+  <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span>: common image formats (PNG, JPEG, GIF, WebP,
+  AVIF and BMP; not SVG), PDF, audio, video and plain text (`ResourceResultOptions.DefaultInlineContentTypes`). Anything else
+  is still offered as a download, because a file uploaded as `text/html` or `image/svg+xml` and shown inline would run
+  as a page of your site. `InlineContentTypes` changes the list;
+- **`Cache-Control: private, no-cache`** <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span>: the
+  user's browser may keep a copy, but checks with your application before reusing it, which the `ETag` makes cheap,
+  and shared caches such as CDNs and proxies don't keep it, so one user's file is never served to another. For public
+  files whose URL names a version, so their content never changes, set `CacheControl` to something like
+  `public, max-age=31536000, immutable`;
+- **`X-Content-Type-Options: nosniff`** <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span>, so
+  browsers take the type as given rather than guessing from the content.
 
 It answers **conditional requests** without reading the content:
 

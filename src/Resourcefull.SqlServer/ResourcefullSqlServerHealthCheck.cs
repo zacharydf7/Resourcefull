@@ -20,7 +20,9 @@ internal sealed class ResourcefullSqlServerHealthCheck(IDbContextFactory<Resourc
             string[] known = [.. dbContext.Database.GetMigrations()];
             string[] applied = [.. await dbContext.Database.GetAppliedMigrationsAsync(cancellationToken)];
             string[] pending = [.. known.Except(applied)];
-            string[] unknown = [.. applied.Except(known)];
+            // The history table is EF Core's, so an application sharing the database keeps its own migrations there
+            // too; only migrations named as Resourcefull's are from a newer release.
+            string[] unknown = [.. applied.Except(known).Where(ResourceDbContext.IsResourcefullMigration)];
             activity?.SetTag("resourcefull.pending_migrations", pending.Length);
 
             var data = new Dictionary<string, object>
@@ -58,11 +60,12 @@ internal sealed class ResourcefullSqlServerHealthCheck(IDbContextFactory<Resourc
 public static class ResourcefullSqlServerHealthChecksBuilderExtensions
 {
     /// <summary>
-    /// Adds a check that the SQL Server database given to <c>UseSqlServer</c> can be reached and has every migration this
-    /// release needs. It reports Healthy when both hold; <paramref name="failureStatus"/> when the database can't be
-    /// reached or is missing migrations, naming them, since this release's queries would fail against the older
-    /// schema; and Degraded when the database has migrations this release doesn't know, which happens when a newer
-    /// release upgraded it first. It reads only the migration history, so it's safe to run every few seconds.
+    /// Adds a check that the SQL Server database given to <c>UseSqlServer</c> can be reached and has every migration
+    /// this release needs. It reports Healthy when both hold; <paramref name="failureStatus"/> when the database
+    /// can't be reached or is missing migrations, naming them, since this release's queries would fail against the
+    /// older schema; and Degraded when the database has migrations of Resourcefull's that this release doesn't know,
+    /// which happens when a newer release upgraded it first. Your own EF Core migrations in the same history are
+    /// ignored. It reads only the migration history, so it's safe to run every few seconds.
     /// </summary>
     /// <remarks>
     /// Use it for readiness, not liveness: when the database is down or behind, restarting the application doesn't

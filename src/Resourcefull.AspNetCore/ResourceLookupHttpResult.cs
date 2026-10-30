@@ -65,7 +65,7 @@ public sealed class ResourceLookupHttpResult : IResult
             try
             {
                 ResourceInfo resource = opened.ResourceInfo;
-                int status = ResourceHttpResult.ValidateAndEvaluate(httpContext, resource);
+                int status = ResourceHttpResult.ValidateAndEvaluate(httpContext, resource, Options);
                 response.StatusCode = status;
                 if (status != StatusCodes.Status200OK) return;
 

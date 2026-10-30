@@ -63,6 +63,9 @@ public abstract partial class ResourcefullContractTests
     [InlineData("text/html", false)]
     [InlineData("application/pdfx", false)]
     [InlineData(null, false)]
+    [InlineData("image/png;,text/html", false)]                 // browsers read each of these as text/html
+    [InlineData("image/png, text/html", false)]
+    [InlineData("application/pdf;x=\",text/html", false)]
     public async Task UploadAsync_ShouldStoreOnlyAllowedContentTypes_WhenTheContainerAllowsSome(string? contentType, bool allowed)
     {
         // Arrange

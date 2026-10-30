@@ -50,6 +50,11 @@
 
 ### Changed
 
+- **Downloads are safer by default.** `Results.Resource` sends `Cache-Control: private, no-cache`, so shared caches
+  such as CDNs no longer keep files (set `ResourceResultOptions.CacheControl` to cache public files), and
+  `X-Content-Type-Options: nosniff`. `Inline` now displays only types that are safe to show (common image formats
+  (PNG, JPEG, GIF, WebP, AVIF and BMP; not SVG), PDF, audio, video and plain text) and offers anything else as a
+  download; `InlineContentTypes` changes the list. See [Serving downloads](docs/aspnet-core/serving-downloads.md).
 - **A new look.** The packages have a new icon, and the [documentation site](https://zacharydf7.github.io/Resourcefull/)
   has a new design, a home page, and a sidebar grouped by what you're trying to do. Pages that covered several topics
   are split into one page each; links to the old pages still work.

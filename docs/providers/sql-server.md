@@ -10,9 +10,10 @@ builder.Services.AddResourcefull(options => options
 
 ## Choosing the database
 
-The connection string names the database that holds Resourcefull's tables: `ResourceContainers`, `Resources`,
-`ResourceChunks` and EF Core's `__EFMigrationsHistory`. It can be a database of its own or your application's, as long
-as none of your tables share those names.
+The connection string names the database that holds Resourcefull's tables: `ResourceContainers`, `Resources` and
+`ResourceChunks`, plus EF Core's migration history, `__EFMigrationsHistory`. It can be a database of its own or your
+application's, as long as none of your tables share the first three names. The history table can be shared with your
+own EF Core migrations.
 
 A database of its own is the better default. Provisioning turns on [`READ_COMMITTED_SNAPSHOT`](#read_committed_snapshot),
 a setting of the whole database, and file content makes the database large, which affects how you back it up.

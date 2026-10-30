@@ -102,6 +102,10 @@ match.
 
 3. Explain anything the migration needs from users in [docs/upgrading.md](docs/upgrading.md).
 
+Name every new migration with `Resourcefull_` first (`dotnet ef migrations add Resourcefull_AddThing`): the history
+table can be shared with an application's own migrations, and the health check counts only migrations whose name
+starts this way as coming from a newer release. A test fails for a migration named otherwise.
+
 Three rules keep the scripts generated and safe to run again:
 
 - **Data fixes go in the migration**, as `migrationBuilder.Sql(...)`, never typed into a script.

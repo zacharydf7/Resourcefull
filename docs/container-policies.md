@@ -27,7 +27,7 @@ Without `UseContainerPolicies` or `UsePolicyProvider`, nothing is checked and no
 | `MaxResourceSize` | upload, restore, copy and move in | is refused before any content is read, if its declared length is over the limit; otherwise it stops as soon as its content passes the limit |
 | `MaxContainerSize` | upload, restore, copy and move in | is refused before any content is read, if its declared length won't fit in what's left; otherwise it stops as soon as its content passes what's left |
 | `MaxResourceCount` | upload, copy or move in of a new name | is refused when the container already holds that many resources; a new version of an existing name never is |
-| `AllowedContentTypes` | upload, copy and move in | is refused before any content is read when its type isn't in the list, or when it declares no type |
+| `AllowedContentTypes` | upload, copy and move in | is refused before any content is read when its type isn't in the list, declares no type, or isn't a single valid type (such as `image/png, text/html`). `image/*` includes SVG images, which can run scripts when shown, so list exact types for files you display |
 | `ReadOnly` | upload, restore, copy and move in or out, delete, deleting the container, changing an expiry | is refused before anything changes; and [expiry](expiry.md) leaves its expired versions until it's writable again |
 
 A refused write throws `ResourcePolicyViolationException`, whose `Rule` says which rule it broke, and stores nothing.

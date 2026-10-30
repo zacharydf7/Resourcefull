@@ -20,6 +20,23 @@ public class ResourceLinkTests
     private static async Task<string> TokenAsync(TestApp app, ResourceLink? link = null) =>
         (await app.Links.CreateTokenAsync(link ?? new ResourceLink(TestApp.Container, "2026/report.txt")))!;
 
+    [Fact]
+    public async Task SharedResource_ShouldOfferTheFileAsADownload_WhenAnInlineLinksFileIsReplacedByAPage()
+    {
+        // Arrange: an inline link to whatever is current, and the image it was made for replaced by a web page.
+        await using TestApp app = await TestApp.StartAsync();
+        await app.Files.UploadAsync("avatar", BinaryData.FromString("png"), new ResourceUploadOptions { Headers = new ResourceHeaders("image/png", null) });
+        string token = await TokenAsync(app, new ResourceLink(TestApp.Container, "avatar") { Inline = true, FollowCurrent = true });
+        await app.Files.UploadAsync("avatar", BinaryData.FromString("<script></script>"), new ResourceUploadOptions { Headers = new ResourceHeaders("text/html", null) });
+
+        // Act
+        HttpResponseMessage response = await app.Client.GetAsync("/shared/" + token);
+
+        // Assert
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("attachment", response.Content.Headers.ContentDisposition!.DispositionType);
+    }
+
     private static void AssertNotPassedOn(HttpResponseMessage response)
     {
         Assert.Equal(["no-referrer"], response.Headers.GetValues("Referrer-Policy"));

@@ -33,8 +33,9 @@ public sealed record ResourceLink(string ContainerName, string ResourceName)
     public bool FollowCurrent { get; init; }
 
     /// <summary>
-    /// Whether browsers should display the file (<c>Content-Disposition: inline</c>) rather than download it. Use it
-    /// only for content types your application allows to be shown; see <see cref="ResourceResultOptions.Inline"/>.
+    /// Whether browsers should display the file (<c>Content-Disposition: inline</c>) rather than download it. It's
+    /// decided when the link is opened, from the file's type then: only
+    /// <see cref="ResourceResultOptions.DefaultInlineContentTypes"/> are displayed, and anything else is downloaded.
     /// </summary>
     public bool Inline { get; init; }
 }

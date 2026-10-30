@@ -45,7 +45,8 @@ public static class ResourceContainerClientHttpExtensions
             CreateOnly = options?.CreateOnly ?? false,
             Conditions = options?.Conditions,
             Headers = options?.Headers ?? new ResourceHeaders(request.ContentType, request.ContentLength),
-            Metadata = options?.Metadata ?? new Dictionary<string, string>()
+            Metadata = options?.Metadata ?? new Dictionary<string, string>(),
+            ExpiresAt = options?.ExpiresAt
         };
         RequestHeaders headers = request.GetTypedHeaders();
         bool hasPreconditions = headers.IfMatch.Count > 0 || headers.IfNoneMatch.Count > 0 || headers.IfUnmodifiedSince is not null;

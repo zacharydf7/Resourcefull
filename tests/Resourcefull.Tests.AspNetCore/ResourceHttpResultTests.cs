@@ -1,5 +1,7 @@
 using System.Net;
 using System.Net.Http.Headers;
+using Microsoft.AspNetCore.Http;
+using Resourcefull.AspNetCore;
 
 namespace Resourcefull.Tests.AspNetCore;
 
@@ -10,6 +12,15 @@ public class ResourceHttpResultTests
         TestApp app = await TestApp.StartAsync();
         await app.Files.UploadAsync(name, BinaryData.FromString(content), new ResourceUploadOptions { Headers = new ResourceHeaders("text/plain", null) });
         return app;
+    }
+
+    /// <summary>Sends a download of <paramref name="name"/> with <paramref name="options"/>, outside a server.</summary>
+    private static async Task<HttpResponse> SendAsync(TestApp app, string name, ResourceResultOptions options)
+    {
+        var context = new DefaultHttpContext();
+        context.Response.Body = new MemoryStream();
+        await Results.Resource((await app.Files.DownloadStreamingAsync(name))!, options).ExecuteAsync(context);
+        return context.Response;
     }
 
     private static HttpRequestMessage Get(string path, Action<HttpRequestHeaders>? headers = null)
@@ -66,6 +77,81 @@ public class ResourceHttpResultTests
         // Assert
         Assert.Equal("inline", response.Content.Headers.ContentDisposition!.DispositionType);
         Assert.Equal("shown.txt", response.Content.Headers.ContentDisposition.FileName);
+    }
+
+    [Theory]
+    [InlineData("/files/report.txt", false)]
+    [InlineData("/files/report.txt", true)]         // 304 Not Modified
+    [InlineData("/ranged/report.txt", false)]
+    public async Task Resource_ShouldKeepTheFileOutOfSharedCachesAndStopTypeGuessing_WhenCalled(string path, bool notModified)
+    {
+        // Arrange
+        await using TestApp app = await StartWithAsync("report.txt", "x");
+
+        // Act
+        HttpResponseMessage response = await app.Client.SendAsync(Get(path, headers =>
+        {
+            if (notModified) headers.IfNoneMatch.Add(EntityTagHeaderValue.Any);
+        }));
+
+        // Assert
+        Assert.Equal(notModified ? HttpStatusCode.NotModified : HttpStatusCode.OK, response.StatusCode);
+        Assert.True(response.Headers.CacheControl!.Private);
+        Assert.True(response.Headers.CacheControl.NoCache);
+        Assert.Equal(["nosniff"], response.Headers.GetValues("X-Content-Type-Options"));
+    }
+
+    [Fact]
+    public async Task Resource_ShouldSendTheGivenCachePolicy_WhenTheOptionsHaveOne()
+    {
+        // Arrange
+        await using TestApp app = await StartWithAsync("report.txt", "x");
+
+        // Act
+        HttpResponse response = await SendAsync(app, "report.txt", new ResourceResultOptions { CacheControl = "public, max-age=60" });
+
+        // Assert
+        Assert.Equal("public, max-age=60", response.Headers.CacheControl.ToString());
+    }
+
+    [Theory]
+    [InlineData("text/html", null)]
+    [InlineData("image/svg+xml", null)]
+    [InlineData("image/png;,text/html", null)]
+    [InlineData("image/png, text/html", null)]
+    [InlineData(null, null)]
+    [InlineData("application/xhtml+xml", "application/xml")]     // a +xml type isn't its suffix's type
+    public async Task Resource_ShouldOfferTheFileAsADownload_WhenInlineIsAskedForATypeThatsNotSafeToDisplay(string? contentType, string? allowed)
+    {
+        // Arrange
+        await using TestApp app = await TestApp.StartAsync();
+        await app.Files.UploadAsync("page", BinaryData.FromString("<script></script>"), new ResourceUploadOptions { Headers = new ResourceHeaders(contentType, null) });
+        var options = allowed is null ? new ResourceResultOptions { Inline = true } : new ResourceResultOptions { Inline = true, InlineContentTypes = [allowed] };
+
+        // Act
+        HttpResponse response = await SendAsync(app, "page", options);
+
+        // Assert
+        Assert.StartsWith("attachment", response.Headers.ContentDisposition.ToString());
+    }
+
+    [Theory]
+    [InlineData("image/png", null)]
+    [InlineData("video/mp4", null)]
+    [InlineData("text/plain; charset=utf-8", null)]
+    [InlineData("text/html", "text/html")]          // an application that allows it
+    public async Task Resource_ShouldDisplayTheFile_WhenInlineIsAskedForATypeAllowedToDisplay(string contentType, string? allowed)
+    {
+        // Arrange
+        await using TestApp app = await TestApp.StartAsync();
+        await app.Files.UploadAsync("file", BinaryData.FromString("x"), new ResourceUploadOptions { Headers = new ResourceHeaders(contentType, null) });
+        var options = allowed is null ? new ResourceResultOptions { Inline = true } : new ResourceResultOptions { Inline = true, InlineContentTypes = [allowed] };
+
+        // Act
+        HttpResponse response = await SendAsync(app, "file", options);
+
+        // Assert
+        Assert.StartsWith("inline", response.Headers.ContentDisposition.ToString());
     }
 
     [Theory]

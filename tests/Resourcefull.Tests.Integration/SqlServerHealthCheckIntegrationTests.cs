@@ -69,6 +69,16 @@ public class SqlServerHealthCheckIntegrationTests(SqlServerFixture fixture)
         Assert.Contains(migrations[^1], entry.Description);
     }
 
+    private static async Task AddMigrationRowAsync(string connectionString, string migrationId)
+    {
+        await using var connection = new SqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using SqlCommand command = connection.CreateCommand();
+        command.CommandText = "INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion]) VALUES (@id, '10.0.14')";
+        command.Parameters.AddWithValue("@id", migrationId);
+        await command.ExecuteNonQueryAsync();
+    }
+
     [SkippableFact]
     public async Task AddResourcefullSqlServerCheck_ShouldReportDegraded_WhenANewerReleaseUpgradedTheDatabase()
     {
@@ -76,21 +86,45 @@ public class SqlServerHealthCheckIntegrationTests(SqlServerFixture fixture)
 
         // Arrange: a migration this release doesn't know, as a newer release would have applied.
         string connectionString = await NewDatabaseAsync("HealthAhead");
-        await using (var connection = new SqlConnection(connectionString))
-        {
-            await connection.OpenAsync();
-            await using SqlCommand command = connection.CreateCommand();
-            command.CommandText = "INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion]) " +
-                "VALUES ('29990101000000_FromANewerRelease', '10.0.14')";
-            await command.ExecuteNonQueryAsync();
-        }
+        await AddMigrationRowAsync(connectionString, "29990101000000_Resourcefull_FromANewerRelease");
 
         // Act
         HealthReportEntry entry = await CheckAsync(connectionString);
 
         // Assert
         Assert.Equal(HealthStatus.Degraded, entry.Status);
-        Assert.Equal(["29990101000000_FromANewerRelease"], (string[])entry.Data["unknownMigrations"]);
+        Assert.Equal(["29990101000000_Resourcefull_FromANewerRelease"], (string[])entry.Data["unknownMigrations"]);
+    }
+
+    [SkippableFact]
+    public async Task AddResourcefullSqlServerCheck_ShouldReportHealthy_WhenTheApplicationsOwnMigrationsShareTheHistory()
+    {
+        fixture.SkipIfUnavailable();
+
+        // Arrange: an application's EF Core migrations in the same history table, one with a look-alike name.
+        string connectionString = await NewDatabaseAsync("HealthShared");
+        await AddMigrationRowAsync(connectionString, "29990101000000_AddInvoices");
+        await AddMigrationRowAsync(connectionString, "29990101000001_ResourcefullStorage");
+
+        // Act
+        HealthReportEntry entry = await CheckAsync(connectionString);
+
+        // Assert
+        Assert.Equal(HealthStatus.Healthy, entry.Status);
+    }
+
+    [Fact]
+    public void Migrations_ShouldBeNamedAsResourcefulls_WhenAddedAfterTheMarkerExisted()
+    {
+        // Arrange
+        using ResourceDbContext context = SqlServerFixture.CreateDbContext("Server=unused");
+
+        // Act
+        string[] later = [.. context.Database.GetMigrations().SkipWhile(id => id != ResourceDbContext.LastUnmarkedMigration).Skip(1)];
+
+        // Assert: so the health check can tell them from an application's own.
+        Assert.All(later, id => Assert.True(ResourceDbContext.IsResourcefullMigration(id), id));
+        Assert.Contains(ResourceDbContext.LastUnmarkedMigration, context.Database.GetMigrations());
     }
 
     [SkippableFact]

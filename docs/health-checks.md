@@ -33,7 +33,7 @@ Both take the usual parameters: `name` (`"resourcefull"` by default), `failureSt
 |---|---|
 | Healthy | the database has every migration this release needs |
 | Unhealthy, or your `failureStatus` | the database can't be reached, or it's missing migrations, which the report names: this release's queries would fail against the older schema |
-| Degraded | the database has migrations this release doesn't know: a newer release upgraded it first, which is a [supported rollout](upgrading.md#upgrading-a-running-application) |
+| Degraded | the database has migrations of Resourcefull's that this release doesn't know (your own EF Core migrations in the same database are ignored): a newer release upgraded it first, which is a [supported rollout](upgrading.md#upgrading-a-running-application) |
 
 A report that the check completed includes the provider in its data, and for SQL Server the `pendingMigrations` and
 `unknownMigrations`. When the check fails or times out, the report carries the exception instead.
