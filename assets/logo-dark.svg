@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="4 10 116 98">
+  <defs>
+    <linearGradient id="r" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#c9d3e4"/></linearGradient>
+    <linearGradient id="fold" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#1d6ae5"/><stop offset="1" stop-color="#2cc3f6"/></linearGradient>
+    <linearGradient id="green" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2fd3a4"/><stop offset="1" stop-color="#0e8a73"/></linearGradient>
+    <linearGradient id="cyan" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3fd8fb"/><stop offset="1" stop-color="#1a8fe6"/></linearGradient>
+    <linearGradient id="blue" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2a8cf2"/><stop offset="1" stop-color="#0f4fcf"/></linearGradient>
+    <path id="greenPage" d="M16,26 H38 a10,10 0 0 1 8.7,5 l2.6,4.5 a6,6 0 0 1-2.2,8.2 l-8,0 a5,5 0 0 0-3.5,1.5 V84 a4,4 0 0 1-4,4 H16 a8,8 0 0 1-8-8 V34 a8,8 0 0 1 8-8z"/>
+    <path id="cyanPage" d="M27,36 H53 a10,10 0 0 1 8.7,5 l2.6,4.5 a6,6 0 0 1-2.2,8.2 l-12,0 a5,5 0 0 0-3.5,1.5 V96 a4,4 0 0 1-4,4 H27 a8,8 0 0 1-8-8 V44 a8,8 0 0 1 8-8z"/>
+    <path id="bluePage" d="M38,46 H66 a10,10 0 0 1 8.7,5 l2.6,4.5 a6,6 0 0 1-2.2,8.2 l-14,0 a5,5 0 0 0-3.5,1.5 V100 a4,4 0 0 1-4,4 H38 a8,8 0 0 1-8-8 V54 a8,8 0 0 1 8-8z"/>
+    <mask id="cutR" maskUnits="userSpaceOnUse" x="0" y="0" width="128" height="128"><rect width="128" height="128" fill="#fff"/><use href="#greenPage" fill="#000" stroke="#000" stroke-width="6" stroke-linejoin="round"/><use href="#cyanPage" fill="#000" stroke="#000" stroke-width="6" stroke-linejoin="round"/><use href="#bluePage" fill="#000" stroke="#000" stroke-width="6" stroke-linejoin="round"/></mask>
+    <mask id="cutGreen" maskUnits="userSpaceOnUse" x="0" y="0" width="128" height="128"><rect width="128" height="128" fill="#fff"/><use href="#cyanPage" fill="#000" stroke="#000" stroke-width="6" stroke-linejoin="round"/></mask>
+    <mask id="cutCyan" maskUnits="userSpaceOnUse" x="0" y="0" width="128" height="128"><rect width="128" height="128" fill="#fff"/><use href="#bluePage" fill="#000" stroke="#000" stroke-width="6" stroke-linejoin="round"/></mask>
+  </defs>
+  <g mask="url(#cutR)"><path d="M38 14h40l22 22v16a18 18 0 0 1-18 18l34 34H86L52 70H30V22a8 8 0 0 1 8-8z" fill="url(#r)"/><path d="M78 14l22 22H84a6 6 0 0 1-6-6z" fill="url(#fold)"/></g>
+  <use href="#greenPage" fill="url(#green)" mask="url(#cutGreen)"/>
+  <use href="#cyanPage" fill="url(#cyan)" mask="url(#cutCyan)"/>
+  <use href="#bluePage" fill="url(#blue)"/>
+</svg>

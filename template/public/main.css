@@ -1,23 +1,24 @@
 @import url("https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=JetBrains+Mono:wght@400;500&family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,400&display=swap");
 
-/* The palette comes from the logo: a navy-to-cobalt tile with white and pale-blue files. */
+/* The palette comes from the logo: its navy R, the blue of its front page, and the green of the page behind. */
 :root,
 [data-bs-theme="light"] {
-  --rf-navy: #17327f;
-  --rf-cobalt: #2f6bff;
-  --rf-pale: #b9ccff;
+  --rf-navy: #13204d;
+  --rf-cobalt: #1a6ae8;
+  --rf-teal: #14a88a;
+  --rf-pale: #a9e4ff;
   --rf-bg: #ffffff;
   --rf-surface: #f4f7fd;
   --rf-raised: #ffffff;
   --rf-text: #151b2e;
   --rf-muted: #566079;
   --rf-line: #e0e6f3;
-  --rf-link: #2456e0;
-  --rf-link-hover: #17327f;
-  --rf-tint: #ebf1ff;
+  --rf-link: #1559d6;
+  --rf-link-hover: #13204d;
+  --rf-tint: #eaf4ff;
   --rf-code-bg: #f4f7fd;
-  --rf-code-text: #1d3a8f;
-  --rf-shadow: 0 1px 2px rgb(23 50 127 / 6%), 0 8px 24px rgb(23 50 127 / 8%);
+  --rf-code-text: #173e8c;
+  --rf-shadow: 0 1px 2px rgb(19 32 77 / 6%), 0 8px 24px rgb(19 32 77 / 8%);
 
   --rf-display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
   --rf-body: "Source Sans 3", "Segoe UI", system-ui, -apple-system, sans-serif;
@@ -29,11 +30,11 @@
   --bs-tertiary-bg: var(--rf-surface);
   --bs-border-color: var(--rf-line);
   --bs-link-color: var(--rf-link);
-  --bs-link-color-rgb: 36, 86, 224;
+  --bs-link-color-rgb: 21, 89, 214;
   --bs-link-hover-color: var(--rf-link-hover);
-  --bs-link-hover-color-rgb: 23, 50, 127;
+  --bs-link-hover-color-rgb: 19, 32, 77;
   --bs-primary: var(--rf-cobalt);
-  --bs-primary-rgb: 47, 107, 255;
+  --bs-primary-rgb: 26, 106, 232;
   --bs-code-color: var(--rf-code-text);
   --bs-body-font-family: var(--rf-body);
   --bs-font-sans-serif: var(--rf-body);
@@ -47,15 +48,15 @@
   --rf-text: #e5eaf7;
   --rf-muted: #9ba7c6;
   --rf-line: #223053;
-  --rf-link: #8fb0ff;
-  --rf-link-hover: #b9ccff;
-  --rf-tint: #16224a;
+  --rf-link: #5cc2ff;
+  --rf-link-hover: #a9e4ff;
+  --rf-tint: #102449;
   --rf-code-bg: #0f172b;
-  --rf-code-text: #b9ccff;
+  --rf-code-text: #a9e4ff;
   --rf-shadow: 0 1px 2px rgb(0 0 0 / 30%), 0 8px 24px rgb(0 0 0 / 30%);
 
-  --bs-link-color-rgb: 143, 176, 255;
-  --bs-link-hover-color-rgb: 185, 204, 255;
+  --bs-link-color-rgb: 92, 194, 255;
+  --bs-link-hover-color-rgb: 169, 228, 255;
 }
 
 body {
@@ -82,10 +83,15 @@ body > header {
   font-weight: 700;
   font-size: 1.3rem;
   letter-spacing: -0.01em;
+  color: var(--rf-navy);
+}
+
+[data-bs-theme="dark"] .navbar-brand {
+  color: var(--rf-text);
 }
 
 #logo {
-  width: 34px;
+  width: auto;
   height: 34px;
   margin: 0;
 }
@@ -273,7 +279,7 @@ article .alert {
 
 .rf-upcoming {
   background: var(--rf-tint);
-  color: var(--rf-cobalt);
+  color: var(--rf-link);
   border: 1px solid color-mix(in srgb, var(--rf-cobalt) 35%, transparent);
 }
 
@@ -304,7 +310,7 @@ article .alert {
   font-family: var(--rf-mono);
   font-size: 11px;
   background: var(--rf-tint);
-  color: var(--rf-cobalt);
+  color: var(--rf-link);
 }
 
 /* ---- Footer, page navigation and "In this article" ---- */
@@ -356,6 +362,7 @@ body[data-layout="landing"] .next-article {
 .rf-hero {
   background:
     radial-gradient(1200px 500px at 85% -10%, color-mix(in srgb, var(--rf-cobalt) 22%, transparent), transparent 60%),
+    radial-gradient(700px 400px at 5% 110%, color-mix(in srgb, var(--rf-teal) 12%, transparent), transparent 60%),
     linear-gradient(180deg, var(--rf-tint), var(--rf-bg));
   border-bottom: 1px solid var(--rf-line);
 }
@@ -425,7 +432,7 @@ body[data-layout="landing"] .next-article {
 .rf-btn-primary {
   background: linear-gradient(135deg, var(--rf-navy), var(--rf-cobalt));
   color: #fff !important;
-  box-shadow: 0 6px 18px rgb(47 107 255 / 30%);
+  box-shadow: 0 6px 18px rgb(26 106 232 / 30%);
 }
 
 .rf-btn-secondary {
@@ -452,7 +459,7 @@ body[data-layout="landing"] .next-article {
 }
 
 .rf-install b {
-  color: var(--rf-cobalt);
+  color: var(--rf-link);
   font-weight: 500;
 }
 
