@@ -53,6 +53,10 @@ With several instances, upgrade without downtime by changing the database first:
   added in minor releases come with default implementations. See [Members added since 3.0](providers/newer-members.md).
 - **The database** within one major version only gains what the table above lists, so any 3.x application works
   against any 3.x database at least as new as itself.
+- **Deprecation:** an API that's going away is first marked `[Obsolete]`, with a message naming what to use
+  instead, and keeps working for at least one more minor release and at least six months. It's removed only in a
+  major release, listed in that release's upgrade guide. The compiler's warning is the notice, so build with
+  warnings visible when you upgrade.
 - **Security fixes** go into the latest minor release of the current major version; see the
   [security policy](https://github.com/zacharydf7/Resourcefull/blob/main/SECURITY.md).
 - **What it runs on:** .NET 10, and SQL Server as described in [Running SQL Server](providers/sql-server-operations.md#choosing-a-sql-server).
