@@ -142,6 +142,10 @@ app.MapGet("/files/{**name}", (string name, IResourceServiceClient resources) =>
 app.Run();
 ```
 
+The download endpoint's `Results.Resource(container, name)`, which also answers range requests, is new in 3.2
+<span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span>. With 3.1, download first and pass the result, as [Serving downloads](aspnet-core/serving-downloads.md)
+shows.
+
 Run it with `dotnet run`, then send it a file and read it back, using the address `dotnet run` prints:
 
 ```shell
