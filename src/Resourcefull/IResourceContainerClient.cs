@@ -350,7 +350,10 @@ public interface IResourceContainerClient : IDisposable
     /// <returns>The moved resource's current version, or <see langword="null"/> if the resource doesn't exist.</returns>
     /// <exception cref="ResourceConflictException">The destination name exists.</exception>
     /// <exception cref="ResourceContainerNotFoundException">The destination container doesn't exist.</exception>
-    /// <exception cref="ResourcePreconditionFailedException">The current version doesn't meet <see cref="ResourceMoveOptions.SourceConditions"/>.</exception>
+    /// <exception cref="ResourcePreconditionFailedException">
+    /// The current version doesn't meet <see cref="ResourceMoveOptions.SourceConditions"/>; or, with container policies,
+    /// uploads to the name kept making new versions current while the move checked them, five times in a row.
+    /// </exception>
     /// <exception cref="ResourcePolicyViolationException">Either container's policy refuses the move.</exception>
     /// <exception cref="ArgumentException">
     /// A name breaks the name rules (<see cref="ResourceNameException"/>) or is null (<see cref="ArgumentNullException"/>),

@@ -392,6 +392,9 @@ internal partial class ResourceContainerClient(IResourceRepository resourceRepos
             () => MoveCoreAsync(resourceName, destinationContainer, destinationName, options?.SourceConditions, cancellationToken),
             "resourcefull.destination_container", destinationContainer);
 
+    /// <summary>How many times a move under container policies checks the versions it moves, as uploads replace them.</summary>
+    private const int MoveChecksBeforeGivingUp = 5;
+
     private async Task<ResourceInfo?> MoveCoreAsync(string resourceName, string destinationContainer, string destinationName,
         ResourceConditions? conditions, CancellationToken cancellationToken)
     {
@@ -401,7 +404,12 @@ internal partial class ResourceContainerClient(IResourceRepository resourceRepos
         if (destinationContainer == ContainerName && destinationName == resourceName)
             throw new ArgumentException("A resource can't be moved to where it already is.", nameof(destinationName));
 
-        if (policies is not null)
+        if (policies is null) return await MoveAsync(conditions is { IsEmpty: false } ? conditions : null);
+
+        // The versions checked must be the ones that move. A version stored under the name meanwhile becomes its current
+        // one, so the move requires the current version it checked, and when another has become current it checks again,
+        // a few times at most, so a name rewritten constantly can't keep it going.
+        for (int attempt = 1; ; attempt++)
         {
             List<ResourceInfo> versions = await resourceRepository.GetResourceVersionsAsync(ContainerName, resourceName, cancellationToken);
             if (versions.Count == 0) return null;
@@ -411,16 +419,39 @@ internal partial class ResourceContainerClient(IResourceRepository resourceRepos
             }
 
             await policies.CheckMoveAsync(ContainerName, destinationContainer, versions, _telemetry, cancellationToken);
+            ResourceInfo current = versions[0];
+            if (conditions?.IfMatchVersionId is { } required && required != current.VersionId)
+            {
+                throw new ResourcePreconditionFailedException(
+                    $"Resource {resourceName}'s current version isn't {required}.", current.VersionId, current.ContentHash);
+            }
+
+            try
+            {
+                return await MoveAsync(new ResourceConditions
+                {
+                    IfMatchVersionId = current.VersionId,
+                    IfMatchContentHash = conditions?.IfMatchContentHash
+                });
+            }
+            catch (ResourcePreconditionFailedException failed) when (failed.CurrentVersionId != current.VersionId
+                && attempt < MoveChecksBeforeGivingUp)
+            {
+                // Another version became current after the check; unmet conditions of the caller's own are reported.
+            }
         }
 
-        if (!await resourceRepository.MoveResourceAsync(new ResourceLocation(ContainerName, resourceName),
-            new ResourceLocation(destinationContainer, destinationName), conditions is { IsEmpty: false } ? conditions : null, cancellationToken))
+        async Task<ResourceInfo?> MoveAsync(ResourceConditions? sourceConditions)
         {
-            return null;
-        }
+            if (!await resourceRepository.MoveResourceAsync(new ResourceLocation(ContainerName, resourceName),
+                new ResourceLocation(destinationContainer, destinationName), sourceConditions, cancellationToken))
+            {
+                return null;
+            }
 
-        ResourceInfo? moved = await resourceRepository.GetResourceInfoAsync(destinationContainer, destinationName, null, cancellationToken);
-        return moved is null ? null : WithUri(moved);
+            ResourceInfo? moved = await resourceRepository.GetResourceInfoAsync(destinationContainer, destinationName, null, cancellationToken);
+            return moved is null ? null : WithUri(moved);
+        }
     }
 
     /// <summary>

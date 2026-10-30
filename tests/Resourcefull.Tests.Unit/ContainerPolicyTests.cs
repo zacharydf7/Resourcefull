@@ -180,4 +180,119 @@ public class ContainerPolicyTests
         // Act & Assert
         await Assert.ThrowsAsync<NotSupportedException>(() => client.GetUsageAsync());
     }
+
+    private static ResourceInfo Version(string id, long length) => new() { ContainerName = "c", Name = "a", VersionId = id, ContentLength = length };
+
+    /// <summary>A versioned client of container <c>c</c> whose policies come from <paramref name="settings"/>.</summary>
+    private static ResourceContainerClient NewMovingClient(IResourceRepository repository, ContainerPolicySettings settings) =>
+        new(repository, null, new ResourcefullOptions { IsVersioningEnabled = true }, new ResourceContainerInfo { Name = "c" }, null,
+            new ContainerPolicies(settings, repository));
+
+    [Fact]
+    public async Task MoveResourceAsync_ShouldCheckTheNewCurrentVersion_WhenAnUploadMakesOneCurrentDuringTheMove()
+    {
+        // Arrange: the move checks v1, then an upload makes v2, too large for the destination, current before it moves.
+        using var settings = new ContainerPolicySettings(new ResourceContainerPolicy { MaxResourceSize = new ResourceSize(10) }, TimeSpan.Zero);
+        var repository = new Mock<IResourceRepository>();
+        repository.SetupSequence(r => r.GetResourceVersionsAsync("c", "a", It.IsAny<CancellationToken>()))
+            .ReturnsAsync([Version("v1", 5)])
+            .ReturnsAsync([Version("v2", 50), Version("v1", 5)]);
+        repository.Setup(r => r.MoveResourceAsync(new ResourceLocation("c", "a"), new ResourceLocation("d", "a"),
+                It.Is<ResourceConditions>(c => c.IfMatchVersionId == "v1"), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new ResourcePreconditionFailedException("v2 is current.", "v2", null));
+
+        // Act
+        Task act() => NewMovingClient(repository.Object, settings).MoveResourceAsync("a", "d", "a");
+
+        // Assert
+        ResourcePolicyViolationException refused = await Assert.ThrowsAsync<ResourcePolicyViolationException>(act);
+        Assert.Equal(ResourcePolicyRule.MaxResourceSize, refused.Rule);
+        repository.Verify(r => r.MoveResourceAsync(It.IsAny<ResourceLocation>(), It.IsAny<ResourceLocation>(),
+            It.IsAny<ResourceConditions?>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task MoveResourceAsync_ShouldReportTheCallersUnmetConditions_WhenTheCurrentVersionHasNotChanged()
+    {
+        // Arrange
+        using var settings = new ContainerPolicySettings(new ResourceContainerPolicy(), TimeSpan.Zero);
+        var repository = new Mock<IResourceRepository>();
+        repository.Setup(r => r.GetResourceVersionsAsync("c", "a", It.IsAny<CancellationToken>())).ReturnsAsync([Version("v1", 5)]);
+        repository.Setup(r => r.MoveResourceAsync(new ResourceLocation("c", "a"), new ResourceLocation("d", "a"),
+                It.Is<ResourceConditions>(c => c.IfMatchVersionId == "v1" && c.IfMatchContentHash == "sha256:other"), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new ResourcePreconditionFailedException("The hash doesn't match.", "v1", "sha256:stored"));
+
+        // Act
+        Task act() => NewMovingClient(repository.Object, settings).MoveResourceAsync("a", "d", "a",
+            new ResourceMoveOptions { SourceConditions = new ResourceConditions { IfMatchContentHash = "sha256:other" } });
+
+        // Assert
+        await Assert.ThrowsAsync<ResourcePreconditionFailedException>(act);
+        repository.Verify(r => r.GetResourceVersionsAsync("c", "a", It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task MoveResourceAsync_ShouldMoveTheNewCurrentVersion_WhenItMeetsThePolicyOnTheSecondCheck()
+    {
+        // Arrange: an upload makes v2 current between the first check and the move; v2 fits too.
+        using var settings = new ContainerPolicySettings(new ResourceContainerPolicy { MaxResourceSize = new ResourceSize(10) }, TimeSpan.Zero);
+        var repository = new Mock<IResourceRepository>();
+        repository.SetupSequence(r => r.GetResourceVersionsAsync("c", "a", It.IsAny<CancellationToken>()))
+            .ReturnsAsync([Version("v1", 5)])
+            .ReturnsAsync([Version("v2", 6), Version("v1", 5)]);
+        repository.Setup(r => r.MoveResourceAsync(new ResourceLocation("c", "a"), new ResourceLocation("d", "a"),
+                It.Is<ResourceConditions>(c => c.IfMatchVersionId == "v1"), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new ResourcePreconditionFailedException("v2 is current.", "v2", null));
+        repository.Setup(r => r.MoveResourceAsync(new ResourceLocation("c", "a"), new ResourceLocation("d", "a"),
+                It.Is<ResourceConditions>(c => c.IfMatchVersionId == "v2"), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        repository.Setup(r => r.GetResourceInfoAsync("d", "a", null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ResourceInfo { ContainerName = "d", Name = "a", VersionId = "v2" });
+
+        // Act
+        ResourceInfo? moved = await NewMovingClient(repository.Object, settings).MoveResourceAsync("a", "d", "a");
+
+        // Assert
+        Assert.Equal(("d", "v2"), (moved!.ContainerName, moved.VersionId));
+    }
+
+    [Fact]
+    public async Task MoveResourceAsync_ShouldGiveUpAfterFiveChecks_WhenUploadsKeepMakingNewVersionsCurrent()
+    {
+        // Arrange: every time the move checks the name, another upload has made a newer version current by the move.
+        using var settings = new ContainerPolicySettings(new ResourceContainerPolicy(), TimeSpan.Zero);
+        var repository = new Mock<IResourceRepository>();
+        int checks = 0;
+        repository.Setup(r => r.GetResourceVersionsAsync("c", "a", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => [Version($"v{++checks}", 5)]);
+        repository.Setup(r => r.MoveResourceAsync(new ResourceLocation("c", "a"), new ResourceLocation("d", "a"),
+                It.IsAny<ResourceConditions?>(), It.IsAny<CancellationToken>()))
+            .Returns(() => Task.FromException<bool>(new ResourcePreconditionFailedException("A newer version is current.", $"v{checks + 1}", null)));
+
+        // Act
+        Task act() => NewMovingClient(repository.Object, settings).MoveResourceAsync("a", "d", "a");
+
+        // Assert
+        await Assert.ThrowsAsync<ResourcePreconditionFailedException>(act);
+        Assert.Equal(5, checks);
+    }
+
+    [Fact]
+    public async Task MoveResourceAsync_ShouldReportTheCallersVersionUnmetWithoutMoving_WhenItIsNotTheCurrentOne()
+    {
+        // Arrange
+        using var settings = new ContainerPolicySettings(new ResourceContainerPolicy(), TimeSpan.Zero);
+        var repository = new Mock<IResourceRepository>();
+        repository.Setup(r => r.GetResourceVersionsAsync("c", "a", It.IsAny<CancellationToken>())).ReturnsAsync([Version("v1", 5)]);
+
+        // Act
+        Task act() => NewMovingClient(repository.Object, settings).MoveResourceAsync("a", "d", "a",
+            new ResourceMoveOptions { SourceConditions = new ResourceConditions { IfMatchVersionId = "v0" } });
+
+        // Assert
+        ResourcePreconditionFailedException failed = await Assert.ThrowsAsync<ResourcePreconditionFailedException>(act);
+        Assert.Equal("v1", failed.CurrentVersionId);
+        repository.Verify(r => r.MoveResourceAsync(It.IsAny<ResourceLocation>(), It.IsAny<ResourceLocation>(),
+            It.IsAny<ResourceConditions?>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
 }
