@@ -45,7 +45,10 @@ reports those.
 - **Lowering a limit** below what a container holds deletes nothing: it only refuses new writes.
 - **Writes at the same time can go slightly over.** The size and count limits read what the container holds once per
   write, so uploads running at the same moment can together pass `MaxContainerSize` or `MaxResourceCount` by up to
-  one upload each. For hard caps, such as billing, compare `GetUsageAsync` with the plan when it matters.
+  one upload each. Set `MaxResourceSize` alongside `MaxContainerSize` to bound that: without it, each of those uploads
+  may use all the room that's left. A move checks the destination before it moves, so a version uploaded to the source
+  name in that moment moves along without being checked. For hard caps, such as billing, compare `GetUsageAsync` with
+  the plan when it matters.
 
 ## Sizes
 
