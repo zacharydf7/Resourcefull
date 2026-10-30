@@ -4,13 +4,19 @@ using System.Text.Json.Serialization;
 
 namespace Resourcefull;
 
-/// <summary>What <see cref="IResourceServiceClient.ExportContainerAsync"/> wrote. <para>Coming in 3.2.</para></summary>
+/// <summary>
+/// What <see cref="IResourceServiceClient.ExportContainerAsync"/> wrote.
+/// <para>Coming in 3.2.</para>
+/// </summary>
 /// <param name="ResourceCount">How many resources (names) it exported.</param>
 /// <param name="VersionCount">How many versions it exported, current and older.</param>
 /// <param name="ContentSize">The size of the distinct content it wrote, before compression; content that versions share counts once.</param>
 public sealed record ResourceExportResult(long ResourceCount, long VersionCount, ResourceSize ContentSize);
 
-/// <summary>What <see cref="IResourceServiceClient.ImportContainerAsync"/> stored. <para>Coming in 3.2.</para></summary>
+/// <summary>
+/// What <see cref="IResourceServiceClient.ImportContainerAsync"/> stored.
+/// <para>Coming in 3.2.</para>
+/// </summary>
 /// <param name="ResourceCount">How many resources (names) it imported.</param>
 /// <param name="VersionCount">How many versions it imported, current and older.</param>
 /// <param name="ContentSize">The size of every version it stored, as the container now holds them.</param>
@@ -217,14 +223,20 @@ internal static class ContainerArchive
 
         // Everything it names is checked as an upload's would be, before anything is created.
         var names = new HashSet<string>(StringComparer.Ordinal);
-        foreach (ManifestResource resource in manifest.Resources)
+        foreach (ManifestResource? resource in manifest.Resources)
         {
+            // JSON's null is allowed in a list whatever its element type says.
+            if (resource is null)
+                throw new InvalidDataException("The export's manifest lists a null resource: the export was damaged or changed.");
             if (!ResourceNames.IsValidResourceName(resource.Name) || !names.Add(resource.Name))
                 throw new InvalidDataException($"The export names a resource \"{resource.Name}\" twice, or with a name that breaks the name rules.");
 
             var versionIds = new HashSet<string>(StringComparer.Ordinal);
-            foreach (ManifestVersion version in resource.Versions)
+            foreach (ManifestVersion? version in resource.Versions)
             {
+                if (version is null)
+                    throw new InvalidDataException($"The export's manifest lists a null version of {resource.Name}: the export was damaged " +
+                        "or changed.");
                 if (version.VersionId.Length is 0 || version.VersionId.Length > ResourceNames.MaxVersionIdLength
                     || !versionIds.Add(version.VersionId) || version.Content.Length is 0 || version.ContentHash.Length is 0
                     || version.ContentLength < 0)

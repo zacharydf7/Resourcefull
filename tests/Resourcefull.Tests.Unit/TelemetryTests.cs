@@ -300,6 +300,36 @@ public sealed class TelemetryTests : IDisposable
         Assert.Equal(2, prune.GetTagItem("resourcefull.pruned"));
     }
 
+    /// <summary>Refuses to hear about the versions of the name <c>refused</c>.</summary>
+    private sealed class RefusingCleanupHandler : IResourceCleanupHandler
+    {
+        public ValueTask OnCleanupAsync(ResourceCleanup cleanup, CancellationToken cancellationToken) =>
+            cleanup.Resource.Name == "refused" ? throw new InvalidOperationException("The audit system is down.") : ValueTask.CompletedTask;
+    }
+
+    [Fact]
+    public async Task PruneContainerAsync_ShouldRecordWhatItPruned_WhenSomeResourcesFail()
+    {
+        // Arrange: two names with three versions each, then a service keeping one whose cleanup handler refuses one name.
+        using ServiceProvider provider = NewServices();
+        IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>().CreateResourceContainerAsync("c");
+        foreach (string name in new[] { "kept", "refused" })
+        {
+            for (int i = 0; i < 3; i++) await container.UploadAsync(name, BinaryData.FromString($"{i}"));
+        }
+        var keepingOne = new ResourceServiceClient(provider.GetRequiredService<IResourceRepository>(),
+            Microsoft.Extensions.Options.Options.Create(new ResourcefullOptions { IsVersioningEnabled = true, MaxVersions = 1 }),
+            cleanupHandler: new RefusingCleanupHandler());
+        using Activity root = TestSource.StartActivity("test")!;
+
+        // Act
+        await Assert.ThrowsAsync<AggregateException>(() => keepingOne.PruneContainerAsync("c"));
+
+        // Assert
+        Activity prune = Assert.Single(SpansIn(root), s => s.OperationName == "resourcefull prune_container");
+        Assert.Equal(2, prune.GetTagItem("resourcefull.pruned"));
+    }
+
     [Fact]
     public async Task DeleteExpiredAsync_ShouldRecordNothing_WhenNothingHasExpired()
     {

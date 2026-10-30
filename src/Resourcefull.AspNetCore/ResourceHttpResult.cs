@@ -82,15 +82,15 @@ public sealed class ResourceHttpResult : IResult, IActionResult
 
     /// <summary>
     /// Whether <paramref name="contentType"/> is one of the types allowed to display: the same type, ignoring case and
-    /// parameters, or any subtype for a pattern ending in <c>/*</c>. A <c>+xml</c> type such as XHTML doesn't match
-    /// <c>application/xml</c>. It's parsed strictly, so a value holding more than one type, which browsers read as its
-    /// last, isn't displayed because of its first.
+    /// the parameters of both, or any subtype for a pattern ending in <c>/*</c>. A <c>+xml</c> type such as XHTML
+    /// doesn't match <c>application/xml</c>. It's parsed strictly, so a value holding more than one type, which browsers
+    /// read as its last, isn't displayed because of its first.
     /// </summary>
     private static bool Displays(IReadOnlyCollection<string> allowed, string? contentType)
     {
         if (!MediaTypeHeaderValue.TryParse(contentType, out MediaTypeHeaderValue? parsed)) return false;
         string type = parsed.MediaType.Value!;
-        return allowed.Any(pattern => pattern == "*/*"
+        return allowed.Select(pattern => pattern.Split(';', 2)[0].Trim()).Any(pattern => pattern == "*/*"
             || (pattern.EndsWith("/*", StringComparison.Ordinal)
                 ? type.StartsWith(pattern[..^1], StringComparison.OrdinalIgnoreCase)
                 : string.Equals(type, pattern, StringComparison.OrdinalIgnoreCase)));
@@ -98,7 +98,8 @@ public sealed class ResourceHttpResult : IResult, IActionResult
 
     /// <summary>
     /// Runs the result as an MVC action result, so a Razor Pages handler, which can't return an <see cref="IResult"/>,
-    /// can return it. <para>Coming in 3.2.</para>
+    /// can return it.
+    /// <para>Coming in 3.2.</para>
     /// </summary>
     Task IActionResult.ExecuteResultAsync(ActionContext context) => ExecuteAsync(context.HttpContext);
 }

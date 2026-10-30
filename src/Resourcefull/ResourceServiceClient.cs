@@ -124,9 +124,7 @@ internal class ResourceServiceClient(IResourceRepository resourceRepository, IOp
         => _telemetry.RunAsync("prune_container", resourceContainerName, null, async activity =>
         {
             ResourceNames.ThrowIfInvalidContainerName(resourceContainerName);
-            int pruned = await NewContainerClient(new ResourceContainerInfo { Name = resourceContainerName }).PruneAllAsync(cancellationToken);
-            activity?.SetTag("resourcefull.pruned", pruned);
-            return pruned;
+            return await NewContainerClient(new ResourceContainerInfo { Name = resourceContainerName }).PruneAllAsync(activity, cancellationToken);
         });
 
     public async Task<int> DeleteExpiredAsync(CancellationToken cancellationToken = default)

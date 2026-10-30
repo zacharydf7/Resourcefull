@@ -213,7 +213,7 @@ internal partial class ResourceContainerClient(IResourceRepository resourceRepos
     /// </summary>
     /// <returns>How many versions were past the limit, in the names pruned.</returns>
     /// <exception cref="AggregateException">Some names weren't pruned; the others were.</exception>
-    internal async Task<int> PruneAllAsync(CancellationToken cancellationToken)
+    internal async Task<int> PruneAllAsync(Activity? activity, CancellationToken cancellationToken)
     {
         if (policies is not null) await policies.ThrowIfReadOnlyAsync(ContainerName, _telemetry, cancellationToken);
         int pruned = 0, failed = 0;
@@ -243,6 +243,7 @@ internal partial class ResourceContainerClient(IResourceRepository resourceRepos
             afterName = page[^1].Name;
         }
 
+        activity?.SetTag("resourcefull.pruned", pruned);
         if (failed > 0)
         {
             throw new AggregateException($"{failed} resources weren't pruned, and keep their extra versions until a later prune; " +

@@ -156,6 +156,8 @@ public abstract partial class ResourcefullContractTests
     [InlineData("\"name\": \"b\"", "\"name\": \"a\"")]                       // the same name twice
     [InlineData("\"contentType\": null,", "")]                               // a field left out
     [InlineData("\"contentLength\": 1,", "\"contentLength\": -1,")]          // a negative length
+    [InlineData("\"resources\": [", "\"resources\": [ null,")]               // a null resource
+    [InlineData("\"versions\": [", "\"versions\": [ null,")]                 // a null version
     public async Task ImportContainerAsync_ShouldRefuseBeforeCreatingAnything_WhenTheManifestWasEdited(string original, string edited)
     {
         // Arrange

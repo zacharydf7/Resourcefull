@@ -15,8 +15,8 @@ public sealed class ResourceResultOptions
 
     /// <summary>
     /// The content types <see cref="Inline"/> displays, by default <see cref="DefaultInlineContentTypes"/>. A pattern
-    /// can end in <c>/*</c> to cover every subtype. Add a type only if no one can upload content of that type that
-    /// should not run as a page of your site.
+    /// can end in <c>/*</c> to cover every subtype. Types are compared without their parameters, ignoring case. Add a
+    /// type only if no one can upload content of that type that should not run as a page of your site.
     /// <para>Coming in 3.2.</para>
     /// </summary>
     public IReadOnlyCollection<string> InlineContentTypes { get; init; } = DefaultInlineContentTypes;

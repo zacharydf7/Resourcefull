@@ -140,6 +140,7 @@ public class ResourceHttpResultTests
     [InlineData("video/mp4", null)]
     [InlineData("text/plain; charset=utf-8", null)]
     [InlineData("text/html", "text/html")]          // an application that allows it
+    [InlineData("text/csv", "text/csv; charset=utf-8")]   // an allowed type written with parameters
     public async Task Resource_ShouldDisplayTheFile_WhenInlineIsAskedForATypeAllowedToDisplay(string contentType, string? allowed)
     {
         // Arrange
