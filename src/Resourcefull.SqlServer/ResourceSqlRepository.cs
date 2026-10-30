@@ -562,7 +562,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
                 await dbContext.Database.OpenConnectionAsync(ct).ConfigureAwait(false);
                 try
                 {
-                    await using DbCommand command = dbContext.Database.GetDbConnection().CreateCommand();
+                    await using DbCommand command = NewCommand(dbContext);
                     command.CommandText =
                         $"SELECT TOP ({ChunksPerReadPage}) [Index], DATALENGTH([Data]), [Data] FROM [ResourceChunks] " +
                         "WHERE [ResourceId] = @resourceId AND (@lastIndex IS NULL OR [Index] > @lastIndex)" +
@@ -939,6 +939,17 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
             await attempt.SaveChangesAsync(ct);
             return deleted = true;
         }, cancellationToken);
+    }
+
+    /// <summary>
+    /// A command on the context's connection, with the command timeout its options give: a command made directly keeps
+    /// SqlClient's default of 30 seconds.
+    /// </summary>
+    internal static DbCommand NewCommand(ResourceDbContext dbContext)
+    {
+        DbCommand command = dbContext.Database.GetDbConnection().CreateCommand();
+        if (dbContext.Database.GetCommandTimeout() is { } timeout) command.CommandTimeout = timeout;
+        return command;
     }
 
     private static Task<ResourceModel?> ResolveAsync(IQueryable<ResourceModel> query,

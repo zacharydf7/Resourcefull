@@ -56,6 +56,8 @@
   for failed prunes, expired versions deleted and failed, cleanup handler failures, and SQL Server's retries show work
   that doesn't fail the call that started it. Nothing is measured until something subscribes. See
   [Telemetry](docs/telemetry.md).
+- **SQL Server options.** `UseSqlServer(connectionString, sql => ...)` changes EF Core's SQL Server options after
+  Resourcefull's own, such as the command timeout or the retries. See [SQL Server](docs/providers/sql-server.md#retries).
 - **Disposable downloads.** `ResourceDownloadResult` implements `IDisposable` and `IAsyncDisposable`, disposing its
   stream, so `await using` works on the download itself.
 - **Razor Pages.** The results `TypedResults.Resource` and `TypedResults.SharedResource` return are also MVC action

@@ -77,6 +77,18 @@ but if yours relies on read-committed blocking, give Resourcefull a database of 
 to 5 retries, at most 10 seconds apart. It stops once the operation's cancellation token is canceled. Each retry is
 counted in the `resourcefull.sqlserver.retries` metric, with the error number; see [Telemetry](../telemetry.md).
 
+To change these or other connection settings <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span>, pass a second argument, which gets EF Core's SQL Server
+options after Resourcefull has set its own. For example, to give slow statements, such as copying a large file, longer
+than the default 30 seconds:
+
+```csharp
+builder.Services.AddResourcefull(options => options
+    .UseSqlServer(connectionString, sql => sql.CommandTimeout(120)));
+```
+
+Replacing the retry policy, such as with `sql.EnableRetryOnFailure(...)`, works too, but then Resourcefull no longer
+counts retries in `resourcefull.sqlserver.retries`.
+
 An upload is retried as a whole, from its first byte. That's possible only when its stream can seek; an upload from a
 stream that can't, such as an HTTP request body, fails instead once its content has started, and stores nothing.
 Copies, restores and imports <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span> are retried too: copies and restores run within the database, and an import
