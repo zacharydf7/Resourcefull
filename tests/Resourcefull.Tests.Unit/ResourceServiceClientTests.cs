@@ -571,6 +571,28 @@ public class ResourceServiceClientTests
     }
 
     [Fact]
+    public async Task ImportContainerAsync_ShouldThrowBothFailures_WhenTheImportFailsAndSoDoesDeletingWhatItCreated()
+    {
+        // Arrange: a provider that can't store the version, and then can't delete the container either.
+        var repository = new Mock<IResourceRepository> { CallBase = true };
+        var storing = new IOException("The disk is full.");
+        var deleting = new InvalidOperationException("The database is unreachable.");
+        repository.Setup(r => r.ImportVersionAsync("d", It.IsAny<ResourceInfo>(),
+            It.IsAny<Stream>(), It.IsAny<CancellationToken>())).ThrowsAsync(storing);
+        repository.Setup(r => r.DeleteResourceContainerAsync("d", It.IsAny<CancellationToken>())).ThrowsAsync(deleting);
+        var client = new ResourceServiceClient(repository.Object, Options.Create(new ResourcefullOptions()));
+        Stream export = await OneFileExportAsync();
+
+        // Act
+        Task act() => client.ImportContainerAsync("d", export);
+
+        // Assert: both, so the caller knows to delete the container before importing again.
+        AggregateException failure = await Assert.ThrowsAsync<AggregateException>(act);
+        Assert.Equal([storing, deleting], failure.InnerExceptions);
+        Assert.Contains("delete the container", failure.Message);
+    }
+
+    [Fact]
     public async Task ImportContainerAsync_ShouldGiveTheProviderContentItCanReadAgain_WhenImporting()
     {
         // Arrange: an export of one file, and a provider that reads each version twice, as one that retries does.

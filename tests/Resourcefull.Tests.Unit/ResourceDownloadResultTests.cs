@@ -35,24 +35,4 @@ public class ResourceDownloadResultTests
         Assert.True(stream.DisposedAsync);
         Assert.False(stream.Disposed);
     }
-
-    /// <summary>Records which dispose path ran.</summary>
-    private sealed class TrackingStream : MemoryStream
-    {
-        public bool Disposed { get; private set; }
-
-        public bool DisposedAsync { get; private set; }
-
-        protected override void Dispose(bool disposing)
-        {
-            Disposed = true;
-            base.Dispose(disposing);
-        }
-
-        public override ValueTask DisposeAsync()
-        {
-            DisposedAsync = true;
-            return ValueTask.CompletedTask;
-        }
-    }
 }

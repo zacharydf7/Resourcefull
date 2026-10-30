@@ -61,6 +61,87 @@ Members added to `IResourceRepository` after 3.0 have default implementations, s
 earlier release keeps compiling. [Members added since 3.0](newer-members.md) says what each default does, and how to
 answer the member directly.
 
+## A skeleton to start from
+
+Ten members have no default, so these are what a new provider writes first. Each comment says what the member must
+do; the contract above and each member's XML documentation say the rest.
+
+```csharp
+public sealed class FileSystemRepository(FileSystemOptions options, TimeProvider? timeProvider = null)
+    : IResourceRepository
+{
+    private readonly TimeProvider _clock = timeProvider ?? TimeProvider.System;
+
+    // Containers
+
+    public Task AddResourceContainerAsync(ResourceContainerInfo resourceContainerInfo,
+        CancellationToken cancellationToken = default)
+        // Store the name and a copy of the metadata. A container that already exists throws
+        // ResourceConflictException, decided by the write itself, not by a check before it.
+        => throw new NotImplementedException();
+
+    public Task<List<ResourceContainerInfo>> GetAllResourceContainerInfoAsync(CancellationToken cancellationToken = default)
+        // Every container, each with its own copy of the metadata.
+        => throw new NotImplementedException();
+
+    public Task<ResourceContainerInfo?> GetResourceContainerInfoAsync(string resourceContainerName,
+        CancellationToken cancellationToken = default)
+        // The container, or null if there's none by that name (compared ordinally).
+        => throw new NotImplementedException();
+
+    public Task<bool> DeleteResourceContainerAsync(string resourceContainerName,
+        CancellationToken cancellationToken = default)
+        // The container and every version in it; false if it didn't exist. It may stop between whole versions when
+        // canceled, as long as every name left keeps its current version and calling it again finishes.
+        => throw new NotImplementedException();
+
+    // Writing
+
+    public Task<WrittenContent> AddResourceAsync(string resourceContainerName, ResourceInfo resourceInfo, Stream stream,
+        bool createOnly = false, CancellationToken cancellationToken = default)
+        // Read the content through a HashingStream, store it as a new version, and make that version the name's
+        // current one. With createOnly, a name that already has a version throws ResourceConflictException; a missing
+        // container throws ResourceContainerNotFoundException. Return HashingStream.Complete(declared length, the
+        // time from _clock as the version becomes current), and store its length and hash with the version.
+        => throw new NotImplementedException();
+
+    public Task<bool> DeleteResourceAsync(string resourceContainerName, string resourceName, string? versionId = null,
+        CancellationToken cancellationToken = default)
+        // One version, or every version of the name when versionId is null; false if there was nothing to delete.
+        // Deleting the current version makes the next most recently stored one current.
+        => throw new NotImplementedException();
+
+    // Reading
+
+    public Task<List<ResourceInfo>> GetAllResourceInfoAsync(string resourceContainerName,
+        CancellationToken cancellationToken = default)
+        // The current version of every name in the container.
+        => throw new NotImplementedException();
+
+    public Task<List<ResourceInfo>> GetResourceVersionsAsync(string resourceContainerName, string resourceName,
+        CancellationToken cancellationToken = default)
+        // Every version of the name, the current one first, then from the most recently stored to the oldest.
+        => throw new NotImplementedException();
+
+    public Task<ResourceInfo?> GetResourceInfoAsync(string resourceContainerName, string resourceName,
+        string? versionId = null, CancellationToken cancellationToken = default)
+        // One version, or the current one when versionId is null; null if there's no such version. The version ID
+        // comes from the caller unchecked: never let it, or the name, reach outside the name's own storage.
+        => throw new NotImplementedException();
+
+    public Task<Stream?> GetResourceStreamAsync(string resourceContainerName, string resourceName,
+        string? versionId = null, CancellationToken cancellationToken = default)
+        // The version's content as a read-only, forward-only stream whose Length is the full length; null if there's
+        // no such version.
+        => throw new NotImplementedException();
+}
+```
+
+The rest have defaults. Paging, reading a range, copying and container usage work through the members above, more
+slowly than a provider that answers them itself. Conditional uploads and deletes, moving, importing, changing
+container metadata and the three expiry members throw `NotSupportedException` until the provider implements them,
+and the features that need them are refused. [Members added since 3.0](newer-members.md) covers each one.
+
 ## Testing a provider
 
 The repository's contract test suite, `tests/Resourcefull.Tests.Contract`, is an abstract xUnit class that runs the
