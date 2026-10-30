@@ -1,0 +1,31 @@
+name: CodeQL
+
+# Scans the code for security problems on every push and pull request, and weekly for newly added checks.
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+  schedule:
+    - cron: "0 6 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    permissions: # a job's permissions replace the workflow's, so all of them are listed
+      contents: read
+      actions: read
+      security-events: write # to report what it finds
+    steps:
+    - uses: actions/checkout@v7
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v6
+      with:
+        dotnet-version: 10.0.x
+    - uses: github/codeql-action/init@v4
+      with:
+        languages: csharp
+        build-mode: none
+    - uses: github/codeql-action/analyze@v4

@@ -1,0 +1,25 @@
+# Proposes updates for NuGet dependencies and the actions the workflows use, so security fixes in them aren't missed.
+version: 2
+updates:
+  - package-ecosystem: nuget
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      nuget:
+        patterns: [ "*" ]
+        update-types: [ "minor", "patch" ]
+    # A new major version of .NET's packages would raise what every application using Resourcefull must reference,
+    # so moving to one is a deliberate change, not a weekly update.
+    ignore:
+      - dependency-name: "Microsoft.*"
+        update-types: [ "version-update:semver-major" ]
+      - dependency-name: "System.*"
+        update-types: [ "version-update:semver-major" ]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: [ "*" ]

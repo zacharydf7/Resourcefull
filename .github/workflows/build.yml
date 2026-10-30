@@ -6,6 +6,13 @@ on:
   pull_request:
   workflow_dispatch: # manual trigger
   workflow_call: # run by publish.yml before anything is pushed to nuget.org
+  schedule:
+    # Weekly, so a newly published advisory against a dependency fails the audit without a push. GitHub pauses
+    # schedules after 60 days without activity in the repository, so Dependabot's alerts are the backstop.
+    - cron: "0 6 * * 1"
+
+permissions:
+  contents: read
 
 jobs:
   unit-tests:

@@ -2,7 +2,8 @@
 
 Thanks for helping with Resourcefull. Bug reports, questions and ideas are welcome as
 [issues](https://github.com/zacharydf7/Resourcefull/issues); for a larger change, open an issue to discuss it before
-you start.
+you start. Report a security vulnerability privately instead, as
+[SECURITY.md](https://github.com/zacharydf7/Resourcefull/blob/main/SECURITY.md) explains.
 
 ## Building and testing
 
