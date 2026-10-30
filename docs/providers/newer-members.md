@@ -15,6 +15,8 @@ if its ordering and its "after" comparison agree, so no name is skipped or repea
 
 ## Reading ranges
 
+<div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 3.2</span></div>
+
 The overload of `GetResourceStreamAsync` that takes an `offset` and a `length` was added in 3.2. Its default
 implementation opens the whole content and reads past the bytes before `offset`, so a provider written for 3.1
 returns correct ranges, just without the savings. To answer it directly, return a stream that starts at `offset`:
@@ -25,6 +27,8 @@ returns correct ranges, just without the savings. To answer it directly, return 
   there or carry on to the end, whichever is simpler.
 
 ## Copying and moving
+
+<div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 3.2</span></div>
 
 `CopyResourceAsync` and `MoveResourceAsync` were added in 3.2, and `AddResourceAsync` should store
 `ResourceInfo.CopiedFrom` with the version and return it on every read, as it does the content hash.
@@ -40,6 +44,8 @@ returns correct ranges, just without the savings. To answer it directly, return 
 
 ## Importing versions
 
+<div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 3.2</span></div>
+
 `ImportVersionAsync` was added in 3.2, for [importing a container](../backup-and-move.md). It stores a version as it was
 in another store: with the `VersionId` and `LastModified` it's given, rather than new ones, and with its type, metadata,
 `CopiedFrom` and `ExpiresAt`. Otherwise it's an upload: measure and hash the content as `AddResourceAsync` does, refuse
@@ -47,6 +53,8 @@ a wrong `ContentLength`, and make the version the name's current one. Its defaul
 imports fail with a provider written for 3.1; exports work with any provider, because they only read.
 
 ## Expiry
+
+<div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 3.2</span></div>
 
 `GetExpiredAsync`, `DeleteExpiredVersionAsync` and `SetExpiryAsync` were added in 3.2, and `AddResourceAsync` and
 `CopyResourceAsync` should store `ResourceInfo.ExpiresAt` with the version and return it on every read. Their default
@@ -62,6 +70,8 @@ written for 3.1. To support it:
 - **Change nothing but the expiry** in `SetExpiryAsync`.
 
 ## Container usage
+
+<div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 3.2</span></div>
 
 `GetContainerUsageAsync` was added in 3.2. Its default implementation lists every resource's versions, one name
 at a time, and adds up their `ContentLength`, so a provider written for 3.1 reports usage correctly, just slowly for

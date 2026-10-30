@@ -112,6 +112,7 @@ public interface IResourceContainerClient : IDisposable
     /// <summary>
     /// Downloads part of a resource as a stream, such as to resume a download or to seek in a video. Only the range's
     /// bytes are read from storage, where the provider supports it.
+    /// <para>Coming in 3.2.</para>
     /// </summary>
     /// <param name="resourceName">The name of the resource to download.</param>
     /// <param name="versionId">
@@ -301,6 +302,7 @@ public interface IResourceContainerClient : IDisposable
     /// The copy has a new version ID and <see cref="ResourceInfo.LastModified"/>, the source's content, hash, type and
     /// metadata, and <see cref="ResourceInfo.CopiedFrom"/> naming the version copied. It's stored and pruned like an
     /// upload, and checked against the destination container's policy.
+    /// <para>Coming in 3.2.</para>
     /// </summary>
     /// <param name="resourceName">The resource to copy.</param>
     /// <param name="destinationContainer">The container to copy it to: this container's name to copy within it.</param>
@@ -325,6 +327,7 @@ public interface IResourceContainerClient : IDisposable
     /// Moves a resource, every version of it, to a name in this or another container, all at once; renaming is a move
     /// within the container. Each version keeps its ID, <see cref="ResourceInfo.LastModified"/>, content and
     /// attributes, and the old name is gone afterwards. It's checked against both containers' policies.
+    /// <para>Coming in 3.2.</para>
     /// </summary>
     /// <param name="resourceName">The resource to move.</param>
     /// <param name="destinationContainer">The container to move it to: this container's name to rename it.</param>
@@ -352,6 +355,7 @@ public interface IResourceContainerClient : IDisposable
     /// <summary>
     /// Sets when a version expires, or with <see langword="null"/> makes it permanent, such as to extend a share. Only
     /// the expiry changes: the version's content, <see cref="ResourceInfo.LastModified"/> and ETag stay as they are.
+    /// <para>Coming in 3.2.</para>
     /// </summary>
     /// <param name="resourceName">The resource.</param>
     /// <param name="versionId">The version.</param>
@@ -371,6 +375,7 @@ public interface IResourceContainerClient : IDisposable
     /// <summary>
     /// Gets what the container holds: the size of every version, and how many resources and versions there are. Use it
     /// to show a user their storage, or against <see cref="ResourceContainerPolicy.MaxContainerSize"/>.
+    /// <para>Coming in 3.2.</para>
     /// </summary>
     /// <param name="cancellationToken">Cancels the lookup.</param>
     /// <returns>The container's usage; nothing stored when the container doesn't exist.</returns>

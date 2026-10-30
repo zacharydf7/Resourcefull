@@ -1,5 +1,7 @@
 # Health checks
 
+<div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 3.2</span></div>
+
 Resourcefull adds checks to .NET's [health checks](https://learn.microsoft.com/aspnet/core/host-and-deploy/health-checks),
 so a load balancer, an orchestrator or your monitoring can tell whether an instance can serve files.
 

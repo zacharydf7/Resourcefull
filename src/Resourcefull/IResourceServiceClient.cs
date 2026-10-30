@@ -110,6 +110,7 @@ public interface IResourceServiceClient
     /// <c>manifest.json</c>, which describes the container and every version of every resource, and each distinct
     /// content once, under <c>content/</c>. It reads one version at a time, and can write to a stream that can't seek,
     /// such as an HTTP response.
+    /// <para>Coming in 3.2.</para>
     /// </summary>
     /// <param name="resourceContainerName">The container to export.</param>
     /// <param name="destination">Where to write the zip; it's left open.</param>
@@ -131,6 +132,7 @@ public interface IResourceServiceClient
     /// created, each content is checked against its hash as it's stored, and the container's policy applies. If
     /// anything fails, the container is deleted again, so nothing is left half-imported. The hashes catch damage in
     /// storage or transfer, not deliberate edits, so import only exports you trust.
+    /// <para>Coming in 3.2.</para>
     /// </summary>
     /// <param name="resourceContainerName">The container to create, which mustn't exist.</param>
     /// <param name="source">The zip, in a stream that can seek, such as a file; it's left open.</param>
@@ -162,6 +164,7 @@ public interface IResourceServiceClient
     /// passed, as a delete of that version would, a batch at a time, telling the <see cref="IResourceCleanupHandler"/>
     /// about each one first. A read-only container keeps its expired versions until it's writable again.
     /// <see cref="ResourcefullOptionsBuilder.UseExpiry"/> calls it every interval; call it yourself to run expiry another way.
+    /// <para>Coming in 3.2.</para>
     /// </summary>
     /// <param name="cancellationToken">Stops the cleanup; the versions already deleted stay deleted.</param>
     /// <returns>How many versions were deleted.</returns>

@@ -41,6 +41,8 @@ doesn't exist. The catch-all `{**name}` takes names with `/` in them, such as `2
 
 ## Range requests
 
+<div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 3.2</span></div>
+
 Video players seek, and download managers resume, by asking for a range of bytes. To answer them, pass the container
 and the name instead of a download, and the result looks the resource up itself:
 

@@ -1,5 +1,7 @@
 # Backing up and moving containers
 
+<div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 3.2</span></div>
+
 You can write a whole container, every file and every version, to a single zip file, and turn that file back into a
 container later, in the same store or another one. Use it to:
 

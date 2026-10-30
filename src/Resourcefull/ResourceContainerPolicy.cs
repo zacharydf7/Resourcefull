@@ -6,6 +6,7 @@ namespace Resourcefull;
 /// any container its own; a property left <see langword="null"/> there falls back to the default. A write that breaks
 /// a rule throws <see cref="ResourcePolicyViolationException"/> and stores nothing. Pruning older versions is never
 /// refused, and lowering a limit below what a container holds only refuses new writes.
+/// <para>Coming in 3.2.</para>
 /// </summary>
 public sealed class ResourceContainerPolicy
 {
@@ -51,6 +52,7 @@ public sealed class ResourceContainerPolicy
 /// service, so it can depend on the application's own. Its answer for a container is cached for the time
 /// <see cref="ResourcefullOptionsBuilder.UseContainerPolicies"/> sets, so a change applies within that time on every
 /// instance.
+/// <para>Coming in 3.2.</para>
 /// </summary>
 public interface IResourcePolicyProvider
 {
@@ -64,7 +66,7 @@ public interface IResourcePolicyProvider
     ValueTask<ResourceContainerPolicy?> GetPolicyAsync(string containerName, CancellationToken cancellationToken);
 }
 
-/// <summary>The rule of a <see cref="ResourceContainerPolicy"/> that a write broke.</summary>
+/// <summary>The rule of a <see cref="ResourceContainerPolicy"/> that a write broke. <para>Coming in 3.2.</para></summary>
 public enum ResourcePolicyRule
 {
     /// <summary><see cref="ResourceContainerPolicy.MaxResourceSize"/>: the content is too large.</summary>
@@ -83,7 +85,7 @@ public enum ResourcePolicyRule
     ReadOnly
 }
 
-/// <summary>What a container holds.</summary>
+/// <summary>What a container holds. <para>Coming in 3.2.</para></summary>
 /// <param name="StoredSize">
 /// The size of every version of every resource in it. A version stored by a release before 3.0 counts its recorded
 /// length, which an application may have declared wrongly.

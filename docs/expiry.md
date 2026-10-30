@@ -1,5 +1,7 @@
 # Expiring resources
 
+<div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 3.2</span></div>
+
 Uploads can delete themselves: exports, previews, temporary shares. Give an upload an expiry, and turn on the
 background service that deletes what has expired:
 

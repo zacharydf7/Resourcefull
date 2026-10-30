@@ -125,9 +125,17 @@ Three rules keep the scripts generated and safe to run again:
   the operation to [Telemetry](docs/telemetry.md), and has a test that observes them; the test that calls every
   public client method fails for a method that records no span.
 - **Pull requests** keep to one change, with tests, and update the docs when behavior changes.
+- **Unreleased features are labeled.** The docs site is published from `main`, so a page or section about something
+  not yet on nuget.org says so, under its heading (not in it, so its link doesn't change):
+  `<div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 3.2</span></div>`. In tables and sentences,
+  use `<span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span>`. A page that's entirely new also gets a
+  sidebar marker in `template/public/main.css`, and new public types and members get `<para>Coming in 3.2.</para>`
+  in their XML docs.
 
 ## Releasing
 
-For maintainers: set `<Version>` in `src/Directory.Build.props`, merge to `main`, then push a matching tag
+For maintainers: set `<Version>` in `src/Directory.Build.props`, and turn the release's labels from upcoming to
+added: in `docs/`, `index.md` and `src/`, replace `Coming in 3.2` with `Added in 3.2` and `rf-upcoming` with
+`rf-added`, and remove the sidebar markers from `template/public/main.css`. Merge to `main`, then push a matching tag
 (`v3.0.0`). The publish workflow runs every test, checks that the tag matches the version, and publishes the packages
 that it tested to nuget.org.

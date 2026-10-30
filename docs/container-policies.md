@@ -1,5 +1,7 @@
 # Container policies
 
+<div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 3.2</span></div>
+
 Container policies limit what can be written to a container: how large a file can be, how much a container can hold,
 how many files it can have, which types of file it accepts, and whether it can change at all. Set defaults for every
 container, and give any container its own policy, such as each user's storage plan, which can change while the

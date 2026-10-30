@@ -94,6 +94,7 @@ public class ResourcefullOptionsBuilder
     /// <summary>
     /// Configures what Resourcefull's spans and metrics record. Telemetry is published whether or not this is called,
     /// under the names in <see cref="ResourcefullTelemetry"/>; this only changes what goes into it.
+    /// <para>Coming in 3.2.</para>
     /// </summary>
     /// <param name="configure">A callback to set <see cref="ResourcefullTelemetryOptions"/>.</param>
     public ResourcefullOptionsBuilder UseTelemetry(Action<ResourcefullTelemetryOptions> configure)
@@ -106,6 +107,7 @@ public class ResourcefullOptionsBuilder
     /// <summary>
     /// Turns on container policies, with <paramref name="defaults"/> for every container, replacing any set before.
     /// Add <see cref="UsePolicyProvider{TProvider}"/> to give containers their own. Without either, no policy is checked.
+    /// <para>Coming in 3.2.</para>
     /// </summary>
     /// <param name="defaults">The policy every container has, unless its own says otherwise; none when null.</param>
     /// <param name="cacheFor">
@@ -128,6 +130,7 @@ public class ResourcefullOptionsBuilder
     /// Uses <typeparamref name="TProvider"/> to give containers their own policies, replacing any policy provider set
     /// before, and turns on container policies with no defaults if <see cref="UseContainerPolicies"/> hasn't. It's
     /// registered as a scoped service, so it can depend on other services, such as the application's database context.
+    /// <para>Coming in 3.2.</para>
     /// </summary>
     /// <typeparam name="TProvider">The <see cref="IResourcePolicyProvider"/> implementation.</typeparam>
     public ResourcefullOptionsBuilder UsePolicyProvider<TProvider>() where TProvider : class, IResourcePolicyProvider
@@ -144,6 +147,7 @@ public class ResourcefullOptionsBuilder
     /// <paramref name="interval"/> after, so a version is gone within one interval of its
     /// <see cref="ResourceInfo.ExpiresAt"/>. Every instance of the application can run it. With a provider that doesn't
     /// support expiry, it logs a warning and stops.
+    /// <para>Coming in 3.2.</para>
     /// </summary>
     /// <param name="interval">How often to look for expired versions; one minute when null.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="interval"/> isn't positive.</exception>
@@ -162,6 +166,7 @@ public class ResourcefullOptionsBuilder
     /// Uses <typeparamref name="THandler"/> to hear about every version Resourcefull deletes by itself, before it's
     /// deleted, replacing any cleanup handler set before. It's registered as a scoped service, so it can depend on other
     /// services, such as the application's audit client.
+    /// <para>Coming in 3.2.</para>
     /// </summary>
     /// <typeparam name="THandler">The <see cref="IResourceCleanupHandler"/> implementation.</typeparam>
     public ResourcefullOptionsBuilder UseCleanupHandler<THandler>() where THandler : class, IResourceCleanupHandler

@@ -40,6 +40,7 @@ public class ResourceUploadOptions
     /// When the uploaded version expires: after it, <see cref="ResourcefullOptionsBuilder.UseExpiry"/> deletes it within
     /// one interval, as a delete of that version would. Any time works, a past one included; <see langword="null"/>
     /// never expires.
+    /// <para>Coming in 3.2.</para>
     /// </summary>
     public DateTimeOffset? ExpiresAt { get; set; }
 }

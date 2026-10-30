@@ -41,7 +41,7 @@ logged as a warning, with its exception, under the `Resourcefull.ResourceContain
 application has logging set up, so one that keeps failing doesn't go unnoticed.
 
 To record the versions that pruning deletes, such as for an audit, register a
-[cleanup handler](expiry.md#auditing-whats-deleted).
+[cleanup handler](expiry.md#auditing-whats-deleted) <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span>.
 
 ## Restoring
 
@@ -54,7 +54,7 @@ if (restored is null) { /* no such name or version */ }
 ```
 
 The restored version is measured like any upload: it gets its own `VersionId`, `ContentLength`, `ContentHash` and
-`LastModified`, and the older version's content type and metadata. Its `CopiedFrom` names the version it restored, so
+`LastModified`, and the older version's content type and metadata. Its `CopiedFrom` <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span> names the version it restored, so
 a history view can show it. `RestoreVersionAsync` throws
 `InvalidOperationException` when versioning is off.
 

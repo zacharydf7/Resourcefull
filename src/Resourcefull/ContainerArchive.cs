@@ -3,13 +3,13 @@ using System.Text.Json;
 
 namespace Resourcefull;
 
-/// <summary>What <see cref="IResourceServiceClient.ExportContainerAsync"/> wrote.</summary>
+/// <summary>What <see cref="IResourceServiceClient.ExportContainerAsync"/> wrote. <para>Coming in 3.2.</para></summary>
 /// <param name="ResourceCount">How many resources (names) it exported.</param>
 /// <param name="VersionCount">How many versions it exported, current and older.</param>
 /// <param name="ContentSize">The size of the distinct content it wrote, before compression; content that versions share counts once.</param>
 public sealed record ResourceExportResult(long ResourceCount, long VersionCount, ResourceSize ContentSize);
 
-/// <summary>What <see cref="IResourceServiceClient.ImportContainerAsync"/> stored.</summary>
+/// <summary>What <see cref="IResourceServiceClient.ImportContainerAsync"/> stored. <para>Coming in 3.2.</para></summary>
 /// <param name="ResourceCount">How many resources (names) it imported.</param>
 /// <param name="VersionCount">How many versions it imported, current and older.</param>
 /// <param name="ContentSize">The size of every version it stored, as the container now holds them.</param>

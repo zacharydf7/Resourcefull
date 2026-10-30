@@ -1,5 +1,7 @@
 # Telemetry
 
+<div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 3.2</span></div>
+
 Resourcefull publishes a trace span for every operation, and metrics for durations and bytes, through .NET's
 `ActivitySource` and `Meter`. Nothing is measured until something subscribes; until then, an operation does little
 more than check whether anything is listening.

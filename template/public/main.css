@@ -169,7 +169,8 @@ article h3 {
 }
 
 /* The paragraph under a page title introduces it. */
-article h1 + p {
+article h1 + p,
+article h1 + .rf-version + p {
   font-size: 1.15rem;
   color: var(--rf-muted);
 }
@@ -249,6 +250,60 @@ article .alert {
   border-radius: 10px;
   background: var(--rf-tint);
   color: var(--rf-text);
+}
+
+/* ---- Version labels ---- */
+
+/* "Coming in 3.2" marks what's on main but not yet released; at release it becomes "Added in 3.2" (rf-added). */
+.rf-version {
+  margin: -0.5rem 0 1rem;
+}
+
+.rf-badge {
+  display: inline-block;
+  padding: .1em .55em;
+  border-radius: 999px;
+  font-family: var(--rf-mono);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.6;
+  white-space: nowrap;
+  vertical-align: .12em;
+}
+
+.rf-upcoming {
+  background: var(--rf-tint);
+  color: var(--rf-cobalt);
+  border: 1px solid color-mix(in srgb, var(--rf-cobalt) 35%, transparent);
+}
+
+[data-bs-theme="dark"] .rf-upcoming {
+  color: var(--rf-pale);
+}
+
+.rf-added {
+  background: var(--rf-surface);
+  color: var(--rf-muted);
+  border: 1px solid var(--rf-line);
+}
+
+/* Sidebar entries for pages about unreleased features; remove these at release. */
+.toc a[href$="expiry.html"]::after,
+.toc a[href$="telemetry.html"]::after,
+.toc a[href$="health-checks.html"]::after,
+.toc a[href$="container-policies.html"]::after,
+.toc a[href$="sharing-links.html"]::after,
+.toc a[href$="sharing-links-in-production.html"]::after,
+.toc a[href$="backup-and-move.html"]::after,
+.toc a[href$="copying-and-moving.html"]::after {
+  content: "3.2";
+  margin-left: .45em;
+  padding: 0 .45em;
+  border-radius: 999px;
+  font-family: var(--rf-mono);
+  font-size: 11px;
+  background: var(--rf-tint);
+  color: var(--rf-cobalt);
 }
 
 /* ---- Footer, page navigation and "In this article" ---- */

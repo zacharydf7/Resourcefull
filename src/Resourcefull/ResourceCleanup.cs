@@ -6,6 +6,7 @@ namespace Resourcefull;
 /// <see cref="ResourcefullOptions.MaxVersions"/>. Use it to record them in an audit system. The application's own
 /// deletes aren't included. Register one with <see cref="ResourcefullOptionsBuilder.UseCleanupHandler{THandler}"/>;
 /// it's a scoped service, so it can depend on the application's own.
+/// <para>Coming in 3.2.</para>
 /// </summary>
 /// <remarks>
 /// A report means the version is about to be deleted, and it's deleted only after the handler returns. If the handler
@@ -23,13 +24,13 @@ public interface IResourceCleanupHandler
     ValueTask OnCleanupAsync(ResourceCleanup cleanup, CancellationToken cancellationToken);
 }
 
-/// <summary>A version Resourcefull is about to delete by itself.</summary>
+/// <summary>A version Resourcefull is about to delete by itself. <para>Coming in 3.2.</para></summary>
 /// <param name="Resource">The version, as stored.</param>
 /// <param name="Reason">Why it's being deleted.</param>
 /// <param name="At">When the cleanup that's deleting it started.</param>
 public sealed record ResourceCleanup(ResourceInfo Resource, ResourceCleanupReason Reason, DateTimeOffset At);
 
-/// <summary>Why Resourcefull is deleting a version by itself.</summary>
+/// <summary>Why Resourcefull is deleting a version by itself. <para>Coming in 3.2.</para></summary>
 public enum ResourceCleanupReason
 {
     /// <summary>Its <see cref="ResourceInfo.ExpiresAt"/> has passed.</summary>

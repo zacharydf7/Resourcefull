@@ -65,12 +65,14 @@ public class ResourceInfo
     /// <summary>
     /// The version this one was copied or restored from; <see langword="null"/> for a version that was uploaded, or
     /// stored by a provider that doesn't record it.
+    /// <para>Coming in 3.2.</para>
     /// </summary>
     public ResourceOrigin? CopiedFrom { get; set; }
 
     /// <summary>
     /// When the version expires and is deleted, within one interval, by <see cref="ResourcefullOptionsBuilder.UseExpiry"/>;
     /// <see langword="null"/> for a version that doesn't expire.
+    /// <para>Coming in 3.2.</para>
     /// </summary>
     public DateTimeOffset? ExpiresAt { get; set; }
 }

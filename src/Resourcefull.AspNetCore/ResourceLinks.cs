@@ -11,6 +11,7 @@ namespace Resourcefull.AspNetCore;
 /// <summary>
 /// What a signed link to a resource lets its holder download, and for how long. Pass it to
 /// <see cref="IResourceLinkSigner.CreateTokenAsync"/>.
+/// <para>Coming in 3.2.</para>
 /// </summary>
 /// <param name="ContainerName">The container the resource is in.</param>
 /// <param name="ResourceName">The resource to share.</param>
@@ -38,7 +39,7 @@ public sealed record ResourceLink(string ContainerName, string ResourceName)
     public bool Inline { get; init; }
 }
 
-/// <summary>What a valid token says its holder may download.</summary>
+/// <summary>What a valid token says its holder may download. <para>Coming in 3.2.</para></summary>
 /// <param name="ContainerName">The container the resource is in.</param>
 /// <param name="ResourceName">The resource.</param>
 /// <param name="VersionId">The version, or <see langword="null"/> for whichever is current.</param>
@@ -46,7 +47,7 @@ public sealed record ResourceLink(string ContainerName, string ResourceName)
 /// <param name="Inline">Whether browsers should display the file rather than download it.</param>
 public sealed record SignedResourceLink(string ContainerName, string ResourceName, string? VersionId, DateTimeOffset ExpiresAt, bool Inline);
 
-/// <summary>Whether a token is a link that still works.</summary>
+/// <summary>Whether a token is a link that still works. <para>Coming in 3.2.</para></summary>
 public enum ResourceLinkStatus
 {
     /// <summary>Signed by this application and not yet expired.</summary>
@@ -61,7 +62,7 @@ public enum ResourceLinkStatus
     Invalid
 }
 
-/// <summary>The result of checking a token.</summary>
+/// <summary>The result of checking a token. <para>Coming in 3.2.</para></summary>
 /// <param name="Status">Whether it's a link that still works.</param>
 /// <param name="Link">What it grants, for a valid or expired token; <see langword="null"/> for an invalid one.</param>
 public sealed record ResourceLinkCheck(ResourceLinkStatus Status, SignedResourceLink? Link);
@@ -71,6 +72,7 @@ public sealed record ResourceLinkCheck(ResourceLinkStatus Status, SignedResource
 /// they expire, without signing in. Register it with <see cref="ResourceLinkServiceCollectionExtensions.AddResourcefullLinks"/>.
 /// Tokens are signed and encrypted with ASP.NET Core Data Protection, so they can't be changed, read or made up, and
 /// they work on every instance that shares the application's Data Protection keys.
+/// <para>Coming in 3.2.</para>
 /// </summary>
 public interface IResourceLinkSigner
 {
@@ -145,7 +147,7 @@ internal sealed class ResourceLinkSigner(IDataProtectionProvider dataProtection,
         [property: JsonPropertyName("i")] bool Inline);
 }
 
-/// <summary>Registers signed links.</summary>
+/// <summary>Registers signed links. <para>Coming in 3.2.</para></summary>
 public static class ResourceLinkServiceCollectionExtensions
 {
     /// <summary>

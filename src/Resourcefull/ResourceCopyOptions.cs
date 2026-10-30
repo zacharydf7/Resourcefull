@@ -1,6 +1,6 @@
 namespace Resourcefull;
 
-/// <summary>How <see cref="IResourceContainerClient.CopyResourceAsync"/> copies a resource.</summary>
+/// <summary>How <see cref="IResourceContainerClient.CopyResourceAsync"/> copies a resource. <para>Coming in 3.2.</para></summary>
 public sealed class ResourceCopyOptions
 {
     /// <summary>The version to copy; the current version when <see langword="null"/>.</summary>
@@ -25,14 +25,14 @@ public sealed class ResourceCopyOptions
     public DateTimeOffset? ExpiresAt { get; init; }
 }
 
-/// <summary>How <see cref="IResourceContainerClient.MoveResourceAsync"/> moves a resource.</summary>
+/// <summary>How <see cref="IResourceContainerClient.MoveResourceAsync"/> moves a resource. <para>Coming in 3.2.</para></summary>
 public sealed class ResourceMoveOptions
 {
     /// <summary>What the resource's current version must be like, decided by the move itself.</summary>
     public ResourceConditions? SourceConditions { get; init; }
 }
 
-/// <summary>A resource name in a container.</summary>
+/// <summary>A resource name in a container. <para>Coming in 3.2.</para></summary>
 /// <param name="ContainerName">The container's name.</param>
 /// <param name="ResourceName">The resource's name.</param>
 public readonly record struct ResourceLocation(string ContainerName, string ResourceName);
@@ -40,6 +40,7 @@ public readonly record struct ResourceLocation(string ContainerName, string Reso
 /// <summary>
 /// The version a copy or restore was made from. It's a record of where the content came from, not a link: it stays
 /// as it is when the source is later moved or deleted.
+/// <para>Coming in 3.2.</para>
 /// </summary>
 /// <param name="ContainerName">The source's container.</param>
 /// <param name="ResourceName">The source's name.</param>

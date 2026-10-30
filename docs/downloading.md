@@ -34,6 +34,8 @@ while you read. With SQL Server, if the version itself is deleted while you're r
 
 ## Downloading part of a resource
 
+<div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 3.2</span></div>
+
 Pass a `ResourceRange` to download only some of the bytes, such as to resume an interrupted download or to seek in a
 video. It's an offset and a length, or an offset alone to read to the end:
 
