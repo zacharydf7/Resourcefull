@@ -5,6 +5,10 @@ reuse what hasn't changed without letting shared caches keep anyone's files, and
 managers ask for part of a file. `Results.Resource`
 does all of that from a download.
 
+> [!NOTE]
+> This endpoint leaves out authorization to stay short. Before you use it, see
+> [Securing file endpoints](securing-endpoints.md).
+
 ```csharp
 using Resourcefull.AspNetCore;
 

@@ -121,6 +121,7 @@ storage is down.</p>
 <div class="rf-path">
 <h3>Web apps</h3>
 <ul>
+<li><a href="docs/aspnet-core/securing-endpoints.md">Securing file endpoints</a></li>
 <li><a href="docs/aspnet-core/serving-downloads.md">Serving downloads</a></li>
 <li><a href="docs/aspnet-core/accepting-uploads.md">Accepting uploads</a></li>
 <li><a href="docs/sharing-links.md">Sharing files with links</a></li>

@@ -30,6 +30,8 @@
   items:
   - name: ASP.NET Core
     href: aspnet-core/index.md
+  - name: Securing file endpoints
+    href: aspnet-core/securing-endpoints.md
   - name: Serving downloads
     href: aspnet-core/serving-downloads.md
   - name: Accepting uploads
