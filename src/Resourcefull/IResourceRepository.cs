@@ -245,6 +245,47 @@ public interface IResourceRepository
     Task<bool> DeleteResourceContainerAsync(string resourceContainerName, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Stores a copy of one version of a resource, or of the current version when <paramref name="sourceVersionId"/> is
+    /// null, as a new version described by <paramref name="destination"/>, with the source's content and hash. It's
+    /// stored as <see cref="AddResourceAsync(string, ResourceInfo, Stream, ResourceWriteCondition, CancellationToken)"/>
+    /// stores an upload, deciding conflicts and conditions at the destination the same way, and keeps
+    /// <see cref="ResourceInfo.CopiedFrom"/>. The default implementation reads the content and stores it through that
+    /// method; a provider that can copy content within its store should override it.
+    /// </summary>
+    /// <param name="source">The resource to copy.</param>
+    /// <param name="sourceVersionId">The version to copy, or <see langword="null"/> for the current version.</param>
+    /// <param name="destination">The new version: its container, name, version ID, type, metadata and origin.</param>
+    /// <param name="condition">How to treat the destination name's current version, as for an upload.</param>
+    /// <param name="cancellationToken">Cancels the copy; a canceled copy stores nothing.</param>
+    /// <returns>What was stored, or <see langword="null"/> when the source version doesn't exist.</returns>
+    async Task<WrittenContent?> CopyResourceAsync(ResourceLocation source, string? sourceVersionId, ResourceInfo destination,
+        ResourceWriteCondition condition, CancellationToken cancellationToken = default)
+    {
+        await using Stream? content = await GetResourceStreamAsync(source.ContainerName, source.ResourceName, sourceVersionId, cancellationToken);
+        return content is null ? null : await AddResourceAsync(destination.ContainerName, destination, content, condition, cancellationToken);
+    }
+
+    /// <summary>
+    /// Moves a resource, every version of it, to <paramref name="destination"/>, keeping each version's ID,
+    /// <see cref="ResourceInfo.LastModified"/>, content and attributes, all at once: the versions are never in both
+    /// places, or in neither, or split between them. The destination name must have no versions, and its container must
+    /// exist. The default implementation throws <see cref="NotSupportedException"/>, because a move made of copies and
+    /// deletes could stop halfway.
+    /// </summary>
+    /// <param name="source">The resource to move.</param>
+    /// <param name="destination">Where to move it.</param>
+    /// <param name="sourceConditions">What the source's current version must be like, decided by the move itself.</param>
+    /// <param name="cancellationToken">Cancels the move; a canceled move changes nothing.</param>
+    /// <returns><see langword="true"/> if it moved; <see langword="false"/> if the source has no versions.</returns>
+    /// <exception cref="ResourceConflictException">The destination name has versions.</exception>
+    /// <exception cref="ResourceContainerNotFoundException">The destination container doesn't exist.</exception>
+    /// <exception cref="ResourcePreconditionFailedException">The source's current version doesn't meet <paramref name="sourceConditions"/>.</exception>
+    /// <exception cref="NotSupportedException">The provider doesn't move resources.</exception>
+    Task<bool> MoveResourceAsync(ResourceLocation source, ResourceLocation destination, ResourceConditions? sourceConditions,
+        CancellationToken cancellationToken = default)
+        => throw new NotSupportedException($"{GetType().Name} doesn't move resources.");
+
+    /// <summary>
     /// Gets what a container holds: the total <see cref="ResourceInfo.ContentLength"/> of every version, and how many
     /// resources and versions there are. Container policies read it before each write they limit, so a provider should
     /// answer it without reading content. The default implementation lists every resource's versions, one name at a

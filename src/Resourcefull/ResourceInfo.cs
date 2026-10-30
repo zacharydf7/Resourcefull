@@ -61,4 +61,10 @@ public class ResourceInfo
     /// The metadata of a stored resource.
     /// </summary>
     public IDictionary<string, string> Metadata { get; set; } = new Dictionary<string, string>();
+
+    /// <summary>
+    /// The version this one was copied or restored from; <see langword="null"/> for a version that was uploaded, or
+    /// stored by a provider that doesn't record it.
+    /// </summary>
+    public ResourceOrigin? CopiedFrom { get; set; }
 }

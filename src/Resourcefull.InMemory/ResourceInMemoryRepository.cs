@@ -57,28 +57,80 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : I
             // Stamped as the version becomes current, not before its content was read. A wrong declared length throws
             // here, before anything is stored.
             WrittenContent written = content.Complete(resourceInfo.ContentLength, _clock.GetUtcNow());
-            if (versions == null)
-                container.Resources[resourceInfo.Name] = versions = [];
-
-            versions.Add(new InMemoryResource
-            {
-                Content = bytes,
-                Sequence = ++_lastSequence,
-                ResourceInfo = new ResourceInfo
-                {
-                    ContainerName = resourceContainerName,
-                    Name = resourceInfo.Name,
-                    VersionId = resourceInfo.VersionId,
-                    LastModified = written.LastModified,
-                    ContentType = resourceInfo.ContentType,
-                    ContentLength = written.ContentLength,
-                    ContentHash = written.ContentHash,
-                    Metadata = new Dictionary<string, string>(resourceInfo.Metadata),
-                    Uri = resourceInfo.Uri
-                }
-            });
+            AddVersion(container, resourceInfo, bytes, written);
             return written;
         }, cancellationToken);
+    }
+
+    public Task<WrittenContent?> CopyResourceAsync(ResourceLocation source, string? sourceVersionId, ResourceInfo destination,
+        ResourceWriteCondition condition, CancellationToken cancellationToken = default) =>
+        UnderLockAsync(() =>
+        {
+            if (Resolve(VersionsOf(source.ContainerName, source.ResourceName), sourceVersionId) is not { } from) return null;
+
+            InMemoryResourceContainer container = _containers.GetValueOrDefault(destination.ContainerName)
+                ?? throw new ResourceContainerNotFoundException($"Resource Container with the name {destination.ContainerName} does not exist.");
+            container.Resources.TryGetValue(destination.Name, out List<InMemoryResource>? versions);
+            if (condition.CreateOnly && versions is not null)
+                throw new ResourceConflictException($"Resource with name {destination.Name} already exists.");
+            if (condition.Conditions is { } conditions) ThrowIfNotMet(conditions, destination.Name, versions?.MaxBy(r => r.Sequence));
+
+            // Stored content is never changed, so the copy can share it.
+            var written = new WrittenContent(from.Content.Length, from.ResourceInfo.ContentHash!, _clock.GetUtcNow());
+            AddVersion(container, destination, from.Content, written);
+            return (WrittenContent?)written;
+        }, cancellationToken);
+
+    public Task<bool> MoveResourceAsync(ResourceLocation source, ResourceLocation destination, ResourceConditions? sourceConditions,
+        CancellationToken cancellationToken = default) =>
+        UnderLockAsync(() =>
+        {
+            if (_containers.GetValueOrDefault(source.ContainerName) is not { } from
+                || !from.Resources.TryGetValue(source.ResourceName, out List<InMemoryResource>? versions))
+            {
+                return false;
+            }
+
+            if (sourceConditions is not null) ThrowIfNotMet(sourceConditions, source.ResourceName, versions.MaxBy(r => r.Sequence));
+            InMemoryResourceContainer to = _containers.GetValueOrDefault(destination.ContainerName)
+                ?? throw new ResourceContainerNotFoundException($"Resource Container with the name {destination.ContainerName} does not exist.");
+            if (to.Resources.ContainsKey(destination.ResourceName))
+                throw new ResourceConflictException($"Resource with name {destination.ResourceName} already exists.");
+
+            from.Resources.Remove(source.ResourceName);
+            foreach (InMemoryResource version in versions)
+            {
+                version.ResourceInfo.ContainerName = destination.ContainerName;
+                version.ResourceInfo.Name = destination.ResourceName;
+            }
+            to.Resources[destination.ResourceName] = versions;
+            return true;
+        }, cancellationToken);
+
+    /// <summary>Stores a new version as the name's current one; called under the lock.</summary>
+    private void AddVersion(InMemoryResourceContainer container, ResourceInfo resourceInfo, byte[] content, WrittenContent written)
+    {
+        if (!container.Resources.TryGetValue(resourceInfo.Name, out List<InMemoryResource>? versions))
+            container.Resources[resourceInfo.Name] = versions = [];
+
+        versions.Add(new InMemoryResource
+        {
+            Content = content,
+            Sequence = ++_lastSequence,
+            ResourceInfo = new ResourceInfo
+            {
+                ContainerName = container.Name,
+                Name = resourceInfo.Name,
+                VersionId = resourceInfo.VersionId,
+                LastModified = written.LastModified,
+                ContentType = resourceInfo.ContentType,
+                ContentLength = written.ContentLength,
+                ContentHash = written.ContentHash,
+                Metadata = new Dictionary<string, string>(resourceInfo.Metadata),
+                Uri = resourceInfo.Uri,
+                CopiedFrom = resourceInfo.CopiedFrom
+            }
+        });
     }
 
     public Task<List<ResourceInfo>> GetAllResourceInfoAsync(string resourceContainerName, CancellationToken cancellationToken = default) =>
@@ -229,6 +281,7 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : I
         ContentLength = resource.ResourceInfo.ContentLength,
         ContentHash = resource.ResourceInfo.ContentHash,
         Metadata = new Dictionary<string, string>(resource.ResourceInfo.Metadata),
-        Uri = resource.ResourceInfo.Uri
+        Uri = resource.ResourceInfo.Uri,
+        CopiedFrom = resource.ResourceInfo.CopiedFrom
     };
 }

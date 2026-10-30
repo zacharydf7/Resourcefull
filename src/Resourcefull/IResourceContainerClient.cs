@@ -296,6 +296,60 @@ public interface IResourceContainerClient : IDisposable
     public Task<bool> ExistsAsync(string resourceName, string? versionId, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Copies a version of a resource, the current one by default, to a name in this or another container, as a new
+    /// version there, without reading it through the application where the provider supports that (SQL Server does).
+    /// The copy has a new version ID and <see cref="ResourceInfo.LastModified"/>, the source's content, hash, type and
+    /// metadata, and <see cref="ResourceInfo.CopiedFrom"/> naming the version copied. It's stored and pruned like an
+    /// upload, and checked against the destination container's policy.
+    /// </summary>
+    /// <param name="resourceName">The resource to copy.</param>
+    /// <param name="destinationContainer">The container to copy it to: this container's name to copy within it.</param>
+    /// <param name="destinationName">The name to copy it to.</param>
+    /// <param name="options">Which version to copy, and how to treat an existing destination; the defaults when null.</param>
+    /// <param name="cancellationToken">Cancels the copy; a canceled copy stores nothing.</param>
+    /// <returns>The new version, or <see langword="null"/> if the resource or version doesn't exist.</returns>
+    /// <exception cref="ResourceConflictException">Versioning is off, the destination name exists, and <see cref="ResourceCopyOptions.Overwrite"/> isn't set.</exception>
+    /// <exception cref="ResourceContainerNotFoundException">The destination container doesn't exist.</exception>
+    /// <exception cref="ResourcePreconditionFailedException">The destination's current version doesn't meet <see cref="ResourceCopyOptions.DestinationConditions"/>.</exception>
+    /// <exception cref="ResourcePolicyViolationException">The destination container's policy refuses the copy.</exception>
+    /// <exception cref="ArgumentException">A name breaks the name rules (<see cref="ResourceNameException"/>), or is null (<see cref="ArgumentNullException"/>).</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
+    /// <exception cref="NotSupportedException">
+    /// This default implementation, kept so implementations written for 3.1 still compile, doesn't copy.
+    /// </exception>
+    public Task<ResourceInfo?> CopyResourceAsync(string resourceName, string destinationContainer, string destinationName,
+        ResourceCopyOptions? options = null, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException($"{GetType().Name} doesn't copy resources.");
+
+    /// <summary>
+    /// Moves a resource, every version of it, to a name in this or another container, all at once; renaming is a move
+    /// within the container. Each version keeps its ID, <see cref="ResourceInfo.LastModified"/>, content and
+    /// attributes, and the old name is gone afterwards. It's checked against both containers' policies.
+    /// </summary>
+    /// <param name="resourceName">The resource to move.</param>
+    /// <param name="destinationContainer">The container to move it to: this container's name to rename it.</param>
+    /// <param name="destinationName">The name to move it to, which must not exist.</param>
+    /// <param name="options">What the resource's current version must be like; none when null.</param>
+    /// <param name="cancellationToken">Cancels the move; a canceled move changes nothing.</param>
+    /// <returns>The moved resource's current version, or <see langword="null"/> if the resource doesn't exist.</returns>
+    /// <exception cref="ResourceConflictException">The destination name exists.</exception>
+    /// <exception cref="ResourceContainerNotFoundException">The destination container doesn't exist.</exception>
+    /// <exception cref="ResourcePreconditionFailedException">The current version doesn't meet <see cref="ResourceMoveOptions.SourceConditions"/>.</exception>
+    /// <exception cref="ResourcePolicyViolationException">Either container's policy refuses the move.</exception>
+    /// <exception cref="ArgumentException">
+    /// A name breaks the name rules (<see cref="ResourceNameException"/>) or is null (<see cref="ArgumentNullException"/>),
+    /// or the destination is where the resource already is.
+    /// </exception>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
+    /// <exception cref="NotSupportedException">
+    /// The provider doesn't move resources, or this is the default implementation, kept so implementations written for
+    /// 3.1 still compile.
+    /// </exception>
+    public Task<ResourceInfo?> MoveResourceAsync(string resourceName, string destinationContainer, string destinationName,
+        ResourceMoveOptions? options = null, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException($"{GetType().Name} doesn't move resources.");
+
+    /// <summary>
     /// Gets what the container holds: the size of every version, and how many resources and versions there are. Use it
     /// to show a user their storage, or against <see cref="ResourceContainerPolicy.MaxContainerSize"/>.
     /// </summary>

@@ -4,11 +4,17 @@
 
 ### Added
 
+- **Copy, move and rename.** `CopyResourceAsync` copies a version to a name in the same or another container, as a
+  new version there, and `MoveResourceAsync` moves a resource with every version, keeping their IDs; renaming is a
+  move within the container. With SQL Server, no content passes through the application. A copy or restore records
+  its source in the new `ResourceInfo.CopiedFrom`. Providers get `CopyResourceAsync`, with a default implementation,
+  and `MoveResourceAsync`, which throws `NotSupportedException` until implemented. The `AddCopiedFrom` migration adds
+  three nullable columns. See [Copying and moving](docs/uploads-and-downloads.md#copying-and-moving).
 - **Container policies.** `UseContainerPolicies` sets limits for every container, and `UsePolicyProvider` gives any
   container its own, such as a quota for each user's container that an admin can change while the application runs:
   `MaxResourceSize`, `MaxContainerSize`, `MaxResourceCount`, `AllowedContentTypes` and `ReadOnly`. Sizes are
   `ResourceSize` values, such as `ResourceSize.Megabytes(100)`, or `"100 MB"` in configuration. A refused write throws
-  `ResourcePolicyViolationException` and stores nothing, and `AddResourcefullExceptionHandler` turns it into 413, 403
+  `ResourcePolicyViolationException` and stores nothing, and `AddResourcefullExceptionHandler` turns it into 413, 409, 403
   or 415. `GetUsageAsync` reports what a container holds. Providers get `GetContainerUsageAsync` with a default
   implementation, so providers written for 3.1 keep working. See [Container policies](docs/container-policies.md).
 - **Range downloads.** A `DownloadStreamingAsync` overload takes a `ResourceRange` and reads only those bytes from

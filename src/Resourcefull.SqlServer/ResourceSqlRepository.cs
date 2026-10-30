@@ -79,17 +79,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
                 throw new ResourceConflictException($"Resource with name {resourceInfo.Name} already exists.");
 
             // Inserted first, so a missing container is reported before any content is read.
-            var resource = new ResourceModel
-            {
-                ContainerName = resourceContainerName,
-                Name = resourceInfo.Name,
-                VersionId = resourceInfo.VersionId,
-                LastModified = _clock.GetUtcNow(),
-                IsLatest = false,
-                ContentType = resourceInfo.ContentType,
-                Uri = resourceInfo.Uri,
-                Metadata = resourceInfo.Metadata
-            };
+            ResourceModel resource = NewVersion(resourceContainerName, resourceInfo);
             attempt.Resources.Add(resource);
             await attempt.SaveChangesAsync(ct);
             // Untracked while the chunks go in, or each would be added to its Chunks collection and kept.
@@ -167,11 +157,138 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
         }
         catch (DbUpdateException exception) when (exception.InnerException is SqlException { Number: SqlForeignKeyViolation })
         {
-            // Only a missing container is ours to report; any other foreign key stays a database error.
-            using ResourceDbContext dbContext = dbContextFactory.CreateDbContext();
-            if (await dbContext.ResourceContainers.AnyAsync(x => x.Name == resourceContainerName, cancellationToken)) throw;
+            await ThrowIfContainerMissingAsync(resourceContainerName, exception, cancellationToken);
+            throw;
+        }
+    }
 
+    /// <summary>A version about to be stored, not yet current, stamped now.</summary>
+    private ResourceModel NewVersion(string resourceContainerName, ResourceInfo resourceInfo) => new()
+    {
+        ContainerName = resourceContainerName,
+        Name = resourceInfo.Name,
+        VersionId = resourceInfo.VersionId,
+        LastModified = _clock.GetUtcNow(),
+        IsLatest = false,
+        ContentType = resourceInfo.ContentType,
+        Uri = resourceInfo.Uri,
+        Metadata = resourceInfo.Metadata,
+        CopiedFromContainerName = resourceInfo.CopiedFrom?.ContainerName,
+        CopiedFromName = resourceInfo.CopiedFrom?.ResourceName,
+        CopiedFromVersionId = resourceInfo.CopiedFrom?.VersionId
+    };
+
+    /// <summary>
+    /// Throws <see cref="ResourceContainerNotFoundException"/> for a foreign key violation a missing container caused.
+    /// Only a missing container is ours to report; the caller rethrows any other violation as the database error it is.
+    /// </summary>
+    private async Task ThrowIfContainerMissingAsync(string resourceContainerName, Exception exception, CancellationToken cancellationToken)
+    {
+        using ResourceDbContext dbContext = dbContextFactory.CreateDbContext();
+        if (!await dbContext.ResourceContainers.AnyAsync(x => x.Name == resourceContainerName, cancellationToken))
             throw new ResourceContainerNotFoundException($"Resource Container with the name {resourceContainerName} does not exist.", exception);
+    }
+
+    public async Task<WrittenContent?> CopyResourceAsync(ResourceLocation source, string? sourceVersionId, ResourceInfo destination,
+        ResourceWriteCondition condition, CancellationToken cancellationToken = default)
+    {
+        // A version stored before hashes were kept has none to copy, so its content is read, and hashed, as an upload's is.
+        using (ResourceDbContext dbContext = dbContextFactory.CreateDbContext())
+        {
+            var found = await Version(dbContext.Resources, source.ContainerName, source.ResourceName, sourceVersionId)
+                .Select(r => new { r.ContentHash })
+                .FirstOrDefaultAsync(cancellationToken);
+            if (found is null) return null;
+            if (found.ContentHash is null)
+            {
+                await using Stream? content = await GetResourceStreamAsync(source.ContainerName, source.ResourceName, sourceVersionId, cancellationToken);
+                return content is null ? null : await AddResourceAsync(destination.ContainerName, destination, content, condition, cancellationToken);
+            }
+        }
+
+        WrittenContent? written = null;
+        try
+        {
+            return await WriteNamesAsync([source, new ResourceLocation(destination.ContainerName, destination.Name)], async (attempt, ct) =>
+            {
+                // A retry after a commit whose acknowledgement was lost finds the copy already stored.
+                if (await attempt.Resources.AnyAsync(r => r.ContainerName == destination.ContainerName && r.Name == destination.Name
+                    && r.VersionId == destination.VersionId, ct))
+                {
+                    return written ?? throw new ResourceConflictException($"Resource {destination.Name} already has a version {destination.VersionId}.");
+                }
+
+                // Read under the source name's lock, so the version can't be deleted while its chunks are copied.
+                var from = await Version(attempt.Resources, source.ContainerName, source.ResourceName, sourceVersionId)
+                    .Select(r => new { r.Id, r.ContentHash, Length = r.Chunks!.Sum(c => (long?)c.Data.Length) ?? 0 })
+                    .FirstOrDefaultAsync(ct);
+                if (from is null) return null;
+
+                List<ResourceModel> priorLatest = await attempt.Resources
+                    .Where(r => r.ContainerName == destination.ContainerName && r.Name == destination.Name && r.IsLatest)
+                    .ToListAsync(ct);
+                if (condition.CreateOnly && priorLatest.Count > 0)
+                    throw new ResourceConflictException($"Resource with name {destination.Name} already exists.");
+                if (condition.Conditions is { } conditions)
+                    ThrowIfNotMet(conditions, destination.Name, priorLatest.FirstOrDefault()?.VersionId, priorLatest.FirstOrDefault()?.ContentHash);
+
+                ResourceModel copy = NewVersion(destination.ContainerName, destination);
+                attempt.Resources.Add(copy);
+                await attempt.SaveChangesAsync(ct);
+                // Copied by the server, so no content passes through the application.
+                await attempt.Database.ExecuteSqlAsync(
+                    $"INSERT INTO [ResourceChunks] ([ResourceId], [Index], [Data]) SELECT {copy.Id}, [Index], [Data] FROM [ResourceChunks] WHERE [ResourceId] = {from.Id}",
+                    ct);
+
+                // As for an upload, the old current version is cleared before the copy is made current.
+                foreach (ResourceModel prior in priorLatest) prior.IsLatest = false;
+                await attempt.SaveChangesAsync(ct);
+                copy.IsLatest = true;
+                copy.ContentLength = from.Length;
+                copy.ContentHash = from.ContentHash;
+                copy.LastModified = _clock.GetUtcNow();
+                await attempt.SaveChangesAsync(ct);
+                return written = new WrittenContent(from.Length, from.ContentHash!, copy.LastModified);
+            }, cancellationToken);
+        }
+        catch (DbUpdateException exception) when (exception.InnerException is SqlException { Number: SqlForeignKeyViolation })
+        {
+            await ThrowIfContainerMissingAsync(destination.ContainerName, exception, cancellationToken);
+            throw;
+        }
+    }
+
+    public async Task<bool> MoveResourceAsync(ResourceLocation source, ResourceLocation destination, ResourceConditions? sourceConditions,
+        CancellationToken cancellationToken = default)
+    {
+        bool moved = false;
+        try
+        {
+            return await WriteNamesAsync([source, destination], async (attempt, ct) =>
+            {
+                ResourceModel? current = await attempt.Resources.AsNoTracking().FirstOrDefaultAsync(r => r.ContainerName == source.ContainerName
+                    && r.Name == source.ResourceName && r.IsLatest, ct);
+                // A retry after a commit whose acknowledgement was lost finds the resource already moved.
+                if (current is null) return moved;
+                if (sourceConditions is not null) ThrowIfNotMet(sourceConditions, source.ResourceName, current.VersionId, current.ContentHash);
+                if (await attempt.Resources.AnyAsync(r => r.ContainerName == destination.ContainerName && r.Name == destination.ResourceName, ct))
+                    throw new ResourceConflictException($"Resource with name {destination.ResourceName} already exists.");
+
+                // Only the versions' container and name change: their chunks hang off their IDs, so no content is copied.
+                // The stored URI, which only 2.x reads, would name the old place, so it's cleared rather than left wrong.
+                await attempt.Resources
+                    .Where(r => r.ContainerName == source.ContainerName && r.Name == source.ResourceName)
+                    .ExecuteUpdateAsync(s => s
+                        .SetProperty(r => r.ContainerName, destination.ContainerName)
+                        .SetProperty(r => r.Name, destination.ResourceName)
+                        .SetProperty(r => r.Uri, (string?)null), ct);
+                return moved = true;
+            }, cancellationToken);
+        }
+        catch (Exception exception) when ((exception as SqlException ?? exception.InnerException as SqlException)?.Number == SqlForeignKeyViolation)
+        {
+            await ThrowIfContainerMissingAsync(destination.ContainerName, exception, cancellationToken);
+            throw;
         }
     }
 
@@ -184,15 +301,22 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
         batch.Clear();
     }
 
+    private Task<T> WriteNameAsync<T>(string resourceContainerName, string resourceName,
+        Func<ResourceDbContext, CancellationToken, Task<T>> write, CancellationToken cancellationToken) =>
+        WriteNamesAsync([new ResourceLocation(resourceContainerName, resourceName)], write, cancellationToken);
+
     /// <summary>
-    /// Runs a write to one resource name in a transaction holding that name's write lock, so writers of a name queue
-    /// rather than race. Each attempt gets a fresh context so the execution strategy can retry all of it after a
+    /// Runs a write to resource names in a transaction holding each name's write lock, so writers of a name queue
+    /// rather than race. The locks are taken in one order whatever the order of the names, so two writes to the same
+    /// two names can't deadlock. Each attempt gets a fresh context so the execution strategy can retry all of it after a
     /// transient failure.
     /// </summary>
-    private async Task<T> WriteNameAsync<T>(string resourceContainerName, string resourceName,
+    private async Task<T> WriteNamesAsync<T>(IEnumerable<ResourceLocation> names,
         Func<ResourceDbContext, CancellationToken, Task<T>> write, CancellationToken cancellationToken)
     {
         using ResourceDbContext dbContext = dbContextFactory.CreateDbContext();
+        List<ResourceLocation> ordered = [.. names.Distinct()
+            .OrderBy(n => n.ContainerName, StringComparer.Ordinal).ThenBy(n => n.ResourceName, StringComparer.Ordinal)];
 
         return await dbContext.Database.CreateExecutionStrategy().ExecuteAsync(async ct =>
         {
@@ -201,7 +325,10 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
 
             // The in-memory provider the unit tests use has no locks.
             if (attempt.Database.IsRelational())
-                await LockNameAsync(attempt, resourceContainerName, resourceName, ct);
+            {
+                foreach (ResourceLocation name in ordered)
+                    await LockNameAsync(attempt, name.ContainerName, name.ResourceName, ct);
+            }
 
             T result = await write(attempt, ct);
             await transaction.CommitAsync(ct);
@@ -287,7 +414,9 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
                 ContentLength = r.ContentLength,
                 ContentHash = r.ContentHash,
                 Metadata = r.Metadata,
-                Uri = r.Uri
+                Uri = r.Uri,
+                CopiedFrom = r.CopiedFromVersionId == null ? null
+                    : new ResourceOrigin(r.CopiedFromContainerName!, r.CopiedFromName!, r.CopiedFromVersionId)
             })
             .ToListAsync(cancellationToken);
     }
@@ -317,7 +446,9 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
                 ContentLength = r.ContentLength,
                 ContentHash = r.ContentHash,
                 Metadata = r.Metadata,
-                Uri = r.Uri
+                Uri = r.Uri,
+                CopiedFrom = r.CopiedFromVersionId == null ? null
+                    : new ResourceOrigin(r.CopiedFromContainerName!, r.CopiedFromName!, r.CopiedFromVersionId)
             })
             .ToListAsync(cancellationToken);
     }
@@ -341,7 +472,9 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
                 ContentLength = r.ContentLength,
                 ContentHash = r.ContentHash,
                 Metadata = r.Metadata,
-                Uri = r.Uri
+                Uri = r.Uri,
+                CopiedFrom = r.CopiedFromVersionId == null ? null
+                    : new ResourceOrigin(r.CopiedFromContainerName!, r.CopiedFromName!, r.CopiedFromVersionId)
             })
             .ToListAsync(cancellationToken);
     }
@@ -366,7 +499,9 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
             ContentLength = existingResource.ContentLength,
             ContentHash = existingResource.ContentHash,
             Metadata = existingResource.Metadata,
-            Uri = existingResource.Uri
+            Uri = existingResource.Uri,
+            CopiedFrom = existingResource.CopiedFromVersionId == null ? null
+                : new ResourceOrigin(existingResource.CopiedFromContainerName!, existingResource.CopiedFromName!, existingResource.CopiedFromVersionId)
         };
     }
 

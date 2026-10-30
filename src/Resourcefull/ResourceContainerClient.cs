@@ -37,10 +37,10 @@ internal partial class ResourceContainerClient(IResourceRepository resourceRepos
         // the version they match.
         bool createOnly = uploadOptions.CreateOnly
             || (!options.IsVersioningEnabled && !uploadOptions.Overwrite && conditions is null);
-        if (policies is not null)
+        if (policies is not null && await policies.CheckNewVersionAsync(ContainerName, resourceName, restore: false,
+            uploadOptions.Headers?.ContentType, uploadOptions.Headers?.ContentLength, _telemetry, cancellationToken) is { } limit)
         {
-            content = await policies.CheckNewVersionAsync(ContainerName, resourceName, restore: false, uploadOptions.Headers?.ContentType,
-                uploadOptions.Headers?.ContentLength, content, _telemetry, cancellationToken);
+            content = new LimitedContentStream(content, limit);
         }
 
         var resourceInfo = new ResourceInfo
@@ -55,7 +55,7 @@ internal partial class ResourceContainerClient(IResourceRepository resourceRepos
 
         try
         {
-            return await SaveNewResourceVersionAsync("upload", content, resourceName, resourceInfo, createOnly, conditions, cancellationToken);
+            return await SaveNewResourceVersionAsync("upload", content, resourceInfo, createOnly, conditions, cancellationToken);
         }
         catch (ResourceConflictException exception) when (!uploadOptions.CreateOnly)
         {
@@ -93,8 +93,8 @@ internal partial class ResourceContainerClient(IResourceRepository resourceRepos
 
         await using Stream? stream = await resourceRepository.GetResourceStreamAsync(ContainerName, resourceName, versionId, cancellationToken);
         if (stream == null) return null;
-        Stream content = policies is null ? stream
-            : await policies.CheckNewVersionAsync(ContainerName, resourceName, restore: true, null, null, stream, _telemetry, cancellationToken);
+        Stream content = policies is not null && await policies.CheckNewVersionAsync(ContainerName, resourceName, restore: true, null, null,
+            _telemetry, cancellationToken) is { } limit ? new LimitedContentStream(stream, limit) : stream;
 
         var newResourceInfo = new ResourceInfo
         {
@@ -104,13 +104,14 @@ internal partial class ResourceContainerClient(IResourceRepository resourceRepos
             ContentType = resourceInfo.ContentType,
             // Measured like any upload rather than declared: lengths stored by earlier releases came from callers.
             ContentLength = null,
-            Metadata = resourceInfo.Metadata
+            Metadata = resourceInfo.Metadata,
+            CopiedFrom = new ResourceOrigin(ContainerName, resourceName, versionId)
         };
 
-        return await SaveNewResourceVersionAsync("restore", content, resourceName, newResourceInfo, createOnly: false, conditions: null, cancellationToken);
+        return await SaveNewResourceVersionAsync("restore", content, newResourceInfo, createOnly: false, conditions: null, cancellationToken);
     }
 
-    private async Task<ResourceInfo> SaveNewResourceVersionAsync(string operation, Stream stream, string resourceName, ResourceInfo resourceInfo,
+    private async Task<ResourceInfo> SaveNewResourceVersionAsync(string operation, Stream stream, ResourceInfo resourceInfo,
         bool createOnly, ResourceConditions? conditions, CancellationToken cancellationToken)
     {
         // Stored too, for applications on 2.x, which read it from storage, while they share a database with this release
@@ -124,7 +125,14 @@ internal partial class ResourceContainerClient(IResourceRepository resourceRepos
                 new ResourceWriteCondition { CreateOnly = createOnly, Conditions = conditions }, cancellationToken);
 
         _telemetry.RecordUploaded(operation, written.ContentLength);
+        return await CompleteNewVersionAsync(resourceInfo, written);
+    }
 
+    /// <summary>
+    /// Fills in what was stored for a new version, and prunes its name's older versions in whichever container it's in.
+    /// </summary>
+    private async Task<ResourceInfo> CompleteNewVersionAsync(ResourceInfo resourceInfo, WrittenContent written)
+    {
         // Report what was stored rather than what was asked for.
         resourceInfo.ContentLength = written.ContentLength;
         resourceInfo.ContentHash = written.ContentHash;
@@ -133,10 +141,10 @@ internal partial class ResourceContainerClient(IResourceRepository resourceRepos
 
         // The new version is stored, so the upload has succeeded; pruning is cleanup that neither the caller's token
         // nor a failure may turn into a reported failure.
-        using Activity? prune = _telemetry.StartSpan("prune", ContainerName);
+        using Activity? prune = _telemetry.StartSpan("prune", resourceInfo.ContainerName);
         try
         {
-            await PruneAsync(resourceName, CancellationToken.None);
+            await PruneAsync(resourceInfo.ContainerName, resourceInfo.Name, CancellationToken.None);
         }
         catch (Exception exception)
         {
@@ -146,7 +154,7 @@ internal partial class ResourceContainerClient(IResourceRepository resourceRepos
             // would otherwise let storage grow unnoticed.
             try
             {
-                LogPruneFailed(_logger, exception, ContainerName, resourceName);
+                LogPruneFailed(_logger, exception, resourceInfo.ContainerName, resourceInfo.Name);
             }
             catch
             {
@@ -162,13 +170,13 @@ internal partial class ResourceContainerClient(IResourceRepository resourceRepos
     /// see all of them, so together they never keep more than the limit; without versioning the limit is one, which
     /// is what an overwrite leaves.
     /// </summary>
-    private async Task PruneAsync(string resourceName, CancellationToken cancellationToken)
+    private async Task PruneAsync(string containerName, string resourceName, CancellationToken cancellationToken)
     {
         int keep = options.IsVersioningEnabled ? options.MaxVersions : 1;
-        List<ResourceInfo> versions = await resourceRepository.GetResourceVersionsAsync(ContainerName, resourceName, cancellationToken);
+        List<ResourceInfo> versions = await resourceRepository.GetResourceVersionsAsync(containerName, resourceName, cancellationToken);
         foreach (ResourceInfo version in versions.Skip(keep))
         {
-            await resourceRepository.DeleteResourceAsync(ContainerName, resourceName, version.VersionId, cancellationToken);
+            await resourceRepository.DeleteResourceAsync(containerName, resourceName, version.VersionId, cancellationToken);
         }
     }
 
@@ -291,7 +299,7 @@ internal partial class ResourceContainerClient(IResourceRepository resourceRepos
     // applies to versions stored before the change as well.
     private ResourceInfo WithUri(ResourceInfo resourceInfo)
     {
-        resourceInfo.Uri = uriProvider?.GetAbsoluteUri(new ResourcefullContext(ContainerName, resourceInfo.Name, resourceInfo.VersionId));
+        resourceInfo.Uri = uriProvider?.GetAbsoluteUri(new ResourcefullContext(resourceInfo.ContainerName, resourceInfo.Name, resourceInfo.VersionId));
         return resourceInfo;
     }
 
@@ -318,6 +326,96 @@ internal partial class ResourceContainerClient(IResourceRepository resourceRepos
                 ? await resourceRepository.DeleteResourceAsync(ContainerName, resourceName, versionId, cancellationToken)
                 : await resourceRepository.DeleteResourceAsync(ContainerName, resourceName, versionId, conditions, cancellationToken);
         }, "resourcefull.conditional", conditions is { IsEmpty: false });
+
+    public Task<ResourceInfo?> CopyResourceAsync(string resourceName, string destinationContainer, string destinationName,
+        ResourceCopyOptions? options = null, CancellationToken cancellationToken = default)
+        => _telemetry.RunAsync("copy", ContainerName, resourceName,
+            () => CopyCoreAsync(resourceName, destinationContainer, destinationName, options ?? new ResourceCopyOptions(), cancellationToken),
+            "resourcefull.destination_container", destinationContainer);
+
+    private async Task<ResourceInfo?> CopyCoreAsync(string resourceName, string destinationContainer, string destinationName,
+        ResourceCopyOptions copyOptions, CancellationToken cancellationToken)
+    {
+        ResourceNames.ThrowIfInvalidResourceName(resourceName);
+        ResourceNames.ThrowIfInvalidContainerName(destinationContainer);
+        ResourceNames.ThrowIfInvalidResourceName(destinationName);
+        ResourceConditions? conditions = copyOptions.DestinationConditions is { IsEmpty: false } set ? set : null;
+        // As for an upload: without versioning, a copy that may not overwrite is a create-only write.
+        bool createOnly = !options.IsVersioningEnabled && !copyOptions.Overwrite && conditions is null;
+
+        ResourceInfo? source = await resourceRepository.GetResourceInfoAsync(ContainerName, resourceName, copyOptions.VersionId, cancellationToken);
+        if (source is null) return null;
+        // The stored length stands in for a declared one: the content doesn't pass through here to be measured.
+        if (policies is not null)
+        {
+            if (!await WithStoredLengthAsync(source, cancellationToken)) return null;
+            await policies.CheckNewVersionAsync(destinationContainer, destinationName, restore: false, source.ContentType, source.ContentLength,
+                _telemetry, cancellationToken);
+        }
+
+        ResourceInfo copy = WithUri(new ResourceInfo
+        {
+            ContainerName = destinationContainer,
+            Name = destinationName,
+            VersionId = Guid.CreateVersion7().ToString(),
+            ContentType = source.ContentType,
+            Metadata = new Dictionary<string, string>(source.Metadata),
+            CopiedFrom = new ResourceOrigin(ContainerName, resourceName, source.VersionId!)
+        });
+        WrittenContent? written = await resourceRepository.CopyResourceAsync(new ResourceLocation(ContainerName, resourceName),
+            source.VersionId, copy, new ResourceWriteCondition { CreateOnly = createOnly, Conditions = conditions }, cancellationToken);
+        return written is null ? null : await CompleteNewVersionAsync(copy, written);
+    }
+
+    public Task<ResourceInfo?> MoveResourceAsync(string resourceName, string destinationContainer, string destinationName,
+        ResourceMoveOptions? options = null, CancellationToken cancellationToken = default)
+        => _telemetry.RunAsync("move", ContainerName, resourceName,
+            () => MoveCoreAsync(resourceName, destinationContainer, destinationName, options?.SourceConditions, cancellationToken),
+            "resourcefull.destination_container", destinationContainer);
+
+    private async Task<ResourceInfo?> MoveCoreAsync(string resourceName, string destinationContainer, string destinationName,
+        ResourceConditions? conditions, CancellationToken cancellationToken)
+    {
+        ResourceNames.ThrowIfInvalidResourceName(resourceName);
+        ResourceNames.ThrowIfInvalidContainerName(destinationContainer);
+        ResourceNames.ThrowIfInvalidResourceName(destinationName);
+        if (destinationContainer == ContainerName && destinationName == resourceName)
+            throw new ArgumentException("A resource can't be moved to where it already is.", nameof(destinationName));
+
+        if (policies is not null)
+        {
+            List<ResourceInfo> versions = await resourceRepository.GetResourceVersionsAsync(ContainerName, resourceName, cancellationToken);
+            if (versions.Count == 0) return null;
+            foreach (ResourceInfo version in versions)
+            {
+                if (!await WithStoredLengthAsync(version, cancellationToken)) return null;
+            }
+
+            await policies.CheckMoveAsync(ContainerName, destinationContainer, versions, _telemetry, cancellationToken);
+        }
+
+        if (!await resourceRepository.MoveResourceAsync(new ResourceLocation(ContainerName, resourceName),
+            new ResourceLocation(destinationContainer, destinationName), conditions is { IsEmpty: false } ? conditions : null, cancellationToken))
+        {
+            return null;
+        }
+
+        ResourceInfo? moved = await resourceRepository.GetResourceInfoAsync(destinationContainer, destinationName, null, cancellationToken);
+        return moved is null ? null : WithUri(moved);
+    }
+
+    /// <summary>
+    /// Sets a version's <see cref="ResourceInfo.ContentLength"/> from its stored content when an early release recorded
+    /// none, for the size limits to check: a stream's length is the stored content's, known without reading it.
+    /// </summary>
+    /// <returns><see langword="false"/> if the version no longer exists.</returns>
+    private async Task<bool> WithStoredLengthAsync(ResourceInfo version, CancellationToken cancellationToken)
+    {
+        if (version.ContentLength is not null) return true;
+        await using Stream? content = await resourceRepository.GetResourceStreamAsync(ContainerName, version.Name, version.VersionId, cancellationToken);
+        version.ContentLength = content?.Length;
+        return content is not null;
+    }
 
     public Task<ResourceContainerUsage> GetUsageAsync(CancellationToken cancellationToken = default)
         => _telemetry.RunAsync("get_usage", ContainerName, null, () => resourceRepository.GetContainerUsageAsync(ContainerName, cancellationToken));

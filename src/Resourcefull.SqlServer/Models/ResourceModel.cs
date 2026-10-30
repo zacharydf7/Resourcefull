@@ -13,6 +13,9 @@ internal class ResourceModel
     public string? ContentHash { get; set; }
     public string? Uri { get; set; }
     public IDictionary<string, string> Metadata { get; set; } = new Dictionary<string, string>();
+    public string? CopiedFromContainerName { get; set; }
+    public string? CopiedFromName { get; set; }
+    public string? CopiedFromVersionId { get; set; }
 
     // Navigation properties
     public virtual ResourceContainerModel? ResourceContainer { get; set; }

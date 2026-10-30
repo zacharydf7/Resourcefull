@@ -17,7 +17,7 @@ namespace Resourcefull.SqlServer.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.5")
+                .HasAnnotation("ProductVersion", "10.0.14")
                 .HasAnnotation("Relational:MaxIdentifierLength", 128);
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
@@ -82,6 +82,21 @@ namespace Resourcefull.SqlServer.Migrations
 
                     b.Property<string>("ContentType")
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("CopiedFromContainerName")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
+                        .UseCollation("Latin1_General_100_BIN2");
+
+                    b.Property<string>("CopiedFromName")
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)")
+                        .UseCollation("Latin1_General_100_BIN2");
+
+                    b.Property<string>("CopiedFromVersionId")
+                        .HasMaxLength(36)
+                        .HasColumnType("nvarchar(36)")
+                        .UseCollation("Latin1_General_100_BIN2");
 
                     b.Property<bool>("IsLatest")
                         .HasColumnType("bit");

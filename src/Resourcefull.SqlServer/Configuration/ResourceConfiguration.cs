@@ -50,6 +50,19 @@ internal class ResourceConfiguration : IEntityTypeConfiguration<ResourceModel>
             .UseCollation(ResourceDbContext.NameCollation)
             .HasValueGenerator<VersionIdValueGenerator>();
 
+        // The version a copy or restore came from: a record, not a foreign key, so it outlives the source.
+        builder.Property(r => r.CopiedFromContainerName)
+            .HasMaxLength(ResourceNames.MaxContainerNameLength)
+            .UseCollation(ResourceDbContext.NameCollation);
+
+        builder.Property(r => r.CopiedFromName)
+            .HasMaxLength(ResourceNames.MaxResourceNameLength)
+            .UseCollation(ResourceDbContext.NameCollation);
+
+        builder.Property(r => r.CopiedFromVersionId)
+            .HasMaxLength(ResourceNames.MaxVersionIdLength)
+            .UseCollation(ResourceDbContext.NameCollation);
+
         builder.HasMany(r => r.Chunks)
             .WithOne()
             .HasForeignKey(c => c.ResourceId)

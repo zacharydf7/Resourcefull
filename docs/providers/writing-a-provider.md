@@ -73,6 +73,20 @@ returns correct ranges, just without the savings. To answer it directly, return 
 - **Reading may go on past the range.** The client reads only `length` bytes, so a provider can stop reading storage
   there or carry on to the end, whichever is simpler.
 
+### Copying and moving
+
+`CopyResourceAsync` and `MoveResourceAsync` were added in 3.2, and `AddResourceAsync` should store
+`ResourceInfo.CopiedFrom` with the version and return it on every read, as it does the content hash.
+
+- **Copy's default implementation** reads the source and stores it through `AddResourceAsync`, so a provider written
+  for 3.1 copies correctly, just through the application, and without `CopiedFrom` unless it stores it. Override it
+  to copy within your store, deciding create-only writes and conditions at the destination as an upload does.
+- **Move's default throws `NotSupportedException`.** A move must change every version's container and name at once,
+  never leaving the resource in both places or half in each, so made of copies and deletes it could stop halfway.
+  Implement it to keep each version's ID and attributes, refuse a destination name that has versions
+  (`ResourceConflictException`) or whose container is missing (`ResourceContainerNotFoundException`), and decide the
+  source conditions in the move itself.
+
 ### Container usage
 
 `GetContainerUsageAsync` was also added in 3.2. Its default implementation lists every resource's versions, one name

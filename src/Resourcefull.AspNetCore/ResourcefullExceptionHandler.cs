@@ -8,8 +8,9 @@ namespace Resourcefull.AspNetCore;
 /// Turns Resourcefull's exceptions into problem details responses: <see cref="ResourceConflictException"/> into 409,
 /// <see cref="ResourceContainerNotFoundException"/> into 404, <see cref="ResourceContentLengthMismatchException"/> and
 /// <see cref="ResourceNameException"/> into 400, <see cref="ResourcePreconditionFailedException"/> into 412, and
-/// <see cref="ResourcePolicyViolationException"/> into 413 for content too large for the size limits, 403 for a
-/// container that's read-only or holds as many resources as it may, and 415 for a content type it doesn't allow. Their
+/// <see cref="ResourcePolicyViolationException"/> into 413 for content too large for the size limits, 409 for a
+/// container that holds as many resources as it may, 403 for a read-only container, and 415 for a content type it
+/// doesn't allow. Their
 /// messages name the resource or container, and sometimes the argument or option involved, but nothing about your
 /// infrastructure, so they're used as the title.
 /// Any other exception is left to the next handler. (ASP.NET Core removes the <c>ETag</c> header from responses its
@@ -29,8 +30,8 @@ public sealed class ResourcefullExceptionHandler(IProblemDetailsService problemD
             ResourcePreconditionFailedException => StatusCodes.Status412PreconditionFailed,
             ResourcePolicyViolationException { Rule: ResourcePolicyRule.MaxResourceSize or ResourcePolicyRule.MaxContainerSize }
                 => StatusCodes.Status413PayloadTooLarge,
-            ResourcePolicyViolationException { Rule: ResourcePolicyRule.ReadOnly or ResourcePolicyRule.MaxResourceCount }
-                => StatusCodes.Status403Forbidden,
+            ResourcePolicyViolationException { Rule: ResourcePolicyRule.MaxResourceCount } => StatusCodes.Status409Conflict,
+            ResourcePolicyViolationException { Rule: ResourcePolicyRule.ReadOnly } => StatusCodes.Status403Forbidden,
             ResourcePolicyViolationException { Rule: ResourcePolicyRule.AllowedContentTypes } => StatusCodes.Status415UnsupportedMediaType,
             _ => null
         };

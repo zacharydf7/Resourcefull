@@ -90,6 +90,9 @@ reads a few chunks at a time as its stream is read, so memory use stays flat wha
 - **About one round trip per MiB.** An upload inserts 16 chunks per round trip and a download reads 16 per query, plus
   a few round trips per operation to find the version, lock the name and make the version current. Reading a
   resource's attributes, listing a container and listing a name's versions are one query each.
+- **Copies and moves stay in the database.** A copy is one `INSERT … SELECT` of the source's chunks, so none of the
+  content goes through the application: copying 16 MiB takes about half the round trips of uploading it and a
+  fraction of the memory. A move changes only the versions' container and name, whatever their size.
 - **A range costs what its own bytes cost.** A [range download](../uploads-and-downloads.md#downloading-part-of-a-resource)
   finds its first chunk from the chunks' lengths, without reading content, and reads only the chunks the range
   covers, so the last MiB of a 64 MiB file costs about what a 1 MiB file does.

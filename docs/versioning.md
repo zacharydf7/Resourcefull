@@ -51,7 +51,8 @@ if (restored is null) { /* no such name or version */ }
 ```
 
 The restored version is measured like any upload: it gets its own `VersionId`, `ContentLength`, `ContentHash` and
-`LastModified`, and the older version's content type and metadata. `RestoreVersionAsync` throws
+`LastModified`, and the older version's content type and metadata. Its `CopiedFrom` names the version it restored, so
+a history view can show it. `RestoreVersionAsync` throws
 `InvalidOperationException` when versioning is off.
 
 ## Deleting

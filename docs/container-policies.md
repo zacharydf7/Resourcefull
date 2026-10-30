@@ -22,13 +22,16 @@ Without `UseContainerPolicies` or `UsePolicyProvider`, nothing is checked and no
 
 | Rule | Checked on | A write that breaks it |
 |---|---|---|
-| `MaxResourceSize` | upload, restore | is refused before any content is read, if its declared length is over the limit; otherwise it stops as soon as its content passes the limit |
-| `MaxContainerSize` | upload, restore | is refused before any content is read, if its declared length won't fit in what's left; otherwise it stops as soon as its content passes what's left |
-| `MaxResourceCount` | upload of a new name | is refused when the container already holds that many resources; a new version of an existing name never is |
-| `AllowedContentTypes` | upload | is refused before any content is read when its type isn't in the list, or when it declares no type |
-| `ReadOnly` | upload, restore, delete, deleting the container | is refused before anything changes |
+| `MaxResourceSize` | upload, restore, copy and move in | is refused before any content is read, if its declared length is over the limit; otherwise it stops as soon as its content passes the limit |
+| `MaxContainerSize` | upload, restore, copy and move in | is refused before any content is read, if its declared length won't fit in what's left; otherwise it stops as soon as its content passes what's left |
+| `MaxResourceCount` | upload, copy or move in of a new name | is refused when the container already holds that many resources; a new version of an existing name never is |
+| `AllowedContentTypes` | upload, copy and move in | is refused before any content is read when its type isn't in the list, or when it declares no type |
+| `ReadOnly` | upload, restore, copy and move in or out, delete, deleting the container | is refused before anything changes |
 
 A refused write throws `ResourcePolicyViolationException`, whose `Rule` says which rule it broke, and stores nothing.
+A copy or move is checked for every version it brings, by its stored length (measured from its content, without
+reading it, for a version an early release stored without one); a rename within a container changes nothing it holds,
+so only `ReadOnly` applies to it.
 
 - **Sizes count every version.** `MaxContainerSize` includes older versions until they're pruned, so with
   [versioning](versioning.md) a container's history counts against it. Pruning is never refused. Overwriting a
@@ -120,7 +123,8 @@ becomes:
 | Rule | Status |
 |---|---|
 | `MaxResourceSize`, `MaxContainerSize` | 413 Content Too Large |
-| `MaxResourceCount`, `ReadOnly` | 403 Forbidden |
+| `MaxResourceCount` | 409 Conflict: the container is full until something is deleted |
+| `ReadOnly` | 403 Forbidden |
 | `AllowedContentTypes` | 415 Unsupported Media Type |
 
 ## Telemetry

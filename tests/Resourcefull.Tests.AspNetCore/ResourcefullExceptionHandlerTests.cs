@@ -15,7 +15,7 @@ public class ResourcefullExceptionHandlerTests
         { new ResourcePreconditionFailedException("Resource report.txt doesn't meet the conditions.", "v2", "sha256:current"), HttpStatusCode.PreconditionFailed },
         { new ResourcePolicyViolationException("Too large.", ResourcePolicyRule.MaxResourceSize, 10), HttpStatusCode.RequestEntityTooLarge },
         { new ResourcePolicyViolationException("No room.", ResourcePolicyRule.MaxContainerSize, 10), HttpStatusCode.RequestEntityTooLarge },
-        { new ResourcePolicyViolationException("Too many.", ResourcePolicyRule.MaxResourceCount, 10), HttpStatusCode.Forbidden },
+        { new ResourcePolicyViolationException("Too many.", ResourcePolicyRule.MaxResourceCount, 10), HttpStatusCode.Conflict },
         { new ResourcePolicyViolationException("Not that type.", ResourcePolicyRule.AllowedContentTypes), HttpStatusCode.UnsupportedMediaType },
         { new ResourcePolicyViolationException("Read-only.", ResourcePolicyRule.ReadOnly), HttpStatusCode.Forbidden }
     };

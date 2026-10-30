@@ -83,6 +83,19 @@ public sealed class PerformanceTests(SqlServerFixture fixture, ITestOutputHelper
     }
 
     [SkippableFact]
+    public async Task CopyResourceAsync_ShouldStayWithinItsBaseline_WhenCopying16MebibytesToAnotherContainer()
+    {
+        // The server copies the chunks, so no content goes through the application: compare upload-16MiB.
+        IResourceContainerClient source = await NewContainerAsync();
+        IResourceContainerClient destination = await NewContainerAsync();
+        long length = 16L * Mebibyte;
+        await source.UploadAsync("r", new GeneratedStream(length));
+
+        await MeasureAsync("copy-16MiB", length,
+            run: iteration => source.CopyResourceAsync("r", destination.ResourceContainerInfo.Name, $"r{iteration}"));
+    }
+
+    [SkippableFact]
     public async Task DownloadStreamingAsync_ShouldCountTheReadsOfItsContent_WhenReadingAMebibyte()
     {
         // The baseline catches reads that grow, not reads that stop being counted: a page query whose reader is

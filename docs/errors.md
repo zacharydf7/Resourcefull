@@ -30,7 +30,7 @@ All of them derive from `ResourcefullException`, so one `catch` handles any of t
 | `ResourceContainerNotFoundException` | The container was never created, or was deleted before the write. | 404 Not Found |
 | `ResourceContentLengthMismatchException` | The upload's declared length didn't match its content. | 400 Bad Request |
 | `ResourcePreconditionFailedException` | The name's current version didn't meet the upload's or delete's conditions. | 412 Precondition Failed |
-| `ResourcePolicyViolationException` | The write broke its container's policy; `Rule` says which rule, and `Limit` its limit. | 413 for the size limits, 403 for `MaxResourceCount` and `ReadOnly`, 415 for `AllowedContentTypes` |
+| `ResourcePolicyViolationException` | The write broke its container's policy; `Rule` says which rule, and `Limit` its limit. | 413 for the size limits, 409 for `MaxResourceCount`, 403 for `ReadOnly`, 415 for `AllowedContentTypes` |
 
 `ResourceNameException` derives from `ArgumentException` rather than `ResourcefullException`, so existing
 `catch (ArgumentException)` code still catches it; it maps to 400 Bad Request.

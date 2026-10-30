@@ -29,23 +29,17 @@ internal sealed class ContainerPolicies(ContainerPolicySettings settings, IResou
         => ThrowIfReadOnly(containerName, await GetAsync(containerName, telemetry, cancellationToken));
 
     /// <summary>
-    /// Checks a new version against the policy before its content is read: an upload, or a restore, which keeps its
-    /// name and type and so isn't checked against <see cref="ResourceContainerPolicy.MaxResourceCount"/> or
+    /// Checks a new version against the policy before its content is read: an upload or a copy, or a restore, which
+    /// keeps its name and type and so isn't checked against <see cref="ResourceContainerPolicy.MaxResourceCount"/> or
     /// <see cref="ResourceContainerPolicy.AllowedContentTypes"/>.
     /// </summary>
-    /// <returns>The content to store: <paramref name="content"/>, or a stream over it that stops at the size limits.</returns>
-    public async Task<Stream> CheckNewVersionAsync(string containerName, string resourceName, bool restore, string? contentType,
-        long? declaredLength, Stream content, ClientTelemetry telemetry, CancellationToken cancellationToken)
+    /// <returns>The size the content must stay within as it's read, or <see langword="null"/> for no limit.</returns>
+    public async Task<ContentLimit?> CheckNewVersionAsync(string containerName, string resourceName, bool restore, string? contentType,
+        long? declaredLength, ClientTelemetry telemetry, CancellationToken cancellationToken)
     {
         ResourceContainerPolicy policy = await GetAsync(containerName, telemetry, cancellationToken);
         ThrowIfReadOnly(containerName, policy);
-        if (!restore && policy.AllowedContentTypes is { } allowed && !Allows(allowed, contentType))
-        {
-            throw new ResourcePolicyViolationException(contentType is null
-                ? $"The container {containerName} accepts only uploads that declare a content type: {string.Join(", ", allowed)}."
-                : $"The container {containerName} doesn't accept content of type {contentType}, only {string.Join(", ", allowed)}.",
-                ResourcePolicyRule.AllowedContentTypes);
-        }
+        if (!restore) ThrowIfTypeNotAllowed(containerName, policy, contentType);
 
         ResourceContainerUsage? usage = policy.MaxContainerSize is not null || (!restore && policy.MaxResourceCount is not null)
             ? await repository.GetContainerUsageAsync(containerName, cancellationToken)
@@ -53,16 +47,13 @@ internal sealed class ContainerPolicies(ContainerPolicySettings settings, IResou
         if (!restore && policy.MaxResourceCount is { } maxCount && usage!.ResourceCount >= maxCount
             && await repository.GetResourceInfoAsync(containerName, resourceName, null, cancellationToken) is null)
         {
-            throw new ResourcePolicyViolationException(
-                $"The container {containerName} holds {usage.ResourceCount} resources, as many as it may.",
-                ResourcePolicyRule.MaxResourceCount, maxCount);
+            throw CountExceeded(containerName, usage, maxCount);
         }
 
         ContentLimit? limit = null;
         if (policy.MaxResourceSize is { } maxSize)
         {
-            limit = new ContentLimit(maxSize.Bytes, ResourcePolicyRule.MaxResourceSize, maxSize.Bytes,
-                $"The content is larger than the container {containerName} allows for one resource, {maxSize}.");
+            limit = new ContentLimit(maxSize.Bytes, ResourcePolicyRule.MaxResourceSize, maxSize.Bytes, TooLargeMessage(containerName, maxSize));
         }
 
         if (policy.MaxContainerSize is { } maxContainerSize)
@@ -71,13 +62,43 @@ internal sealed class ContainerPolicies(ContainerPolicySettings settings, IResou
             if (limit is null || room < limit.Bytes)
             {
                 limit = new ContentLimit(room, ResourcePolicyRule.MaxContainerSize, maxContainerSize.Bytes,
-                    $"The container {containerName} has no room for the content: it holds {usage.StoredSize} of its {maxContainerSize}.");
+                    NoRoomMessage(containerName, usage, maxContainerSize));
             }
         }
 
-        if (limit is null) return content;
-        if (declaredLength > limit.Bytes) throw limit.Exception();
-        return new LimitedContentStream(content, limit);
+        if (declaredLength > limit?.Bytes) throw limit.Exception();
+        return limit;
+    }
+
+    /// <summary>
+    /// Checks a move of a resource, every version of it in <paramref name="versions"/>, against both containers'
+    /// policies: the source mustn't be read-only, and the destination is checked as for a new name holding those
+    /// versions, unless the move stays within its container, which then holds what it did. Every version's
+    /// <see cref="ResourceInfo.ContentLength"/> must be set.
+    /// </summary>
+    public async Task CheckMoveAsync(string sourceContainer, string destinationContainer, IReadOnlyList<ResourceInfo> versions,
+        ClientTelemetry telemetry, CancellationToken cancellationToken)
+    {
+        ThrowIfReadOnly(sourceContainer, await GetAsync(sourceContainer, telemetry, cancellationToken));
+        if (destinationContainer == sourceContainer) return;
+
+        ResourceContainerPolicy policy = await GetAsync(destinationContainer, telemetry, cancellationToken);
+        ThrowIfReadOnly(destinationContainer, policy);
+        foreach (string? contentType in versions.Select(v => v.ContentType).Distinct())
+            ThrowIfTypeNotAllowed(destinationContainer, policy, contentType);
+        ResourceContainerUsage? usage = policy.MaxContainerSize is not null || policy.MaxResourceCount is not null
+            ? await repository.GetContainerUsageAsync(destinationContainer, cancellationToken)
+            : null;
+        if (policy.MaxResourceCount is { } maxCount && usage!.ResourceCount >= maxCount)
+            throw CountExceeded(destinationContainer, usage, maxCount);
+        if (policy.MaxResourceSize is { } maxSize && versions.Any(v => v.ContentLength > maxSize.Bytes))
+            throw new ResourcePolicyViolationException(TooLargeMessage(destinationContainer, maxSize), ResourcePolicyRule.MaxResourceSize, maxSize.Bytes);
+        if (policy.MaxContainerSize is { } maxContainerSize
+            && usage!.StoredSize.Bytes + versions.Sum(v => v.ContentLength ?? 0) > maxContainerSize.Bytes)
+        {
+            throw new ResourcePolicyViolationException(NoRoomMessage(destinationContainer, usage, maxContainerSize),
+                ResourcePolicyRule.MaxContainerSize, maxContainerSize.Bytes);
+        }
     }
 
     private static void ThrowIfReadOnly(string containerName, ResourceContainerPolicy policy)
@@ -85,6 +106,26 @@ internal sealed class ContainerPolicies(ContainerPolicySettings settings, IResou
         if (policy.ReadOnly == true)
             throw new ResourcePolicyViolationException($"The container {containerName} is read-only.", ResourcePolicyRule.ReadOnly);
     }
+
+    private static void ThrowIfTypeNotAllowed(string containerName, ResourceContainerPolicy policy, string? contentType)
+    {
+        if (policy.AllowedContentTypes is { } allowed && !Allows(allowed, contentType))
+        {
+            throw new ResourcePolicyViolationException(contentType is null
+                ? $"The container {containerName} accepts only content that declares a type: {string.Join(", ", allowed)}."
+                : $"The container {containerName} doesn't accept content of type {contentType}, only {string.Join(", ", allowed)}.",
+                ResourcePolicyRule.AllowedContentTypes);
+        }
+    }
+
+    private static ResourcePolicyViolationException CountExceeded(string containerName, ResourceContainerUsage usage, long maxCount) =>
+        new($"The container {containerName} holds {usage.ResourceCount} resources, as many as it may.", ResourcePolicyRule.MaxResourceCount, maxCount);
+
+    private static string TooLargeMessage(string containerName, ResourceSize maxSize) =>
+        $"The content is larger than the container {containerName} allows for one resource, {maxSize}.";
+
+    private static string NoRoomMessage(string containerName, ResourceContainerUsage usage, ResourceSize maxContainerSize) =>
+        $"The container {containerName} has no room for the content: it holds {usage.StoredSize} of its {maxContainerSize}.";
 
     private async ValueTask<ResourceContainerPolicy> GetAsync(string containerName, ClientTelemetry telemetry,
         CancellationToken cancellationToken)

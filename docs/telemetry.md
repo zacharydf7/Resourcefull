@@ -58,6 +58,8 @@ metrics. It also has:
 | `get_info` | `GetResourceInfoAsync` | |
 | `exists` | `ExistsAsync` | |
 | `get_usage` | `GetUsageAsync` | |
+| `copy` | `CopyResourceAsync` | `resourcefull.destination_container`; a `resourcefull prune` child span |
+| `move` | `MoveResourceAsync` | `resourcefull.destination_container` |
 | `list` | `GetResourcesAsync` | |
 | `list_page` | `GetResourcePageAsync`, and each page `ListResourcesAsync` fetches | `resourcefull.page_size` |
 | `list_versions` | `GetResourceVersionsAsync` | |
@@ -72,8 +74,8 @@ metrics. It also has:
 | `health_check` | `AddResourcefullCheck`; `AddResourcefullSqlServerCheck` (span only) | for SQL Server, `resourcefull.pending_migrations` |
 
 `GetResourceContainerClient` doesn't contact storage, so it records nothing. With
-[container policies](container-policies.md), every operation that checks one (`upload`, `restore`, `delete` and
-`delete_container`) records a `resourcefull get_policy` child span when it asks the policy provider, and
+[container policies](container-policies.md), every operation that checks one (`upload`, `restore`, `copy`, `move`,
+`delete` and `delete_container`) records a `resourcefull get_policy` child span when it asks the policy provider, and
 `resourcefull.policy_rule` when the policy refuses it.
 
 ## ASP.NET Core

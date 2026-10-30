@@ -232,6 +232,28 @@ public sealed class TelemetryTests : IDisposable
     }
 
     [Fact]
+    public async Task CopyAndMove_ShouldTagTheDestinationContainer_WhenCalled()
+    {
+        // Arrange
+        using ServiceProvider provider = NewServices();
+        IResourceServiceClient service = provider.GetRequiredService<IResourceServiceClient>();
+        IResourceContainerClient container = await service.CreateResourceContainerAsync("c");
+        await service.CreateResourceContainerAsync("d");
+        await container.UploadAsync("a", BinaryData.FromString("x"));
+        using Activity root = TestSource.StartActivity("test")!;
+
+        // Act
+        await container.CopyResourceAsync("a", "d", "b");
+        await container.MoveResourceAsync("a", "d", "c");
+
+        // Assert
+        Activity copy = Assert.Single(SpansIn(root), s => s.OperationName == "resourcefull copy");
+        Activity move = Assert.Single(SpansIn(root), s => s.OperationName == "resourcefull move");
+        Assert.All(new[] { copy, move }, s => Assert.Equal(("c", "d"),
+            (s.GetTagItem("resourcefull.container"), s.GetTagItem("resourcefull.destination_container"))));
+    }
+
+    [Fact]
     public async Task GetUsageAsync_ShouldRecordAGetUsageOperation_WhenCalled()
     {
         // Arrange
