@@ -103,7 +103,7 @@ check is a test that expects exactly `ArgumentException` for a bad name; it's no
 ## 3.0.0
 
 The first release of Resourcefull for general use. Coming from an earlier release, read
-[Upgrading to 3.0](docs/upgrading.md) first: it lists every change to code, behavior and the database, with what each
+[Upgrading to 3.0](docs/upgrading-to-3.md) first: it lists every change to code, behavior and the database, with what each
 needs from you. Items marked *(from 1.x)* were already in 2.x.
 
 ### Added

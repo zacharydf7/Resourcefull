@@ -87,7 +87,7 @@ you're trying to do, plus the API reference.
   uploads and sharing files with links
 - [SQL Server](https://zacharydf7.github.io/Resourcefull/docs/providers/sql-server.html): provisioning, permissions
   and upgrades
-- [Upgrading to 3.0](https://zacharydf7.github.io/Resourcefull/docs/upgrading.html) and the
+- [Upgrading](https://zacharydf7.github.io/Resourcefull/docs/upgrading.html), including from 2.x, and the
   [changelog](https://github.com/zacharydf7/Resourcefull/blob/main/CHANGELOG.md)
 
 ## Contributing

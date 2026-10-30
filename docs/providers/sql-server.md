@@ -38,7 +38,7 @@ Run it from a deployment step, or at startup of a single instance. Turning on `R
 first provisioning does, disconnects every other session on the database.
 
 **With the scripts.** `Resourcefull.SqlServer` ships idempotent SQL scripts in its package's `scripts` folder, for
-example `~/.nuget/packages/resourcefull.sqlserver/3.0.0/scripts/`. Create the database, then run `Resourcefull.sql`
+example `~/.nuget/packages/resourcefull.sqlserver/<version>/scripts/`. Create the database, then run `Resourcefull.sql`
 connected to it:
 
 ```shell
