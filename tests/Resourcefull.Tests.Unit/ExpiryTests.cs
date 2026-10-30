@@ -202,4 +202,29 @@ public class ExpiryTests
         await Assert.ThrowsAsync<NotSupportedException>(() => container.SetExpiryAsync("a", "v", null));
         await Assert.ThrowsAsync<NotSupportedException>(() => service.DeleteExpiredAsync());
     }
+
+    [Fact]
+    public async Task UploadAsync_ShouldDeleteThePrunedVersionAtOnce_WhenExpiryIsOnButTheProviderDoesNotSupportIt()
+    {
+        // Arrange: a provider written for 3.1, whose SetExpiryAsync throws NotSupportedException by default.
+        var repository = new Mock<IResourceRepository> { CallBase = true };
+        repository.Setup(r => r.AddResourceAsync("c", It.IsAny<ResourceInfo>(), It.IsAny<Stream>(), false, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new WrittenContent(1, "sha256:written", DateTimeOffset.UtcNow));
+        repository.Setup(r => r.GetResourceVersionsAsync("c", "a", It.IsAny<CancellationToken>())).ReturnsAsync(
+        [
+            new ResourceInfo { ContainerName = "c", Name = "a", VersionId = "v2" },
+            new ResourceInfo { ContainerName = "c", Name = "a", VersionId = "v1" }
+        ]);
+        var handler = new Mock<IResourceCleanupHandler>();
+        var client = new ResourceContainerClient(repository.Object, null, new ResourcefullOptions(), new ResourceContainerInfo { Name = "c" },
+            null, cleanupHandler: handler.Object, expiry: new ExpirySettings(TimeSpan.FromMinutes(1)));
+
+        // Act
+        await client.UploadAsync("a", BinaryData.FromString("x"), new ResourceUploadOptions { Overwrite = true });
+
+        // Assert
+        handler.Verify(h => h.OnCleanupAsync(It.Is<ResourceCleanup>(c => c.Reason == ResourceCleanupReason.Pruned && c.Resource.VersionId == "v1"),
+            It.IsAny<CancellationToken>()));
+        repository.Verify(r => r.DeleteResourceAsync("c", "a", "v1", It.IsAny<CancellationToken>()));
+    }
 }

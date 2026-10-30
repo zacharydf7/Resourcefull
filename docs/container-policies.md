@@ -37,9 +37,10 @@ application; a rename within a container changes nothing it holds, so only `Read
 early release recorded wrongly isn't caught this way: the [hash backfill](providers/sql-server-upgrades.md#recording-hashes-for-older-versions)
 reports those.
 
-- **Sizes count every version.** `MaxContainerSize` includes older versions until they're pruned, so with
-  [versioning](versioning.md) a container's history counts against it. Pruning is never refused. Overwriting a
-  resource needs room for the new content while the old version still counts, even without versioning.
+- **Sizes count every version.** `MaxContainerSize` includes older versions until they're deleted, including a
+  pruned version's five minutes with [expiry](expiry.md) on, so with [versioning](versioning.md) a container's history
+  counts against it. Pruning is never refused. Overwriting a resource needs room for the new content while the old
+  version still counts, even without versioning.
 - **Content types** are compared without their parameters and ignoring case, so `application/pdf` allows
   `Application/PDF; charset=binary`. End a type with `/*` to allow every subtype, such as `image/*`.
 - **Lowering a limit** below what a container holds deletes nothing: it only refuses new writes.

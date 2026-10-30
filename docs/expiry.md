@@ -20,7 +20,8 @@ await container.UploadAsync("exports/report.zip", stream, new ResourceUploadOpti
 
 - **The expiry belongs to the version,** and `ResourceInfo.ExpiresAt` reports it. An expired version is deleted as a
   delete of that version would delete it: a name whose only version expires is gone, and when the current version
-  expires, the one stored before it becomes current again.
+  expires, with [versioning](versioning.md#keeping-a-limited-number), the one stored before it becomes current again.
+  Without versioning, the versions it replaced go with it.
 - **A version is gone within one interval of expiring.** Until the service gets to it, it can still be read. Any time
   works, from seconds to years away, or in the past, which the next sweep deletes. For expiries of a few seconds, use a
   shorter interval, such as `UseExpiry(TimeSpan.FromSeconds(5))`: with nothing expired, a sweep reads one row of the
@@ -56,7 +57,9 @@ gone, as it is if the service deleted it first. A [read-only](container-policies
 
 To record every version Resourcefull deletes by itself, such as in an audit system, register a cleanup handler. It
 hears about expired versions, and about older versions [pruned](versioning.md#keeping-a-limited-number) past
-`MaxVersions`, before each is deleted:
+`MaxVersions`, before each is deleted. With expiry on, pruning gives a version five minutes before the sweep deletes
+it, so the handler hears about it then, with the reason `Expired`, or with `Pruned` if, without versioning, it's
+deleted sooner along with the version that replaced it:
 
 ```csharp
 public sealed class AuditCleanup(AuditClient audit) : IResourceCleanupHandler

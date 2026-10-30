@@ -18,8 +18,9 @@
 - **Expiring resources.** `ResourceUploadOptions.ExpiresAt` sets when a version expires, and `UseExpiry` runs a
   background service that deletes expired versions within one interval, on every instance safely. `SetExpiryAsync`
   changes or clears an expiry. An `IResourceCleanupHandler` hears about every version Resourcefull deletes by itself,
-  expired or pruned, before it's deleted, for auditing. The `AddExpiresAt` migration adds a nullable column and an
-  index. Providers get three members whose defaults throw `NotSupportedException`. See
+  expired or pruned, before it's deleted, for auditing. With expiry on, pruning sets a version to expire five minutes
+  later instead of deleting it, so a download already reading it finishes. The `AddExpiresAt` migration adds a
+  nullable column and an index. Providers get three members whose defaults throw `NotSupportedException`. See
   [Expiring resources](docs/expiry.md).
 - **Copy, move and rename.** `CopyResourceAsync` copies a version to a name in the same or another container, as a
   new version there, and `MoveResourceAsync` moves a resource with every version, keeping their IDs; renaming is a

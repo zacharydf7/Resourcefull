@@ -17,7 +17,7 @@ public sealed class ResourceContainerPolicy
     public ResourceSize? MaxResourceSize { get; init; }
 
     /// <summary>
-    /// The most the container may hold, counting every version of every resource until it's pruned. An upload or
+    /// The most the container may hold, counting every version of every resource until it's deleted. An upload or
     /// restore is refused before any content is read if its declared length wouldn't fit, and stops as soon as its
     /// content passes what's left. Overwriting a resource needs room for the new content while the old version still
     /// counts, even without versioning. What the container holds is read once per write, so writes running at the same time

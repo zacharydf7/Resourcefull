@@ -9,7 +9,7 @@ namespace Resourcefull;
 
 internal class ResourceServiceClient(IResourceRepository resourceRepository, IOptions<ResourcefullOptions> options, IUriProvider? uriProvider = null,
     ILogger<ResourceContainerClient>? containerLogger = null, ContainerPolicies? policies = null,
-    IResourceCleanupHandler? cleanupHandler = null, TimeProvider? timeProvider = null) : IResourceServiceClient
+    IResourceCleanupHandler? cleanupHandler = null, TimeProvider? timeProvider = null, ExpirySettings? expiry = null) : IResourceServiceClient
 {
     private readonly ResourcefullOptions _options = options.Value;
     private readonly ClientTelemetry _telemetry = new(Telemetry.ProviderName(resourceRepository), options.Value);
@@ -70,11 +70,12 @@ internal class ResourceServiceClient(IResourceRepository resourceRepository, IOp
         });
 
         await resourceRepository.AddResourceContainerAsync(containerInfo, cancellationToken);
-        return new ResourceContainerClient(resourceRepository, uriProvider, _options, containerInfo, containerLogger, policies, cleanupHandler, timeProvider);
+        return new ResourceContainerClient(resourceRepository, uriProvider, _options, containerInfo, containerLogger, policies, cleanupHandler,
+            timeProvider, expiry);
     }
 
     private ResourceContainerClient NewContainerClient(ResourceContainerInfo containerInfo)
-        => new(resourceRepository, uriProvider, _options, WithUri(containerInfo), containerLogger, policies, cleanupHandler, timeProvider);
+        => new(resourceRepository, uriProvider, _options, WithUri(containerInfo), containerLogger, policies, cleanupHandler, timeProvider, expiry);
 
     // URIs come from the URI provider whenever a container is returned, not from storage, so a changed provider or base
     // URL applies to containers created before the change as well.
@@ -150,11 +151,16 @@ internal class ResourceServiceClient(IResourceRepository resourceRepository, IOp
                             await _telemetry.NotifyCleanupAsync(cleanupHandler, new ResourceCleanup(version, ResourceCleanupReason.Expired, now),
                                 cancellationToken);
                         }
+                        ResourceContainerClient container = NewContainerClient(new ResourceContainerInfo { Name = version.ContainerName });
+                        List<ResourceInfo> waiting = version.IsLatest
+                            ? await container.WaitingBehindAsync(version.Name, version.VersionId, cancellationToken)
+                            : [];
                         if (await resourceRepository.DeleteExpiredVersionAsync(new ResourceLocation(version.ContainerName, version.Name),
                             version.VersionId, now, cancellationToken))
                         {
                             deleted++;
                             _telemetry.CountExpired();
+                            await container.DeleteWaitingAsync(version.Name, waiting);
                         }
                     }
                     catch (Exception exception) when (exception is not OperationCanceledException || !cancellationToken.IsCancellationRequested)

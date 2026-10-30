@@ -36,6 +36,12 @@ public enum ResourceCleanupReason
     /// <summary>Its <see cref="ResourceInfo.ExpiresAt"/> has passed.</summary>
     Expired,
 
-    /// <summary>The name has more versions than <see cref="ResourcefullOptions.MaxVersions"/> keeps.</summary>
+    /// <summary>
+    /// The name has more versions than <see cref="ResourcefullOptions.MaxVersions"/> keeps. With
+    /// <see cref="ResourcefullOptionsBuilder.UseExpiry"/> and a provider that supports it, such a version is set to
+    /// expire five minutes later instead, and
+    /// is reported as <see cref="Expired"/> when the sweep deletes it, or as <see cref="Pruned"/> if, without versioning,
+    /// it's deleted sooner along with the version that replaced it.
+    /// </summary>
     Pruned
 }

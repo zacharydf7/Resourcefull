@@ -16,13 +16,16 @@ same guarantees:
 - **An upload never succeeds into a missing container.** A container deleted while an upload into it runs makes the
   upload throw `ResourceContainerNotFoundException`, not report success.
 - **Pruning never leaves more than `MaxVersions`**, even with concurrent uploads, because each prune works from the
-  versions as they stand after its own write. A prune that fails leaves the extra versions until a later upload of the
+  versions as they stand after its own write. (With [expiry](expiry.md) on <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span>, the extra versions expire
+  five minutes later instead of being deleted at once.) A prune that fails leaves the extra versions until a later upload of the
   name prunes them (see [Versioning](versioning.md#keeping-a-limited-number)).
 - **A download reads the version it resolved.** If another upload makes a newer version current while you read, you
   keep reading the version the `ResourceInfo` describes, as long as that version still exists. An upload can delete
   it: without versioning, an upload replaces the name's only version, and with versioning, an upload past
   `maxVersions` prunes the oldest. With SQL Server, a download of a version deleted partway through throws
-  `IOException`, so a client downloading a file that's often replaced should be ready to download it again.
+  `IOException`, so a client downloading a file that's often replaced should be ready to download it again. Turning on
+  [expiry](expiry.md) <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span> avoids this: a replaced or pruned version then stays five minutes more, so
+  downloads already reading it finish.
 - **Readers don't block writers.** With SQL Server, reads use row versions
   ([`READ_COMMITTED_SNAPSHOT`](providers/sql-server.md#read_committed_snapshot)) instead of shared locks, and
   deadlocks that contention still causes are retried for you.

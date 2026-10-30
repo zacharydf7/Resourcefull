@@ -6,7 +6,8 @@ namespace Resourcefull;
 
 internal partial class ResourceContainerClient(IResourceRepository resourceRepository, IUriProvider? uriProvider,
     ResourcefullOptions options, ResourceContainerInfo containerInfo, ILogger? logger, ContainerPolicies? policies = null,
-    IResourceCleanupHandler? cleanupHandler = null, TimeProvider? timeProvider = null) : IResourceContainerClient
+    IResourceCleanupHandler? cleanupHandler = null, TimeProvider? timeProvider = null, ExpirySettings? expiry = null)
+    : IResourceContainerClient
 {
     private readonly ILogger _logger = logger ?? NullLogger.Instance;
     private readonly ClientTelemetry _telemetry = new(Telemetry.ProviderName(resourceRepository), options);
@@ -147,31 +148,39 @@ internal partial class ResourceContainerClient(IResourceRepository resourceRepos
         resourceInfo.LastModified = written.LastModified;
         resourceInfo.IsLatest = true;
 
-        // The new version is stored, so the upload has succeeded; pruning is cleanup that neither the caller's token
-        // nor a failure may turn into a reported failure.
-        using Activity? prune = _telemetry.StartSpan("prune", resourceInfo.ContainerName);
+        // The new version is stored, so the upload has succeeded.
+        await PruneAfterAsync(resourceInfo.ContainerName, resourceInfo.Name,
+            () => PruneAsync(resourceInfo.ContainerName, resourceInfo.Name, CancellationToken.None));
+        return resourceInfo;
+    }
+
+    /// <summary>
+    /// Runs a prune after a write that succeeded, as cleanup that neither the caller's token nor a failure may turn
+    /// into a reported failure.
+    /// </summary>
+    private async Task PruneAfterAsync(string containerName, string resourceName, Func<Task> prune)
+    {
+        using Activity? activity = _telemetry.StartSpan("prune", containerName);
         try
         {
-            await PruneAsync(resourceInfo.ContainerName, resourceInfo.Name, CancellationToken.None);
+            await prune();
         }
         catch (Exception exception)
         {
-            _telemetry.RecordFailure(prune, exception);
+            _telemetry.RecordFailure(activity, exception);
             _telemetry.CountFailure(Telemetry.PruneFailures, exception);
-            // The older versions stay until a later overwriting or versioned upload of the name prunes them; every
-            // prune works from the versions as they stand after its own write. Logged, as a prune that keeps failing
-            // would otherwise let storage grow unnoticed.
+            // The older versions stay until a later write of the name prunes them, or they expire; every prune works
+            // from the versions as they stand after its own write. Logged, as a prune that keeps failing would
+            // otherwise let storage grow unnoticed.
             try
             {
-                LogPruneFailed(_logger, exception, resourceInfo.ContainerName, resourceInfo.Name);
+                LogPruneFailed(_logger, exception, containerName, resourceName);
             }
             catch
             {
-                // A logging provider that throws mustn't fail an upload that was stored either.
+                // A logging provider that throws mustn't fail a write that succeeded either.
             }
         }
-
-        return resourceInfo;
     }
 
     /// <summary>
@@ -186,10 +195,66 @@ internal partial class ResourceContainerClient(IResourceRepository resourceRepos
         DateTimeOffset now = (timeProvider ?? TimeProvider.System).GetUtcNow();
         foreach (ResourceInfo version in versions.Skip(keep))
         {
-            // Told first, so a handler that fails leaves the version for a later prune rather than deleted unreported.
-            if (cleanupHandler is not null)
-                await _telemetry.NotifyCleanupAsync(cleanupHandler, new ResourceCleanup(version, ResourceCleanupReason.Pruned, now), cancellationToken);
-            await resourceRepository.DeleteResourceAsync(containerName, resourceName, version.VersionId, cancellationToken);
+            // With expiry on, a version past the limit stays a few minutes more, so a download reading it can finish; the
+            // sweep deletes it, telling the cleanup handler then. A provider without expiry deletes it now.
+            if (expiry is not null && await TryExpireAsync(containerName, version, now + PruneGracePeriod, cancellationToken))
+                continue;
+
+            await DeletePrunedAsync(version, now, cancellationToken);
+        }
+    }
+
+    /// <summary>Deletes a pruned version, telling the cleanup handler first.</summary>
+    private async Task DeletePrunedAsync(ResourceInfo version, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        // Told first, so a handler that fails leaves the version for a later prune rather than deleted unreported.
+        if (cleanupHandler is not null)
+            await _telemetry.NotifyCleanupAsync(cleanupHandler, new ResourceCleanup(version, ResourceCleanupReason.Pruned, now), cancellationToken);
+        await resourceRepository.DeleteResourceAsync(version.ContainerName, version.Name, version.VersionId, cancellationToken);
+    }
+
+    /// <summary>
+    /// Without versioning, the versions an overwrite replaced that are still waiting out their grace period, behind
+    /// <paramref name="currentVersionId"/>. Deleting the current version must take them too, or the most recent of them
+    /// would become current again, bringing back content the overwrite replaced. Empty when versioning is on, where an
+    /// older version becoming current is what deleting the current one does, or when expiry is off and none wait.
+    /// </summary>
+    internal async Task<List<ResourceInfo>> WaitingBehindAsync(string resourceName, string currentVersionId,
+        CancellationToken cancellationToken)
+    {
+        if (options.IsVersioningEnabled || expiry is null) return [];
+        List<ResourceInfo> versions = await resourceRepository.GetResourceVersionsAsync(ContainerName, resourceName, cancellationToken);
+        return versions is [{ } current, .. var rest] && current.VersionId == currentVersionId ? rest : [];
+    }
+
+    /// <summary>Deletes the versions <see cref="WaitingBehindAsync"/> found, once the current one is deleted.</summary>
+    internal Task DeleteWaitingAsync(string resourceName, List<ResourceInfo> waiting) =>
+        waiting.Count == 0
+            ? Task.CompletedTask
+            : PruneAfterAsync(ContainerName, resourceName, async () =>
+            {
+                DateTimeOffset now = (timeProvider ?? TimeProvider.System).GetUtcNow();
+                foreach (ResourceInfo version in waiting) await DeletePrunedAsync(version, now, CancellationToken.None);
+            });
+
+    /// <summary>How long a version past the versioning limit is kept when expiry is on, for downloads reading it.</summary>
+    internal static readonly TimeSpan PruneGracePeriod = TimeSpan.FromMinutes(5);
+
+    /// <summary>Sets a pruned version to expire at <paramref name="expiresAt"/>, unless it already expires sooner.</summary>
+    /// <returns><see langword="false"/> if the provider doesn't support expiry, so the version is deleted now.</returns>
+    private async Task<bool> TryExpireAsync(string containerName, ResourceInfo version, DateTimeOffset expiresAt,
+        CancellationToken cancellationToken)
+    {
+        if (version.ExpiresAt <= expiresAt) return true;
+        try
+        {
+            await resourceRepository.SetExpiryAsync(new ResourceLocation(containerName, version.Name), version.VersionId, expiresAt,
+                cancellationToken);
+            return true;
+        }
+        catch (NotSupportedException)
+        {
+            return false;
         }
     }
 
@@ -334,10 +399,13 @@ internal partial class ResourceContainerClient(IResourceRepository resourceRepos
         {
             ResourceNames.ThrowIfInvalidResourceName(resourceName);
             if (policies is not null) await policies.ThrowIfReadOnlyAsync(ContainerName, _telemetry, cancellationToken);
+            List<ResourceInfo> waiting = versionId is null ? [] : await WaitingBehindAsync(resourceName, versionId, cancellationToken);
             // Only a conditional delete takes the newer overload, so a provider written for 3.0 handles every other one.
-            return conditions is null or { IsEmpty: true }
+            bool deleted = conditions is null or { IsEmpty: true }
                 ? await resourceRepository.DeleteResourceAsync(ContainerName, resourceName, versionId, cancellationToken)
                 : await resourceRepository.DeleteResourceAsync(ContainerName, resourceName, versionId, conditions, cancellationToken);
+            if (deleted) await DeleteWaitingAsync(resourceName, waiting);
+            return deleted;
         }, "resourcefull.conditional", conditions is { IsEmpty: false });
 
     public Task<ResourceInfo?> CopyResourceAsync(string resourceName, string destinationContainer, string destinationName,
@@ -495,6 +563,6 @@ internal partial class ResourceContainerClient(IResourceRepository resourceRepos
     public void Dispose() => GC.SuppressFinalize(this);
 
     [LoggerMessage(Level = LogLevel.Warning,
-        Message = "Pruning older versions of {ContainerName}/{ResourceName} failed after its upload was stored; they stay until a later upload of the name prunes them.")]
+        Message = "Pruning older versions of {ContainerName}/{ResourceName} failed; they stay until a later write of the name prunes them, or they expire.")]
     private static partial void LogPruneFailed(ILogger logger, Exception exception, string containerName, string resourceName);
 }

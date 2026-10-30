@@ -40,6 +40,15 @@ upload of the name prunes them. Until then they're ordinary versions you can lis
 logged as a warning, with its exception, under the `Resourcefull.ResourceContainerClient` category, when your
 application has logging set up, so one that keeps failing doesn't go unnoticed.
 
+With [expiry](expiry.md) turned on <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span>, pruning doesn't delete a version at once: it sets it to expire five
+minutes later, and the expiry sweep deletes it then. A download already reading it can finish, rather than fail
+partway. Until it's deleted, it's listed, readable and counted toward [container policies](container-policies.md)
+like any version, with its `ExpiresAt` showing when it goes. A version that already expires sooner keeps its expiry.
+Without versioning, deleting the current version, or its expiring, deletes the versions it replaced that are still
+waiting too, so replaced content doesn't come back; if deleting them fails, the failure is logged as a failed prune and
+they stay until they expire. With versioning, deleting the current version makes the
+previous one current, as always, and that can be one waiting to be deleted.
+
 To record the versions that pruning deletes, such as for an audit, register a
 [cleanup handler](expiry.md#auditing-whats-deleted) <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span>.
 

@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Security.Cryptography;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Resourcefull.Tests.Contract;
@@ -136,6 +137,119 @@ public abstract partial class ResourcefullContractTests
         Assert.Contains(cleanups, c => c.Reason == ResourceCleanupReason.Pruned && c.Resource.VersionId == pruned.VersionId);
         Assert.Contains(cleanups, c => c.Reason == ResourceCleanupReason.Expired && c.Resource.VersionId == expired.VersionId);
         Assert.Equal(2, cleanups.Count);
+    }
+
+    [SkippableFact]
+    public async Task UploadAsync_ShouldKeepAPrunedVersionUntilItsGracePeriodEnds_WhenExpiryIsOn()
+    {
+        // Arrange
+        var clock = new ManualTimeProvider { Now = DateTimeOffset.UtcNow };
+        using ServiceProvider provider = BuildServiceProvider(o =>
+        {
+            o.UseVersioning(1).UseExpiry().UseCleanupHandler<RecordingCleanupHandler>();
+            o.Services.AddSingleton<TimeProvider>(clock);
+        });
+        IResourceContainerClient container = await NewContainerAsync(provider);
+        ResourceInfo first = await container.UploadAsync("notes.txt", BinaryData.FromString("1"));
+        DateTimeOffset pruned = clock.Now;
+
+        // Act
+        await container.UploadAsync("notes.txt", BinaryData.FromString("2"));
+        ResourceInfo? kept = await container.GetResourceInfoAsync("notes.txt", first.VersionId);
+        bool reportedWhilePruning = RecordingCleanupHandler.In(container.ResourceContainerInfo.Name).Count > 0;
+        clock.Now = clock.Now.AddMinutes(6);
+        await ServiceOf(provider).DeleteExpiredAsync();
+
+        // Assert: kept, expiring five minutes after the prune, then deleted by the sweep, which reports it.
+        Assert.Equal(pruned.AddMinutes(5), kept!.ExpiresAt);
+        Assert.False(reportedWhilePruning);
+        Assert.False(await container.ExistsAsync("notes.txt", first.VersionId));
+        ResourceCleanup cleanup = Assert.Single(RecordingCleanupHandler.In(container.ResourceContainerInfo.Name));
+        Assert.Equal((ResourceCleanupReason.Expired, first.VersionId), (cleanup.Reason, cleanup.Resource.VersionId));
+    }
+
+    [SkippableFact]
+    public async Task UploadAsync_ShouldKeepAPrunedVersionsSoonerExpiry_WhenExpiryIsOn()
+    {
+        // Arrange
+        var clock = new ManualTimeProvider { Now = DateTimeOffset.UtcNow };
+        using ServiceProvider provider = BuildServiceProvider(o =>
+        {
+            o.UseVersioning(1).UseExpiry();
+            o.Services.AddSingleton<TimeProvider>(clock);
+        });
+        IResourceContainerClient container = await NewContainerAsync(provider);
+        ResourceInfo first = await container.UploadAsync("notes.txt", BinaryData.FromString("1"), Expiring(clock.Now.AddMinutes(1)));
+
+        // Act
+        await container.UploadAsync("notes.txt", BinaryData.FromString("2"));
+
+        // Assert
+        Assert.Equal(clock.Now.AddMinutes(1), (await container.GetResourceInfoAsync("notes.txt", first.VersionId))!.ExpiresAt);
+    }
+
+    [SkippableFact]
+    public async Task DeleteResourceIfExistsAsync_ShouldDeleteTheReplacedVersionsToo_WhenTheCurrentVersionIsDeletedWithoutVersioning()
+    {
+        // Arrange: without versioning, the version an overwrite replaced waits out its grace period.
+        using ServiceProvider provider = BuildServiceProvider(o => o.UseExpiry());
+        IResourceContainerClient container = await NewContainerAsync(provider);
+        await container.UploadAsync("notes.txt", BinaryData.FromString("replaced"));
+        ResourceInfo current = await container.UploadAsync("notes.txt", BinaryData.FromString("current"),
+            new ResourceUploadOptions { Overwrite = true });
+
+        // Act
+        bool deleted = await container.DeleteResourceIfExistsAsync("notes.txt", current.VersionId);
+
+        // Assert: the replaced content didn't become current again.
+        Assert.True(deleted);
+        Assert.False(await container.ExistsAsync("notes.txt"));
+        Assert.Empty(await container.GetResourceVersionsAsync("notes.txt"));
+    }
+
+    [SkippableFact]
+    public async Task DeleteExpiredAsync_ShouldDeleteTheReplacedVersionsToo_WhenTheCurrentVersionExpiresWithoutVersioning()
+    {
+        // Arrange: an overwrite that expires sooner than the grace period of the version it replaced.
+        var clock = new ManualTimeProvider { Now = DateTimeOffset.UtcNow };
+        using ServiceProvider provider = BuildServiceProvider(o =>
+        {
+            o.UseExpiry();
+            o.Services.AddSingleton<TimeProvider>(clock);
+        });
+        IResourceContainerClient container = await NewContainerAsync(provider);
+        await container.UploadAsync("notes.txt", BinaryData.FromString("replaced"));
+        await container.UploadAsync("notes.txt", BinaryData.FromString("current"),
+            new ResourceUploadOptions { Overwrite = true, ExpiresAt = clock.Now.AddMinutes(1) });
+
+        // Act
+        clock.Now = clock.Now.AddMinutes(2);
+        await ServiceOf(provider).DeleteExpiredAsync();
+
+        // Assert
+        Assert.False(await container.ExistsAsync("notes.txt"));
+        Assert.Empty(await container.GetResourceVersionsAsync("notes.txt"));
+    }
+
+    [SkippableFact]
+    public async Task DownloadStreamingAsync_ShouldFinishReading_WhenAnUploadReplacesTheVersionWhileExpiryIsOn()
+    {
+        // Arrange: without versioning an upload replaces the version before it; the content spans several pages.
+        using ServiceProvider provider = BuildServiceProvider(o => o.UseExpiry());
+        IResourceContainerClient container = await NewContainerAsync(provider);
+        byte[] content = RandomNumberGenerator.GetBytes(4 * 1024 * 1024);
+        await container.UploadAsync("video.mp4", new MemoryStream(content));
+        await using ResourceDownloadResult download = (await container.DownloadStreamingAsync("video.mp4"))!;
+        byte[] start = new byte[1000];
+        await download.Stream.ReadExactlyAsync(start);
+
+        // Act
+        await container.UploadAsync("video.mp4", BinaryData.FromString("replaced"), new ResourceUploadOptions { Overwrite = true });
+        var rest = new MemoryStream();
+        await download.Stream.CopyToAsync(rest);
+
+        // Assert
+        Assert.Equal(content, start.Concat(rest.ToArray()).ToArray());
     }
 
     [SkippableFact]
