@@ -145,4 +145,8 @@ remove the sidebar markers from `template/public/main.css`, and move the README'
 Merge to `main`, then push a matching tag (`v3.0.0`). Once it's published, set `PackageValidationBaselineVersion` in
 `src/Directory.Build.props` to the version just released, so the next release is checked against it. The publish
 workflow runs every test, checks that the tag matches the version, and publishes the packages that it tested to
-nuget.org.
+nuget.org. In `CHANGELOG.md`, turn `[Unreleased]` into the version and date, start a new `[Unreleased]` section, and
+update the compare links at the bottom.
+
+A release that adds a package ID needs it added to nuget.org's Trusted Publishing policy for this repository first, or
+pushed once by hand: until then nuget.org refuses the workflow's push of the new ID with 403 Forbidden.

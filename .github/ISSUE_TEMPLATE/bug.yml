@@ -1,0 +1,48 @@
+name: Bug report
+description: Something in Resourcefull doesn't work as documented.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting it. For a security problem, don't open an issue: see the security policy instead.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead. Include the exception and stack trace if there is one.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: How to reproduce it
+      description: The smallest code that shows it, if you can.
+      render: csharp
+  - type: input
+    id: version
+    attributes:
+      label: Resourcefull version
+      description: The version of every Resourcefull package you use, such as 3.1.0.
+    validations:
+      required: true
+  - type: dropdown
+    id: provider
+    attributes:
+      label: Storage provider
+      options:
+        - SQL Server
+        - In-memory
+        - A provider of my own
+    validations:
+      required: true
+  - type: input
+    id: sql-server
+    attributes:
+      label: SQL Server version and edition
+      description: For the SQL Server provider, such as "SQL Server 2022 Express" or "Azure SQL Database". `SELECT @@VERSION` shows it.
+  - type: input
+    id: dotnet
+    attributes:
+      label: .NET version and operating system
+      description: Such as ".NET 10.0.1 on Linux".

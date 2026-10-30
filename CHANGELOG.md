@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## [Unreleased]
 
 ### Added
 
@@ -86,7 +86,7 @@
   committed but the connection failed before saying so, the automatic retry ran again and reported a conflict for a
   create, or a concurrency error for a delete; now it recognizes its own success, as uploads already did.
 
-## 3.1.0
+## [3.1.0] - 2026-10-29
 
 New features, all additive: code written for 3.0 keeps compiling, and custom providers keep working. The one thing to
 check is a test that expects exactly `ArgumentException` for a bad name; it's now the subclass
@@ -122,7 +122,7 @@ check is a test that expects exactly `ArgumentException` for a bad name; it's no
 - With SQL Server, a delete whose commit succeeded but whose acknowledgement was lost to a transient error, and was
   retried, reported that nothing was deleted. It now reports the delete.
 
-## 3.0.0
+## [3.0.0] - 2026-10-29
 
 The first release of Resourcefull for general use. Coming from an earlier release, read
 [Upgrading to 3.0](docs/upgrading-to-3.md) first: it lists every change to code, behavior and the database, with what each
@@ -168,3 +168,7 @@ needs from you. Items marked *(from 1.x)* were already in 2.x.
 - Uploads and downloads of any size use a fixed amount of memory, and uploads make about half as many round trips.
 - An upload into a container deleted moments before reports the missing container. *(from 1.x)*
 - Deleting a large container works in bounded batches, and can be resumed if it stops partway.
+
+[Unreleased]: https://github.com/zacharydf7/Resourcefull/compare/v3.1.0...HEAD
+[3.1.0]: https://github.com/zacharydf7/Resourcefull/compare/v3.0.0...v3.1.0
+[3.0.0]: https://github.com/zacharydf7/Resourcefull/releases/tag/v3.0.0
