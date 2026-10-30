@@ -15,7 +15,8 @@ builder.Services.AddOpenTelemetry()
 ```
 
 Both names are `Resourcefull`. With SQL Server, SqlClient's own instrumentation, when you enable it, adds each
-database call as a child of the operation's span.
+database call as a child of the operation's span. With .NET Aspire, add them to the service defaults; see
+[Aspire](aspire.md).
 
 ## Metrics
 

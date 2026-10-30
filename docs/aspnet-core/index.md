@@ -20,6 +20,7 @@ This section covers:
 - [Accepting uploads](accepting-uploads.md): streaming request bodies and form files into storage, with
   preconditions, and raising the request size limits for large files.
 - [Turning exceptions into status codes](status-codes.md): one handler that answers 404, 409, 412 and the rest.
+- [MVC, Razor Pages and Blazor](mvc-razor-blazor.md): the same pieces in controllers, pages and Blazor components.
 - [URIs for your API](../uri-providers.md): giving containers and resources the URLs your endpoints serve them at.
 - [Sharing files with links](../sharing-links.md): links that let anyone download one file, without signing in,
   until they expire.

@@ -38,6 +38,8 @@
     href: aspnet-core/accepting-uploads.md
   - name: Exceptions as status codes
     href: aspnet-core/status-codes.md
+  - name: MVC, Razor Pages and Blazor
+    href: aspnet-core/mvc-razor-blazor.md
   - name: URI providers
     href: uri-providers.md
   - name: Sharing files with links
@@ -70,6 +72,8 @@
     href: health-checks.md
   - name: Telemetry
     href: telemetry.md
+  - name: Aspire
+    href: aspire.md
   - name: Troubleshooting
     href: troubleshooting.md
 - name: Testing and extending

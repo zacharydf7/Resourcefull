@@ -11,6 +11,7 @@
     <ProjectReference Include="..\..\src\Resourcefull.InMemory\Resourcefull.InMemory.csproj" />
     <ProjectReference Include="..\..\src\Resourcefull.SqlServer\Resourcefull.SqlServer.csproj" />
     <ProjectReference Include="..\..\src\Resourcefull\Resourcefull.csproj" />
+    <ProjectReference Include="..\..\src\Resourcefull.AspNetCore\Resourcefull.AspNetCore.csproj" />
   </ItemGroup>
 
 </Project>

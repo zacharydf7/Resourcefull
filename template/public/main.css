@@ -295,7 +295,8 @@ article .alert {
 .toc a[href$="sharing-links.html"]::after,
 .toc a[href$="sharing-links-in-production.html"]::after,
 .toc a[href$="backup-and-move.html"]::after,
-.toc a[href$="copying-and-moving.html"]::after {
+.toc a[href$="copying-and-moving.html"]::after,
+.toc a[href$="aspire.html"]::after {
   content: "3.2";
   margin-left: .45em;
   padding: 0 .45em;
