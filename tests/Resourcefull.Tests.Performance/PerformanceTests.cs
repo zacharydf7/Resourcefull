@@ -27,6 +27,8 @@ public sealed class PerformanceTests(SqlServerFixture fixture, ITestOutputHelper
 
     private readonly SqlActivity _activity = new();
     private ServiceProvider? _provider;
+    // The database the scenario runs in, which its checkpoint and log measurement read.
+    private string? _connectionString;
 
     [ModuleInitializer]
     internal static void UseTheSameNetworkingEverywhere()
@@ -99,8 +101,9 @@ public sealed class PerformanceTests(SqlServerFixture fixture, ITestOutputHelper
     public async Task DeleteExpiredAsync_ShouldStayWithinItsBaseline_WhenNothingHasExpired()
     {
         // What expiry costs every interval on every instance when there's nothing to delete: a read of the index of
-        // versions that expire, whatever else the store holds.
-        IResourceContainerClient container = await NewContainerAsync();
+        // versions that expire, whatever else the store holds. In a database of its own, so its versions can't change
+        // where other scenarios' land on pages, whatever order the scenarios run in.
+        IResourceContainerClient container = await NewContainerAsync(ownDatabase: "expiry");
         for (int i = 0; i < 200; i++) await container.UploadAsync($"lasting{i}", BinaryData.FromString("x"));
         for (int i = 0; i < 20; i++)
             await container.UploadAsync($"expiring{i}", BinaryData.FromString("x"), new ResourceUploadOptions { ExpiresAt = DateTimeOffset.UtcNow.AddDays(1) });
@@ -272,14 +275,20 @@ public sealed class PerformanceTests(SqlServerFixture fixture, ITestOutputHelper
         _activity.Dispose();
     }
 
-    private async Task<IResourceContainerClient> NewContainerAsync()
+    /// <summary>
+    /// A new container, in the shared database, or in a database of the scenario's own, named for
+    /// <paramref name="ownDatabase"/>, which it creates and migrates.
+    /// </summary>
+    private async Task<IResourceContainerClient> NewContainerAsync(string? ownDatabase = null)
     {
         fixture.SkipIfUnavailable();
 
+        _connectionString = ownDatabase is null ? fixture.ConnectionString : fixture.AllocateDatabase(ownDatabase);
         var services = new ServiceCollection();
-        services.AddResourcefull(options => options.UseSqlServer(fixture.ConnectionString).UseVersioning(maxVersions: 50));
+        services.AddResourcefull(options => options.UseSqlServer(_connectionString).UseVersioning(maxVersions: 50));
         services.ConfigureDbContext<ResourceDbContext>(options => options.AddInterceptors(_activity));
         _provider = services.BuildServiceProvider();
+        if (ownDatabase is not null) await _provider.MigrateResourcefullDatabaseAsync();
 
         var resources = _provider.GetRequiredService<IResourceServiceClient>();
         return await resources.CreateResourceContainerAsync($"perf-{Guid.NewGuid():N}");
@@ -298,7 +307,7 @@ public sealed class PerformanceTests(SqlServerFixture fixture, ITestOutputHelper
 
         // Flushes the pages the scenario's setup and warm-up dirtied, so SQL Server doesn't write them out during the
         // measured runs: on a slow disk that more than tripled the time of deletes measured right after their uploads.
-        await using (SqlConnection connection = await fixture.OpenConnectionAsync())
+        await using (SqlConnection connection = await OpenScenarioDatabaseAsync())
         await using (SqlCommand checkpoint = connection.CreateCommand())
         {
             checkpoint.CommandText = "CHECKPOINT;";
@@ -365,10 +374,18 @@ public sealed class PerformanceTests(SqlServerFixture fixture, ITestOutputHelper
     /// </summary>
     private async Task<long> LogBytesWrittenAsync()
     {
-        await using SqlConnection connection = await fixture.OpenConnectionAsync();
+        await using SqlConnection connection = await OpenScenarioDatabaseAsync();
         await using SqlCommand command = connection.CreateCommand();
         command.CommandText = "SELECT [num_of_bytes_written] FROM sys.dm_io_virtual_file_stats(DB_ID(), 2);";
         return (long)(await command.ExecuteScalarAsync())!;
+    }
+
+    /// <summary>A raw connection to the database the scenario runs in.</summary>
+    private async Task<SqlConnection> OpenScenarioDatabaseAsync()
+    {
+        var connection = new SqlConnection(_connectionString ?? fixture.ConnectionString);
+        await connection.OpenAsync();
+        return connection;
     }
 
     private static T Median<T>(List<Measurement> samples, Func<Measurement, T> metric)

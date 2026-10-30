@@ -157,7 +157,7 @@ internal class ResourceServiceClient(IResourceRepository resourceRepository, IOp
                         // One version that keeps failing, a handler's timeout included, mustn't hold up the rest; only
                         // canceling the sweep stops it.
                         failed++;
-                        if (failures.Count < 10) failures.Add(exception);
+                        if (failures.Count < FailuresKept) failures.Add(exception);
                     }
                 }
 
@@ -176,6 +176,9 @@ internal class ResourceServiceClient(IResourceRepository resourceRepository, IOp
 
     /// <summary>How many expired versions one query lists, so a cleanup holds a bounded batch at a time.</summary>
     private const int ExpiredPerBatch = 100;
+
+    /// <summary>How many of a sweep's failures it keeps to throw, to say why without holding one per failed version.</summary>
+    private const int FailuresKept = 10;
 
     public Task<bool> DeleteResourceContainerIfExistsAsync(string resourceContainerName, CancellationToken cancellationToken)
         => _telemetry.RunAsync("delete_container", resourceContainerName, null, async () =>
