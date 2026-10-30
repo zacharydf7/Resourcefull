@@ -151,56 +151,46 @@ internal class ResourceServiceClient(IResourceRepository resourceRepository, IOp
                 await resourceRepository.GetResourceInfoAsync(version.ContainerName, version.Name, version.VersionId,
                     CancellationToken.None) is null;
 
-            // Deletes each version on its own, so one that fails doesn't hold up the rest. One gone already counts as
-            // deleted after a batch failed, which may have deleted it, so what waited behind it is cleaned up.
-            async Task<List<ResourceInfo>> DeleteOneByOneAsync(IEnumerable<ResourceInfo> versions, bool afterFailedBatch)
-            {
-                var deletedOneByOne = new List<ResourceInfo>();
-                foreach (ResourceInfo version in versions)
-                {
-                    try
-                    {
-                        var location = new ResourceLocation(version.ContainerName, version.Name);
-                        if (await resourceRepository.DeleteExpiredVersionAsync(location, version.VersionId, now,
-                            cancellationToken) || (afterFailedBatch && await GoneAsync(version)))
-                            deletedOneByOne.Add(version);
-                    }
-                    catch (Exception oneFailure)
-                        when (oneFailure is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
-                    {
-                        Fail(oneFailure);
-                    }
-                }
-                return deletedOneByOne;
-            }
+            static (ResourceLocation, string) Key(ResourceInfo version) =>
+                (new ResourceLocation(version.ContainerName, version.Name), version.VersionId);
 
-            // Deletes a batch of versions together, or, if that fails, each on its own. Returns the versions deleted.
+            // Deletes a batch of versions together, or, if that fails, each on its own, so one version that fails
+            // doesn't hold up the rest. Returns the versions deleted.
             async Task<List<ResourceInfo>> DeleteBatchAsync(List<ResourceInfo> versions)
             {
-                // A batch returns only IDs, which can repeat in other containers, so a repeated one goes on its own.
-                List<ResourceInfo> repeated = [.. versions.GroupBy(v => v.VersionId).Where(g => g.Count() > 1)
-                    .SelectMany(g => g)];
-                List<ResourceInfo> batch = [.. versions.Except(repeated)];
-                List<ResourceInfo> deletedTogether = [];
-                if (batch.Count > 0)
+                try
                 {
-                    try
-                    {
-                        IReadOnlyCollection<string> ids = await resourceRepository.DeleteExpiredVersionsAsync(
-                            [.. batch.Select(v => (new ResourceLocation(v.ContainerName, v.Name), v.VersionId))], now,
-                            cancellationToken);
-                        batches++;
-                        deletedTogether = [.. batch.Where(v => ids.Contains(v.VersionId))];
-                    }
-                    catch (Exception exception)
-                        when (exception is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
-                    {
-                        fallbacks++;
-                        _telemetry.RecordException(activity, exception);
-                        deletedTogether = await DeleteOneByOneAsync(batch, afterFailedBatch: true);
-                    }
+                    HashSet<(ResourceLocation, string)> deletedTogether =
+                        [.. await resourceRepository.DeleteExpiredVersionsAsync([.. versions.Select(Key)], now,
+                            cancellationToken)];
+                    batches++;
+                    return [.. versions.Where(v => deletedTogether.Contains(Key(v)))];
                 }
-                return [.. deletedTogether, .. await DeleteOneByOneAsync(repeated, afterFailedBatch: false)];
+                catch (Exception exception)
+                    when (exception is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+                {
+                    fallbacks++;
+                    _telemetry.RecordException(activity, exception);
+                    var deletedOneByOne = new List<ResourceInfo>();
+                    foreach (ResourceInfo version in versions)
+                    {
+                        try
+                        {
+                            var location = new ResourceLocation(version.ContainerName, version.Name);
+                            // One the failed batch deleted before it failed counts as deleted, so what waited
+                            // behind it is cleaned up.
+                            if (await resourceRepository.DeleteExpiredVersionAsync(location, version.VersionId, now,
+                                cancellationToken) || await GoneAsync(version))
+                                deletedOneByOne.Add(version);
+                        }
+                        catch (Exception oneFailure) when (oneFailure is not OperationCanceledException
+                            || !cancellationToken.IsCancellationRequested)
+                        {
+                            Fail(oneFailure);
+                        }
+                    }
+                    return deletedOneByOne;
+                }
             }
 
             // Each batch starts after the last one ended, so the versions a sweep skips or fails on can't hold up the rest.

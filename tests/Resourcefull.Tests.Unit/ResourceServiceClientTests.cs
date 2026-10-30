@@ -461,7 +461,7 @@ public class ResourceServiceClientTests
         var expired = new ResourceInfo { ContainerName = "c", Name = "n", VersionId = "v1", ExpiresAt = DateTimeOffset.UnixEpoch };
         repository.Setup(r => r.GetExpiredAsync(It.IsAny<DateTimeOffset>(), It.IsAny<int>(), null, It.IsAny<CancellationToken>())).ReturnsAsync([expired]);
         repository.Setup(r => r.DeleteExpiredVersionsAsync(It.IsAny<IReadOnlyList<(ResourceLocation, string)>>(),
-            It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>())).ReturnsAsync(["v1"]);
+            It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>())).ReturnsAsync([(new ResourceLocation("c", "n"), "v1")]);
         var service = NewService(repository.Object);
 
         // Act
@@ -497,7 +497,7 @@ public class ResourceServiceClientTests
             .ReturnsAsync([current, replaced]);
         repository.Setup(r => r.DeleteExpiredVersionsAsync(It.IsAny<IReadOnlyList<(ResourceLocation, string)>>(),
             It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()))
-            .Returns(() => Task.FromException<IReadOnlyCollection<string>>(failure()));
+            .Returns(() => Task.FromException<IReadOnlyCollection<(ResourceLocation, string)>>(failure()));
         repository.Setup(r => r.GetResourceInfoAsync("c", "n", "current", It.IsAny<CancellationToken>()))
             .ReturnsAsync((ResourceInfo?)null);
         var service = new ResourceServiceClient(repository.Object, Options.Create(new ResourcefullOptions()),
@@ -539,7 +539,7 @@ public class ResourceServiceClientTests
     }
 
     [Fact]
-    public async Task DeleteExpiredAsync_ShouldDeleteARepeatedVersionIdOnItsOwn_WhenTwoContainersHaveIt()
+    public async Task DeleteExpiredAsync_ShouldCountOnlyTheVersionsTheBatchDeleted_WhenTwoContainersShareAVersionId()
     {
         // Arrange: an import can give versions in two containers the same ID; only one of those two is still expired.
         var repository = new Mock<IResourceRepository>();
@@ -547,19 +547,17 @@ public class ResourceServiceClientTests
             new() { ContainerName = container, Name = name, VersionId = id, ExpiresAt = DateTimeOffset.UnixEpoch };
         repository.Setup(r => r.GetExpiredAsync(It.IsAny<DateTimeOffset>(), It.IsAny<int>(), null,
             It.IsAny<CancellationToken>())).ReturnsAsync([Expired("c", "n", "v1"), Expired("d", "n", "v1"), Expired("c", "o", "v2")]);
-        repository.Setup(r => r.DeleteExpiredVersionsAsync(It.IsAny<IReadOnlyList<(ResourceLocation, string)>>(),
-            It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>())).ReturnsAsync(["v2"]);
-        repository.Setup(r => r.DeleteExpiredVersionAsync(new ResourceLocation("c", "n"), "v1", It.IsAny<DateTimeOffset>(),
-            It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        repository.Setup(r => r.DeleteExpiredVersionsAsync(It.Is<IReadOnlyList<(ResourceLocation, string)>>(v => v.Count == 3),
+            It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([(new ResourceLocation("c", "n"), "v1"), (new ResourceLocation("c", "o"), "v2")]);
 
         // Act
         int deleted = await NewService(repository.Object).DeleteExpiredAsync();
 
         // Assert
         Assert.Equal(2, deleted);
-        repository.Verify(r => r.DeleteExpiredVersionsAsync(
-            It.Is<IReadOnlyList<(ResourceLocation, string)>>(v => IsOnly(v, "c", "o", "v2")),
-            It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()), Times.Once);
+        repository.Verify(r => r.DeleteExpiredVersionAsync(It.IsAny<ResourceLocation>(), It.IsAny<string>(),
+            It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]

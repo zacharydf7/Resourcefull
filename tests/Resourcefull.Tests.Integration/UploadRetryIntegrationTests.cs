@@ -285,11 +285,12 @@ public class UploadRetryIntegrationTests(SqlServerFixture fixture)
         failure.Arm();
 
         // Act
-        IReadOnlyCollection<string> deleted = await repository.DeleteExpiredVersionsAsync(versions, DateTimeOffset.UtcNow);
+        IReadOnlyCollection<(ResourceLocation, string)> deleted =
+            await repository.DeleteExpiredVersionsAsync(versions, DateTimeOffset.UtcNow);
 
         // Assert
         Assert.True(failure.Failed);
-        Assert.Equal(versions.Select(v => v.Item2).Order(), deleted.Order());
+        Assert.Equal(versions.OrderBy(v => v.Item2), deleted.OrderBy(v => v.Item2));
         for (int i = 0; i < 5; i++) Assert.Empty(await repository.GetResourceVersionsAsync(c, $"n{i}"));
     }
 

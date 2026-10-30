@@ -396,7 +396,7 @@ public interface IResourceRepository
 
     /// <summary>
     /// Deletes each of <paramref name="versions"/> that's still expired at <paramref name="now"/>, as
-    /// <see cref="DeleteExpiredVersionAsync"/> does for one, and returns the IDs of those it deleted; a version that's
+    /// <see cref="DeleteExpiredVersionAsync"/> does for one, and returns those it deleted; a version that's
     /// gone, or no longer expired, is left out. A sweep deletes each page of expired versions it lists through it. A
     /// provider should answer it in a few round trips; the default implementation, kept so providers written before it
     /// still compile and work, calls <see cref="DeleteExpiredVersionAsync"/> for each.
@@ -405,16 +405,17 @@ public interface IResourceRepository
     /// <param name="versions">The versions to delete if they're still expired.</param>
     /// <param name="now">The time to decide expiry by.</param>
     /// <param name="cancellationToken">Cancels the deletes; the versions already deleted stay deleted.</param>
-    /// <returns>The IDs of the versions it deleted.</returns>
+    /// <returns>The versions it deleted.</returns>
     /// <exception cref="NotSupportedException">The provider doesn't support expiry.</exception>
-    async Task<IReadOnlyCollection<string>> DeleteExpiredVersionsAsync(
+    async Task<IReadOnlyCollection<(ResourceLocation Resource, string VersionId)>> DeleteExpiredVersionsAsync(
         IReadOnlyList<(ResourceLocation Resource, string VersionId)> versions, DateTimeOffset now,
         CancellationToken cancellationToken = default)
     {
-        var deleted = new List<string>();
+        var deleted = new List<(ResourceLocation, string)>();
         foreach ((ResourceLocation resource, string versionId) in versions)
         {
-            if (await DeleteExpiredVersionAsync(resource, versionId, now, cancellationToken)) deleted.Add(versionId);
+            if (await DeleteExpiredVersionAsync(resource, versionId, now, cancellationToken))
+                deleted.Add((resource, versionId));
         }
         return deleted;
     }

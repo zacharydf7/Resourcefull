@@ -46,7 +46,7 @@ public abstract partial class ResourcefullContractTests
         IResourceRepository repository = provider.GetRequiredService<IResourceRepository>();
 
         // Act
-        IReadOnlyCollection<string> deleted = await repository.DeleteExpiredVersionsAsync(
+        IReadOnlyCollection<(ResourceLocation, string)> deleted = await repository.DeleteExpiredVersionsAsync(
         [
             (new ResourceLocation(containerName, "a"), current.VersionId),
             (new ResourceLocation(containerName, "b"), extended.VersionId),
@@ -54,7 +54,7 @@ public abstract partial class ResourcefullContractTests
         ], DateTimeOffset.UtcNow);
 
         // Assert
-        Assert.Equal([current.VersionId], deleted);
+        Assert.Equal([(new ResourceLocation(containerName, "a"), current.VersionId)], deleted);
         ResourceInfo nowCurrent = (await container.GetResourceInfoAsync("a"))!;
         Assert.Equal(older.VersionId, nowCurrent.VersionId);
         Assert.True(nowCurrent.IsLatest);
@@ -74,11 +74,11 @@ public abstract partial class ResourcefullContractTests
         IResourceRepository repository = provider.GetRequiredService<IResourceRepository>();
 
         // Act
-        IReadOnlyCollection<string> deleted = await repository.DeleteExpiredVersionsAsync(
+        IReadOnlyCollection<(ResourceLocation, string VersionId)> deleted = await repository.DeleteExpiredVersionsAsync(
             [(location, second.VersionId), (location, third.VersionId)], DateTimeOffset.UtcNow);
 
         // Assert
-        Assert.Equal(new[] { second.VersionId, third.VersionId }.Order(), deleted.Order());
+        Assert.Equal(new[] { second.VersionId, third.VersionId }.Order(), deleted.Select(d => d.VersionId).Order());
         ResourceInfo current = Assert.Single(await container.GetResourceVersionsAsync("a"));
         Assert.Equal(kept.VersionId, current.VersionId);
         Assert.True(current.IsLatest);

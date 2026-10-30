@@ -875,39 +875,65 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
         }, cancellationToken);
     }
 
-    public async Task<IReadOnlyCollection<string>> DeleteExpiredVersionsAsync(
+    public async Task<IReadOnlyCollection<(ResourceLocation Resource, string VersionId)>> DeleteExpiredVersionsAsync(
         IReadOnlyList<(ResourceLocation Resource, string VersionId)> versions, DateTimeOffset now,
         CancellationToken cancellationToken = default)
     {
-        var deleted = new List<string>();
-        List<(ResourceLocation Resource, string VersionId)> left = [.. versions.Distinct()];
-        while (left.Count > 0)
+        var deleted = new List<(ResourceLocation, string)>();
+        // The expired versions left for a later batch, with their chunks.
+        List<(ResourceLocation Resource, string VersionId, int Chunks)> later = [];
+        List<(ResourceLocation Resource, string VersionId)> batch = [.. versions.Distinct()];
+        while (batch.Count > 0)
         {
             // What an earlier attempt deleted, should a retry follow a commit whose acknowledgement was lost.
             List<(ResourceLocation, string)> deletedInAnEarlierAttempt = [];
 
-            // A transaction under every name's lock, so a change to an expiry can't come between the check and the
-            // delete. It deletes up to ChunksPerDeleteBatch chunks' worth, as a container or name delete does, and
+            // A transaction under the batch's names' locks, so a change to an expiry can't come between the check and
+            // the delete. It deletes up to ChunksPerDeleteBatch chunks' worth, as a container or name delete does, and
             // leaves the rest of the expired versions for the next.
-            List<(ResourceLocation Resource, string VersionId)> batch = left;
-            (List<(ResourceLocation Resource, string VersionId)> gone, left) = await WriteNamesAsync(
-                batch.Select(v => v.Resource),
+            List<(ResourceLocation Resource, string VersionId)> current = batch;
+            (List<(ResourceLocation, string)> gone, List<(ResourceLocation, string, int)> left) = await WriteNamesAsync(
+                current.Select(v => v.Resource),
                 async (dbContext, ct) =>
                 {
-                    var result = await DeleteExpiredBatchAsync(dbContext, batch, now, deletedInAnEarlierAttempt, ct);
+                    var result = await DeleteExpiredBatchAsync(dbContext, current, now, deletedInAnEarlierAttempt, ct);
                     deletedInAnEarlierAttempt = result.Deleted;
                     return result;
                 }, cancellationToken);
-            deleted.AddRange(gone.Select(v => v.VersionId));
+            deleted.AddRange(gone);
+
+            // The first batch is every version, as it doesn't know their chunks yet; each later one is only those that
+            // fit the budget, so it locks only the names it deletes.
+            later = [.. left, .. later];
+            int count = CountWithinDeleteBudget(later.Select(v => v.Chunks));
+            batch = [.. later.Take(count).Select(v => (v.Resource, v.VersionId))];
+            later = [.. later.Skip(count)];
         }
         return deleted;
     }
 
     /// <summary>
-    /// Deletes those of <paramref name="versions"/> still expired, up to <see cref="ChunksPerDeleteBatch"/> chunks' worth,
-    /// and returns the versions it deleted and those still expired that it left for another batch.
+    /// How many of a list of versions, with these chunks each, go in one batch: as many as fit in
+    /// <see cref="ChunksPerDeleteBatch"/>, and at least one.
     /// </summary>
-    private async Task<(List<(ResourceLocation, string)> Deleted, List<(ResourceLocation, string)> Left)>
+    private int CountWithinDeleteBudget(IEnumerable<int> chunks)
+    {
+        int count = 0;
+        long total = 0;
+        foreach (int versionChunks in chunks)
+        {
+            if (count > 0 && total + versionChunks > ChunksPerDeleteBatch) break;
+            count++;
+            total += versionChunks;
+        }
+        return count;
+    }
+
+    /// <summary>
+    /// Deletes those of <paramref name="versions"/> still expired, up to <see cref="ChunksPerDeleteBatch"/> chunks' worth,
+    /// and returns the versions it deleted and those still expired, with their chunks, that it left for another batch.
+    /// </summary>
+    private async Task<(List<(ResourceLocation, string)> Deleted, List<(ResourceLocation, string, int)> Left)>
         DeleteExpiredBatchAsync(ResourceDbContext dbContext, List<(ResourceLocation Resource, string VersionId)> versions,
             DateTimeOffset now, List<(ResourceLocation, string)> deletedInAnEarlierAttempt, CancellationToken ct)
     {
@@ -925,15 +951,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
                 (new ResourceLocation(f.Version.ContainerName, f.Version.Name), f.Version.VersionId!)))
             .ToList();
         var expired = found.Where(f => f.Version.ExpiresAt <= now).ToList();
-        int count = 0;
-        long chunks = 0;
-        foreach (var version in expired)
-        {
-            if (count > 0 && chunks + version.Chunks > ChunksPerDeleteBatch) break;
-            count++;
-            chunks += version.Chunks;
-        }
-        var deleting = expired.Take(count).ToList();
+        var deleting = expired.Take(CountWithinDeleteBudget(expired.Select(e => e.Chunks))).ToList();
 
         await DeleteLargeVersionsChunksAsync(dbContext, deleting.Select(d => (d.Version.Id, d.Chunks)), ct);
         dbContext.Resources.RemoveRange(deleting.Select(d => d.Version));
@@ -966,7 +984,8 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
             (new ResourceLocation(version.ContainerName, version.Name), version.VersionId!);
         var foundKeys = found.Select(f => Key(f.Version)).ToHashSet();
         return ([.. deleting.Select(d => Key(d.Version)), .. deletedInAnEarlierAttempt.Where(v => !foundKeys.Contains(v))],
-            [.. expired.Skip(deleting.Count).Select(e => Key(e.Version))]);
+            [.. expired.Skip(deleting.Count).Select(e => (new ResourceLocation(e.Version.ContainerName, e.Version.Name),
+                e.Version.VersionId!, e.Chunks))]);
     }
 
     public Task<bool> SetExpiryAsync(ResourceLocation resource, string versionId, DateTimeOffset? expiresAt,

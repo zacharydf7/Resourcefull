@@ -1,4 +1,8 @@
+using System.Data.Common;
 using Microsoft.Data.SqlClient;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
 using Resourcefull.SqlServer;
 using Resourcefull.SqlServer.Utilities;
@@ -88,5 +92,51 @@ public class DeleteLockingIntegrationTests(SqlServerFixture fixture)
         Assert.True(deleted);
         Assert.Equal(before, await LockEscalationsAsync());
         Assert.Equal(what is "version" or "expire" ? 1 : 0, (await container.GetResourceVersionsAsync("big")).Count);
+    }
+
+    [SkippableFact]
+    public async Task DeleteExpiredVersionsAsync_ShouldLockOnlyTheNamesALaterTransactionDeletes_WhenAPageIsOverTheChunkBudget()
+    {
+        fixture.SkipIfUnavailable();
+
+        // Arrange: nine expired names of a chunk each, four of which fit in a transaction.
+        var locks = new LockCountingInterceptor();
+        var repository = new ResourceSqlRepository(new PooledDbContextFactory<ResourceDbContext>(
+            new DbContextOptionsBuilder<ResourceDbContext>().UseSqlServer(fixture.ConnectionString).AddInterceptors(locks)
+                .Options)) { ChunksPerDeleteBatch = 4 };
+        string containerName = $"c-{Guid.NewGuid():N}";
+        await repository.AddResourceContainerAsync(new ResourceContainerInfo { Name = containerName });
+        List<(ResourceLocation, string)> versions = [];
+        for (int i = 0; i < 9; i++)
+        {
+            var version = new ResourceInfo
+            {
+                ContainerName = containerName, Name = $"n{i}", VersionId = $"v{i}", ExpiresAt = DateTimeOffset.UnixEpoch
+            };
+            await repository.AddResourceAsync(containerName, version, new MemoryStream("x"u8.ToArray()));
+            versions.Add((new ResourceLocation(containerName, version.Name), version.VersionId));
+        }
+        locks.Counts.Clear();
+
+        // Act
+        IReadOnlyCollection<(ResourceLocation, string)> deleted =
+            await repository.DeleteExpiredVersionsAsync(versions, DateTimeOffset.UtcNow);
+
+        // Assert: the first transaction, before it knows their chunks, locks every name.
+        Assert.Equal(9, deleted.Count);
+        Assert.Equal([9, 4, 1], locks.Counts);
+    }
+
+    /// <summary>Counts the names each command that locks names locks.</summary>
+    private sealed class LockCountingInterceptor : DbCommandInterceptor
+    {
+        public List<int> Counts { get; } = [];
+
+        public override ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(DbCommand command, CommandEventData eventData,
+            InterceptionResult<int> result, CancellationToken cancellationToken = default)
+        {
+            if (command.CommandText.Contains("sp_getapplock")) Counts.Add(command.Parameters.Count);
+            return ValueTask.FromResult(result);
+        }
     }
 }
