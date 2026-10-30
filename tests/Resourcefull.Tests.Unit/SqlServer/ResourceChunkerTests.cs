@@ -65,7 +65,7 @@ public class ResourceChunkerTests
     }
 
     [Fact]
-    public async Task ChunksAsync_ShouldThrowOperationCanceled_WhenTokenIsCancelledMidStream()
+    public async Task ChunksAsync_ShouldThrowOperationCanceled_WhenTokenIsCanceledMidStream()
     {
         // Arrange
         using var cts = new CancellationTokenSource();

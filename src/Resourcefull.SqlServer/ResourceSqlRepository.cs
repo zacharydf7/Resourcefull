@@ -31,8 +31,10 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
     private const int ChunksPerReadPage = 16;
 
     /// <summary>
-    /// Caps the content one batch of a container delete removes, counted in chunks, so no single transaction has to log
-    /// a whole container. A resource bigger than the cap still goes in a batch of its own.
+    /// Caps the chunks one statement deletes, and the content one batch of a container or name delete removes, counted
+    /// in chunks, so no single transaction has to log a whole container or a name's whole history. SQL Server locks the
+    /// whole chunk table once a statement holds about 5,000 locks on it, which would hold up every upload, so a version
+    /// bigger than the cap goes in a batch of its own and its chunks go a statement at a time.
     /// </summary>
     internal int ChunksPerDeleteBatch { get; init; } = 256;
 
@@ -613,6 +615,8 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
     public Task<bool> DeleteResourceAsync(string resourceContainerName, string resourceName, string? versionId,
         ResourceConditions conditions, CancellationToken cancellationToken = default)
     {
+        if (versionId == null) return DeleteNameAsync(resourceContainerName, resourceName, conditions, cancellationToken);
+
         bool deletedInAnEarlierAttempt = false;
 
         // Under the name's lock, so a concurrent delete of the same version finds it gone instead of failing, the
@@ -622,29 +626,98 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
             // A retry after a commit whose acknowledgement was lost finds what it deleted gone. The conditions it met
             // no longer hold then, and it mustn't report that nothing was deleted.
             if (deletedInAnEarlierAttempt && !await dbContext.Resources.AnyAsync(r => r.ContainerName == resourceContainerName
-                && r.Name == resourceName && (versionId == null || r.VersionId == versionId), ct))
+                && r.Name == resourceName && r.VersionId == versionId, ct))
                 return true;
 
             await ThrowIfNotMetAsync(dbContext, conditions, resourceContainerName, resourceName, ct);
-            deletedInAnEarlierAttempt = await DeleteVersionsAsync(dbContext, ct);
+            ResourceModel? existingResource = await ResolveAsync(dbContext.Resources, resourceContainerName, resourceName, versionId, ct);
+            deletedInAnEarlierAttempt = existingResource != null && await DeleteVersionAsync(dbContext, existingResource, ct);
             return deletedInAnEarlierAttempt;
         }, cancellationToken);
+    }
 
-        async Task<bool> DeleteVersionsAsync(ResourceDbContext dbContext, CancellationToken ct)
+    /// <summary>
+    /// Deletes every version of a name, in batches that each commit on their own, so no transaction holds a name's whole
+    /// history. The versions are the ones the name had when the conditions were checked, oldest first and the current one
+    /// last, so the name keeps its current version until the end. A version stored meanwhile is newer, and stays, as if
+    /// it had been stored just after the delete. A delete that's canceled or fails partway leaves every version it
+    /// didn't reach whole, and calling it again finishes the job.
+    /// </summary>
+    private async Task<bool> DeleteNameAsync(string resourceContainerName, string resourceName, ResourceConditions conditions,
+        CancellationToken cancellationToken)
+    {
+        List<(long Id, int Chunks)> versions = [];
+        int deleted = 0;
+        bool deletedAny = false;
+        do
         {
-            if (versionId == null)
+            // Under the name's lock, so a batch can't race a write that makes a version current.
+            deleted += await WriteNameAsync(resourceContainerName, resourceName, async (dbContext, ct) =>
             {
-                // Without a version, every version of the name goes; their chunks cascade.
-                List<ResourceModel> versions = await dbContext.Resources
-                    .Where(r => r.ContainerName == resourceContainerName && r.Name == resourceName)
+                // A retry after a commit whose acknowledgement was lost keeps the list it took, and doesn't check the
+                // conditions again: with versions deleted, they may no longer hold.
+                if (versions.Count == 0)
+                {
+                    await ThrowIfNotMetAsync(dbContext, conditions, resourceContainerName, resourceName, ct);
+                    versions = [.. (await dbContext.Resources
+                        .Where(r => r.ContainerName == resourceContainerName && r.Name == resourceName)
+                        .OrderBy(r => r.IsLatest).ThenBy(r => r.Id)
+                        .Select(r => new { r.Id, Chunks = r.Chunks!.Count })
+                        .ToListAsync(ct)).Select(v => (v.Id, v.Chunks))];
+                }
+
+                List<(long Id, int Chunks)> batch = [];
+                long chunks = 0;
+                foreach ((long id, int count) in versions.Skip(deleted))
+                {
+                    if (batch.Count > 0 && chunks + count > ChunksPerDeleteBatch) break;
+                    batch.Add((id, count));
+                    chunks += count;
+                }
+
+                // Only versions still under this name: a move between batches takes them, IDs and all, to another.
+                List<long> ids = [.. batch.Select(v => v.Id)];
+                List<ResourceModel> found = await dbContext.Resources
+                    .Where(r => ids.Contains(r.Id) && r.ContainerName == resourceContainerName && r.Name == resourceName)
                     .ToListAsync(ct);
-                dbContext.Resources.RemoveRange(versions);
-                return await dbContext.SaveChangesAsync(ct) > 0;
-            }
+                await DeleteLargeVersionsChunksAsync(dbContext, found.Select(r => (r.Id, batch.First(v => v.Id == r.Id).Chunks)), ct);
+                dbContext.Resources.RemoveRange(found);
+                deletedAny |= found.Count > 0;
+                await dbContext.SaveChangesAsync(ct);
+                return batch.Count;
+            }, cancellationToken);
+        }
+        while (deleted < versions.Count);
 
-            ResourceModel? existingResource = await ResolveAsync(dbContext.Resources, resourceContainerName, resourceName, versionId, ct);
+        return deletedAny;
+    }
 
-            return existingResource != null && await DeleteVersionAsync(dbContext, existingResource, ct);
+    /// <summary>
+    /// Deletes the chunks of the versions too big for the cascade a statement at a time, before the versions go. A batch
+    /// is otherwise within <see cref="ChunksPerDeleteBatch"/>, so its cascade stays well under the lock count that
+    /// escalates, without a round trip per version.
+    /// </summary>
+    private async Task DeleteLargeVersionsChunksAsync(ResourceDbContext dbContext, IEnumerable<(long Id, int Chunks)> versions,
+        CancellationToken cancellationToken)
+    {
+        foreach ((long id, int chunks) in versions)
+        {
+            if (chunks > ChunksPerDeleteBatch) await DeleteChunksAsync(dbContext, id, cancellationToken);
+        }
+    }
+
+    /// <summary>
+    /// Deletes a version's chunks a statement at a time, in the caller's transaction, before the version itself goes:
+    /// deleting thousands of chunks in one statement, as the cascade would, locks the whole chunk table.
+    /// </summary>
+    private async Task DeleteChunksAsync(ResourceDbContext dbContext, long resourceId, CancellationToken cancellationToken)
+    {
+        // The in-memory provider the unit tests use leaves them to the cascade.
+        if (!dbContext.Database.IsRelational()) return;
+
+        while (await dbContext.Database.ExecuteSqlAsync(
+            $"DELETE TOP ({ChunksPerDeleteBatch}) FROM [ResourceChunks] WHERE [ResourceId] = {resourceId}", cancellationToken) == ChunksPerDeleteBatch)
+        {
         }
     }
 
@@ -652,8 +725,9 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
     /// Deletes one version, under its name's lock; when it's the current version, the most recently stored of the rest
     /// becomes current.
     /// </summary>
-    private static async Task<bool> DeleteVersionAsync(ResourceDbContext dbContext, ResourceModel version, CancellationToken cancellationToken)
+    private async Task<bool> DeleteVersionAsync(ResourceDbContext dbContext, ResourceModel version, CancellationToken cancellationToken)
     {
+        await DeleteChunksAsync(dbContext, version.Id, cancellationToken);
         dbContext.Resources.Remove(version);
 
         if (version.IsLatest)
@@ -762,18 +836,27 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
     {
         using ResourceDbContext dbContext = dbContextFactory.CreateDbContext();
 
-        // One aggregate over the container's version rows, from their recorded lengths. Only a version without one, as
-        // stored by an early release, has its chunks' lengths added up instead.
+        // One aggregate over the container's version rows, from their recorded lengths, which doesn't touch the chunks.
+        // Only if an early release stored versions without a length are their chunks' lengths added up, separately.
         UsageRow usage = (await dbContext.Database.SqlQuery<UsageRow>($"""
-            SELECT COALESCE(SUM(COALESCE(r.[ContentLength], c.[Length])), 0) AS [StoredSize],
+            SELECT COALESCE(SUM(r.[ContentLength]), 0) AS [StoredSize],
                 COUNT_BIG(CASE WHEN r.[IsLatest] = 1 THEN 1 END) AS [ResourceCount],
-                COUNT_BIG(*) AS [VersionCount]
+                COUNT_BIG(*) AS [VersionCount],
+                COUNT_BIG(CASE WHEN r.[ContentLength] IS NULL THEN 1 END) AS [Unmeasured]
             FROM [Resources] r
-            OUTER APPLY (SELECT SUM(CAST(DATALENGTH(ch.[Data]) AS bigint)) AS [Length] FROM [ResourceChunks] ch
-                WHERE ch.[ResourceId] = r.[Id] AND r.[ContentLength] IS NULL) c
             WHERE r.[ContainerName] = {resourceContainerName}
             """).ToListAsync(cancellationToken))[0];
-        return new ResourceContainerUsage(usage.StoredSize, usage.ResourceCount, usage.VersionCount);
+        long storedSize = usage.StoredSize;
+        if (usage.Unmeasured > 0)
+        {
+            storedSize += await dbContext.Database.SqlQuery<long>($"""
+                SELECT COALESCE(SUM(CAST(DATALENGTH(ch.[Data]) AS bigint)), 0) AS [Value]
+                FROM [Resources] r JOIN [ResourceChunks] ch ON ch.[ResourceId] = r.[Id]
+                WHERE r.[ContainerName] = {resourceContainerName} AND r.[ContentLength] IS NULL
+                """).SingleAsync(cancellationToken);
+        }
+
+        return new ResourceContainerUsage(storedSize, usage.ResourceCount, usage.VersionCount);
     }
 
     public async Task<bool> DeleteResourceContainerAsync(string resourceContainerName, CancellationToken cancellationToken = default)
@@ -782,19 +865,23 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
 
         if (!await dbContext.ResourceContainers.AnyAsync(x => x.Name == resourceContainerName, cancellationToken)) return false;
 
-        // Each batch commits on its own, so no single transaction holds the whole container's content. A batch takes
-        // whole resources, each with its chunks, so a reader never sees part of one, until it reaches the chunk budget.
-        // Each pass removes only what earlier passes left, so a delete that is canceled or fails partway is finished
-        // by calling it again.
-        while (true)
+        // Each batch commits in a transaction of its own, so no single transaction holds the whole container's content.
+        // A batch takes whole resources, each with its chunks, so a reader never sees part of one, until it reaches the
+        // chunk budget. Each pass removes only what earlier passes left, so a delete that is canceled or fails partway
+        // is finished by calling it again.
+        while (await WriteNamesAsync([], DeleteBatchAsync, cancellationToken) > 0)
         {
-            var candidates = await dbContext.Resources
+        }
+
+        async Task<int> DeleteBatchAsync(ResourceDbContext attempt, CancellationToken ct)
+        {
+            var candidates = await attempt.Resources
                 .Where(r => r.ContainerName == resourceContainerName)
                 .OrderBy(r => r.Name).ThenBy(r => r.VersionId)
                 .Select(r => new { r.Id, r.Name, r.IsLatest, Chunks = r.Chunks!.Count })
                 .Take(MaxResourcesPerDeleteBatch)
-                .ToListAsync(cancellationToken);
-            if (candidates.Count == 0) break;
+                .ToListAsync(ct);
+            if (candidates.Count == 0) return 0;
 
             // A name's current version goes after all its others: deleting it first would leave the name with stored
             // versions but none current. Candidates come grouped by name, so a current version waits while more of its
@@ -812,8 +899,10 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
                 chunks += candidate.Chunks;
             }
 
-            dbContext.Resources.RemoveRange(await dbContext.Resources.Where(r => batch.Contains(r.Id)).ToListAsync(cancellationToken));
-            await dbContext.SaveChangesAsync(cancellationToken);
+            await DeleteLargeVersionsChunksAsync(attempt, candidates.Where(c => batch.Contains(c.Id)).Select(c => (c.Id, c.Chunks)), ct);
+            attempt.Resources.RemoveRange(await attempt.Resources.Where(r => batch.Contains(r.Id)).ToListAsync(ct));
+            await attempt.SaveChangesAsync(ct);
+            return batch.Count;
         }
 
         ResourceContainerModel? container = await dbContext.ResourceContainers
@@ -844,6 +933,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
         public long StoredSize { get; set; }
         public long ResourceCount { get; set; }
         public long VersionCount { get; set; }
+        public long Unmeasured { get; set; }
     }
 
     /// <summary>

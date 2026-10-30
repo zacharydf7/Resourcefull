@@ -53,7 +53,7 @@ public class ContentHashBackfillIntegrationTests(SqlServerFixture fixture)
     {
         fixture.SkipIfUnavailable();
 
-        // Arrange: three versions without a hash, the first stored with a length recorded wrong, and a run cancelled as
+        // Arrange: three versions without a hash, the first stored with a length recorded wrong, and a run canceled as
         // soon as it records its first hash, before it could report anything.
         (ServiceProvider provider, string connectionString) = await NewDatabaseAsync("BackfillResume");
         using (provider)

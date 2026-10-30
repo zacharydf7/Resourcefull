@@ -4,14 +4,14 @@ using System.Text;
 namespace Resourcefull.Tests.Integration;
 
 /// <summary>
-/// Cancellation against a real SQL Server: a cancelled upload must leave the store exactly as it was, and a
-/// cancelled download must stop reading.
+/// Cancellation against a real SQL Server: a canceled upload must leave the store exactly as it was, and a
+/// canceled download must stop reading.
 /// </summary>
 [Collection(SqlServerCollection.Name)]
 public class CancellationIntegrationTests(SqlServerFixture fixture)
 {
     [SkippableFact]
-    public async Task UploadAsync_ShouldLeaveTheStoreUnchanged_WhenCancelledMidStream()
+    public async Task UploadAsync_ShouldLeaveTheStoreUnchanged_WhenCanceledMidStream()
     {
         fixture.SkipIfUnavailable();
 
@@ -26,7 +26,7 @@ public class CancellationIntegrationTests(SqlServerFixture fixture)
         IReadOnlyList<ResourceInfo> versionsBefore = await container.GetResourceVersionsAsync("doc");
         int chunksBefore = await CountChunksAsync(containerName);
         using var cts = new CancellationTokenSource();
-        // Cancelled after 20 of 32 chunks, once the first batch of chunks has been written to the database.
+        // Canceled after 20 of 32 chunks, once the first batch of chunks has been written to the database.
         var content = new CancelAfterReadsStream(new byte[65_535 * 32], cts, readsBeforeCancel: 20);
 
         // Act
@@ -44,7 +44,7 @@ public class CancellationIntegrationTests(SqlServerFixture fixture)
     }
 
     [SkippableFact]
-    public async Task DownloadStreamingAsync_ShouldStopReading_WhenTheStreamIsReadWithACancelledToken()
+    public async Task DownloadStreamingAsync_ShouldStopReading_WhenTheStreamIsReadWithACanceledToken()
     {
         fixture.SkipIfUnavailable();
 
@@ -67,7 +67,7 @@ public class CancellationIntegrationTests(SqlServerFixture fixture)
     }
 
     [SkippableFact]
-    public async Task CreateResourceContainerAsync_ShouldCreateNothing_WhenTokenIsAlreadyCancelled()
+    public async Task CreateResourceContainerAsync_ShouldCreateNothing_WhenTokenIsAlreadyCanceled()
     {
         fixture.SkipIfUnavailable();
 

@@ -628,7 +628,7 @@ public class ResourceInMemoryRepositoryTests
     }
 
     [Fact]
-    public async Task AddResourceAsync_ShouldThrowOperationCanceledAndStoreNothing_WhenTokenIsAlreadyCancelled()
+    public async Task AddResourceAsync_ShouldThrowOperationCanceledAndStoreNothing_WhenTokenIsAlreadyCanceled()
     {
         // Arrange
         var containerName = "containerName";
@@ -647,7 +647,7 @@ public class ResourceInMemoryRepositoryTests
     }
 
     [Fact]
-    public async Task AddResourceAsync_ShouldThrowOperationCanceledAndStoreNothing_WhenTokenIsCancelledMidStream()
+    public async Task AddResourceAsync_ShouldThrowOperationCanceledAndStoreNothing_WhenTokenIsCanceledMidStream()
     {
         // Arrange
         var containerName = "containerName";
@@ -666,7 +666,7 @@ public class ResourceInMemoryRepositoryTests
     }
 
     [Fact]
-    public async Task GetAllResourceInfoAsync_ShouldThrowOperationCanceled_WhenTokenIsAlreadyCancelled()
+    public async Task GetAllResourceInfoAsync_ShouldThrowOperationCanceled_WhenTokenIsAlreadyCanceled()
     {
         // Arrange & Act
         var repository = new ResourceInMemoryRepository();
@@ -678,7 +678,7 @@ public class ResourceInMemoryRepositoryTests
     }
 
     [Fact]
-    public async Task GetResourceStreamAsync_ShouldThrowOperationCanceled_WhenTokenIsAlreadyCancelled()
+    public async Task GetResourceStreamAsync_ShouldThrowOperationCanceled_WhenTokenIsAlreadyCanceled()
     {
         // Arrange & Act
         var containerName = "containerName";
@@ -693,7 +693,7 @@ public class ResourceInMemoryRepositoryTests
     }
 
     [Fact]
-    public async Task DeleteResourceContainerAsync_ShouldThrowOperationCanceledAndDeleteNothing_WhenTokenIsAlreadyCancelled()
+    public async Task DeleteResourceContainerAsync_ShouldThrowOperationCanceledAndDeleteNothing_WhenTokenIsAlreadyCanceled()
     {
         // Arrange
         var containerName = "containerName";

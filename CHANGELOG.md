@@ -55,6 +55,11 @@
   `X-Content-Type-Options: nosniff`. `Inline` now displays only types that are safe to show (common image formats
   (PNG, JPEG, GIF, WebP, AVIF and BMP; not SVG), PDF, audio, video and plain text) and offers anything else as a
   download; `InlineContentTypes` changes the list. See [Serving downloads](docs/aspnet-core/serving-downloads.md).
+- **Deleting a resource with many versions on SQL Server** happens in batches that each commit, oldest first and the
+  current version last, rather than in one transaction, so it no longer holds the whole history in one transaction. A
+  delete that's canceled or fails partway leaves the rest whole, and calling it again finishes it. Deleting a large
+  version also no longer locks the whole content table while it runs. See
+  [Versioning](docs/versioning.md#deleting).
 - **A new look.** The packages have a new icon, and the [documentation site](https://zacharydf7.github.io/Resourcefull/)
   has a new design, a home page, and a sidebar grouped by what you're trying to do. Pages that covered several topics
   are split into one page each; links to the old pages still work.

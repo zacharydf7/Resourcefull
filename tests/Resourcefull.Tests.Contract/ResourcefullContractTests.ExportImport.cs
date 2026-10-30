@@ -260,4 +260,69 @@ public abstract partial class ResourcefullContractTests
         Assert.Equal(ResourcePolicyRule.MaxResourceSize, (await Assert.ThrowsAsync<ResourcePolicyViolationException>(act)).Rule);
         Assert.False(await service.ContainerExistsAsync(restoredName));
     }
+
+    [SkippableTheory]
+    [InlineData(ResourcePolicyRule.MaxResourceCount, 2L, true)]     // "a" twice and "b": two names
+    [InlineData(ResourcePolicyRule.MaxResourceCount, 1L, false)]
+    [InlineData(ResourcePolicyRule.MaxContainerSize, 30L, true)]    // three versions of 10 bytes
+    [InlineData(ResourcePolicyRule.MaxContainerSize, 29L, false)]
+    public async Task ImportContainerAsync_ShouldCountWhatItHasImported_WhenTheContainerHasALimit(ResourcePolicyRule rule, long limit, bool fits)
+    {
+        // Arrange
+        using ServiceProvider provider = BuildServiceProvider(o => o.UseVersioning().UseContainerPolicies(cacheFor: TimeSpan.Zero)
+            .UsePolicyProvider<TestPolicyProvider>());
+        IResourceServiceClient service = ServiceOf(provider);
+        IResourceContainerClient source = await NewContainerAsync(provider);
+        await source.UploadAsync("a", new MemoryStream(new byte[10]));
+        await source.UploadAsync("a", new MemoryStream(new byte[10]));
+        await source.UploadAsync("b", new MemoryStream(new byte[10]));
+        MemoryStream export = await ExportAsync(service, source.ResourceContainerInfo.Name);
+        string restoredName = NewContainerName();
+        TestPolicyProvider.Policies[restoredName] = rule == ResourcePolicyRule.MaxResourceCount
+            ? new ResourceContainerPolicy { MaxResourceCount = limit }
+            : new ResourceContainerPolicy { MaxContainerSize = limit };
+
+        // Act
+        Exception? refused = await Record.ExceptionAsync(() => service.ImportContainerAsync(restoredName, export));
+
+        // Assert
+        Assert.Equal(fits, refused is null);
+        if (!fits) Assert.Equal(rule, Assert.IsType<ResourcePolicyViolationException>(refused).Rule);
+        Assert.Equal(fits, await service.ContainerExistsAsync(restoredName));
+    }
+
+    [SkippableFact]
+    public async Task ImportContainerAsync_ShouldNotCountANameWithNoVersions_WhenTheContainerLimitsNames()
+    {
+        // Arrange: an export of "a" and "b" whose manifest also lists a name with no versions, which stores nothing.
+        using ServiceProvider provider = BuildServiceProvider(o => o.UseContainerPolicies(cacheFor: TimeSpan.Zero)
+            .UsePolicyProvider<TestPolicyProvider>());
+        IResourceServiceClient service = ServiceOf(provider);
+        IResourceContainerClient source = await NewContainerAsync(provider);
+        await source.UploadAsync("a", BinaryData.FromString("x"));
+        await source.UploadAsync("b", BinaryData.FromString("y"));
+        MemoryStream export = await ExportAsync(service, source.ResourceContainerInfo.Name);
+        await using (ZipArchive zip = await ZipArchive.CreateAsync(export, ZipArchiveMode.Update, leaveOpen: true, entryNameEncoding: null))
+        {
+            ZipArchiveEntry manifest = zip.GetEntry("manifest.json")!;
+            string text;
+            await using (Stream read = await manifest.OpenAsync())
+                text = await new StreamReader(read).ReadToEndAsync();
+            Assert.Contains("\"resources\": [", text);
+            await using Stream write = await manifest.OpenAsync();
+            write.SetLength(0);
+            await write.WriteAsync(System.Text.Encoding.UTF8.GetBytes(
+                text.Replace("\"resources\": [", "\"resources\": [ { \"name\": \"empty\", \"versions\": [] },")));
+        }
+        export.Position = 0;
+        string restoredName = NewContainerName();
+        TestPolicyProvider.Policies[restoredName] = new ResourceContainerPolicy { MaxResourceCount = 2 };
+
+        // Act
+        ResourceImportResult imported = await service.ImportContainerAsync(restoredName, export);
+
+        // Assert
+        Assert.Equal(2, (await service.GetResourceContainerClient(restoredName).GetUsageAsync()).ResourceCount);
+        Assert.Equal(2, imported.VersionCount);
+    }
 }

@@ -840,7 +840,7 @@ public class ResourceContainerClientTests
     }
 
     [Fact]
-    public async Task DownloadContentAsync_ShouldStopCopyingAndReleaseTheStream_WhenCancelledMidCopy()
+    public async Task DownloadContentAsync_ShouldStopCopyingAndReleaseTheStream_WhenCanceledMidCopy()
     {
         // Arrange
         using var cts = new CancellationTokenSource();
@@ -962,7 +962,7 @@ public class ResourceContainerClientTests
     }
 
     [Fact]
-    public async Task UploadAsync_ShouldReturnTheStoredVersionAndStillPrune_WhenCancelledAfterTheWrite()
+    public async Task UploadAsync_ShouldReturnTheStoredVersionAndStillPrune_WhenCanceledAfterTheWrite()
     {
         // Arrange: overwrite without versioning; the caller cancels as soon as the new version is stored.
         using var cts = new CancellationTokenSource();

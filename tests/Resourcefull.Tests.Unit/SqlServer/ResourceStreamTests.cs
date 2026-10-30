@@ -133,7 +133,7 @@ public class ResourceStreamTests
     }
 
     [Fact]
-    public async Task ReadAsync_ShouldThrowOperationCanceled_WhenTokenIsAlreadyCancelled()
+    public async Task ReadAsync_ShouldThrowOperationCanceled_WhenTokenIsAlreadyCanceled()
     {
         // Arrange
         var stream = Stream("abc");
@@ -145,7 +145,7 @@ public class ResourceStreamTests
     }
 
     [Fact]
-    public async Task CopyToAsync_ShouldStopPartWay_WhenTokenIsCancelledBetweenChunks()
+    public async Task CopyToAsync_ShouldStopPartWay_WhenTokenIsCanceledBetweenChunks()
     {
         // Arrange
         var stream = Stream("aaa", "bbb", "ccc");

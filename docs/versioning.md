@@ -80,3 +80,8 @@ a history view can show it. `RestoreVersionAsync` throws
 | `DeleteResourceContainerIfExistsAsync(container)` | the container and everything in it |
 
 Each returns `true` if it deleted anything.
+
+With SQL Server, deleting a name with many large versions happens in batches that commit one at a time, oldest first
+and the current version last, so the name keeps its current version until the end. If the delete is canceled or
+fails partway, the versions it reached are gone, every other version is still whole, and calling it again finishes
+the job. A version uploaded while the delete runs is newer than the ones it set out to delete, and stays.

@@ -16,6 +16,8 @@
     <PackageIcon>icon.png</PackageIcon>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <EnablePackageValidation>true</EnablePackageValidation>
+    <!-- Packing fails on any change that would break code compiled against the last release; bump it at each release. -->
+    <PackageValidationBaselineVersion>3.1.0</PackageValidationBaselineVersion>
 
     <!-- XML docs ship in the packages for IntelliSense and the API reference, so every public member needs one. -->
     <GenerateDocumentationFile>true</GenerateDocumentationFile>

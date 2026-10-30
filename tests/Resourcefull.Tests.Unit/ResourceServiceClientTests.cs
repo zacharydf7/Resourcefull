@@ -280,7 +280,7 @@ public class ResourceServiceClientTests
     }
 
     [Fact]
-    public async Task CreateResourceContainerIfNotExistsAsync_ShouldReportCancellation_WhenTheAddIsCancelled()
+    public async Task CreateResourceContainerIfNotExistsAsync_ShouldReportCancellation_WhenTheAddIsCanceled()
     {
         // Arrange & Act
         var repository = new Mock<IResourceRepository>();
@@ -290,7 +290,7 @@ public class ResourceServiceClientTests
 
         // Assert
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
-            () => service.CreateResourceContainerIfNotExistsAsync("cancelled"));
+            () => service.CreateResourceContainerIfNotExistsAsync("canceled"));
     }
 
     [Fact]

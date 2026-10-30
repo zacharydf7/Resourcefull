@@ -34,18 +34,19 @@ internal sealed class ContainerPolicies(ContainerPolicySettings settings, IResou
     /// <summary>
     /// Checks a new version against the policy before its content is read: an upload or a copy, or a restore, which
     /// keeps its name and type and so isn't checked against <see cref="ResourceContainerPolicy.MaxResourceCount"/> or
-    /// <see cref="ResourceContainerPolicy.AllowedContentTypes"/>.
+    /// <see cref="ResourceContainerPolicy.AllowedContentTypes"/>. A caller that keeps track of the container's usage, as an
+    /// import does, passes it as <paramref name="knownUsage"/>; otherwise it's read from storage when a limit needs it.
     /// </summary>
     /// <returns>The size the content must stay within as it's read, or <see langword="null"/> for no limit.</returns>
     public async Task<ContentLimit?> CheckNewVersionAsync(string containerName, string resourceName, bool restore, string? contentType,
-        long? declaredLength, ClientTelemetry telemetry, CancellationToken cancellationToken)
+        long? declaredLength, ClientTelemetry telemetry, CancellationToken cancellationToken, ResourceContainerUsage? knownUsage = null)
     {
         ResourceContainerPolicy policy = await GetAsync(containerName, telemetry, cancellationToken);
         ThrowIfReadOnly(containerName, policy);
         if (!restore) ThrowIfTypeNotAllowed(containerName, policy, contentType);
 
         ResourceContainerUsage? usage = policy.MaxContainerSize is not null || (!restore && policy.MaxResourceCount is not null)
-            ? await repository.GetContainerUsageAsync(containerName, cancellationToken)
+            ? knownUsage ?? await repository.GetContainerUsageAsync(containerName, cancellationToken)
             : null;
         if (!restore && policy.MaxResourceCount is { } maxCount && usage!.ResourceCount >= maxCount
             && await repository.GetResourceInfoAsync(containerName, resourceName, null, cancellationToken) is null)

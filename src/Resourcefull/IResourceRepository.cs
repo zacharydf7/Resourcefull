@@ -186,7 +186,10 @@ public interface IResourceRepository
 
     /// <summary>
     /// Deletes one version of a resource, or with no <paramref name="versionId"/> every version of it. Deleting the
-    /// current version alone makes the most recently stored remaining version current.
+    /// current version alone makes the most recently stored remaining version current. Deleting every version may happen
+    /// in several steps, oldest first and the current version last: if it's canceled or fails partway, every version it
+    /// didn't reach is still whole, the name still has its current version, and calling it again finishes the job. A
+    /// version stored while it runs may remain.
     /// </summary>
     /// <returns><see langword="true"/> if anything was deleted; <see langword="false"/> if there was nothing to delete,
     /// including when a concurrent delete removed it first.</returns>
@@ -202,7 +205,7 @@ public interface IResourceRepository
     /// <param name="resourceName">The resource's name.</param>
     /// <param name="versionId">The version to delete, or <see langword="null"/> for every version.</param>
     /// <param name="conditions">What the name's current version must be like.</param>
-    /// <param name="cancellationToken">Cancels the delete; a canceled delete deletes nothing.</param>
+    /// <param name="cancellationToken">Cancels the delete; a canceled delete of one version deletes nothing.</param>
     /// <returns>As for the other overload.</returns>
     /// <exception cref="ResourcePreconditionFailedException">
     /// The name's current version doesn't meet <paramref name="conditions"/>, or the name doesn't exist; nothing was deleted.

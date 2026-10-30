@@ -109,7 +109,9 @@ internal static class ContainerArchive
         IResourceRepository repository, ContainerPolicies? policies, ClientTelemetry telemetry, IUriProvider? uriProvider,
         CancellationToken cancellationToken)
     {
-        long versionCount = 0, contentSize = 0;
+        // The container is new, so its usage is what the import has stored so far: counted here, so a policy's limits
+        // don't add up the container again before each version.
+        long versionCount = 0, contentSize = 0, resourceCount = 0;
         foreach (ManifestResource resource in manifest.Resources)
         {
             foreach (ManifestVersion version in resource.Versions)
@@ -132,8 +134,9 @@ internal static class ContainerArchive
                 };
 
                 await using Stream content = await entry.OpenAsync(cancellationToken);
+                var usage = new ResourceContainerUsage(contentSize, resourceCount, versionCount);
                 Stream checkedContent = policies is not null && await policies.CheckNewVersionAsync(containerName, resource.Name, restore: false,
-                    version.ContentType, version.ContentLength, telemetry, cancellationToken) is { } limit
+                    version.ContentType, version.ContentLength, telemetry, cancellationToken, usage) is { } limit
                     ? new LimitedContentStream(content, limit)
                     : content;
                 WrittenContent stored = await repository.ImportVersionAsync(containerName, info, checkedContent, cancellationToken);
@@ -148,6 +151,9 @@ internal static class ContainerArchive
                 versionCount++;
                 contentSize += stored.ContentLength;
             }
+
+            // Counted once its versions are stored, so its own later versions don't count it against the limit.
+            if (resource.Versions.Count > 0) resourceCount++;
         }
 
         return new ResourceImportResult(manifest.Resources.Count, versionCount, contentSize);

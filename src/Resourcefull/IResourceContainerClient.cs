@@ -242,7 +242,10 @@ public interface IResourceContainerClient : IDisposable
     public Task<IReadOnlyList<ResourceInfo>> GetResourceVersionsAsync(string resourceName, CancellationToken cancellationToken);
 
     /// <summary>
-    /// Deletes a resource and all its versions, or one version of it, if it exists.
+    /// Deletes a resource and all its versions, or one version of it, if it exists. A storage provider may delete a
+    /// resource with many versions in several steps, oldest first and the current version last: if the delete is
+    /// canceled or fails partway, every version it didn't reach is still whole, the resource still has its current
+    /// version, and calling it again finishes the job. A version uploaded while it runs may remain.
     /// </summary>
     /// <param name="resourceName">The name of the resource to delete.</param>
     /// <param name="versionId">
