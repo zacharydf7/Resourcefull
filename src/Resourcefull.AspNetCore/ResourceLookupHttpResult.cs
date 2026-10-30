@@ -4,12 +4,12 @@ using Microsoft.Net.Http.Headers;
 namespace Resourcefull.AspNetCore;
 
 /// <summary>
-/// Looks up a resource's current version and sends it as <see cref="ResourceHttpResult"/> does, with the same headers
-/// and conditional requests, and also answers range requests: a <c>GET</c> with one <c>Range: bytes=…</c> gets
-/// 206 Partial Content with <c>Content-Range</c>, reading only that range from storage, unless an <c>If-Range</c>
-/// doesn't hold, which gets the whole content. A range that starts past the end gets 416 Range Not Satisfiable, and a
-/// request for several ranges gets the whole content. Every response has <c>Accept-Ranges: bytes</c>, and a resource
-/// that doesn't exist gets 404.
+/// Looks up a resource's current version, or the version asked for, and sends it as <see cref="ResourceHttpResult"/>
+/// does, with the same headers and conditional requests, and also answers range requests: a <c>GET</c> with one
+/// <c>Range: bytes=…</c> gets 206 Partial Content with <c>Content-Range</c>, reading only that range from storage,
+/// unless an <c>If-Range</c> doesn't hold, which gets the whole content. A range that starts past the end gets 416 Range
+/// Not Satisfiable, and a request for several ranges gets the whole content. Every response has
+/// <c>Accept-Ranges: bytes</c>, and a resource that doesn't exist gets 404.
 /// <para>Coming in 3.2.</para>
 /// </summary>
 public sealed class ResourceLookupHttpResult : IResult
@@ -34,8 +34,8 @@ public sealed class ResourceLookupHttpResult : IResult
     /// <summary>How the resource is presented.</summary>
     public ResourceResultOptions Options { get; }
 
-    /// <summary>The version a signed link pins, which this result sends; the current version when <see langword="null"/>.</summary>
-    internal string? VersionId { get; }
+    /// <summary>The version this result sends; the current version when <see langword="null"/>.</summary>
+    public string? VersionId { get; }
 
     /// <inheritdoc />
     public async Task ExecuteAsync(HttpContext httpContext)

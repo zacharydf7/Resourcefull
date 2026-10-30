@@ -217,6 +217,64 @@ public class ResourceLookupHttpResultTests
     }
 
     [Fact]
+    public async Task Resource_ShouldSendTheRangeOfThatVersion_WhenGivenAnOlderVersionId()
+    {
+        // Arrange
+        await using TestApp app = await StartWithDigitsAsync();
+        ResourceInfo older = (await app.Files.GetResourceInfoAsync("digits.txt"))!;
+        await app.Files.UploadAsync("digits.txt", BinaryData.FromString("abcdefghij"), new ResourceUploadOptions { Overwrite = true });
+
+        // Act
+        HttpResponseMessage response = await app.Client.SendAsync(Get($"/ranged/digits.txt?versionId={Uri.EscapeDataString(older.VersionId!)}",
+            h => h.Range = new RangeHeaderValue(2, 4)));
+
+        // Assert
+        Assert.Equal(HttpStatusCode.PartialContent, response.StatusCode);
+        Assert.Equal("234", await response.Content.ReadAsStringAsync());
+        Assert.Equal($"\"{older.ContentHash}\"", response.Headers.ETag!.Tag);
+    }
+
+    [Fact]
+    public async Task Resource_ShouldAnswerNotFound_WhenTheVersionDoesNotExist()
+    {
+        // Arrange
+        await using TestApp app = await StartWithDigitsAsync();
+
+        // Act
+        HttpResponseMessage whole = await app.Client.GetAsync("/ranged/digits.txt?versionId=missing");
+        HttpResponseMessage part = await app.Client.SendAsync(Get("/ranged/digits.txt?versionId=missing", h => h.Range = new RangeHeaderValue(0, 2)));
+
+        // Assert
+        Assert.Equal(HttpStatusCode.NotFound, whole.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, part.StatusCode);
+    }
+
+    [Fact]
+    public async Task Resource_ShouldAnswerNotFound_WhenTheVersionAskedForIsDeletedBeforeItsRangeOpens()
+    {
+        // Arrange: a suffix range opens the whole version first, to learn its length; by the time its range opens,
+        // the version is gone. Unlike the current version, a version asked for isn't replaced by another.
+        var container = new Mock<IResourceContainerClient>(MockBehavior.Strict);
+        container.Setup(c => c.DownloadStreamingAsync("n", "v1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ResourceDownloadResult(new ResourceInfo { ContainerName = "c", Name = "n", VersionId = "v1" },
+                new MemoryStream(System.Text.Encoding.ASCII.GetBytes("0123456789"))) { TotalLength = 10 });
+        container.Setup(c => c.DownloadStreamingAsync("n", "v1", new ResourceRange(7, 3), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((ResourceDownloadResult?)null);
+        var context = new DefaultHttpContext();
+        context.Request.Method = "GET";
+        context.Request.Headers.Range = "bytes=-3";
+        context.Response.Body = new MemoryStream();
+
+        // Act
+        await TypedResults.Resource(container.Object, "n", "v1").ExecuteAsync(context);
+
+        // Assert
+        container.Verify(c => c.DownloadStreamingAsync("n", "v1", It.IsAny<CancellationToken>()), Times.Once);
+        Assert.Equal(StatusCodes.Status404NotFound, context.Response.StatusCode);
+        Assert.Empty(((MemoryStream)context.Response.Body).ToArray());
+    }
+
+    [Fact]
     public async Task TypedResource_ShouldPresentTheRangeAsTheOptionsSay_WhenGivenOptions()
     {
         // Arrange

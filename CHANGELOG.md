@@ -35,10 +35,11 @@
   implementation, so providers written for 3.1 keep working. See [Container policies](docs/container-policies.md).
 - **Range downloads.** A `DownloadStreamingAsync` overload takes a `ResourceRange` and reads only those bytes from
   storage, for resuming downloads and seeking in media; every download's result now has `TotalLength`, and `Range`
-  for a range. `Results.Resource(container, name)` in `Resourcefull.AspNetCore` looks the resource up itself and
-  answers `Range` requests with 206 Partial Content, honoring `If-Range`, and 416 for a range past the end. Providers
-  get a range overload of `GetResourceStreamAsync` with a default implementation, so providers written for 3.1 keep
-  working. See [Downloading part of a resource](docs/downloading.md#downloading-part-of-a-resource).
+  for a range. `Results.Resource(container, name)` in `Resourcefull.AspNetCore` looks the resource up itself, the
+  current version or the `versionId` given, and answers `Range` requests with 206 Partial Content, honoring
+  `If-Range`, and 416 for a range past the end. Providers get a range overload of `GetResourceStreamAsync` with a
+  default implementation, so providers written for 3.1 keep working.
+  See [Downloading part of a resource](docs/downloading.md#downloading-part-of-a-resource).
 - **Health checks.** `AddHealthChecks().AddResourcefullCheck()` reports whether storage can be reached through any
   provider, and `AddResourcefullSqlServerCheck()` also reports Unhealthy when the database is missing migrations this
   release needs, and Degraded when a newer release has upgraded it. See [Health checks](docs/health-checks.md).

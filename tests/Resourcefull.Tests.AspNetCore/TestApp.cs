@@ -61,10 +61,10 @@ internal sealed class TestApp : IAsyncDisposable
             ResourceDownloadResult? download = await resources.GetResourceContainerClient(Container).DownloadStreamingAsync(name, null, cancellationToken);
             return download is null ? Results.NotFound() : TypedResults.Resource(download, new ResourceResultOptions { Inline = true, FileName = "shown.txt" });
         });
-        app.MapMethods("/ranged/{**name}", ["GET", "HEAD"], (string name, IResourceServiceClient resources) =>
-            Results.Resource(resources.GetResourceContainerClient(Container), name));
+        app.MapMethods("/ranged/{**name}", ["GET", "HEAD"], (string name, string? versionId, IResourceServiceClient resources) =>
+            Results.Resource(resources.GetResourceContainerClient(Container), name, versionId));
         app.MapGet("/ranged-inline/{**name}", (string name, IResourceServiceClient resources) =>
-            TypedResults.Resource(resources.GetResourceContainerClient(Container), name, new ResourceResultOptions { Inline = true, FileName = "shown.txt" }));
+            TypedResults.Resource(resources.GetResourceContainerClient(Container), name, null, new ResourceResultOptions { Inline = true, FileName = "shown.txt" }));
         app.MapMethods("/shared/{token}", ["GET", "HEAD"], (string token, IResourceServiceClient resources) =>
             Results.SharedResource(resources, token));
         app.MapPut("/files/{**name}", (string name, HttpRequest request, IResourceServiceClient resources, CancellationToken cancellationToken) =>
