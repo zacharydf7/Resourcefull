@@ -977,14 +977,19 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
             {
                 // A statement per version, in one round trip, rather than loading and tracking each to delete it: SQL
                 // Server removes each version's chunks through the cascade with a seek. One statement for the whole
-                // batch would instead cascade with a scan of the chunk table, which locks all of it. Each also matches
-                // the container, so a version a move took to another container since it was listed stays there.
-                var sql = new StringBuilder();
+                // batch, or one that also matches the container, cascades with a scan of the chunk table instead,
+                // which locks all of it. So the versions still in the container are locked and listed first, by ID, and
+                // only those are deleted: a version a move took to another container since it was listed stays there.
+                var ids = string.Join(", ", batch.Select((_, i) => $"@id{i}"));
+                var sql = new StringBuilder("DECLARE @here TABLE ([Id] bigint PRIMARY KEY); " +
+                    "INSERT INTO @here SELECT [Id] FROM [Resources] WITH (UPDLOCK, ROWLOCK, INDEX([PK_Resources])) " +
+                    $"WHERE [Id] IN ({ids}) AND [ContainerName] = @container;");
                 var parameters = new object[batch.Count + 1];
                 parameters[0] = new SqlParameter("@container", resourceContainerName);
                 for (int i = 0; i < batch.Count; i++)
                 {
-                    sql.Append($"DELETE FROM [Resources] WHERE [Id] = @id{i} AND [ContainerName] = @container;");
+                    sql.Append($"IF EXISTS (SELECT 1 FROM @here WHERE [Id] = @id{i}) ")
+                        .Append($"DELETE FROM [Resources] WHERE [Id] = @id{i};");
                     parameters[i + 1] = new SqlParameter($"@id{i}", batch[i]);
                 }
                 await attempt.Database.ExecuteSqlRawAsync(sql.ToString(), parameters, ct);
