@@ -480,19 +480,46 @@ public class ResourceServiceClientTests
         var repository = new Mock<IResourceRepository>();
         var version = new ResourceInfo { ContainerName = "name", Name = "a", VersionId = "v1" };
         repository.Setup(r => r.GetResourceContainerInfoAsync("name", It.IsAny<CancellationToken>())).ReturnsAsync(new ResourceContainerInfo { Name = "name" });
-        repository.Setup(r => r.GetAllResourceInfoAsync("name", It.IsAny<CancellationToken>())).ReturnsAsync([version]);
-        repository.Setup(r => r.GetResourceVersionsAsync("name", "a", It.IsAny<CancellationToken>())).ReturnsAsync([version]);
+        repository.Setup(r => r.GetVersionPageAsync("name", null, It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([version]);
+        repository.Setup(r => r.GetVersionPageAsync("name", "a", It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
         repository.Setup(r => r.GetResourceStreamAsync("name", "a", "v1", It.IsAny<CancellationToken>())).ReturnsAsync(() => new MemoryStream([1]));
         var service = NewService(repository.Object);
 
         // Act
         await service.ExportContainerAsync("name", new MemoryStream(), cts.Token);
 
-        // Assert: the container, its names, each name's versions, and each version's content.
+        // Assert: the container, its page of names' versions, and each version's content.
         repository.Verify(r => r.GetResourceContainerInfoAsync("name", cts.Token), Times.Once);
-        repository.Verify(r => r.GetAllResourceInfoAsync("name", cts.Token), Times.Once);
-        repository.Verify(r => r.GetResourceVersionsAsync("name", "a", cts.Token), Times.Once);
+        repository.Verify(r => r.GetVersionPageAsync("name", null, It.IsAny<int>(), cts.Token), Times.Once);
         repository.Verify(r => r.GetResourceStreamAsync("name", "a", "v1", cts.Token), Times.Once);
+    }
+
+    [Fact]
+    public async Task ExportContainerAsync_ShouldReadUntilAnEmptyPage_WhenAPageHasFewerNamesThanItAskedFor()
+    {
+        // Arrange: a provider whose first page comes back short, as one can when a name is deleted while it's read,
+        // and whose next page still has a name.
+        var repository = new Mock<IResourceRepository>();
+        repository.Setup(r => r.GetResourceContainerInfoAsync("c", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ResourceContainerInfo { Name = "c" });
+        ResourceInfo Version(string name) => new() { ContainerName = "c", Name = name, VersionId = name };
+        repository.Setup(r => r.GetVersionPageAsync("c", null, It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([Version("a")]);
+        repository.Setup(r => r.GetVersionPageAsync("c", "a", It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([Version("b")]);
+        repository.Setup(r => r.GetVersionPageAsync("c", "b", It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+        repository.Setup(r => r.GetResourceStreamAsync("c", It.IsAny<string>(), It.IsAny<string>(),
+            It.IsAny<CancellationToken>())).ReturnsAsync(() => new MemoryStream([1]));
+
+        // Act
+        ResourceExportResult exported =
+            await NewService(repository.Object).ExportContainerAsync("c", new MemoryStream());
+
+        // Assert
+        Assert.Equal(2, exported.ResourceCount);
     }
 
     /// <summary>An export of one file, "a", whose container has the metadata team=billing.</summary>

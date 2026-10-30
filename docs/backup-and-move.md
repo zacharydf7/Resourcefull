@@ -50,9 +50,12 @@ release can't change the format by accident.
 
 ## Exporting
 
-An export reads one version at a time, so a file's size doesn't change how much memory it uses; only the number of
-versions does, because the manifest describing them is written at the end. It writes to any stream, including one that
-can only be written forward, such as an HTTP response. That lets an admin download a container
+An export reads one version at a time and writes its manifest to a temporary file as it goes, so neither a file's size
+nor the number of versions changes much how much memory it uses: it keeps only a small note of each distinct content
+it has written, so content that versions share goes in once. The temporary file, in the system's temporary directory
+and readable only by the application's user, needs about as much space as the manifest: around a kilobyte per version,
+more with long names or a lot of metadata. It reads the container 1,000 names at a time. It writes to any stream,
+including one that can only be written forward, such as an HTTP response. That lets an admin download a container
 directly:
 
 ```csharp

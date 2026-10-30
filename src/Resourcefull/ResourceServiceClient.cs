@@ -211,7 +211,8 @@ internal class ResourceServiceClient(IResourceRepository resourceRepository, IOp
             ResourceContainerInfo container = await resourceRepository.GetResourceContainerInfoAsync(resourceContainerName, cancellationToken)
                 ?? throw new ResourceContainerNotFoundException($"Resource Container with the name {resourceContainerName} does not exist.");
 
-            ResourceExportResult exported = await ContainerArchive.ExportAsync(resourceRepository, container, destination, cancellationToken);
+            ResourceExportResult exported = await ContainerArchive.ExportAsync(resourceRepository, container,
+                destination, activity, cancellationToken);
             activity?.SetTag("resourcefull.resources", exported.ResourceCount);
             activity?.SetTag("resourcefull.versions", exported.VersionCount);
             return exported;

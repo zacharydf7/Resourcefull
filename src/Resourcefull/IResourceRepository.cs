@@ -126,6 +126,49 @@ public interface IResourceRepository
     Task<List<ResourceInfo>> GetResourceVersionsAsync(string resourceContainerName, string resourceName, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Lists every stored version of up to <paramref name="maxNames"/> names in a container: the names after
+    /// <paramref name="afterName"/> in <see cref="GetResourcePageAsync"/>'s order, and each name's versions in
+    /// <see cref="GetResourceVersionsAsync"/>'s, the current version first. An export reads a container through it a
+    /// page at a time, until a page comes back empty, so return an empty page only when no names follow
+    /// <paramref name="afterName"/>: a name deleted while the page is read is left out rather than ending the listing.
+    /// A provider should answer it in one query; the default implementation, kept so providers written for 3.1 still
+    /// compile and work, lists the names with <see cref="GetResourcePageAsync"/> and then each name's versions.
+    /// <para>Coming in 3.2.</para>
+    /// </summary>
+    /// <param name="resourceContainerName">The container to list.</param>
+    /// <param name="afterName">
+    /// Only names after this one, in the listing's order; <see langword="null"/> to start from the first.
+    /// </param>
+    /// <param name="maxNames">The most names to list the versions of.</param>
+    /// <param name="cancellationToken">Cancels the listing.</param>
+    /// <returns>
+    /// The versions, grouped by name; empty when there are no more names, or the container does not exist.
+    /// </returns>
+    async Task<List<ResourceInfo>> GetVersionPageAsync(string resourceContainerName, string? afterName, int maxNames,
+        CancellationToken cancellationToken = default)
+    {
+        var versions = new List<ResourceInfo>();
+        int names = 0;
+        while (names < maxNames)
+        {
+            int wanted = maxNames - names;
+            List<ResourceInfo> page = await GetResourcePageAsync(resourceContainerName, null, afterName, wanted,
+                cancellationToken);
+            foreach (ResourceInfo current in page)
+            {
+                // A name deleted since it was listed has no versions left, and the next name takes its place.
+                List<ResourceInfo> ofName =
+                    await GetResourceVersionsAsync(resourceContainerName, current.Name, cancellationToken);
+                if (ofName.Count > 0) names++;
+                versions.AddRange(ofName);
+                afterName = current.Name;
+            }
+            if (page.Count < wanted) break;
+        }
+        return versions;
+    }
+
+    /// <summary>
     /// Gets one version of a resource, or the current version when <paramref name="versionId"/> is null, with
     /// <see cref="ResourceInfo.IsLatest"/> set accurately.
     /// </summary>

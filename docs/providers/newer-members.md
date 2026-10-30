@@ -57,6 +57,14 @@ imports fail with a provider written for 3.1; exports work with any provider, be
 container it's filling as unfinished, and to clear the mark at the end. Its default throws `NotSupportedException`, and
 imports then go unmarked.
 
+`GetVersionPageAsync` was added with them too, for exports, which read a container through it 1,000 names at a time.
+It returns every version of up to `maxNames` names after `afterName`: the names in `GetResourcePageAsync`'s order,
+and each name's versions in `GetResourceVersionsAsync`'s, the current version first. Its default lists the names with
+`GetResourcePageAsync` and then asks for each name's versions, a query apiece, so exports work with any provider, just
+more slowly than with one that answers it in a single query. A provider written for 3.0, which answers neither
+`GetResourcePageAsync` nor this, reads its whole container once for every 1,000 names an export lists; implement either
+one to avoid that.
+
 ## Expiry
 
 <div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 3.2</span></div>

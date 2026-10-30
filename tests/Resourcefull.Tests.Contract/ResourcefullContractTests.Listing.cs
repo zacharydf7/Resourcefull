@@ -4,6 +4,32 @@ namespace Resourcefull.Tests.Contract;
 
 public abstract partial class ResourcefullContractTests
 {
+    [SkippableFact]
+    public async Task GetVersionPageAsync_ShouldListEveryVersionOfEachNameInOrder_WhenReadAPageAtATime()
+    {
+        // Arrange: three names, the middle one with three versions.
+        using ServiceProvider provider = BuildServiceProvider(o => o.UseVersioning());
+        IResourceContainerClient container = await NewContainerAsync(provider);
+        await UploadAllAsync(container, "c", "a");
+        var versionsOfB = new List<string>();
+        for (int i = 0; i < 3; i++)
+            versionsOfB.Add((await container.UploadAsync("b", BinaryData.FromString($"b{i}"))).VersionId);
+        IResourceRepository repository = provider.GetRequiredService<IResourceRepository>();
+        string containerName = container.ResourceContainerInfo.Name;
+
+        // Act
+        List<ResourceInfo> first = await repository.GetVersionPageAsync(containerName, null, 2);
+        List<ResourceInfo> second = await repository.GetVersionPageAsync(containerName, "b", 2);
+        List<ResourceInfo> past = await repository.GetVersionPageAsync(containerName, "c", 2);
+
+        // Assert: the names in order, and each name's versions current first, then newest to oldest.
+        Assert.Equal(["a", "b", "b", "b"], first.Select(v => v.Name));
+        Assert.Equal([versionsOfB[2], versionsOfB[1], versionsOfB[0]], first.Skip(1).Select(v => v.VersionId));
+        Assert.True(first[1].IsLatest);
+        Assert.Equal(["c"], second.Select(v => v.Name));
+        Assert.Empty(past);
+    }
+
     private static async Task UploadAllAsync(IResourceContainerClient container, params string[] names)
     {
         foreach (string name in names) await container.UploadAsync(name, BinaryData.FromString(name));

@@ -369,6 +369,9 @@ public sealed class TelemetryTests : IDisposable
             Activity span = Assert.Single(SpansIn(root), s => s.OperationName == operation);
             Assert.Equal((2L, 3L), ((long)span.GetTagItem("resourcefull.resources")!, (long)span.GetTagItem("resourcefull.versions")!));
         }
+        // Fewer names than a page holds, so the export read one.
+        Activity exportSpan = Assert.Single(SpansIn(root), s => s.OperationName == "resourcefull export");
+        Assert.Equal(1, exportSpan.GetTagItem("resourcefull.pages"));
     }
 
     [Fact]

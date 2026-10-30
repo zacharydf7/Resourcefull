@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.IO.Compression;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -70,71 +71,115 @@ internal static class ContainerArchive
         [property: JsonPropertyName("resourceName")] string ResourceName,
         [property: JsonPropertyName("versionId")] string VersionId);
 
+    /// <summary>How many names an export lists the versions of at a time.</summary>
+    internal const int NamesPerPage = 1_000;
+
     public static async Task<ResourceExportResult> ExportAsync(IResourceRepository repository, ResourceContainerInfo container,
-        Stream destination, CancellationToken cancellationToken)
+        Stream destination, Activity? activity, CancellationToken cancellationToken)
     {
-        var resources = new List<ManifestResource>();
         // Each distinct content's entry, by the version's recorded hash, or by its version ID when it has none.
         var written = new Dictionary<string, WrittenContent>();
-        long versionCount = 0, contentSize = 0;
+        long resourceCount = 0, versionCount = 0, contentSize = 0;
+        int pages = 0;
+
+        // The manifest goes to a temporary file as the export finds each resource, and is copied into the zip at its
+        // end, rather than being held in memory. Only this process's user can read it, since it names every file.
+        var manifestOptions = new FileStreamOptions
+        {
+            Mode = FileMode.CreateNew,
+            Access = FileAccess.ReadWrite,
+            Share = FileShare.None,
+            Options = FileOptions.Asynchronous | FileOptions.DeleteOnClose
+        };
+        if (!OperatingSystem.IsWindows())
+            manifestOptions.UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite;
+        await using var manifestFile = new FileStream(Path.Combine(Path.GetTempPath(), Path.GetRandomFileName()),
+            manifestOptions);
+        await using var manifest = new Utf8JsonWriter(manifestFile, new JsonWriterOptions { Indented = true });
+        manifest.WriteStartObject();
+        manifest.WriteNumber("format", Format);
+        manifest.WritePropertyName("metadata");
+        JsonSerializer.Serialize(manifest, container.Metadata, Json);
+        manifest.WriteStartArray("resources");
 
         var output = new AsyncWriteStream(destination);
         await using (ZipArchive zip = await ZipArchive.CreateAsync(output, ZipArchiveMode.Create, leaveOpen: true,
             entryNameEncoding: null, cancellationToken))
         {
-            foreach (ResourceInfo current in (await repository.GetAllResourceInfoAsync(container.Name, cancellationToken))
-                .OrderBy(r => r.Name, StringComparer.Ordinal))
+            string? afterName = null;
+            while (true)
             {
-                var versions = new List<ManifestVersion>();
-                List<ResourceInfo> history = await repository.GetResourceVersionsAsync(container.Name, current.Name, cancellationToken);
-                // Oldest first, the order an import stores them in, which leaves the newest current as it was.
-                history.Reverse();
-                foreach (ResourceInfo version in history)
+                List<ResourceInfo> page = await repository.GetVersionPageAsync(container.Name, afterName, NamesPerPage,
+                    cancellationToken);
+                // Only an empty page ends it: a page can hold fewer names than asked for, as when one is deleted while
+                // it's read, and more still follow.
+                if (page.Count == 0) break;
+                pages++;
+                foreach (IGrouping<string, ResourceInfo> name in page.GroupBy(v => v.Name, StringComparer.Ordinal))
                 {
-                    string entryName = "content/" + (version.ContentHash is { } hash && hash.StartsWith(HashingStream.HashPrefix, StringComparison.Ordinal)
-                        ? hash[HashingStream.HashPrefix.Length..]
-                        : version.VersionId);
-                    if (!written.TryGetValue(entryName, out WrittenContent? content))
+                    afterName = name.Key;
+                    var versions = new List<ManifestVersion>();
+                    // Oldest first, the order an import stores them in, which leaves the newest current as it was.
+                    foreach (ResourceInfo version in name.Reverse())
                     {
-                        await using Stream? source = await repository.GetResourceStreamAsync(container.Name, current.Name,
-                            version.VersionId, cancellationToken);
-                        // Deleted while the container was exported.
-                        if (source is null) continue;
-
-                        using var hashing = new HashingStream(source);
-                        await using (Stream target = await zip.CreateEntry(entryName, CompressionLevel.Fastest).OpenAsync(cancellationToken))
-                            await hashing.CopyToAsync(target, cancellationToken);
-                        // Measured, rather than the recorded length, which an early release may have taken from its caller.
-                        content = hashing.Complete(null, version.LastModified);
-                        if (version.ContentHash is not null && content.ContentHash != version.ContentHash)
+                        string entryName = "content/" + (version.ContentHash is { } hash
+                            && hash.StartsWith(HashingStream.HashPrefix, StringComparison.Ordinal)
+                                ? hash[HashingStream.HashPrefix.Length..]
+                                : version.VersionId);
+                        if (!written.TryGetValue(entryName, out WrittenContent? content))
                         {
-                            throw new InvalidDataException(
-                                $"Version {version.VersionId} of {current.Name} doesn't match its recorded hash, so the stored content has changed since it was written.");
+                            await using Stream? source = await repository.GetResourceStreamAsync(container.Name,
+                                name.Key, version.VersionId, cancellationToken);
+                            // Deleted while the container was exported.
+                            if (source is null) continue;
+
+                            using var hashing = new HashingStream(source);
+                            ZipArchiveEntry entry = zip.CreateEntry(entryName, CompressionLevel.Fastest);
+                            await using (Stream target = await entry.OpenAsync(cancellationToken))
+                                await hashing.CopyToAsync(target, cancellationToken);
+                            // Measured, rather than the recorded length, which an early release may have taken from
+                            // its caller.
+                            content = hashing.Complete(null, version.LastModified);
+                            if (version.ContentHash is not null && content.ContentHash != version.ContentHash)
+                            {
+                                throw new InvalidDataException($"Version {version.VersionId} of {name.Key} doesn't " +
+                                    "match its recorded hash, so the stored content has changed since it was written.");
+                            }
+
+                            written[entryName] = content;
+                            contentSize += content.ContentLength;
                         }
 
-                        written[entryName] = content;
-                        contentSize += content.ContentLength;
+                        ManifestOrigin? origin = version.CopiedFrom is { } from
+                            ? new ManifestOrigin(from.ContainerName, from.ResourceName, from.VersionId)
+                            : null;
+                        versions.Add(new ManifestVersion(version.VersionId, version.LastModified, version.ContentType,
+                            content.ContentLength, content.ContentHash, version.Metadata, origin, version.ExpiresAt,
+                            entryName));
                     }
 
-                    ManifestOrigin? origin = version.CopiedFrom is { } from
-                        ? new ManifestOrigin(from.ContainerName, from.ResourceName, from.VersionId)
-                        : null;
-                    versions.Add(new ManifestVersion(version.VersionId, version.LastModified, version.ContentType, content.ContentLength,
-                        content.ContentHash, version.Metadata, origin, version.ExpiresAt, entryName));
+                    if (versions.Count == 0) continue;
+                    JsonSerializer.Serialize(manifest, new ManifestResource(name.Key, versions), Json);
+                    await manifest.FlushAsync(cancellationToken);
+                    resourceCount++;
+                    versionCount += versions.Count;
                 }
-
-                if (versions.Count == 0) continue;
-                resources.Add(new ManifestResource(current.Name, versions));
-                versionCount += versions.Count;
             }
 
+            manifest.WriteEndArray();
+            manifest.WriteEndObject();
+            await manifest.FlushAsync(cancellationToken);
+
             // Last, so it describes only what was written.
-            await using Stream manifest = await zip.CreateEntry(ManifestEntry, CompressionLevel.Optimal).OpenAsync(cancellationToken);
-            await JsonSerializer.SerializeAsync(manifest, new Manifest(Format, container.Metadata, resources), Json, cancellationToken);
+            manifestFile.Position = 0;
+            ZipArchiveEntry manifestEntry = zip.CreateEntry(ManifestEntry, CompressionLevel.Optimal);
+            await using Stream manifestTarget = await manifestEntry.OpenAsync(cancellationToken);
+            await manifestFile.CopyToAsync(manifestTarget, cancellationToken);
         }
 
         await output.FlushAsync(cancellationToken);
-        return new ResourceExportResult(resources.Count, versionCount, contentSize);
+        activity?.SetTag("resourcefull.pages", pages);
+        return new ResourceExportResult(resourceCount, versionCount, contentSize);
     }
 
     /// <summary>Stores every version an export describes in <paramref name="containerName"/>, which must exist and be empty.</summary>

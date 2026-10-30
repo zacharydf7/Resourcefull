@@ -70,6 +70,7 @@ public sealed class ScaleTests(SqlServerFixture fixture, ITestOutputHelper outpu
         IResourceContainerClient warmUp =
             await service.CreateResourceContainerAsync($"{container.ResourceContainerInfo.Name}-warm-up");
         await warmUp.UploadAsync("r", BinaryData.FromString("x"));
+        await service.ExportContainerAsync(warmUp.ResourceContainerInfo.Name, Stream.Null);
         await service.DeleteResourceContainerIfExistsAsync(warmUp.ResourceContainerInfo.Name);
 
         await MeasureAsync($"get-info-of-{rows}", () => container.GetResourceInfoAsync(NameOf(Rows / 2)));
@@ -78,6 +79,10 @@ public sealed class ScaleTests(SqlServerFixture fixture, ITestOutputHelper outpu
         await MeasureAsync($"upload-with-limits-in-{rows}",
             () => container.UploadAsync("new", BinaryData.FromString("x")));
         await MeasureAsync($"expire-nothing-due-in-{rows}", () => service.DeleteExpiredAsync());
+        // Every seeded name shares one content, which an export writes once, so this measures reading the container
+        // and writing its manifest.
+        await MeasureAsync($"export-of-{rows}",
+            () => service.ExportContainerAsync(container.ResourceContainerInfo.Name, Stream.Null));
         await MeasureAsync($"delete-container-of-{rows}",
             () => service.DeleteResourceContainerIfExistsAsync(container.ResourceContainerInfo.Name));
     }

@@ -87,7 +87,7 @@ metrics. It also has:
 | `copy` | `CopyResourceAsync` | `resourcefull.destination_container`; a `resourcefull prune` child span |
 | `move` | `MoveResourceAsync` | `resourcefull.destination_container` |
 | `set_expiry` | `SetExpiryAsync` | |
-| `export` | `ExportContainerAsync` | `resourcefull.resources`, `resourcefull.versions`: what it wrote |
+| `export` | `ExportContainerAsync` | `resourcefull.resources`, `resourcefull.versions`: what it wrote; `resourcefull.pages`: the pages of 1,000 names it read |
 | `import` | `ImportContainerAsync` | `resourcefull.resources`, `resourcefull.versions`: what it stored |
 | `prune_container` | `PruneContainerAsync` | `resourcefull.pruned`: how many versions were past the limit |
 | `expire` | `DeleteExpiredAsync`, and each sweep of [`UseExpiry`](expiry.md), when it finds expired versions, read-only containers' included | `resourcefull.expired`: how many versions it deleted |

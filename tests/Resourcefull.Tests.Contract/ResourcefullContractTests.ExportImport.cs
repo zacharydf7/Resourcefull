@@ -37,6 +37,29 @@ public abstract partial class ResourcefullContractTests
     }
 
     [SkippableFact]
+    public async Task ExportContainerAsync_ShouldExportEveryName_WhenTheContainerHoldsMoreThanOnePage()
+    {
+        // Arrange: one more name than an export lists at a time.
+        using ServiceProvider provider = BuildServiceProvider();
+        IResourceServiceClient service = ServiceOf(provider);
+        string sourceName = NewContainerName(), restoredName = NewContainerName();
+        IResourceContainerClient source = await service.CreateResourceContainerAsync(sourceName);
+        for (int i = 0; i <= 1_000; i++) await source.UploadAsync($"r{i:D4}", BinaryData.FromString($"{i}"));
+        var export = new MemoryStream();
+
+        // Act
+        ResourceExportResult exported = await service.ExportContainerAsync(sourceName, export);
+        export.Position = 0;
+        await service.ImportContainerAsync(restoredName, export);
+
+        // Assert
+        Assert.Equal(1_001, exported.ResourceCount);
+        IResourceContainerClient restored = service.GetResourceContainerClient(restoredName);
+        Assert.Equal(1_001, (await restored.GetResourcesAsync()).Count);
+        Assert.Equal("1000", (await restored.DownloadContentAsync("r1000"))!.Content.ToString());
+    }
+
+    [SkippableFact]
     public async Task ImportContainerAsync_ShouldRestoreEveryVersionAsItWas_WhenGivenAnExport()
     {
         // Arrange: metadata, a history over several chunks, a copy, an expiry, and an older version that's current.

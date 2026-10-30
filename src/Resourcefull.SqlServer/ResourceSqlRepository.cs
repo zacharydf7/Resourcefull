@@ -497,6 +497,26 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<List<ResourceInfo>> GetVersionPageAsync(string resourceContainerName, string? afterName,
+        int maxNames, CancellationToken cancellationToken = default)
+    {
+        using ResourceDbContext dbContext = dbContextFactory.CreateDbContext();
+
+        // The page's names, found as GetResourcePageAsync finds them, and every version of each, in one query.
+        IQueryable<ResourceModel> current =
+            dbContext.Resources.Where(r => r.ContainerName == resourceContainerName && r.IsLatest);
+        if (afterName is not null) current = current.Where(r => string.Compare(r.Name, afterName) > 0);
+        IQueryable<string> names = current.OrderBy(r => r.Name).Take(maxNames).Select(r => r.Name);
+
+        return await dbContext.Resources
+            .Where(r => r.ContainerName == resourceContainerName && names.Contains(r.Name))
+            .OrderBy(r => r.Name)
+            .ThenByDescending(r => r.IsLatest)
+            .ThenByDescending(r => r.Id)
+            .Select(AsResourceInfo)
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task<ResourceInfo?> GetResourceInfoAsync(string resourceContainerName, string resourceName,
         string? versionId = null, CancellationToken cancellationToken = default)
     {

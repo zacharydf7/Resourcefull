@@ -27,12 +27,12 @@
     "ContentBytes": 0
   },
   "delete-container-16MiB": {
-    "RoundTrips": 19,
-    "LogicalReads": 2231,
-    "LogBytes": 18338611,
-    "AllocatedBytes": 1235232,
+    "RoundTrips": 17,
+    "LogicalReads": 2241,
+    "LogBytes": 18340249,
+    "AllocatedBytes": 1152232,
     "RetainedBytes": 64,
-    "Seconds": 0.0818,
+    "Seconds": 0.0714,
     "ContentBytes": 0
   },
   "download-16MiB": {
@@ -108,12 +108,12 @@
     "ContentBytes": 0
   },
   "export-16MiB": {
-    "RoundTrips": 26,
-    "LogicalReads": 4293,
-    "LogBytes": 2457,
-    "AllocatedBytes": 8385424,
+    "RoundTrips": 23,
+    "LogicalReads": 4299,
+    "LogBytes": 0,
+    "AllocatedBytes": 8059872,
     "RetainedBytes": 216,
-    "Seconds": 0.0965,
+    "Seconds": 0.0774,
     "ContentBytes": 16777222
   },
   "get-info": {
