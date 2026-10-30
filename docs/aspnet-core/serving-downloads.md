@@ -47,8 +47,9 @@ It answers **conditional requests** without reading the content:
   change;
 - **412 Precondition Failed** for an `If-Match` or `If-Unmodified-Since` that doesn't hold.
 
-A `HEAD` request gets the headers alone. The download stream is disposed once the response is sent, and the
-request's cancellation token stops the read when the client disconnects. **Range requests** get the whole file (200
+A `HEAD` request gets the headers alone. The download stream is disposed once the response is sent, so don't
+dispose the download in the endpoint: the response is sent after the endpoint returns. The request's cancellation
+token stops the read when the client disconnects. **Range requests** get the whole file (200
 rather than 206), because the download is already open; to answer them, see below.
 
 **404** comes from the endpoint: `DownloadStreamingAsync` returns `null` when the container, resource or version

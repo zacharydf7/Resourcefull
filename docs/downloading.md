@@ -16,7 +16,8 @@ unless you pass a `versionId`.
 The stream from `DownloadStreamingAsync` reads from storage as you read it, so memory use stays flat whatever the
 size. It's read-only and forward-only: `Length` is the content's length and `Position` counts the bytes read, but it
 can't seek. Dispose it when you're done, which releases what the provider keeps for it (with SQL Server, a database
-context).
+context). From 3.2 <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span>, disposing the download disposes its stream, so
+`await using ResourceDownloadResult? download = await container.DownloadStreamingAsync(...)` does it too.
 
 ```csharp
 ResourceDownloadResult? download = await container.DownloadStreamingAsync("report.pdf");

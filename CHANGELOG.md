@@ -49,6 +49,8 @@
   provider and error type. SQL Server's migrations and hash backfill record spans. Resource names, and failure
   messages that may contain them, go on spans only with `UseTelemetry(t => t.RecordResourceNames = true)`. Nothing is
   measured until something subscribes. See [Telemetry](docs/telemetry.md).
+- **Disposable downloads.** `ResourceDownloadResult` implements `IDisposable` and `IAsyncDisposable`, disposing its
+  stream, so `await using` works on the download itself.
 
 ### Changed
 
