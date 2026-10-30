@@ -56,7 +56,7 @@ These apply coming from 1.x or 2.x. Check them even where your code still compil
 - **Deleting a name deletes all its versions.** `DeleteResourceIfExistsAsync(name)` without a `versionId` used to
   delete only the current version. Pass the version's ID to delete just that one.
 - **Names are case-sensitive and have limits:** 1 to 128 characters for a container, 1 to 256 for a resource, and no
-  whitespace at either end. See [Names](containers-and-names.md#names).
+  whitespace at either end. See [Names](names.md).
 - **What's returned is what was stored.** `ContentLength` is measured from the content, and an upload whose declared
   length differs throws `ResourceContentLengthMismatchException`. `LastModified` is when the version became current,
   by the storing server's clock. Every new version has a `ContentHash`.
@@ -64,7 +64,7 @@ These apply coming from 1.x or 2.x. Check them even where your code still compil
 - **Download streams can't seek**, and `ResourceDownloadResult.Stream` is never `null`. (With SQL Server, 2.x streams
   couldn't seek either; the in-memory provider's could.)
 - **A failed upload from a non-seekable stream isn't retried** once its content has started. See
-  [Large files](uploads-and-downloads.md#large-files).
+  [Large files](large-files.md).
 - **A container client needs no disposing** (from 1.x). It still implements `IDisposable`, but disposing it does
   nothing.
 - **A failed prune is logged** as a warning through `ILogger` instead of being silent.
@@ -87,8 +87,8 @@ These apply coming from 1.x or 2.x. Check them even where your code still compil
 3. **Prepare for case-sensitive names** (below).
 4. **Apply the migrations**: `MigrateResourcefullDatabaseAsync`, or the scripts under `scripts/Migrations/` that the
    database is missing, oldest first, or `Resourcefull.sql` for all of them at once. See
-   [Upgrading the schema](providers/sql-server.md#upgrading-the-schema).
-5. **Record hashes for older content** with the [backfill](providers/sql-server.md#recording-hashes-for-older-versions),
+   [Upgrading the schema](providers/sql-server-upgrades.md#upgrading-the-schema).
+5. **Record hashes for older content** with the [backfill](providers/sql-server-upgrades.md#recording-hashes-for-older-versions),
    whenever the load allows.
 
 What each migration does, and what it needs from you:

@@ -28,7 +28,7 @@ rewind it first. Otherwise the upload stores an empty version, which with `Overw
 ## `ArgumentException` for a name that looks fine
 
 Names can't start or end with whitespace, and are limited to 128 characters for a container and 256 for a resource. A
-name read from a file or a form often carries a trailing newline or space. See [Names](containers-and-names.md#names).
+name read from a file or a form often carries a trailing newline or space. See [Names](names.md).
 
 ## A resource "disappeared" after upgrading
 

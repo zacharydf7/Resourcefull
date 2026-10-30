@@ -23,15 +23,17 @@
       { "files": [ "api/**.yml", "api/index.md" ] }
     ],
     "resource": [
-      { "files": [ "assets/icon.png" ] }
+      { "files": [ "assets/icon.png", "assets/logo.svg" ] },
+      { "files": [ "**.html" ], "src": "redirects" }
     ],
     "output": "_site",
     "template": [ "default", "modern", "template" ],
     "globalMetadata": {
       "_appName": "Resourcefull",
       "_appTitle": "Resourcefull",
-      "_appLogoPath": "assets/icon.png",
-      "_appFaviconPath": "assets/icon.png",
+      "_appLogoPath": "assets/logo.svg",
+      "_appFaviconPath": "assets/logo.svg",
+      "_appFooter": "<span>Resourcefull is open source under the MIT license. <a href=\"https://github.com/zacharydf7/Resourcefull\">GitHub</a> · <a href=\"https://www.nuget.org/packages/Resourcefull\">NuGet</a></span>",
       "_enableSearch": true
     }
   }

@@ -61,18 +61,20 @@ public class Reports(IResourceServiceClient resources)
 
 ## Documentation
 
-The [documentation site](https://zacharydf7.github.io/Resourcefull/) has everything below, plus the API
-reference.
+The [documentation site](https://zacharydf7.github.io/Resourcefull/) has guides for every feature, grouped by what
+you're trying to do, plus the API reference.
 
-- [Getting started](https://github.com/zacharydf7/Resourcefull/blob/main/docs/getting-started.md)
-- [Concepts](https://github.com/zacharydf7/Resourcefull/blob/main/docs/index.md#concepts): containers and names,
-  uploads and downloads, versioning, concurrency, errors
-- [SQL Server](https://github.com/zacharydf7/Resourcefull/blob/main/docs/providers/sql-server.md): provisioning,
-  permissions and upgrades
-- [ASP.NET Core](https://github.com/zacharydf7/Resourcefull/blob/main/docs/recipes/aspnet-core.md)
-- [Upgrading to 3.0](https://github.com/zacharydf7/Resourcefull/blob/main/docs/upgrading.md) and the
+- [Introduction](https://zacharydf7.github.io/Resourcefull/docs/index.html): containers, resources, versions and
+  providers
+- [Getting started](https://zacharydf7.github.io/Resourcefull/docs/getting-started.html)
+- [Uploading](https://zacharydf7.github.io/Resourcefull/docs/uploading.html) and
+  [downloading](https://zacharydf7.github.io/Resourcefull/docs/downloading.html) files
+- [ASP.NET Core](https://zacharydf7.github.io/Resourcefull/docs/aspnet-core/index.html): serving downloads, accepting
+  uploads and sharing files with links
+- [SQL Server](https://zacharydf7.github.io/Resourcefull/docs/providers/sql-server.html): provisioning, permissions
+  and upgrades
+- [Upgrading to 3.0](https://zacharydf7.github.io/Resourcefull/docs/upgrading.html) and the
   [changelog](https://github.com/zacharydf7/Resourcefull/blob/main/CHANGELOG.md)
-- [All documentation](https://github.com/zacharydf7/Resourcefull/blob/main/docs/index.md)
 
 ## Contributing
 

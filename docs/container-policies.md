@@ -117,7 +117,7 @@ cost that query too.
 
 ## Over HTTP
 
-With [`AddResourcefullExceptionHandler`](recipes/aspnet-core.md#turning-exceptions-into-status-codes), a refused write
+With [`AddResourcefullExceptionHandler`](aspnet-core/status-codes.md), a refused write
 becomes:
 
 | Rule | Status |

@@ -1,6 +1,602 @@
-/* The logo is a PNG, which the modern template shows at its natural size; size it to the navigation bar. */
+@import url("https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=JetBrains+Mono:wght@400;500&family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,400&display=swap");
+
+/* The palette comes from the logo: a navy-to-cobalt tile with white and pale-blue files. */
+:root,
+[data-bs-theme="light"] {
+  --rf-navy: #17327f;
+  --rf-cobalt: #2f6bff;
+  --rf-pale: #b9ccff;
+  --rf-bg: #ffffff;
+  --rf-surface: #f4f7fd;
+  --rf-raised: #ffffff;
+  --rf-text: #151b2e;
+  --rf-muted: #566079;
+  --rf-line: #e0e6f3;
+  --rf-link: #2456e0;
+  --rf-link-hover: #17327f;
+  --rf-tint: #ebf1ff;
+  --rf-code-bg: #f4f7fd;
+  --rf-code-text: #1d3a8f;
+  --rf-shadow: 0 1px 2px rgb(23 50 127 / 6%), 0 8px 24px rgb(23 50 127 / 8%);
+
+  --rf-display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --rf-body: "Source Sans 3", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --rf-mono: "JetBrains Mono", ui-monospace, "Cascadia Code", Consolas, monospace;
+
+  --bs-body-bg: var(--rf-bg);
+  --bs-body-color: var(--rf-text);
+  --bs-secondary-color: var(--rf-muted);
+  --bs-tertiary-bg: var(--rf-surface);
+  --bs-border-color: var(--rf-line);
+  --bs-link-color: var(--rf-link);
+  --bs-link-color-rgb: 36, 86, 224;
+  --bs-link-hover-color: var(--rf-link-hover);
+  --bs-link-hover-color-rgb: 23, 50, 127;
+  --bs-primary: var(--rf-cobalt);
+  --bs-primary-rgb: 47, 107, 255;
+  --bs-code-color: var(--rf-code-text);
+  --bs-body-font-family: var(--rf-body);
+  --bs-font-sans-serif: var(--rf-body);
+  --bs-font-monospace: var(--rf-mono);
+}
+
+[data-bs-theme="dark"] {
+  --rf-bg: #0b1120;
+  --rf-surface: #111a2f;
+  --rf-raised: #141e36;
+  --rf-text: #e5eaf7;
+  --rf-muted: #9ba7c6;
+  --rf-line: #223053;
+  --rf-link: #8fb0ff;
+  --rf-link-hover: #b9ccff;
+  --rf-tint: #16224a;
+  --rf-code-bg: #0f172b;
+  --rf-code-text: #b9ccff;
+  --rf-shadow: 0 1px 2px rgb(0 0 0 / 30%), 0 8px 24px rgb(0 0 0 / 30%);
+
+  --bs-link-color-rgb: 143, 176, 255;
+  --bs-link-hover-color-rgb: 185, 204, 255;
+}
+
+body {
+  background: var(--rf-bg);
+  color: var(--rf-text);
+  font-family: var(--rf-body);
+  font-size: 17px;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---- Navigation bar ---- */
+
+body > header {
+  background: color-mix(in srgb, var(--rf-bg) 88%, transparent) !important;
+  backdrop-filter: saturate(160%) blur(10px);
+  border-bottom: 1px solid var(--rf-line) !important;
+}
+
+.navbar-brand {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  font-family: var(--rf-display);
+  font-weight: 700;
+  font-size: 1.3rem;
+  letter-spacing: -0.01em;
+}
+
 #logo {
-  width: 40px;
-  height: 40px;
-  margin-right: .5rem;
+  width: 34px;
+  height: 34px;
+  margin: 0;
+}
+
+#navbar .nav-link,
+#navbar .navbar-nav > li > a {
+  font-weight: 600;
+  color: var(--rf-muted);
+}
+
+#navbar .nav-link:hover,
+#navbar .nav-link.active,
+#navbar .navbar-nav > li > a.active {
+  color: var(--rf-text);
+}
+
+#search-query {
+  border-radius: 999px;
+  background: var(--rf-surface);
+  border-color: var(--rf-line);
+}
+
+/* ---- Sidebar ---- */
+
+.toc {
+  font-size: 15px;
+}
+
+/* Top-level entries are the sections; they read as labels over their pages. */
+.toc > ul > li > .expand-stub + a,
+.toc > ul > li > a {
+  font-weight: 700;
+  color: var(--rf-text);
+}
+
+.toc ul ul a {
+  color: var(--rf-muted);
+}
+
+.toc a:hover {
+  color: var(--rf-link);
+}
+
+.toc a.active {
+  color: var(--rf-link) !important;
+  font-weight: 600;
+}
+
+/* ---- Articles ---- */
+
+article {
+  line-height: 1.7;
+}
+
+article h1,
+article h2,
+article h3,
+article h4 {
+  font-family: var(--rf-display);
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  text-wrap: balance;
+  color: var(--rf-text);
+}
+
+article h1 {
+  font-size: 2.5rem;
+  margin-bottom: 1.25rem;
+}
+
+article h2 {
+  font-size: 1.65rem;
+  margin-top: 2.75rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--rf-line);
+}
+
+article h3 {
+  font-size: 1.25rem;
+  margin-top: 2rem;
+}
+
+/* The paragraph under a page title introduces it. */
+article h1 + p {
+  font-size: 1.15rem;
+  color: var(--rf-muted);
+}
+
+article a:not(.btn) {
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+article li + li {
+  margin-top: .35rem;
+}
+
+/* ---- Code ---- */
+
+code {
+  font-family: var(--rf-mono);
+  font-size: .86em;
+}
+
+article :not(pre) > code {
+  font-size: .8em;
+  padding: .12em .38em;
+  border-radius: 6px;
+  background: var(--rf-tint);
+  color: var(--rf-code-text);
+}
+
+article pre {
+  position: relative;
+  background: var(--rf-code-bg) !important;
+  border: 1px solid var(--rf-line);
+  border-radius: 12px;
+  padding: 1rem 1.15rem;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+article pre > code {
+  background: transparent !important;
+  padding: 0 !important;
+}
+
+/* ---- Tables ---- */
+
+article table {
+  border-collapse: separate;
+  border-spacing: 0;
+  width: 100%;
+  border: 1px solid var(--rf-line);
+  border-radius: 12px;
+  overflow: hidden;
+  font-size: 15px;
+}
+
+article table th {
+  background: var(--rf-surface);
+  font-weight: 700;
+}
+
+article table th,
+article table td {
+  padding: .6rem .85rem;
+  border-bottom: 1px solid var(--rf-line);
+  vertical-align: top;
+}
+
+article table tr:last-child td {
+  border-bottom: 0;
+}
+
+/* ---- Callouts ---- */
+
+article .alert {
+  border: 1px solid var(--rf-line);
+  border-left: 4px solid var(--rf-cobalt);
+  border-radius: 10px;
+  background: var(--rf-tint);
+  color: var(--rf-text);
+}
+
+/* ---- Footer, page navigation and "In this article" ---- */
+
+.affix h5 {
+  font-family: var(--rf-display);
+  font-size: .8rem;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--rf-muted);
+}
+
+.next-article a {
+  font-weight: 600;
+}
+
+body > footer {
+  background: var(--rf-surface);
+  color: var(--rf-muted) !important;
+  font-size: 14px;
+}
+
+/* ---- The home page ---- */
+
+body[data-layout="landing"] main {
+  max-width: none;
+  padding: 0;
+}
+
+body[data-layout="landing"] .actionbar,
+body[data-layout="landing"] .contribution,
+body[data-layout="landing"] .next-article {
+  display: none;
+}
+
+.rf-home {
+  --gutter: max(16px, 4vw);
+}
+
+.rf-home section {
+  padding: 4.5rem var(--gutter);
+}
+
+.rf-wrap {
+  max-width: 1140px;
+  margin: 0 auto;
+}
+
+.rf-hero {
+  background:
+    radial-gradient(1200px 500px at 85% -10%, color-mix(in srgb, var(--rf-cobalt) 22%, transparent), transparent 60%),
+    linear-gradient(180deg, var(--rf-tint), var(--rf-bg));
+  border-bottom: 1px solid var(--rf-line);
+}
+
+.rf-hero .rf-wrap {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+  gap: 3rem;
+  align-items: center;
+}
+
+.rf-hero h1 {
+  font-family: var(--rf-display);
+  font-size: clamp(2.4rem, 5vw, 3.6rem);
+  font-weight: 700;
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+  margin: 0 0 1.1rem;
+  text-wrap: balance;
+  border: 0;
+  padding: 0;
+}
+
+.rf-hero h1 span {
+  background: linear-gradient(120deg, var(--rf-navy), var(--rf-cobalt));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+[data-bs-theme="dark"] .rf-hero h1 span {
+  background: linear-gradient(120deg, var(--rf-pale), var(--rf-cobalt));
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+
+.rf-lede {
+  font-size: 1.2rem;
+  color: var(--rf-muted);
+  max-width: 34em;
+  margin-bottom: 1.75rem;
+}
+
+.rf-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .75rem;
+  align-items: center;
+}
+
+.rf-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: .45rem;
+  padding: .7rem 1.25rem;
+  border-radius: 999px;
+  font-weight: 700;
+  text-decoration: none !important;
+  border: 1px solid transparent;
+  transition: transform .15s ease, box-shadow .15s ease;
+}
+
+.rf-btn:hover {
+  transform: translateY(-1px);
+}
+
+.rf-btn-primary {
+  background: linear-gradient(135deg, var(--rf-navy), var(--rf-cobalt));
+  color: #fff !important;
+  box-shadow: 0 6px 18px rgb(47 107 255 / 30%);
+}
+
+.rf-btn-secondary {
+  background: var(--rf-raised);
+  color: var(--rf-text) !important;
+  border-color: var(--rf-line);
+}
+
+.rf-install {
+  margin-top: 1.5rem;
+  display: inline-flex;
+  align-items: center;
+  gap: .6rem;
+  padding: .5rem .9rem;
+  border: 1px dashed var(--rf-line);
+  border-radius: 10px;
+  font-family: var(--rf-mono);
+  font-size: 14px;
+  color: var(--rf-muted);
+  background: var(--rf-raised);
+  max-width: 100%;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+.rf-install b {
+  color: var(--rf-cobalt);
+  font-weight: 500;
+}
+
+.rf-code {
+  border-radius: 16px;
+  background: var(--rf-raised);
+  border: 1px solid var(--rf-line);
+  box-shadow: var(--rf-shadow);
+  overflow: hidden;
+  min-width: 0;
+}
+
+.rf-code-bar {
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+  padding: .65rem 1rem;
+  border-bottom: 1px solid var(--rf-line);
+  font-family: var(--rf-mono);
+  font-size: 13px;
+  color: var(--rf-muted);
+}
+
+.rf-code-bar i {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--rf-line);
+}
+
+.rf-code-bar span {
+  margin-left: .5rem;
+}
+
+.rf-code pre {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent !important;
+  padding: 1.1rem 1.25rem;
+  font-size: 13.5px;
+  overflow-x: auto;
+}
+
+.rf-section-head {
+  max-width: 44em;
+  margin-bottom: 2.25rem;
+}
+
+.rf-section-head h2 {
+  font-family: var(--rf-display);
+  font-size: clamp(1.7rem, 3vw, 2.2rem);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin: 0 0 .6rem;
+  border: 0;
+  padding: 0;
+}
+
+.rf-section-head p {
+  color: var(--rf-muted);
+  font-size: 1.1rem;
+  margin: 0;
+}
+
+.rf-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
+  gap: 1.1rem;
+}
+
+.rf-card {
+  display: flex;
+  flex-direction: column;
+  gap: .5rem;
+  padding: 1.35rem 1.4rem;
+  border: 1px solid var(--rf-line);
+  border-radius: 14px;
+  background: var(--rf-raised);
+  color: var(--rf-text) !important;
+  text-decoration: none !important;
+  transition: border-color .15s ease, transform .15s ease, box-shadow .15s ease;
+}
+
+.rf-card:hover {
+  border-color: color-mix(in srgb, var(--rf-cobalt) 55%, var(--rf-line));
+  transform: translateY(-2px);
+  box-shadow: var(--rf-shadow);
+}
+
+.rf-card h3 {
+  font-family: var(--rf-display);
+  font-size: 1.15rem;
+  font-weight: 700;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: .55rem;
+}
+
+.rf-card h3 .bi {
+  display: inline-grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 9px;
+  background: var(--rf-tint);
+  color: var(--rf-cobalt);
+  font-size: 1rem;
+}
+
+[data-bs-theme="dark"] .rf-card h3 .bi {
+  color: var(--rf-pale);
+}
+
+.rf-card p {
+  margin: 0;
+  color: var(--rf-muted);
+  font-size: 15.5px;
+  line-height: 1.55;
+}
+
+.rf-paths {
+  background: var(--rf-surface);
+  border-top: 1px solid var(--rf-line);
+  border-bottom: 1px solid var(--rf-line);
+}
+
+.rf-path {
+  padding: 1.25rem 1.35rem;
+  border-radius: 14px;
+  background: var(--rf-raised);
+  border: 1px solid var(--rf-line);
+}
+
+.rf-path h3 {
+  font-family: var(--rf-display);
+  font-size: 1.05rem;
+  margin: 0 0 .65rem;
+}
+
+.rf-path ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: .35rem;
+  font-size: 15.5px;
+}
+
+.rf-path a {
+  text-decoration: none;
+}
+
+.rf-path a:hover {
+  text-decoration: underline;
+}
+
+.rf-providers {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr));
+  gap: 1.1rem;
+}
+
+.rf-provider {
+  padding: 1.2rem 1.3rem;
+  border-radius: 14px;
+  border: 1px solid var(--rf-line);
+  background: var(--rf-raised);
+}
+
+.rf-provider code {
+  font-size: 13.5px;
+  color: var(--rf-code-text);
+}
+
+.rf-provider p {
+  margin: .4rem 0 0;
+  color: var(--rf-muted);
+  font-size: 15px;
+}
+
+@media (max-width: 900px) {
+  .rf-hero .rf-wrap {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .rf-home section {
+    padding-block: 3rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rf-btn,
+  .rf-card {
+    transition: none;
+  }
+
+  .rf-btn:hover,
+  .rf-card:hover {
+    transform: none;
+  }
 }

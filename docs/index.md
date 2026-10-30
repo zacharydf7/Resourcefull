@@ -1,43 +1,59 @@
-# Resourcefull documentation
+# Introduction
 
-Resourcefull stores files of any type and size, called **resources**, in named **containers**, on storage you run
-yourself. One client API uploads, downloads, lists, versions and deletes them, whichever storage provider holds the
-bytes: SQL Server, process memory for tests, or a provider you write.
+Resourcefull is a .NET library for storing files in your own infrastructure and serving them from your application.
+Your code uploads, downloads, lists, versions and deletes files through one client API, and a **storage provider**
+decides where the bytes go: SQL Server in production, process memory in tests, or a store of your own.
 
-## Start here
+It's for applications that keep files people upload or download, such as invoices, profile pictures, reports, contract
+scans or video, and want them next to the rest of their data, rather than in a cloud service.
 
-- [Getting started](getting-started.md): install a package, register a provider, and upload and download your first
-  file, in an ASP.NET Core app or a console app.
+## The building blocks
 
-## Concepts
+A few words come up on every page:
 
-- [Containers and names](containers-and-names.md): how resources are organized, and the rules names follow.
-- [Uploads and downloads](uploads-and-downloads.md): streams, content length and hashes, large files and
-  cancellation.
-- [Versioning](versioning.md): keeping older versions, restoring them, and what deleting removes.
-- [Concurrency](concurrency.md): what's guaranteed when several callers write the same name.
-- [Errors](errors.md): what each operation returns or throws.
-- [URI providers](uri-providers.md): giving containers and resources the URIs your API serves them at.
-- [Telemetry](telemetry.md): the spans and metrics every operation records.
-- [Container policies](container-policies.md): size limits, quotas, allowed file types and read-only containers.
-- [Expiring resources](expiry.md): uploads that delete themselves, and auditing what Resourcefull deletes.
-- [Sharing files with links](sharing-links.md): links that let anyone download one file, without signing in, until they expire.
-- [Backing up and moving containers](backup-and-move.md): a whole container, every version, to a zip file and back.
-- [Health checks](health-checks.md): reporting whether storage can be reached and the schema is current.
+- **A resource** is a file: its content, plus a description that Resourcefull keeps with it, called its
+  `ResourceInfo`: its name, content type, length, a SHA-256 hash of its content, metadata you choose, and when it was
+  stored.
+- **A container** is a named group of resources, such as `invoices` or `user-42`. Every resource lives in one, and two
+  resources can have the same name in different containers. See [Containers](containers.md).
+- **A version** is one stored copy of a resource's content. Uploading again stores a new version, and the newest is
+  the **current** one. With [versioning](versioning.md) turned on, older versions are kept so you can go back to them.
+- **The service client**, `IResourceServiceClient`, is what your code injects. It creates and deletes containers, and
+  hands out a **container client**, `IResourceContainerClient`, for working with the resources in one container.
+- **A provider** stores the bytes. You choose one when you register Resourcefull, and your code doesn't change if you
+  switch.
 
-## Providers
+```csharp
+IResourceContainerClient invoices = await resources.CreateResourceContainerIfNotExistsAsync("invoices");
+ResourceInfo stored = await invoices.UploadAsync("2026/10/invoice-1042.pdf", pdf);
+ResourceDownloadResult? download = await invoices.DownloadStreamingAsync("2026/10/invoice-1042.pdf");
+```
 
-- [SQL Server](providers/sql-server.md): provisioning, connection strings, permissions, upgrades and
-  recording hashes for older content.
-- [In-memory](providers/in-memory.md): for tests and local development.
-- [Writing a provider](providers/writing-a-provider.md): storing resources anywhere else.
+## The packages
 
-## Guides
+| Package | What it's for |
+|---|---|
+| `Resourcefull` | The client API every application uses. |
+| `Resourcefull.SqlServer` | Stores files in a SQL Server database. Use it in production. |
+| `Resourcefull.InMemory` | Keeps files in process memory, for tests and local development. |
+| `Resourcefull.AspNetCore` | Serves and accepts files over HTTP with the right status codes and headers, and creates signed links for sharing them. |
 
-- [ASP.NET Core](recipes/aspnet-core.md): the `Resourcefull.AspNetCore` package for serving downloads, accepting
-  uploads and turning exceptions into status codes, and handling large files.
-- [Upgrading](upgrading.md): moving to 3.0 from earlier releases, and the [changelog](../CHANGELOG.md).
-- [Troubleshooting](troubleshooting.md): common errors and what they mean.
-- [API reference](../api/index.md): every public type and member, generated from the XML documentation.
+## Where to go next
+
+- **New to Resourcefull?** [Getting started](getting-started.md) installs a package, registers a provider, and stores
+  and reads your first file.
+- **Working with files:** [uploading](uploading.md), [downloading](downloading.md), [listing](listing.md),
+  [copying and moving](copying-and-moving.md), [versioning](versioning.md), and what happens when several callers
+  write at once ([concurrency](concurrency.md)).
+- **Building a web app:** the [ASP.NET Core](aspnet-core/index.md) section serves downloads, accepts uploads and
+  [shares files with links](sharing-links.md).
+- **Managing storage:** [container policies](container-policies.md) for quotas and file types,
+  [expiring resources](expiry.md), and [backing up and moving containers](backup-and-move.md).
+- **Running in production:** setting up [SQL Server](providers/sql-server.md), [health checks](health-checks.md),
+  [telemetry](telemetry.md) and [troubleshooting](troubleshooting.md).
+- **Testing and extending:** [testing with the in-memory provider](providers/in-memory.md), and
+  [writing a provider](providers/writing-a-provider.md) of your own.
+- **Looking something up?** The [API reference](../api/index.md) lists every public type and member, and
+  [Errors](errors.md) lists what each operation returns or throws.
 
 Contributing to Resourcefull itself? See [CONTRIBUTING.md](../CONTRIBUTING.md).

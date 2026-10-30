@@ -25,7 +25,7 @@
   move within the container. With SQL Server, no content passes through the application. A copy or restore records
   its source in the new `ResourceInfo.CopiedFrom`. Providers get `CopyResourceAsync`, with a default implementation,
   and `MoveResourceAsync`, which throws `NotSupportedException` until implemented. The `AddCopiedFrom` migration adds
-  three nullable columns. See [Copying and moving](docs/uploads-and-downloads.md#copying-and-moving).
+  three nullable columns. See [Copying and moving](docs/copying-and-moving.md).
 - **Container policies.** `UseContainerPolicies` sets limits for every container, and `UsePolicyProvider` gives any
   container its own, such as a quota for each user's container that an admin can change while the application runs:
   `MaxResourceSize`, `MaxContainerSize`, `MaxResourceCount`, `AllowedContentTypes` and `ReadOnly`. Sizes are
@@ -38,7 +38,7 @@
   for a range. `Results.Resource(container, name)` in `Resourcefull.AspNetCore` looks the resource up itself and
   answers `Range` requests with 206 Partial Content, honoring `If-Range`, and 416 for a range past the end. Providers
   get a range overload of `GetResourceStreamAsync` with a default implementation, so providers written for 3.1 keep
-  working. See [Downloading part of a resource](docs/uploads-and-downloads.md#downloading-part-of-a-resource).
+  working. See [Downloading part of a resource](docs/downloading.md#downloading-part-of-a-resource).
 - **Health checks.** `AddHealthChecks().AddResourcefullCheck()` reports whether storage can be reached through any
   provider, and `AddResourcefullSqlServerCheck()` also reports Unhealthy when the database is missing migrations this
   release needs, and Degraded when a newer release has upgraded it. See [Health checks](docs/health-checks.md).
@@ -47,6 +47,12 @@
   provider and error type. SQL Server's migrations and hash backfill record spans. Resource names, and failure
   messages that may contain them, go on spans only with `UseTelemetry(t => t.RecordResourceNames = true)`. Nothing is
   measured until something subscribes. See [Telemetry](docs/telemetry.md).
+
+### Changed
+
+- **A new look.** The packages have a new icon, and the [documentation site](https://zacharydf7.github.io/Resourcefull/)
+  has a new design, a home page, and a sidebar grouped by what you're trying to do. Pages that covered several topics
+  are split into one page each; links to the old pages still work.
 
 ## 3.1.0
 
@@ -65,14 +71,14 @@ check is a test that expects exactly `ArgumentException` for a bad name; it's no
   download with `Content-Length`, a strong `ETag`, `Last-Modified` and `Content-Disposition`, and answers conditional
   and `HEAD` requests. `UploadFromRequestAsync` stores a request body, honoring `If-Match`, `If-None-Match` and
   `If-Unmodified-Since` race-free. `AddResourcefullExceptionHandler` turns Resourcefull's exceptions into problem
-  details with the right status codes. See [ASP.NET Core](docs/recipes/aspnet-core.md).
+  details with the right status codes. See [ASP.NET Core](docs/aspnet-core/index.md).
 - **`ResourceNameException`**, thrown for a name that breaks the name rules. It derives from `ArgumentException`, so
   existing `catch (ArgumentException)` code still catches it, but a test that expects exactly `ArgumentException`
   needs updating.
 - **Listing by prefix, a page at a time.** `ListResourcesAsync` enumerates a container's current resources, or those
   under a prefix, fetching pages as you go, and `GetResourcePageAsync` returns one page with a continuation token for
   APIs that page for their own callers. With SQL Server a page costs the same wherever it starts. See
-  [Listing resources](docs/containers-and-names.md#listing-resources).
+  [Listing resources](docs/listing.md).
 - **For provider authors:** `IResourceRepository.GetResourcePageAsync`, whose default implementation sorts and filters
   the full listing, so providers written for 3.0 keep working until they answer it directly.
 - **For provider authors:** conditional overloads of `IResourceRepository.AddResourceAsync` and

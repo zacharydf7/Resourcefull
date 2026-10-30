@@ -27,7 +27,7 @@ An import restores the container as it was:
 - **Each version's ID and `LastModified`.** Imported under the container's original name, anything that recorded a
   version ID still finds it: [signed links](sharing-links.md), audit records, links in your own database. Imported under
   another name, the IDs are the same, but links that name the old container don't follow.
-- **Everything else about each version:** content type, metadata, content hash, [`CopiedFrom`](uploads-and-downloads.md#copying-and-moving)
+- **Everything else about each version:** content type, metadata, content hash, [`CopiedFrom`](copying-and-moving.md)
   and [`ExpiresAt`](expiry.md).
 - **The container's metadata.**
 
@@ -91,7 +91,7 @@ app.MapPost("/admin/containers/{name}/import", async (string name, HttpRequest r
 
 ### Imports are checked, and all or nothing
 
-- **The manifest is checked first.** Names that break the [name rules](containers-and-names.md#names), repeated
+- **The manifest is checked first.** Names that break the [name rules](names.md), repeated
   names or version IDs, and missing fields are refused (`InvalidDataException`) before anything is created.
 - **Every file is checked against its hash** as it's imported, so content damaged in storage or on the way is refused
   (`InvalidDataException`) rather than restored wrong.
@@ -122,7 +122,7 @@ application wrote, or that came from someone you trust, and keep backups where o
 
 Export only reads, so it works with any provider. Import stores each version with its original ID and time, which
 needs the provider method `ImportVersionAsync`; a provider written before it existed throws `NotSupportedException`.
-See [Writing a provider](providers/writing-a-provider.md#importing-versions).
+See [Writing a provider](providers/newer-members.md#importing-versions).
 
 ## Telemetry
 

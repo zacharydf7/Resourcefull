@@ -46,11 +46,11 @@ clients that read the same version, exactly one succeeds. The others get `Resour
 carries the version that's current now (`CurrentVersionId` and `CurrentContentHash`), and nothing of theirs is stored.
 They can read again, reapply their change and retry.
 
-- **`IfMatchContentHash`** compares the content hash instead. The [ASP.NET Core recipe](recipes/aspnet-core.md)
+- **`IfMatchContentHash`** compares the content hash instead. [Serving downloads](aspnet-core/serving-downloads.md)
   sends it as the `ETag`, in quotes as HTTP requires, so pass the tag from an `If-Match` header without its quotes.
-  `UploadFromRequestAsync` in the [ASP.NET Core package](recipes/aspnet-core.md#accepting-uploads) does that for you,
+  `UploadFromRequestAsync` in the [ASP.NET Core package](aspnet-core/accepting-uploads.md) does that for you,
   along with `*`, weak tags and lists of tags. Versions stored before 3.0 have no hash until the
-  [backfill](providers/sql-server.md#recording-hashes-for-older-versions) records one, and until then they meet no
+  [backfill](providers/sql-server-upgrades.md#recording-hashes-for-older-versions) records one, and until then they meet no
   hash condition.
 - **Set both** and both must hold.
 - **A name with no current version meets no condition.** For "only if it doesn't exist yet", use `CreateOnly`; it

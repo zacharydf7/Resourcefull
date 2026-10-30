@@ -1,51 +1,85 @@
-- name: Overview
-  href: index.md
-- name: Getting started
-  href: getting-started.md
-- name: Concepts
+- name: Get started
   items:
-  - name: Containers and names
-    href: containers-and-names.md
-  - name: Uploads and downloads
-    href: uploads-and-downloads.md
+  - name: Introduction
+    href: index.md
+  - name: Getting started
+    href: getting-started.md
+- name: Working with files
+  items:
+  - name: Containers
+    href: containers.md
+  - name: Names
+    href: names.md
+  - name: Uploading files
+    href: uploading.md
+  - name: Downloading files
+    href: downloading.md
+  - name: Listing resources
+    href: listing.md
+  - name: Copying and moving
+    href: copying-and-moving.md
   - name: Versioning
     href: versioning.md
   - name: Concurrency
     href: concurrency.md
-  - name: Errors
-    href: errors.md
-  - name: URI providers
-    href: uri-providers.md
-  - name: Telemetry
-    href: telemetry.md
-- name: Providers
-  items:
-  - name: SQL Server
-    href: providers/sql-server.md
-  - name: In-memory
-    href: providers/in-memory.md
-  - name: Writing a provider
-    href: providers/writing-a-provider.md
-- name: Guides
+  - name: Large files
+    href: large-files.md
+  - name: Cancellation
+    href: cancellation.md
+- name: Web apps
   items:
   - name: ASP.NET Core
-    href: recipes/aspnet-core.md
+    href: aspnet-core/index.md
+  - name: Serving downloads
+    href: aspnet-core/serving-downloads.md
+  - name: Accepting uploads
+    href: aspnet-core/accepting-uploads.md
+  - name: Exceptions as status codes
+    href: aspnet-core/status-codes.md
+  - name: URI providers
+    href: uri-providers.md
+  - name: Sharing files with links
+    href: sharing-links.md
+  - name: Shared links in production
+    href: sharing-links-in-production.md
+- name: Managing storage
+  items:
   - name: Container policies
     href: container-policies.md
   - name: Expiring resources
     href: expiry.md
-  - name: Sharing files with links
-    href: sharing-links.md
   - name: Backing up and moving containers
     href: backup-and-move.md
+- name: Running in production
+  items:
+  - name: SQL Server
+    href: providers/sql-server.md
+  - name: How SQL Server stores files
+    href: providers/sql-server-storage.md
+  - name: Upgrading the database
+    href: providers/sql-server-upgrades.md
   - name: Health checks
     href: health-checks.md
+  - name: Telemetry
+    href: telemetry.md
+  - name: Troubleshooting
+    href: troubleshooting.md
+- name: Testing and extending
+  items:
+  - name: Testing with the in-memory provider
+    href: providers/in-memory.md
+  - name: Writing a provider
+    href: providers/writing-a-provider.md
+  - name: Members added since 3.0
+    href: providers/newer-members.md
+- name: Reference
+  items:
+  - name: Errors
+    href: errors.md
   - name: Upgrading to 3.0
     href: upgrading.md
   - name: Changelog
     href: ../CHANGELOG.md
-  - name: Troubleshooting
-    href: troubleshooting.md
   - name: Samples
     href: ../samples/README.md
   - name: Contributing

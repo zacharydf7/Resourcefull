@@ -8,7 +8,7 @@ Resourcefull reports an expected absence with a return value and everything else
 | A listing with nothing in it | an empty list, never `null` |
 | An existence check or a conditional delete | `bool` |
 | A `null` name, or a missing argument | `ArgumentNullException`, before storage is contacted |
-| A name that breaks the [name rules](containers-and-names.md#names) | `ResourceNameException`, an `ArgumentException`, before storage is contacted |
+| A name that breaks the [name rules](names.md) | `ResourceNameException`, an `ArgumentException`, before storage is contacted |
 | Uploading a name that exists, when the upload is create-only | `ResourceConflictException` |
 | Creating a container that exists | `ResourceConflictException` |
 | Uploading into a container that doesn't exist | `ResourceContainerNotFoundException` |
@@ -50,5 +50,5 @@ catch (ResourceContainerNotFoundException)
 }
 ```
 
-The [ASP.NET Core package](recipes/aspnet-core.md#turning-exceptions-into-status-codes) maps them all, the name exception
+The [ASP.NET Core package](aspnet-core/status-codes.md) maps them all, the name exception
 included, to responses in one place.
