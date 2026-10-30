@@ -66,7 +66,10 @@ public interface IResourcePolicyProvider
     ValueTask<ResourceContainerPolicy?> GetPolicyAsync(string containerName, CancellationToken cancellationToken);
 }
 
-/// <summary>The rule of a <see cref="ResourceContainerPolicy"/> that a write broke. <para>Coming in 3.2.</para></summary>
+/// <summary>
+/// The rule of a <see cref="ResourceContainerPolicy"/> that a write broke.
+/// <para>Coming in 3.2.</para>
+/// </summary>
 public enum ResourcePolicyRule
 {
     /// <summary><see cref="ResourceContainerPolicy.MaxResourceSize"/>: the content is too large.</summary>
@@ -85,7 +88,10 @@ public enum ResourcePolicyRule
     ReadOnly
 }
 
-/// <summary>What a container holds. <para>Coming in 3.2.</para></summary>
+/// <summary>
+/// What a container holds.
+/// <para>Coming in 3.2.</para>
+/// </summary>
 /// <param name="StoredSize">
 /// The size of every version of every resource in it. A version stored by a release before 3.0 counts its recorded
 /// length, which an application may have declared wrongly.

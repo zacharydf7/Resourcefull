@@ -24,13 +24,19 @@ public interface IResourceCleanupHandler
     ValueTask OnCleanupAsync(ResourceCleanup cleanup, CancellationToken cancellationToken);
 }
 
-/// <summary>A version Resourcefull is about to delete by itself. <para>Coming in 3.2.</para></summary>
+/// <summary>
+/// A version Resourcefull is about to delete by itself.
+/// <para>Coming in 3.2.</para>
+/// </summary>
 /// <param name="Resource">The version, as stored.</param>
 /// <param name="Reason">Why it's being deleted.</param>
 /// <param name="At">When the cleanup that's deleting it started.</param>
 public sealed record ResourceCleanup(ResourceInfo Resource, ResourceCleanupReason Reason, DateTimeOffset At);
 
-/// <summary>Why Resourcefull is deleting a version by itself. <para>Coming in 3.2.</para></summary>
+/// <summary>
+/// Why Resourcefull is deleting a version by itself.
+/// <para>Coming in 3.2.</para>
+/// </summary>
 public enum ResourceCleanupReason
 {
     /// <summary>Its <see cref="ResourceInfo.ExpiresAt"/> has passed.</summary>

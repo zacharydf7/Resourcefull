@@ -40,7 +40,10 @@ public sealed record ResourceLink(string ContainerName, string ResourceName)
     public bool Inline { get; init; }
 }
 
-/// <summary>What a valid token says its holder may download. <para>Coming in 3.2.</para></summary>
+/// <summary>
+/// What a valid token says its holder may download.
+/// <para>Coming in 3.2.</para>
+/// </summary>
 /// <param name="ContainerName">The container the resource is in.</param>
 /// <param name="ResourceName">The resource.</param>
 /// <param name="VersionId">The version, or <see langword="null"/> for whichever is current.</param>
@@ -48,7 +51,10 @@ public sealed record ResourceLink(string ContainerName, string ResourceName)
 /// <param name="Inline">Whether browsers should display the file rather than download it.</param>
 public sealed record SignedResourceLink(string ContainerName, string ResourceName, string? VersionId, DateTimeOffset ExpiresAt, bool Inline);
 
-/// <summary>Whether a token is a link that still works. <para>Coming in 3.2.</para></summary>
+/// <summary>
+/// Whether a token is a link that still works.
+/// <para>Coming in 3.2.</para>
+/// </summary>
 public enum ResourceLinkStatus
 {
     /// <summary>Signed by this application and not yet expired.</summary>
@@ -63,7 +69,10 @@ public enum ResourceLinkStatus
     Invalid
 }
 
-/// <summary>The result of checking a token. <para>Coming in 3.2.</para></summary>
+/// <summary>
+/// The result of checking a token.
+/// <para>Coming in 3.2.</para>
+/// </summary>
 /// <param name="Status">Whether it's a link that still works.</param>
 /// <param name="Link">What it grants, for a valid or expired token; <see langword="null"/> for an invalid one.</param>
 public sealed record ResourceLinkCheck(ResourceLinkStatus Status, SignedResourceLink? Link);
@@ -148,7 +157,10 @@ internal sealed class ResourceLinkSigner(IDataProtectionProvider dataProtection,
         [property: JsonPropertyName("i")] bool Inline);
 }
 
-/// <summary>Registers signed links. <para>Coming in 3.2.</para></summary>
+/// <summary>
+/// Registers signed links.
+/// <para>Coming in 3.2.</para>
+/// </summary>
 public static class ResourceLinkServiceCollectionExtensions
 {
     /// <summary>

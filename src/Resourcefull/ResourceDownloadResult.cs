@@ -22,14 +22,20 @@ public record ResourceDownloadResult(ResourceInfo ResourceInfo, Stream Stream) :
     /// </summary>
     public ResourceRange? Range { get; init; }
 
-    /// <summary>Disposes <see cref="Stream"/>. <para>Coming in 3.2.</para></summary>
+    /// <summary>
+    /// Disposes <see cref="Stream"/>.
+    /// <para>Coming in 3.2.</para>
+    /// </summary>
     public void Dispose()
     {
         Stream.Dispose();
         GC.SuppressFinalize(this);
     }
 
-    /// <summary>Disposes <see cref="Stream"/>. <para>Coming in 3.2.</para></summary>
+    /// <summary>
+    /// Disposes <see cref="Stream"/>.
+    /// <para>Coming in 3.2.</para>
+    /// </summary>
     public async ValueTask DisposeAsync()
     {
         await Stream.DisposeAsync();
