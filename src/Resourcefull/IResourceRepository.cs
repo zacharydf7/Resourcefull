@@ -286,6 +286,25 @@ public interface IResourceRepository
         => throw new NotSupportedException($"{GetType().Name} doesn't move resources.");
 
     /// <summary>
+    /// Stores a version as it was in another store, for an import: with <paramref name="version"/>'s
+    /// <see cref="ResourceInfo.VersionId"/> and <see cref="ResourceInfo.LastModified"/> rather than new ones, and its
+    /// type, metadata, <see cref="ResourceInfo.CopiedFrom"/> and <see cref="ResourceInfo.ExpiresAt"/>. Otherwise it's
+    /// stored as <see cref="AddResourceAsync(string, ResourceInfo, Stream, ResourceWriteCondition, CancellationToken)"/>
+    /// stores an upload: measured and hashed, refused if <see cref="ResourceInfo.ContentLength"/> doesn't match, and made
+    /// the name's current version. The default implementation throws <see cref="NotSupportedException"/>.
+    /// </summary>
+    /// <param name="resourceContainerName">The container to store it in.</param>
+    /// <param name="version">The version as it was.</param>
+    /// <param name="content">Its content.</param>
+    /// <param name="cancellationToken">Cancels the write; a canceled write stores nothing.</param>
+    /// <returns>What was stored.</returns>
+    /// <exception cref="ResourceConflictException">The name already has a version with that ID.</exception>
+    /// <exception cref="NotSupportedException">The provider doesn't import versions.</exception>
+    Task<WrittenContent> ImportVersionAsync(string resourceContainerName, ResourceInfo version, Stream content,
+        CancellationToken cancellationToken = default)
+        => throw new NotSupportedException($"{GetType().Name} doesn't import versions.");
+
+    /// <summary>
     /// Lists the versions, in every container, whose <see cref="ResourceInfo.ExpiresAt"/> is at or before
     /// <paramref name="now"/>, ordered by <see cref="ResourceInfo.ExpiresAt"/> and then by version ID (ordinally), each
     /// with <see cref="ResourceInfo.IsLatest"/> set. Expiry calls it every interval, so a provider should answer it from

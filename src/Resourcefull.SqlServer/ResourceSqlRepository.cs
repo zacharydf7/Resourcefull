@@ -39,8 +39,20 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
     public Task<WrittenContent> AddResourceAsync(string resourceContainerName, ResourceInfo resourceInfo, Stream stream, bool createOnly = false, CancellationToken cancellationToken = default) =>
         AddResourceAsync(resourceContainerName, resourceInfo, stream, new ResourceWriteCondition { CreateOnly = createOnly }, cancellationToken);
 
-    public async Task<WrittenContent> AddResourceAsync(string resourceContainerName, ResourceInfo resourceInfo, Stream stream,
-        ResourceWriteCondition condition, CancellationToken cancellationToken = default)
+    public Task<WrittenContent> AddResourceAsync(string resourceContainerName, ResourceInfo resourceInfo, Stream stream,
+        ResourceWriteCondition condition, CancellationToken cancellationToken = default) =>
+        AddVersionAsync(resourceContainerName, resourceInfo, stream, condition, null, cancellationToken);
+
+    public Task<WrittenContent> ImportVersionAsync(string resourceContainerName, ResourceInfo version, Stream content,
+        CancellationToken cancellationToken = default) =>
+        AddVersionAsync(resourceContainerName, version, content, new ResourceWriteCondition(), version.LastModified, cancellationToken);
+
+    /// <summary>
+    /// Stores a new version as the name's current one: an upload, stamped with the time it becomes current, or an
+    /// import, stamped with <paramref name="lastModified"/>, the time it was first stored.
+    /// </summary>
+    private async Task<WrittenContent> AddVersionAsync(string resourceContainerName, ResourceInfo resourceInfo, Stream stream,
+        ResourceWriteCondition condition, DateTimeOffset? lastModified, CancellationToken cancellationToken)
     {
         bool createOnly = condition.CreateOnly;
         ResourceConditions? conditions = condition.Conditions;
@@ -120,7 +132,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
 
             // Stamped under the name's lock as the version becomes current, not before its content was read. A wrong
             // declared length throws here, before anything about the name changes.
-            written = content.Complete(resourceInfo.ContentLength, _clock.GetUtcNow());
+            written = content.Complete(resourceInfo.ContentLength, lastModified ?? _clock.GetUtcNow());
 
             // Clear the old current version before setting the new one, so the unique "latest" index never holds
             // two rows for the name in the middle of the write.

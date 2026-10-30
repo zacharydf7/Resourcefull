@@ -36,6 +36,8 @@
     href: expiry.md
   - name: Sharing files with links
     href: sharing-links.md
+  - name: Backing up and moving containers
+    href: backup-and-move.md
   - name: Health checks
     href: health-checks.md
   - name: Upgrading to 3.0

@@ -4,6 +4,11 @@
 
 ### Added
 
+- **Exporting and importing containers.** `ExportContainerAsync` writes a container, every version of every file, to
+  a zip, and `ImportContainerAsync` creates a new container from one, keeping each version's ID and `LastModified`.
+  Imports check the manifest and every file's hash, and delete what they created if anything fails. Providers get
+  `ImportVersionAsync`, which returns what it stored and whose default throws `NotSupportedException`. See
+  [Backing up and moving containers](docs/backup-and-move.md).
 - **Signed, expiring links.** `Resourcefull.AspNetCore` can create links that let anyone download one file, without
   signing in, until they expire: `AddResourcefullLinks`, `IResourceLinkSigner.CreateTokenAsync` and
   `Results.SharedResource`. Links are sealed with ASP.NET Core Data Protection, can't be changed or read, and show the

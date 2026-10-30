@@ -20,7 +20,7 @@ database call as a child of the operation's span.
 | Instrument | Type | Unit | What it measures |
 |---|---|---|---|
 | `resourcefull.client.operation.duration` | histogram | s | each operation, from call to result |
-| `resourcefull.client.uploaded` | counter | By | content bytes stored by uploads and restores |
+| `resourcefull.client.uploaded` | counter | By | content bytes stored by uploads, restores and imports |
 | `resourcefull.client.downloaded` | counter | By | content bytes read from download streams, counted as they're read |
 
 Every measurement carries these tags:
@@ -61,6 +61,8 @@ metrics. It also has:
 | `copy` | `CopyResourceAsync` | `resourcefull.destination_container`; a `resourcefull prune` child span |
 | `move` | `MoveResourceAsync` | `resourcefull.destination_container` |
 | `set_expiry` | `SetExpiryAsync` | |
+| `export` | `ExportContainerAsync` | `resourcefull.resources`, `resourcefull.versions`: what it wrote |
+| `import` | `ImportContainerAsync` | `resourcefull.resources`, `resourcefull.versions`: what it stored |
 | `expire` | `DeleteExpiredAsync`, and each sweep of [`UseExpiry`](expiry.md), when it finds expired versions, read-only containers' included | `resourcefull.expired`: how many versions it deleted |
 | `list` | `GetResourcesAsync` | |
 | `list_page` | `GetResourcePageAsync`, and each page `ListResourcesAsync` fetches | `resourcefull.page_size` |

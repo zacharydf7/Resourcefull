@@ -106,6 +106,58 @@ public interface IResourceServiceClient
     public Task<bool> DeleteResourceContainerIfExistsAsync(string resourceContainerName, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Writes a container to <paramref name="destination"/> as a zip, to back it up or to move it to another store:
+    /// <c>manifest.json</c>, which describes the container and every version of every resource, and each distinct
+    /// content once, under <c>content/</c>. It reads one version at a time, and can write to a stream that can't seek,
+    /// such as an HTTP response.
+    /// </summary>
+    /// <param name="resourceContainerName">The container to export.</param>
+    /// <param name="destination">Where to write the zip; it's left open.</param>
+    /// <param name="cancellationToken">Cancels the export, leaving <paramref name="destination"/> incomplete.</param>
+    /// <returns>How many resources and versions it wrote, and how much content.</returns>
+    /// <exception cref="ResourceContainerNotFoundException">The container doesn't exist.</exception>
+    /// <exception cref="InvalidDataException">A version's stored content doesn't match its recorded hash.</exception>
+    /// <exception cref="ArgumentException"><paramref name="resourceContainerName"/> breaks the name rules, or <paramref name="destination"/> is null.</exception>
+    /// <exception cref="NotSupportedException">
+    /// This default implementation, kept so implementations written for 3.1 still compile, doesn't export.
+    /// </exception>
+    public Task<ResourceExportResult> ExportContainerAsync(string resourceContainerName, Stream destination,
+        CancellationToken cancellationToken = default)
+        => throw new NotSupportedException($"{GetType().Name} doesn't export containers.");
+
+    /// <summary>
+    /// Creates a container from an export that <see cref="ExportContainerAsync"/> wrote, with every version as it was:
+    /// its ID, <see cref="ResourceInfo.LastModified"/>, content and attributes. The manifest is checked before anything is
+    /// created, each content is checked against its hash as it's stored, and the container's policy applies. If
+    /// anything fails, the container is deleted again, so nothing is left half-imported. The hashes catch damage in
+    /// storage or transfer, not deliberate edits, so import only exports you trust.
+    /// </summary>
+    /// <param name="resourceContainerName">The container to create, which mustn't exist.</param>
+    /// <param name="source">The zip, in a stream that can seek, such as a file; it's left open.</param>
+    /// <param name="cancellationToken">Cancels the import, which then deletes what it created.</param>
+    /// <returns>How many resources and versions it stored, and how much content.</returns>
+    /// <exception cref="ResourceConflictException">The container already exists.</exception>
+    /// <exception cref="InvalidDataException">
+    /// The zip isn't an export this release can read, describes something that can't be imported, or its content was
+    /// damaged or changed.
+    /// </exception>
+    /// <exception cref="AggregateException">
+    /// The import failed, and so did deleting what it had imported; it holds both failures. Delete the container before
+    /// importing it again.
+    /// </exception>
+    /// <exception cref="ResourcePolicyViolationException">The container's policy refuses a version.</exception>
+    /// <exception cref="ArgumentException">
+    /// <paramref name="resourceContainerName"/> breaks the name rules, or <paramref name="source"/> is null or can't seek.
+    /// </exception>
+    /// <exception cref="NotSupportedException">
+    /// The provider doesn't import versions, or this is the default implementation, kept so implementations written for
+    /// 3.1 still compile.
+    /// </exception>
+    public Task<ResourceImportResult> ImportContainerAsync(string resourceContainerName, Stream source,
+        CancellationToken cancellationToken = default)
+        => throw new NotSupportedException($"{GetType().Name} doesn't import containers.");
+
+    /// <summary>
     /// Deletes every version, in every container that isn't read-only, whose <see cref="ResourceInfo.ExpiresAt"/> has
     /// passed, as a delete of that version would, a batch at a time, telling the <see cref="IResourceCleanupHandler"/>
     /// about each one first. A read-only container keeps its expired versions until it's writable again.

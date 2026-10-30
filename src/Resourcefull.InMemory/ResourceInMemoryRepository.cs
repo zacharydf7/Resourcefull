@@ -16,8 +16,20 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : I
     public Task<WrittenContent> AddResourceAsync(string resourceContainerName, ResourceInfo resourceInfo, Stream stream, bool createOnly = false, CancellationToken cancellationToken = default) =>
         AddResourceAsync(resourceContainerName, resourceInfo, stream, new ResourceWriteCondition { CreateOnly = createOnly }, cancellationToken);
 
-    public async Task<WrittenContent> AddResourceAsync(string resourceContainerName, ResourceInfo resourceInfo, Stream stream,
-        ResourceWriteCondition condition, CancellationToken cancellationToken = default)
+    public Task<WrittenContent> AddResourceAsync(string resourceContainerName, ResourceInfo resourceInfo, Stream stream,
+        ResourceWriteCondition condition, CancellationToken cancellationToken = default) =>
+        AddVersionAsync(resourceContainerName, resourceInfo, stream, condition, null, cancellationToken);
+
+    public Task<WrittenContent> ImportVersionAsync(string resourceContainerName, ResourceInfo version, Stream content,
+        CancellationToken cancellationToken = default) =>
+        AddVersionAsync(resourceContainerName, version, content, new ResourceWriteCondition(), version.LastModified, cancellationToken);
+
+    /// <summary>
+    /// Stores a new version as the name's current one: an upload, stamped with the time it becomes current, or an
+    /// import, stamped with <paramref name="lastModified"/>, the time it was first stored.
+    /// </summary>
+    private async Task<WrittenContent> AddVersionAsync(string resourceContainerName, ResourceInfo resourceInfo, Stream stream,
+        ResourceWriteCondition condition, DateTimeOffset? lastModified, CancellationToken cancellationToken)
     {
         bool createOnly = condition.CreateOnly;
         ResourceConditions? conditions = condition.Conditions;
@@ -56,7 +68,7 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : I
 
             // Stamped as the version becomes current, not before its content was read. A wrong declared length throws
             // here, before anything is stored.
-            WrittenContent written = content.Complete(resourceInfo.ContentLength, _clock.GetUtcNow());
+            WrittenContent written = content.Complete(resourceInfo.ContentLength, lastModified ?? _clock.GetUtcNow());
             AddVersion(container, resourceInfo, bytes, written);
             return written;
         }, cancellationToken);

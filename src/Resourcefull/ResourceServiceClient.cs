@@ -1,3 +1,4 @@
+using System.IO.Compression;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using System.Runtime.CompilerServices;
@@ -179,6 +180,61 @@ internal class ResourceServiceClient(IResourceRepository resourceRepository, IOp
 
     /// <summary>How many of a sweep's failures it keeps to throw, to say why without holding one per failed version.</summary>
     private const int FailuresKept = 10;
+
+    public Task<ResourceExportResult> ExportContainerAsync(string resourceContainerName, Stream destination,
+        CancellationToken cancellationToken = default)
+        => _telemetry.RunAsync("export", resourceContainerName, null, async activity =>
+        {
+            ResourceNames.ThrowIfInvalidContainerName(resourceContainerName);
+            ArgumentNullException.ThrowIfNull(destination);
+            ResourceContainerInfo container = await resourceRepository.GetResourceContainerInfoAsync(resourceContainerName, cancellationToken)
+                ?? throw new ResourceContainerNotFoundException($"Resource Container with the name {resourceContainerName} does not exist.");
+
+            ResourceExportResult exported = await ContainerArchive.ExportAsync(resourceRepository, container, destination, cancellationToken);
+            activity?.SetTag("resourcefull.resources", exported.ResourceCount);
+            activity?.SetTag("resourcefull.versions", exported.VersionCount);
+            return exported;
+        });
+
+    public Task<ResourceImportResult> ImportContainerAsync(string resourceContainerName, Stream source,
+        CancellationToken cancellationToken = default)
+        => _telemetry.RunAsync("import", resourceContainerName, null, async activity =>
+        {
+            ResourceNames.ThrowIfInvalidContainerName(resourceContainerName);
+            ArgumentNullException.ThrowIfNull(source);
+            if (!source.CanSeek)
+                throw new ArgumentException("An import reads the zip's directory at its end, so it needs a stream that can seek, such as a file.", nameof(source));
+
+            await using ZipArchive zip = await ZipArchive.CreateAsync(source, ZipArchiveMode.Read, leaveOpen: true,
+                entryNameEncoding: null, cancellationToken);
+            ContainerArchive.Manifest manifest = await ContainerArchive.ReadManifestAsync(zip, cancellationToken);
+            await CreateContainerCoreAsync(resourceContainerName, manifest.Metadata, cancellationToken);
+            ResourceImportResult imported;
+            try
+            {
+                imported = await ContainerArchive.ImportAsync(zip, manifest, resourceContainerName, resourceRepository, policies,
+                    _telemetry, uriProvider, cancellationToken);
+            }
+            catch (Exception failure)
+            {
+                // Nothing is left half-imported; the caller's token may be what stopped it, so it isn't used here.
+                try
+                {
+                    await resourceRepository.DeleteResourceContainerAsync(resourceContainerName, CancellationToken.None);
+                }
+                catch (Exception cleanupFailure)
+                {
+                    throw new AggregateException($"The import of {resourceContainerName} failed, and deleting what it had imported failed too: " +
+                        "delete the container before importing it again.", failure, cleanupFailure);
+                }
+
+                throw;
+            }
+
+            activity?.SetTag("resourcefull.resources", imported.ResourceCount);
+            activity?.SetTag("resourcefull.versions", imported.VersionCount);
+            return imported;
+        });
 
     public Task<bool> DeleteResourceContainerIfExistsAsync(string resourceContainerName, CancellationToken cancellationToken)
         => _telemetry.RunAsync("delete_container", resourceContainerName, null, async () =>

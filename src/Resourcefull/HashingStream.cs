@@ -10,7 +10,7 @@ namespace Resourcefull;
 /// </summary>
 public sealed class HashingStream(Stream source) : Stream
 {
-    private const string HashPrefix = "sha256:";
+    internal const string HashPrefix = "sha256:";
 
     private readonly IncrementalHash _hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
     private long _bytesRead;

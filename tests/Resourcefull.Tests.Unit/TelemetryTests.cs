@@ -293,6 +293,32 @@ public sealed class TelemetryTests : IDisposable
     }
 
     [Fact]
+    public async Task ExportAndImport_ShouldRecordHowManyResourcesAndVersionsTheyMoved_WhenCalled()
+    {
+        // Arrange
+        using ServiceProvider provider = NewServices();
+        IResourceServiceClient service = provider.GetRequiredService<IResourceServiceClient>();
+        IResourceContainerClient container = await service.CreateResourceContainerAsync("c");
+        await container.UploadAsync("a", BinaryData.FromString("1"));
+        await container.UploadAsync("a", BinaryData.FromString("2"));
+        await container.UploadAsync("b", BinaryData.FromString("3"));
+        using Activity root = TestSource.StartActivity("test")!;
+        var export = new MemoryStream();
+
+        // Act
+        await service.ExportContainerAsync("c", export);
+        export.Position = 0;
+        await service.ImportContainerAsync("d", export);
+
+        // Assert
+        foreach (string operation in new[] { "resourcefull export", "resourcefull import" })
+        {
+            Activity span = Assert.Single(SpansIn(root), s => s.OperationName == operation);
+            Assert.Equal((2L, 3L), ((long)span.GetTagItem("resourcefull.resources")!, (long)span.GetTagItem("resourcefull.versions")!));
+        }
+    }
+
+    [Fact]
     public async Task GetUsageAsync_ShouldRecordAGetUsageOperation_WhenCalled()
     {
         // Arrange

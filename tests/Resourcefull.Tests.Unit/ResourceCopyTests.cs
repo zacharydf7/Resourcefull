@@ -54,6 +54,20 @@ public class ResourceCopyTests
     }
 
     [Fact]
+    public async Task ExportImportMembers_ShouldThrowNotSupported_WhenAProviderOrClientWrittenFor31IsAsked()
+    {
+        // Arrange
+        IResourceRepository repository = new Mock<IResourceRepository> { CallBase = true }.Object;
+        IResourceServiceClient service = new Mock<IResourceServiceClient> { CallBase = true }.Object;
+
+        // Act & Assert
+        await Assert.ThrowsAsync<NotSupportedException>(() =>
+            repository.ImportVersionAsync("c", new ResourceInfo { ContainerName = "c", Name = "a" }, new MemoryStream()));
+        await Assert.ThrowsAsync<NotSupportedException>(() => service.ExportContainerAsync("c", new MemoryStream()));
+        await Assert.ThrowsAsync<NotSupportedException>(() => service.ImportContainerAsync("c", new MemoryStream()));
+    }
+
+    [Fact]
     public async Task CopyAndMove_ShouldThrowNotSupported_WhenAClientWrittenFor31IsAsked()
     {
         // Arrange

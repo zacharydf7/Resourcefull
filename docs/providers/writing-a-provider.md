@@ -87,6 +87,14 @@ returns correct ranges, just without the savings. To answer it directly, return 
   (`ResourceConflictException`) or whose container is missing (`ResourceContainerNotFoundException`), and decide the
   source conditions in the move itself.
 
+### Importing versions
+
+`ImportVersionAsync` was added in 3.2, for [importing a container](../backup-and-move.md). It stores a version as it was
+in another store: with the `VersionId` and `LastModified` it's given, rather than new ones, and with its type, metadata,
+`CopiedFrom` and `ExpiresAt`. Otherwise it's an upload: measure and hash the content as `AddResourceAsync` does, refuse
+a wrong `ContentLength`, and make the version the name's current one. Its default throws `NotSupportedException`, so
+imports fail with a provider written for 3.1; exports work with any provider, because they only read.
+
 ### Expiry
 
 `GetExpiredAsync`, `DeleteExpiredVersionAsync` and `SetExpiryAsync` were added in 3.2, and `AddResourceAsync` and
