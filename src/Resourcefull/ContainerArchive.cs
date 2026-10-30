@@ -162,7 +162,8 @@ internal static class ContainerArchive
                     Uri = uriProvider?.GetAbsoluteUri(new ResourcefullContext(containerName, resource.Name, version.VersionId))
                 };
 
-                await using Stream content = await entry.OpenAsync(cancellationToken);
+                // Able to go back to its start, so a provider that retries a transient failure can read it again.
+                await using Stream content = new RewindableEntryStream(entry, await entry.OpenAsync(cancellationToken));
                 var usage = new ResourceContainerUsage(contentSize, resourceCount, versionCount);
                 Stream checkedContent = policies is not null && await policies.CheckNewVersionAsync(containerName, resource.Name, restore: false,
                     version.ContentType, version.ContentLength, telemetry, cancellationToken, usage) is { } limit
@@ -232,5 +233,76 @@ internal static class ContainerArchive
         }
 
         return manifest;
+    }
+}
+
+/// <summary>
+/// A zip entry's content that can seek back to its start, by opening the entry again; it can't seek anywhere else.
+/// </summary>
+internal sealed class RewindableEntryStream(ZipArchiveEntry entry, Stream opened) : Stream
+{
+    private Stream? _content = opened;
+    private long _position;
+
+    public override bool CanRead => true;
+    public override bool CanSeek => true;
+    public override bool CanWrite => false;
+    public override long Length => entry.Length;
+
+    public override long Position
+    {
+        get => _position;
+        set => Seek(value, SeekOrigin.Begin);
+    }
+
+    /// <summary>Goes back to the start; the entry is opened again by the next read.</summary>
+    public override long Seek(long offset, SeekOrigin origin)
+    {
+        if (origin != SeekOrigin.Begin || offset != 0)
+            throw new NotSupportedException("An export's entry can only go back to its start.");
+        if (_position == 0) return 0;
+        _content?.Dispose();
+        _content = null;
+        _position = 0;
+        return 0;
+    }
+
+    public override int Read(byte[] buffer, int offset, int count) => Read(buffer.AsSpan(offset, count));
+
+    public override int Read(Span<byte> buffer)
+    {
+        int read = (_content ??= entry.Open()).Read(buffer);
+        _position += read;
+        return read;
+    }
+
+    public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) =>
+        ReadAsync(buffer.AsMemory(offset, count), cancellationToken).AsTask();
+
+    public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+    {
+        _content ??= await entry.OpenAsync(cancellationToken);
+        int read = await _content.ReadAsync(buffer, cancellationToken);
+        _position += read;
+        return read;
+    }
+
+    public override void Flush()
+    {
+    }
+
+    public override void SetLength(long value) => throw new NotSupportedException();
+    public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing) _content?.Dispose();
+        base.Dispose(disposing);
+    }
+
+    public override async ValueTask DisposeAsync()
+    {
+        if (_content is not null) await _content.DisposeAsync();
+        await base.DisposeAsync();
     }
 }

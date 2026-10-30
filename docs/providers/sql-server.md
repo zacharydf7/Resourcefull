@@ -79,6 +79,9 @@ counted in the `resourcefull.sqlserver.retries` metric, with the error number; s
 
 An upload is retried as a whole, from its first byte. That's possible only when its stream can seek; an upload from a
 stream that can't, such as an HTTP request body, fails instead once its content has started, and stores nothing.
+Copies, restores and imports <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span> are retried too: copies and restores run within the database, and an import
+reads the version's file from the export again. The exception is copying or restoring a version stored before 3.0
+that has no hash yet, which reads it through the application; [record the hashes](sql-server-upgrades.md#recording-hashes-for-older-versions) to retry those too.
 
 Once it's running, see [How SQL Server stores files](sql-server-storage.md) for what to expect from it, and
 [Upgrading the database](sql-server-upgrades.md) for moving to a new release.

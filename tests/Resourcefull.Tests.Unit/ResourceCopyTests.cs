@@ -43,6 +43,30 @@ public class ResourceCopyTests
     }
 
     [Fact]
+    public async Task RestoreVersionAsync_ShouldStoreTheVersionsContentThroughAddResource_WhenAProviderWrittenFor31Restores()
+    {
+        // Arrange
+        var repository = new Mock<IResourceRepository> { CallBase = true };
+        repository.Setup(r => r.GetResourceInfoAsync("c", "a", "v1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ResourceInfo { ContainerName = "c", Name = "a", VersionId = "v1" });
+        repository.Setup(r => r.GetResourceStreamAsync("c", "a", "v1", It.IsAny<CancellationToken>())).ReturnsAsync(new MemoryStream([1, 2, 3]));
+        byte[]? stored = null;
+        repository.Setup(r => r.AddResourceAsync("c", It.IsAny<ResourceInfo>(), It.IsAny<Stream>(), false, It.IsAny<CancellationToken>()))
+            .Callback((string _, ResourceInfo _, Stream content, bool _, CancellationToken _) => stored = new BinaryReader(content).ReadBytes(10))
+            .ReturnsAsync(Written);
+        repository.Setup(r => r.GetResourceVersionsAsync("c", "a", It.IsAny<CancellationToken>())).ReturnsAsync([]);
+        var client = new ResourceContainerClient(repository.Object, null, new ResourcefullOptions { IsVersioningEnabled = true },
+            new ResourceContainerInfo { Name = "c" }, null);
+
+        // Act
+        ResourceInfo? restored = await client.RestoreVersionAsync("a", "v1");
+
+        // Assert
+        Assert.Equal([1, 2, 3], stored);
+        Assert.Equal(new ResourceOrigin("c", "a", "v1"), restored!.CopiedFrom);
+    }
+
+    [Fact]
     public async Task MoveResourceAsync_ShouldThrowNotSupported_WhenAProviderWrittenFor31IsAsked()
     {
         // Arrange

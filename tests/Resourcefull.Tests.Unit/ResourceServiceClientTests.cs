@@ -1,7 +1,9 @@
 using System.IO.Compression;
 using System.Security.Cryptography;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Moq;
+using Resourcefull.InMemory;
 
 namespace Resourcefull.Tests.Unit;
 
@@ -491,6 +493,35 @@ public class ResourceServiceClientTests
         repository.Verify(r => r.GetAllResourceInfoAsync("name", cts.Token), Times.Once);
         repository.Verify(r => r.GetResourceVersionsAsync("name", "a", cts.Token), Times.Once);
         repository.Verify(r => r.GetResourceStreamAsync("name", "a", "v1", cts.Token), Times.Once);
+    }
+
+    [Fact]
+    public async Task ImportContainerAsync_ShouldGiveTheProviderContentItCanReadAgain_WhenImporting()
+    {
+        // Arrange: an export of one file, and a provider that reads each version twice, as one that retries does.
+        using ServiceProvider services = new ServiceCollection().AddResourcefull(o => o.UseInMemory()).BuildServiceProvider();
+        IResourceServiceClient source = services.GetRequiredService<IResourceServiceClient>();
+        await (await source.CreateResourceContainerAsync("c")).UploadAsync("a", BinaryData.FromString("hello"));
+        var export = new MemoryStream();
+        await source.ExportContainerAsync("c", export);
+        export.Position = 0;
+        var reads = new List<string>();
+        var repository = new Mock<IResourceRepository>();
+        repository.Setup(r => r.ImportVersionAsync("d", It.IsAny<ResourceInfo>(), It.IsAny<Stream>(), It.IsAny<CancellationToken>()))
+            .Returns(async (string _, ResourceInfo _, Stream content, CancellationToken _) =>
+            {
+                reads.Add(await new StreamReader(content, leaveOpen: true).ReadToEndAsync());
+                content.Position = 0;
+                reads.Add(await new StreamReader(content, leaveOpen: true).ReadToEndAsync());
+                return new WrittenContent(5, "sha256:2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824", DateTimeOffset.UtcNow);
+            });
+        var client = new ResourceServiceClient(repository.Object, Options.Create(new ResourcefullOptions()));
+
+        // Act
+        await client.ImportContainerAsync("d", export);
+
+        // Assert
+        Assert.Equal(["hello", "hello"], reads);
     }
 
     [Fact]

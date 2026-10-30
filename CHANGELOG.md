@@ -7,7 +7,8 @@
 - **Exporting and importing containers.** `ExportContainerAsync` writes a container, every version of every file, to
   a zip, and `ImportContainerAsync` creates a new container from one, keeping each version's ID and `LastModified`.
   Imports check the manifest and every file's hash, and delete what they created if anything fails. Providers get
-  `ImportVersionAsync`, which returns what it stored and whose default throws `NotSupportedException`. See
+  `ImportVersionAsync`, which returns what it stored and whose default throws `NotSupportedException`. With SQL
+  Server, a version whose write hits a transient failure is retried, reading its file from the export again. See
   [Backing up and moving containers](docs/backup-and-move.md).
 - **Signed, expiring links.** `Resourcefull.AspNetCore` can create links that let anyone download one file, without
   signing in, until they expire: `AddResourcefullLinks`, `IResourceLinkSigner.CreateTokenAsync` and
@@ -26,7 +27,9 @@
   create-only or conditional, as an upload can. A copy or restore records
   its source in the new `ResourceInfo.CopiedFrom`. Providers get `CopyResourceAsync`, with a default implementation,
   and `MoveResourceAsync`, which throws `NotSupportedException` until implemented. The `AddCopiedFrom` migration adds
-  three nullable columns. See [Copying and moving](docs/copying-and-moving.md).
+  three nullable columns. `RestoreVersionAsync` restores through `CopyResourceAsync`, so with SQL Server a restore
+  runs within the database and is retried after a transient failure (for a version stored before 3.0, once the hash
+  backfill has recorded its hash). See [Copying and moving](docs/copying-and-moving.md).
 - **Container policies.** `UseContainerPolicies` sets limits for every container, and `UsePolicyProvider` gives any
   container its own, such as a quota for each user's container that an admin can change while the application runs:
   `MaxResourceSize`, `MaxContainerSize`, `MaxResourceCount`, `AllowedContentTypes` and `ReadOnly`. Sizes are

@@ -177,6 +177,28 @@ public class UploadRetryIntegrationTests(SqlServerFixture fixture)
     }
 
     [SkippableFact]
+    public async Task CopyResourceAsync_ShouldRetryAndStoreTheCopy_WhenACopyToItsOwnNameFailsPartway()
+    {
+        fixture.SkipIfUnavailable();
+
+        // Arrange: a restore copies an older version to its own name; the copy fails on its second save.
+        var failure = new FailOnceInterceptor(failAtSave: 2);
+        (ResourceSqlRepository repository, string c) = await NewRepositoryAsync(failure, arm: false);
+        await repository.AddResourceAsync(c, Version(c), new MemoryStream(Payload));
+        failure.Arm();
+        var restored = new ResourceInfo { ContainerName = c, Name = "n", VersionId = "v2", CopiedFrom = new ResourceOrigin(c, "n", "v1") };
+
+        // Act
+        WrittenContent? written = await repository.CopyResourceAsync(new ResourceLocation(c, "n"), "v1", restored, new ResourceWriteCondition());
+
+        // Assert
+        Assert.True(failure.Failed);
+        Assert.Equal(Payload.Length, written!.ContentLength);
+        Assert.Equal(["v2", "v1"], (await repository.GetResourceVersionsAsync(c, "n")).Select(v => v.VersionId));
+        Assert.Equal(Payload, await ReadAsync(repository, c));
+    }
+
+    [SkippableFact]
     public async Task MoveResourceAsync_ShouldReportTheMove_WhenTheCommitSucceedsButItsAcknowledgementIsLost()
     {
         fixture.SkipIfUnavailable();

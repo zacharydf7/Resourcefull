@@ -36,6 +36,7 @@ returns correct ranges, just without the savings. To answer it directly, return 
 - **Copy's default implementation** reads the source and stores it through `AddResourceAsync`, so a provider written
   for 3.1 copies correctly, just through the application, and without `CopiedFrom` unless it stores it. Override it
   to copy within your store, deciding create-only writes and conditions at the destination as an upload does.
+  `RestoreVersionAsync` calls it too, to copy an older version to its own name.
 - **Move's default throws `NotSupportedException`.** A move must change every version's container and name at once,
   never leaving the resource in both places or half in each, so made of copies and deletes it could stop halfway.
   Implement it to keep each version's ID and attributes, refuse a destination name that has versions

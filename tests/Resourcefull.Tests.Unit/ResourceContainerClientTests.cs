@@ -659,8 +659,8 @@ public class ResourceContainerClientTests
         var repository = NewRepository();
         repository.Setup(r => r.GetResourceInfoAsync(Container, name, versionId,
             It.IsAny<CancellationToken>())).ReturnsAsync(existing);
-        repository.Setup(r => r.GetResourceStreamAsync(Container, name, versionId,
-            It.IsAny<CancellationToken>())).ReturnsAsync(new MemoryStream());
+        repository.Setup(r => r.CopyResourceAsync(new ResourceLocation(Container, name), versionId, It.IsAny<ResourceInfo>(),
+            It.IsAny<ResourceWriteCondition>(), It.IsAny<CancellationToken>())).ReturnsAsync(Written);
         var options = new ResourcefullOptions { IsVersioningEnabled = true, MaxVersions = 10 };
         var client = NewClient(repository.Object, options: options);
 
@@ -783,8 +783,6 @@ public class ResourceContainerClientTests
                 Name = "name",
                 VersionId = "v1"
             });
-        repository.Setup(r => r.GetResourceStreamAsync(Container, "name", "v1", cts.Token))
-            .ReturnsAsync(new MemoryStream());
         var client = NewClient(repository.Object,
             options: new ResourcefullOptions { IsVersioningEnabled = true });
 
@@ -792,8 +790,8 @@ public class ResourceContainerClientTests
         await client.RestoreVersionAsync("name", "v1", cts.Token);
 
         // Assert
-        repository.Verify(r => r.AddResourceAsync(Container, It.IsAny<ResourceInfo>(),
-            It.IsAny<Stream>(), It.IsAny<bool>(), cts.Token), Times.Once);
+        repository.Verify(r => r.CopyResourceAsync(new ResourceLocation(Container, "name"), "v1", It.IsAny<ResourceInfo>(),
+            It.IsAny<ResourceWriteCondition>(), cts.Token), Times.Once);
     }
 
     [Fact]
@@ -1224,11 +1222,11 @@ public class ResourceContainerClientTests
         var repository = NewRepository();
         repository.Setup(r => r.GetResourceInfoAsync(Container, "name", "v1", It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ResourceInfo { ContainerName = Container, Name = "name", VersionId = "v1", ContentLength = 999 });
-        repository.Setup(r => r.GetResourceStreamAsync(Container, "name", "v1", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new MemoryStream([1, 2, 3]));
         long? declaredLength = -1;
-        repository.Setup(r => r.AddResourceAsync(Container, It.IsAny<ResourceInfo>(), It.IsAny<Stream>(), false, It.IsAny<CancellationToken>()))
-            .Callback<string, ResourceInfo, Stream, bool, CancellationToken>((_, info, _, _, _) => declaredLength = info.ContentLength)
+        repository.Setup(r => r.CopyResourceAsync(new ResourceLocation(Container, "name"), "v1", It.IsAny<ResourceInfo>(),
+                It.IsAny<ResourceWriteCondition>(), It.IsAny<CancellationToken>()))
+            .Callback<ResourceLocation, string?, ResourceInfo, ResourceWriteCondition, CancellationToken>(
+                (_, _, info, _, _) => declaredLength = info.ContentLength)
             .ReturnsAsync(Written);
         var client = NewClient(repository.Object, options: new ResourcefullOptions { IsVersioningEnabled = true, MaxVersions = 10 });
 

@@ -67,7 +67,11 @@ if (restored is null) { /* no such name or version */ }
 ```
 
 The restored version is measured like any upload: it gets its own `VersionId`, `ContentLength`, `ContentHash` and
-`LastModified`, and the older version's content type and metadata. Its `CopiedFrom` <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span> names the version it restored, so
+`LastModified`, and the older version's content type and metadata. From 3.2 <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span>, a restore is a copy within the store,
+as [copying](copying-and-moving.md) is: with SQL Server, the content doesn't pass through your application, and a
+transient failure is retried rather than ending the restore. (A version stored before 3.0 is still read through the
+application, and can't be retried once its content has started, until the [hash backfill](providers/sql-server-upgrades.md#recording-hashes-for-older-versions)
+records its hash.) Its `CopiedFrom` <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span> names the version it restored, so
 a history view can show it. `RestoreVersionAsync` throws
 `InvalidOperationException` when versioning is off.
 

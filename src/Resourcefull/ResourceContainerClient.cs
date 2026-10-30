@@ -92,25 +92,31 @@ internal partial class ResourceContainerClient(IResourceRepository resourceRepos
 
         ResourceInfo? resourceInfo = await resourceRepository.GetResourceInfoAsync(ContainerName, resourceName, versionId, cancellationToken);
         if (resourceInfo == null) return null;
+        // As for a copy, the stored length stands in for a declared one: the content doesn't pass through here.
+        if (policies is not null)
+        {
+            if (!await WithStoredLengthAsync(resourceInfo, cancellationToken)) return null;
+            await policies.CheckNewVersionAsync(ContainerName, resourceName, restore: true, null,
+                resourceInfo.ContentLength, _telemetry, cancellationToken);
+        }
 
-        await using Stream? stream = await resourceRepository.GetResourceStreamAsync(ContainerName, resourceName, versionId, cancellationToken);
-        if (stream == null) return null;
-        Stream content = policies is not null && await policies.CheckNewVersionAsync(ContainerName, resourceName, restore: true, null, null,
-            _telemetry, cancellationToken) is { } limit ? new LimitedContentStream(stream, limit) : stream;
-
-        var newResourceInfo = new ResourceInfo
+        // Copied within the store, as a copy is, so a provider that copies on the server can retry a transient failure
+        // rather than end the restore, which it can't do for content streamed through here.
+        ResourceInfo restored = WithUri(new ResourceInfo
         {
             ContainerName = resourceInfo.ContainerName,
             Name = resourceInfo.Name,
             VersionId = Guid.CreateVersion7().ToString(),
             ContentType = resourceInfo.ContentType,
-            // Measured like any upload rather than declared: lengths stored by earlier releases came from callers.
-            ContentLength = null,
             Metadata = resourceInfo.Metadata,
             CopiedFrom = new ResourceOrigin(ContainerName, resourceName, versionId)
-        };
+        });
+        WrittenContent? written = await resourceRepository.CopyResourceAsync(new ResourceLocation(ContainerName, resourceName),
+            versionId, restored, new ResourceWriteCondition(), cancellationToken);
+        if (written is null) return null;
 
-        return await SaveNewResourceVersionAsync("restore", content, newResourceInfo, createOnly: false, conditions: null, cancellationToken);
+        _telemetry.RecordUploaded("restore", written.ContentLength);
+        return await CompleteNewVersionAsync(restored, written);
     }
 
     private async Task<ResourceInfo> SaveNewResourceVersionAsync(string operation, Stream stream, ResourceInfo resourceInfo,
