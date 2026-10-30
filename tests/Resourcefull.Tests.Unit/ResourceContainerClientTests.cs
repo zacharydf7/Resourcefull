@@ -924,6 +924,164 @@ public class ResourceContainerClientTests
     }
 
     [Fact]
+    public async Task GetResourcePageAsync_ShouldPassTheToken_WhenCalledWithOne()
+    {
+        // Arrange
+        using var cts = new CancellationTokenSource();
+        var repository = NewRepository();
+        repository.Setup(r => r.GetResourcePageAsync(Container, null, null, It.IsAny<int>(), It.IsAny<CancellationToken>())).ReturnsAsync([]);
+        var client = NewClient(repository.Object);
+
+        // Act
+        await client.GetResourcePageAsync(null, null, cts.Token);
+
+        // Assert
+        repository.Verify(r => r.GetResourcePageAsync(Container, null, null, It.IsAny<int>(), cts.Token), Times.Once);
+    }
+
+    [Fact]
+    public async Task ListResourcesAsync_ShouldPassTheToken_WhenEnumeratedWithOne()
+    {
+        // Arrange
+        using var cts = new CancellationTokenSource();
+        var repository = NewRepository();
+        repository.Setup(r => r.GetResourcePageAsync(Container, null, null, It.IsAny<int>(), It.IsAny<CancellationToken>())).ReturnsAsync([]);
+        var client = NewClient(repository.Object);
+
+        // Act
+        await foreach (ResourceInfo _ in ((IResourceContainerClient)client).ListResourcesAsync(null, cts.Token)) { }
+
+        // Assert
+        repository.Verify(r => r.GetResourcePageAsync(Container, null, null, It.IsAny<int>(), cts.Token), Times.Once);
+    }
+
+    [Fact]
+    public async Task UploadAsync_ShouldPassTheToken_WhenGivenConditions()
+    {
+        // Arrange
+        using var cts = new CancellationTokenSource();
+        var repository = NewRepository();
+        repository.Setup(r => r.AddResourceAsync(Container, It.IsAny<ResourceInfo>(), It.IsAny<Stream>(), It.IsAny<ResourceWriteCondition>(),
+            It.IsAny<CancellationToken>())).ReturnsAsync(Written);
+        var client = NewClient(repository.Object);
+
+        // Act
+        await client.UploadAsync("name", new MemoryStream([1]), new ResourceUploadOptions { Conditions = new ResourceConditions { IfMatchVersionId = "v1" } },
+            cts.Token);
+
+        // Assert
+        repository.Verify(r => r.AddResourceAsync(Container, It.IsAny<ResourceInfo>(), It.IsAny<Stream>(), It.IsAny<ResourceWriteCondition>(), cts.Token),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task DownloadStreamingAsync_ShouldPassTheToken_WhenGivenARange()
+    {
+        // Arrange
+        using var cts = new CancellationTokenSource();
+        var repository = NewRepository();
+        repository.Setup(r => r.GetResourceInfoAsync(Container, "name", null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ResourceInfo { ContainerName = Container, Name = "name", VersionId = "v1", ContentLength = 10 });
+        repository.Setup(r => r.GetResourceStreamAsync(Container, "name", "v1", 2, 3, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new MemoryStream(new byte[10]));
+        var client = NewClient(repository.Object);
+
+        // Act
+        await client.DownloadStreamingAsync("name", null, new ResourceRange(2, 3), cts.Token);
+
+        // Assert
+        repository.Verify(r => r.GetResourceStreamAsync(Container, "name", "v1", 2, 3, cts.Token), Times.Once);
+    }
+
+    [Fact]
+    public async Task DeleteResourceIfExistsAsync_ShouldPassTheToken_WhenGivenConditions()
+    {
+        // Arrange
+        using var cts = new CancellationTokenSource();
+        var repository = NewRepository();
+        var conditions = new ResourceConditions { IfMatchVersionId = "v1" };
+        var client = NewClient(repository.Object);
+
+        // Act
+        await client.DeleteResourceIfExistsAsync("name", null, conditions, cts.Token);
+
+        // Assert
+        repository.Verify(r => r.DeleteResourceAsync(Container, "name", null, conditions, cts.Token), Times.Once);
+    }
+
+    [Fact]
+    public async Task CopyResourceAsync_ShouldPassTheToken_WhenCalledWithOne()
+    {
+        // Arrange
+        using var cts = new CancellationTokenSource();
+        var repository = NewRepository();
+        repository.Setup(r => r.GetResourceInfoAsync(Container, "name", null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ResourceInfo { ContainerName = Container, Name = "name", VersionId = "v1" });
+        repository.Setup(r => r.CopyResourceAsync(It.IsAny<ResourceLocation>(), "v1", It.IsAny<ResourceInfo>(),
+            It.IsAny<ResourceWriteCondition>(), It.IsAny<CancellationToken>())).ReturnsAsync(Written);
+        var client = NewClient(repository.Object);
+
+        // Act
+        await client.CopyResourceAsync("name", "other", "copy", null, cts.Token);
+
+        // Assert
+        repository.Verify(r => r.GetResourceInfoAsync(Container, "name", null, cts.Token), Times.Once);
+        repository.Verify(r => r.CopyResourceAsync(It.IsAny<ResourceLocation>(), "v1", It.IsAny<ResourceInfo>(),
+            It.IsAny<ResourceWriteCondition>(), cts.Token), Times.Once);
+    }
+
+    [Fact]
+    public async Task MoveResourceAsync_ShouldPassTheToken_WhenCalledWithOne()
+    {
+        // Arrange
+        using var cts = new CancellationTokenSource();
+        var repository = NewRepository();
+        repository.Setup(r => r.MoveResourceAsync(It.IsAny<ResourceLocation>(), It.IsAny<ResourceLocation>(),
+            It.IsAny<ResourceConditions?>(), It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        var client = NewClient(repository.Object);
+
+        // Act
+        await client.MoveResourceAsync("name", "other", "moved", null, cts.Token);
+
+        // Assert
+        repository.Verify(r => r.MoveResourceAsync(It.IsAny<ResourceLocation>(), It.IsAny<ResourceLocation>(),
+            It.IsAny<ResourceConditions?>(), cts.Token), Times.Once);
+        repository.Verify(r => r.GetResourceInfoAsync("other", "moved", null, cts.Token), Times.Once);
+    }
+
+    [Fact]
+    public async Task SetExpiryAsync_ShouldPassTheToken_WhenCalledWithOne()
+    {
+        // Arrange
+        using var cts = new CancellationTokenSource();
+        var repository = NewRepository();
+        var client = NewClient(repository.Object);
+
+        // Act
+        await client.SetExpiryAsync("name", "v1", null, cts.Token);
+
+        // Assert
+        repository.Verify(r => r.SetExpiryAsync(new ResourceLocation(Container, "name"), "v1", null, cts.Token), Times.Once);
+    }
+
+    [Fact]
+    public async Task GetUsageAsync_ShouldPassTheToken_WhenCalledWithOne()
+    {
+        // Arrange
+        using var cts = new CancellationTokenSource();
+        var repository = NewRepository();
+        repository.Setup(r => r.GetContainerUsageAsync(Container, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ResourceContainerUsage(0, 0, 0));
+        var client = NewClient(repository.Object);
+
+        // Act
+        await client.GetUsageAsync(cts.Token);
+
+        // Assert
+        repository.Verify(r => r.GetContainerUsageAsync(Container, cts.Token), Times.Once);
+    }
+
+    [Fact]
     public async Task ExistsAsync_ShouldPassTheToken_WhenCalledWithOne()
     {
         // Arrange
