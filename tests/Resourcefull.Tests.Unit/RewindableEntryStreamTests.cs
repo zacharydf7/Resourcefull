@@ -21,7 +21,7 @@ public class RewindableEntryStreamTests
         byte[] content = [1, 2, 3, 4, 5];
         await using ZipArchive zip = await ZipOfAsync(content);
         ZipArchiveEntry entry = zip.GetEntry("content/a")!;
-        await using var stream = new RewindableEntryStream(entry, await entry.OpenAsync());
+        await using var stream = new RewindableEntryStream(entry, await entry.OpenAsync(), content.Length);
         var first = new MemoryStream();
         await stream.CopyToAsync(first);
 
@@ -44,9 +44,21 @@ public class RewindableEntryStreamTests
         // Arrange
         await using ZipArchive zip = await ZipOfAsync([1, 2, 3]);
         ZipArchiveEntry entry = zip.GetEntry("content/a")!;
-        await using var stream = new RewindableEntryStream(entry, await entry.OpenAsync());
+        await using var stream = new RewindableEntryStream(entry, await entry.OpenAsync(), 3);
 
         // Act & Assert
         Assert.Throws<NotSupportedException>(() => stream.Seek(offset, origin));
+    }
+
+    [Fact]
+    public async Task Read_ShouldThrowInvalidData_WhenTheEntryIsLongerThanItsDeclaredLength()
+    {
+        // Arrange
+        await using ZipArchive zip = await ZipOfAsync(new byte[1000]);
+        ZipArchiveEntry entry = zip.GetEntry("content/a")!;
+        await using var stream = new RewindableEntryStream(entry, await entry.OpenAsync(), 10);
+
+        // Act & Assert
+        await Assert.ThrowsAsync<InvalidDataException>(() => stream.CopyToAsync(Stream.Null));
     }
 }

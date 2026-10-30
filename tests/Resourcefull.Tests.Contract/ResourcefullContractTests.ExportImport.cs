@@ -155,6 +155,7 @@ public abstract partial class ResourcefullContractTests
     [InlineData("\"name\": \"a\"", "\"name\": \"a \"")]                      // a name the rules refuse
     [InlineData("\"name\": \"b\"", "\"name\": \"a\"")]                       // the same name twice
     [InlineData("\"contentType\": null,", "")]                               // a field left out
+    [InlineData("\"contentLength\": 1,", "\"contentLength\": -1,")]          // a negative length
     public async Task ImportContainerAsync_ShouldRefuseBeforeCreatingAnything_WhenTheManifestWasEdited(string original, string edited)
     {
         // Arrange
@@ -164,6 +165,40 @@ public abstract partial class ResourcefullContractTests
         await source.UploadAsync("a", BinaryData.FromString("x"));
         await source.UploadAsync("b", BinaryData.FromString("y"));
         MemoryStream export = await ExportAsync(service, source.ResourceContainerInfo.Name);
+        await EditManifestAsync(export, original, edited);
+        string restoredName = NewContainerName();
+
+        // Act
+        Task act() => service.ImportContainerAsync(restoredName, export);
+
+        // Assert
+        await Assert.ThrowsAsync<InvalidDataException>(act);
+        Assert.False(await service.ContainerExistsAsync(restoredName));
+    }
+
+    [SkippableFact]
+    public async Task ImportContainerAsync_ShouldRefuseAndLeaveNoContainer_WhenAFileIsLongerThanItsManifestSays()
+    {
+        // Arrange: the content and its hash are untouched; only the length the manifest gives it is shorter.
+        using ServiceProvider provider = BuildServiceProvider();
+        IResourceServiceClient service = ServiceOf(provider);
+        IResourceContainerClient source = await NewContainerAsync(provider);
+        await source.UploadAsync("a", BinaryData.FromString("hello"));
+        MemoryStream export = await ExportAsync(service, source.ResourceContainerInfo.Name);
+        await EditManifestAsync(export, "\"contentLength\": 5,", "\"contentLength\": 4,");
+        string restoredName = NewContainerName();
+
+        // Act
+        Task act() => service.ImportContainerAsync(restoredName, export);
+
+        // Assert
+        await Assert.ThrowsAsync<InvalidDataException>(act);
+        Assert.False(await service.ContainerExistsAsync(restoredName));
+    }
+
+    /// <summary>Replaces the first <paramref name="original"/> in the export's manifest, and rewinds the export.</summary>
+    private static async Task EditManifestAsync(MemoryStream export, string original, string edited)
+    {
         await using (ZipArchive zip = await ZipArchive.CreateAsync(export, ZipArchiveMode.Update, leaveOpen: true, entryNameEncoding: null))
         {
             ZipArchiveEntry manifest = zip.GetEntry("manifest.json")!;
@@ -177,14 +212,6 @@ public abstract partial class ResourcefullContractTests
             await write.WriteAsync(System.Text.Encoding.UTF8.GetBytes(text[..at] + edited + text[(at + original.Length)..]));
         }
         export.Position = 0;
-        string restoredName = NewContainerName();
-
-        // Act
-        Task act() => service.ImportContainerAsync(restoredName, export);
-
-        // Assert
-        await Assert.ThrowsAsync<InvalidDataException>(act);
-        Assert.False(await service.ContainerExistsAsync(restoredName));
     }
 
     [SkippableFact]

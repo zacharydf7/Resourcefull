@@ -152,7 +152,8 @@ internal static class ContainerArchive
                     VersionId = version.VersionId,
                     LastModified = version.LastModified,
                     ContentType = version.ContentType,
-                    // Not declared, so content changed to another length is caught by the hash check below, as any change is.
+                    // Not declared: the entry's stream refuses content longer than the manifest's length, and the hash
+                    // check below catches any other change.
                     Metadata = version.Metadata,
                     CopiedFrom = version.CopiedFrom is { } from
                         ? new ResourceOrigin(from.ContainerName, from.ResourceName, from.VersionId)
@@ -163,7 +164,8 @@ internal static class ContainerArchive
                 };
 
                 // Able to go back to its start, so a provider that retries a transient failure can read it again.
-                await using Stream content = new RewindableEntryStream(entry, await entry.OpenAsync(cancellationToken));
+                await using Stream content = new RewindableEntryStream(entry, await entry.OpenAsync(cancellationToken),
+                    version.ContentLength);
                 var usage = new ResourceContainerUsage(contentSize, resourceCount, versionCount);
                 Stream checkedContent = policies is not null && await policies.CheckNewVersionAsync(containerName, resource.Name, restore: false,
                     version.ContentType, version.ContentLength, telemetry, cancellationToken, usage) is { } limit
@@ -224,10 +226,11 @@ internal static class ContainerArchive
             foreach (ManifestVersion version in resource.Versions)
             {
                 if (version.VersionId.Length is 0 || version.VersionId.Length > ResourceNames.MaxVersionIdLength
-                    || !versionIds.Add(version.VersionId) || version.Content.Length is 0 || version.ContentHash.Length is 0)
+                    || !versionIds.Add(version.VersionId) || version.Content.Length is 0 || version.ContentHash.Length is 0
+                    || version.ContentLength < 0)
                 {
                     throw new InvalidDataException($"The export describes a version of {resource.Name} that can't be imported: " +
-                        "a version ID that's empty, too long or repeated, or no content or hash.");
+                        "a version ID that's empty, too long or repeated, no content or hash, or a negative length.");
                 }
             }
         }
@@ -237,9 +240,11 @@ internal static class ContainerArchive
 }
 
 /// <summary>
-/// A zip entry's content that can seek back to its start, by opening the entry again; it can't seek anywhere else.
+/// A zip entry's content that can seek back to its start, by opening the entry again; it can't seek anywhere else. It
+/// refuses content longer than <paramref name="declaredLength"/>, the length the export's manifest gives the version,
+/// before returning it, so a small, highly compressed entry can't write more than the manifest says.
 /// </summary>
-internal sealed class RewindableEntryStream(ZipArchiveEntry entry, Stream opened) : Stream
+internal sealed class RewindableEntryStream(ZipArchiveEntry entry, Stream opened, long declaredLength) : Stream
 {
     private Stream? _content = opened;
     private long _position;
@@ -269,12 +274,7 @@ internal sealed class RewindableEntryStream(ZipArchiveEntry entry, Stream opened
 
     public override int Read(byte[] buffer, int offset, int count) => Read(buffer.AsSpan(offset, count));
 
-    public override int Read(Span<byte> buffer)
-    {
-        int read = (_content ??= entry.Open()).Read(buffer);
-        _position += read;
-        return read;
-    }
+    public override int Read(Span<byte> buffer) => Counted((_content ??= entry.Open()).Read(buffer));
 
     public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) =>
         ReadAsync(buffer.AsMemory(offset, count), cancellationToken).AsTask();
@@ -282,8 +282,18 @@ internal sealed class RewindableEntryStream(ZipArchiveEntry entry, Stream opened
     public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
     {
         _content ??= await entry.OpenAsync(cancellationToken);
-        int read = await _content.ReadAsync(buffer, cancellationToken);
+        return Counted(await _content.ReadAsync(buffer, cancellationToken));
+    }
+
+    private int Counted(int read)
+    {
         _position += read;
+        if (_position > declaredLength)
+        {
+            throw new InvalidDataException($"The export's file {entry.FullName} is longer than the {declaredLength} bytes its " +
+                "manifest gives it: the export was damaged or changed.");
+        }
+
         return read;
     }
 
