@@ -79,10 +79,13 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
         {
             using ResourceDbContext attempt = NewWriteContext();
 
-            if (await attempt.Resources.AnyAsync(r => r.ContainerName == resourceContainerName
-                && r.Name == resourceInfo.Name && r.VersionId == resourceInfo.VersionId, ct))
+            // A retry after a commit whose acknowledgement was lost finds its own version already stored. A first
+            // attempt on SQL Server skips the look, a round trip on every write: the insert below is refused if the
+            // name already has the version. The in-memory provider the unit tests use doesn't enforce the unique index.
+            if ((written != null || !attempt.Database.IsRelational()) && await attempt.Resources.AnyAsync(r =>
+                r.ContainerName == resourceContainerName && r.Name == resourceInfo.Name
+                && r.VersionId == resourceInfo.VersionId, ct))
             {
-                // A retry after a commit whose acknowledgement was lost finds its own version already stored.
                 if (written != null) return;
                 throw new ResourceConflictException($"Resource {resourceInfo.Name} already has a version {resourceInfo.VersionId}.");
             }
@@ -102,7 +105,15 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
             // Inserted first, so a missing container is reported before any content is read.
             ResourceModel resource = NewVersion(resourceContainerName, resourceInfo);
             attempt.Resources.Add(resource);
-            await attempt.SaveChangesAsync(ct);
+            try
+            {
+                await attempt.SaveChangesAsync(ct);
+            }
+            catch (DbUpdateException exception) when (IsUniqueViolation(exception))
+            {
+                throw new ResourceConflictException(
+                    $"Resource {resourceInfo.Name} already has a version {resourceInfo.VersionId}.", exception);
+            }
             // Untracked while the chunks go in, or each would be added to its Chunks collection and kept.
             attempt.Entry(resource).State = EntityState.Detached;
 
