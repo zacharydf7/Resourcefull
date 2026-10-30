@@ -151,6 +151,7 @@ internal partial class ResourceContainerClient(IResourceRepository resourceRepos
         catch (Exception exception)
         {
             _telemetry.RecordFailure(prune, exception);
+            _telemetry.CountFailure(Telemetry.PruneFailures, exception);
             // The older versions stay until a later overwriting or versioned upload of the name prunes them; every
             // prune works from the versions as they stand after its own write. Logged, as a prune that keeps failing
             // would otherwise let storage grow unnoticed.
@@ -181,7 +182,7 @@ internal partial class ResourceContainerClient(IResourceRepository resourceRepos
         {
             // Told first, so a handler that fails leaves the version for a later prune rather than deleted unreported.
             if (cleanupHandler is not null)
-                await cleanupHandler.OnCleanupAsync(new ResourceCleanup(version, ResourceCleanupReason.Pruned, now), cancellationToken);
+                await _telemetry.NotifyCleanupAsync(cleanupHandler, new ResourceCleanup(version, ResourceCleanupReason.Pruned, now), cancellationToken);
             await resourceRepository.DeleteResourceAsync(containerName, resourceName, version.VersionId, cancellationToken);
         }
     }

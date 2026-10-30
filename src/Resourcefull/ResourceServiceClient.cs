@@ -146,11 +146,15 @@ internal class ResourceServiceClient(IResourceRepository resourceRepository, IOp
 
                         // Told first, so a handler that fails leaves the version for the next sweep rather than deleted unreported.
                         if (cleanupHandler is not null)
-                            await cleanupHandler.OnCleanupAsync(new ResourceCleanup(version, ResourceCleanupReason.Expired, now), cancellationToken);
+                        {
+                            await _telemetry.NotifyCleanupAsync(cleanupHandler, new ResourceCleanup(version, ResourceCleanupReason.Expired, now),
+                                cancellationToken);
+                        }
                         if (await resourceRepository.DeleteExpiredVersionAsync(new ResourceLocation(version.ContainerName, version.Name),
                             version.VersionId, now, cancellationToken))
                         {
                             deleted++;
+                            _telemetry.CountExpired();
                         }
                     }
                     catch (Exception exception) when (exception is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
@@ -158,6 +162,7 @@ internal class ResourceServiceClient(IResourceRepository resourceRepository, IOp
                         // One version that keeps failing, a handler's timeout included, mustn't hold up the rest; only
                         // canceling the sweep stops it.
                         failed++;
+                        _telemetry.CountFailure(Telemetry.ExpireFailures, exception);
                         if (failures.Count < FailuresKept) failures.Add(exception);
                     }
                 }

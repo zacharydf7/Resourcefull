@@ -56,6 +56,19 @@ internal static class Telemetry
     public static readonly Counter<long> Downloaded = Meter.CreateCounter<long>("resourcefull.client.downloaded",
         unit: "By", description: "Content bytes read from download streams, counted as they're read.");
 
+    public static readonly Counter<long> PruneFailures = Meter.CreateCounter<long>("resourcefull.client.prune.failures",
+        unit: "{failure}", description: "Prunes of older versions that failed after their write was stored; the versions stay.");
+
+    public static readonly Counter<long> Expired = Meter.CreateCounter<long>("resourcefull.client.expired",
+        unit: "{version}", description: "Expired versions that sweeps deleted.");
+
+    public static readonly Counter<long> ExpireFailures = Meter.CreateCounter<long>("resourcefull.client.expire.failures",
+        unit: "{version}", description: "Expired versions a sweep failed to delete; they stay for the next sweep.");
+
+    public static readonly Counter<long> CleanupHandlerFailures = Meter.CreateCounter<long>(
+        "resourcefull.client.cleanup_handler.failures", unit: "{failure}",
+        description: "Calls to the cleanup handler that threw; the version they reported stays.");
+
     /// <summary>
     /// <c>sqlserver</c> or <c>inmemory</c> for the built-in providers, otherwise the repository's type name: a
     /// low-cardinality tag that tells measurements from different stores apart.
@@ -162,6 +175,35 @@ internal sealed class ClientTelemetry(string provider, ResourcefullOptions optio
             activity.SetStatus(ActivityStatusCode.Error);
             activity.AddException(exception,
                 new TagList { { "exception.message", errorType }, { "exception.stacktrace", exception.StackTrace } });
+        }
+    }
+
+    /// <summary>Adds one to <paramref name="counter"/>, tagged with the provider and the exception's type.</summary>
+    public void CountFailure(Counter<long> counter, Exception exception, string? extraTag = null, object? extraValue = null)
+    {
+        if (!counter.Enabled) return;
+        var tags = new TagList { { "resourcefull.provider", Provider }, { "error.type", exception.GetType().FullName } };
+        if (extraTag is not null) tags.Add(extraTag, extraValue);
+        counter.Add(1, tags);
+    }
+
+    public void CountExpired()
+    {
+        if (Telemetry.Expired.Enabled) Telemetry.Expired.Add(1, new KeyValuePair<string, object?>("resourcefull.provider", Provider));
+    }
+
+    /// <summary>Tells the cleanup handler about a version, counting the call as failed if it throws.</summary>
+    public async Task NotifyCleanupAsync(IResourceCleanupHandler handler, ResourceCleanup cleanup, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await handler.OnCleanupAsync(cleanup, cancellationToken);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+        {
+            CountFailure(Telemetry.CleanupHandlerFailures, exception, "resourcefull.cleanup_reason",
+                cleanup.Reason == ResourceCleanupReason.Expired ? "expired" : "pruned");
+            throw;
         }
     }
 

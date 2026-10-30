@@ -47,8 +47,10 @@
 - **Telemetry.** Every client operation records a trace span and metrics, through `ActivitySource` and `Meter`
   named `Resourcefull`: each operation's duration, and the bytes uploaded and downloaded, tagged by operation,
   provider and error type. SQL Server's migrations and hash backfill record spans. Resource names, and failure
-  messages that may contain them, go on spans only with `UseTelemetry(t => t.RecordResourceNames = true)`. Nothing is
-  measured until something subscribes. See [Telemetry](docs/telemetry.md).
+  messages that may contain them, go on spans only with `UseTelemetry(t => t.RecordResourceNames = true)`. Counters
+  for failed prunes, expired versions deleted and failed, cleanup handler failures, and SQL Server's retries show work
+  that doesn't fail the call that started it. Nothing is measured until something subscribes. See
+  [Telemetry](docs/telemetry.md).
 - **Disposable downloads.** `ResourceDownloadResult` implements `IDisposable` and `IAsyncDisposable`, disposing its
   stream, so `await using` works on the download itself.
 

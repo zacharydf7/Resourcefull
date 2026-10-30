@@ -48,6 +48,8 @@ a feature such as shared links or expiry.
     trouble;
   - errors logged under `Resourcefull.ExpiryService` ("Deleting expired versions failed"), and warnings under
     `Resourcefull.ResourceContainerClient` (a failed prune), which mean files aren't being deleted when they should be;
+    the same show up as counters, with SQL Server's retries, in
+    [Work that happens out of sight](telemetry.md#work-that-happens-out-of-sight);
   - the readiness health check reporting Unhealthy, or Degraded for long after a deployment;
   - the database's free space and log space, from SQL Server's own monitoring.
 - [ ] **A runbook** for the incidents a file store has: a full transaction log, a full disk, running out of
