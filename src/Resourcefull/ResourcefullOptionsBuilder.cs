@@ -114,14 +114,28 @@ public class ResourcefullOptionsBuilder
     /// How long a container's policy is kept before the policy provider is asked again, so how long a change can take
     /// to apply: 5 seconds when null, and zero to ask on every write.
     /// </param>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="cacheFor"/> is negative.</exception>
-    public ResourcefullOptionsBuilder UseContainerPolicies(ResourceContainerPolicy? defaults = null, TimeSpan? cacheFor = null)
+    /// <param name="keepLastKnownFor">
+    /// When the policy provider throws, how long after it last gave a container's policy that policy is used instead,
+    /// so an outage of the policy store doesn't fail every write: 5 minutes when null, and zero to fail at once. It
+    /// helps only when longer than <paramref name="cacheFor"/>, since until then the cached policy is used anyway.
+    /// </param>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <paramref name="cacheFor"/> or <paramref name="keepLastKnownFor"/> is negative.
+    /// </exception>
+    public ResourcefullOptionsBuilder UseContainerPolicies(ResourceContainerPolicy? defaults = null, TimeSpan? cacheFor = null,
+        TimeSpan? keepLastKnownFor = null)
     {
         if (cacheFor < TimeSpan.Zero)
             throw new ArgumentOutOfRangeException(nameof(cacheFor), cacheFor, "The cache time can't be negative.");
+        if (keepLastKnownFor < TimeSpan.Zero)
+        {
+            throw new ArgumentOutOfRangeException(nameof(keepLastKnownFor), keepLastKnownFor,
+                "The time can't be negative.");
+        }
 
         Services.RemoveAll<ContainerPolicySettings>();
-        Services.AddSingleton(_ => new ContainerPolicySettings(defaults ?? new ResourceContainerPolicy(), cacheFor ?? TimeSpan.FromSeconds(5)));
+        Services.AddSingleton(_ => new ContainerPolicySettings(defaults ?? new ResourceContainerPolicy(),
+            cacheFor ?? TimeSpan.FromSeconds(5), keepLastKnownFor ?? TimeSpan.FromMinutes(5)));
         Services.TryAddScoped<ContainerPolicies>();
         return this;
     }

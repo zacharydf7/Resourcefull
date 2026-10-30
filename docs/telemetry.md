@@ -37,13 +37,14 @@ Container and resource names aren't metric tags: there can be any number of them
 ### Work that happens out of sight
 
 Some of Resourcefull's work doesn't fail the call that started it, so it would go unnoticed without a counter of its
-own. Each carries `resourcefull.provider`, and the failure counters `error.type`:
+own. Each carries `resourcefull.provider`, and all but `resourcefull.client.expired` carry `error.type`:
 
 | Instrument | Unit | What it counts |
 |---|---|---|
 | `resourcefull.client.prune.failures` | {failure} | prunes of older versions that failed after the upload, restore or copy was stored; the older versions stay until a later prune |
 | `resourcefull.client.expired` | {version} | expired versions that [expiry](expiry.md) sweeps deleted |
 | `resourcefull.client.expire.failures` | {version} | expired versions a sweep failed to delete; they stay for the next sweep |
+| `resourcefull.client.policy.last_known_uses` | {use} | times a container's last known [policy](container-policies.md) was used because the policy provider failed, at most once per container each `cacheFor` |
 | `resourcefull.client.cleanup_handler.failures` | {failure} | calls to your [cleanup handler](expiry.md#auditing-whats-deleted) that threw, with `resourcefull.cleanup_reason`: `expired` or `pruned`. A handler failure also counts as a failed prune or expired version, since the version stays |
 | `resourcefull.sqlserver.retries` | {retry} | SQL Server calls retried after a transient failure, such as a deadlock or a dropped connection, with `db.response.status_code`: the SQL Server error number, such as `1205` for a deadlock |
 
@@ -53,6 +54,8 @@ What to alert on:
   sweep; a steady count means storage is growing, or expired files are staying, until you fix the cause.
 - **A jump in retries.** A few are normal on a busy database. Many at once mean the database is struggling, and each
   retry makes the operation slower; the error numbers say whether it's deadlocks, timeouts or connections.
+- **Any use of a last known policy.** Your policy provider is failing, and writes start failing too once
+  `keepLastKnownFor` runs out.
 
 ## Spans
 
@@ -103,7 +106,8 @@ metrics. It also has:
 `GetResourceContainerClient` doesn't contact storage, so it records nothing. With
 [container policies](container-policies.md), every operation that checks one (`upload`, `restore`, `copy`, `move`,
 `delete` and `delete_container`) records a `resourcefull get_policy` child span when it asks the policy provider, and
-`resourcefull.policy_rule` when the policy refuses it.
+`resourcefull.policy_rule` when the policy refuses it. When the provider fails and the container's last known policy is
+used instead, the `get_policy` span records the failure and `resourcefull.policy_last_known`.
 
 ## Logs
 

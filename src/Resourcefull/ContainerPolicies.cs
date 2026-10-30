@@ -7,11 +7,17 @@ namespace Resourcefull;
 /// The store-wide policy settings, and each container's effective policy, cached for every scope to share: a cache
 /// that drops expired entries, so it doesn't grow with the number of containers ever seen.
 /// </summary>
-internal sealed class ContainerPolicySettings(ResourceContainerPolicy defaults, TimeSpan cacheFor) : IDisposable
+internal sealed class ContainerPolicySettings(ResourceContainerPolicy defaults, TimeSpan cacheFor,
+    TimeSpan keepLastKnownFor) : IDisposable
 {
     public ResourceContainerPolicy Defaults { get; } = defaults;
 
     public TimeSpan CacheFor { get; } = cacheFor;
+
+    /// <summary>
+    /// How long a container's policy stands in for its provider's answer after it was given, while the provider fails.
+    /// </summary>
+    public TimeSpan KeepLastKnownFor { get; } = keepLastKnownFor;
 
     public MemoryCache Cache { get; } = new(new MemoryCacheOptions());
 
@@ -147,7 +153,18 @@ internal sealed class ContainerPolicies(ContainerPolicySettings settings, IResou
             catch (Exception exception)
             {
                 telemetry.RecordFailure(activity, exception);
-                throw;
+                // An outage of the policy store mustn't fail every write: the policy it last gave stands in for a while.
+                if (exception is OperationCanceledException && cancellationToken.IsCancellationRequested
+                    || !settings.Cache.TryGetValue(new LastKnown(containerName), out ResourceContainerPolicy? lastKnown))
+                {
+                    throw;
+                }
+
+                activity?.SetTag("resourcefull.policy_last_known", true);
+                telemetry.CountFailure(Telemetry.LastKnownPolicyUses, exception);
+                // Kept as an answer is, so writes during the outage don't each wait for the provider to fail.
+                if (settings.CacheFor > TimeSpan.Zero) settings.Cache.Set(containerName, lastKnown, settings.CacheFor);
+                return lastKnown!;
             }
         }
 
@@ -161,8 +178,13 @@ internal sealed class ContainerPolicies(ContainerPolicySettings settings, IResou
             ReadOnly = own.ReadOnly ?? defaults.ReadOnly
         };
         if (settings.CacheFor > TimeSpan.Zero) settings.Cache.Set(containerName, effective, settings.CacheFor);
+        if (provider is not null && settings.KeepLastKnownFor > TimeSpan.Zero)
+            settings.Cache.Set(new LastKnown(containerName), effective, settings.KeepLastKnownFor);
         return effective;
     }
+
+    /// <summary>The cache key of a container's policy as the provider last gave it.</summary>
+    private sealed record LastKnown(string ContainerName);
 
     /// <summary>
     /// Whether <paramref name="contentType"/> is one of <paramref name="allowed"/>, compared without parameters and

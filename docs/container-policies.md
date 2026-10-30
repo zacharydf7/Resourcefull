@@ -110,6 +110,11 @@ public sealed class PlanPolicyProvider(AppDbContext db) : IResourcePolicyProvide
 - **Its answers are cached** for 5 seconds per container, so it isn't called on every upload, and a change an admin
   makes applies within 5 seconds on every instance. Pass `cacheFor` to `UseContainerPolicies` to change that, or
   `TimeSpan.Zero` to ask on every write.
+- **If it fails,** such as when its database is down, a container's policy as it last gave it is used instead, for up
+  to 5 minutes after it gave it, so writes carry on. After that, or for a container it hasn't given a policy for yet,
+  writes throw its exception. Pass `keepLastKnownFor` to `UseContainerPolicies` to change how long, or
+  `TimeSpan.Zero` to fail at once; it helps only when longer than `cacheFor`. The cost: a change made just before the
+  outage, such as making a container read-only, may not apply until the provider answers again.
 
 ## Usage
 
@@ -140,4 +145,6 @@ becomes:
 
 A refused write's span has `error.type` and `resourcefull.policy_rule`, such as `max_container_size`. A call to your
 policy provider records a `resourcefull get_policy` child span, only when the cache misses, and `GetUsageAsync` records
-a `get_usage` operation. See [Telemetry](telemetry.md).
+a `get_usage` operation. When the provider fails and the last known policy is used, its span records the failure and
+`resourcefull.policy_last_known`, and `resourcefull.client.policy.last_known_uses` counts it.
+See [Telemetry](telemetry.md).

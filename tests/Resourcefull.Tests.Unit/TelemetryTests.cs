@@ -550,4 +550,36 @@ public sealed class TelemetryTests : IDisposable
         Assert.Equal(2, retries.Count);
         Assert.All(retries, tags => Assert.Equal(("sqlserver", "System.TimeoutException"), (tags["resourcefull.provider"], tags["error.type"])));
     }
+
+    /// <summary>Gives a policy once per container, then fails, as a policy store that goes down.</summary>
+    private sealed class OncePolicies : IResourcePolicyProvider
+    {
+        private static readonly ConcurrentDictionary<string, bool> Given = new();
+
+        public ValueTask<ResourceContainerPolicy?> GetPolicyAsync(string containerName, CancellationToken cancellationToken) =>
+            Given.TryAdd(containerName, true)
+                ? ValueTask.FromResult<ResourceContainerPolicy?>(new ResourceContainerPolicy())
+                : throw new InvalidOperationException("The policy store is down.");
+    }
+
+    [Fact]
+    public async Task UploadAsync_ShouldCountTheLastKnownPolicyUse_WhenThePolicyProviderFails()
+    {
+        // Arrange
+        using ServiceProvider provider = new ServiceCollection()
+            .AddResourcefull(o => o.UseInMemory().UseContainerPolicies(cacheFor: TimeSpan.Zero).UsePolicyProvider<OncePolicies>())
+            .BuildServiceProvider();
+        IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>().CreateResourceContainerAsync("c");
+        await container.UploadAsync("a", BinaryData.FromString("x"));
+        using Activity root = TestSource.StartActivity("test")!;
+
+        // Act
+        await container.UploadAsync("b", BinaryData.FromString("x"));
+
+        // Assert
+        Activity lookup = Assert.Single(SpansIn(root), s => s.OperationName == "resourcefull get_policy");
+        Assert.Equal(true, lookup.GetTagItem("resourcefull.policy_last_known"));
+        Dictionary<string, object?> use = Assert.Single(MeasurementsOf("resourcefull.client.policy.last_known_uses"));
+        Assert.Equal(("inmemory", "System.InvalidOperationException"), (use["resourcefull.provider"], use["error.type"]));
+    }
 }

@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -192,7 +193,7 @@ public class ContainerPolicyTests
     public async Task MoveResourceAsync_ShouldCheckTheNewCurrentVersion_WhenAnUploadMakesOneCurrentDuringTheMove()
     {
         // Arrange: the move checks v1, then an upload makes v2, too large for the destination, current before it moves.
-        using var settings = new ContainerPolicySettings(new ResourceContainerPolicy { MaxResourceSize = new ResourceSize(10) }, TimeSpan.Zero);
+        using var settings = new ContainerPolicySettings(new ResourceContainerPolicy { MaxResourceSize = new ResourceSize(10) }, TimeSpan.Zero, TimeSpan.Zero);
         var repository = new Mock<IResourceRepository>();
         repository.SetupSequence(r => r.GetResourceVersionsAsync("c", "a", It.IsAny<CancellationToken>()))
             .ReturnsAsync([Version("v1", 5)])
@@ -215,7 +216,7 @@ public class ContainerPolicyTests
     public async Task MoveResourceAsync_ShouldReportTheCallersUnmetConditions_WhenTheCurrentVersionHasNotChanged()
     {
         // Arrange
-        using var settings = new ContainerPolicySettings(new ResourceContainerPolicy(), TimeSpan.Zero);
+        using var settings = new ContainerPolicySettings(new ResourceContainerPolicy(), TimeSpan.Zero, TimeSpan.Zero);
         var repository = new Mock<IResourceRepository>();
         repository.Setup(r => r.GetResourceVersionsAsync("c", "a", It.IsAny<CancellationToken>())).ReturnsAsync([Version("v1", 5)]);
         repository.Setup(r => r.MoveResourceAsync(new ResourceLocation("c", "a"), new ResourceLocation("d", "a"),
@@ -235,7 +236,7 @@ public class ContainerPolicyTests
     public async Task MoveResourceAsync_ShouldMoveTheNewCurrentVersion_WhenItMeetsThePolicyOnTheSecondCheck()
     {
         // Arrange: an upload makes v2 current between the first check and the move; v2 fits too.
-        using var settings = new ContainerPolicySettings(new ResourceContainerPolicy { MaxResourceSize = new ResourceSize(10) }, TimeSpan.Zero);
+        using var settings = new ContainerPolicySettings(new ResourceContainerPolicy { MaxResourceSize = new ResourceSize(10) }, TimeSpan.Zero, TimeSpan.Zero);
         var repository = new Mock<IResourceRepository>();
         repository.SetupSequence(r => r.GetResourceVersionsAsync("c", "a", It.IsAny<CancellationToken>()))
             .ReturnsAsync([Version("v1", 5)])
@@ -260,7 +261,7 @@ public class ContainerPolicyTests
     public async Task MoveResourceAsync_ShouldGiveUpAfterFiveChecks_WhenUploadsKeepMakingNewVersionsCurrent()
     {
         // Arrange: every time the move checks the name, another upload has made a newer version current by the move.
-        using var settings = new ContainerPolicySettings(new ResourceContainerPolicy(), TimeSpan.Zero);
+        using var settings = new ContainerPolicySettings(new ResourceContainerPolicy(), TimeSpan.Zero, TimeSpan.Zero);
         var repository = new Mock<IResourceRepository>();
         int checks = 0;
         repository.Setup(r => r.GetResourceVersionsAsync("c", "a", It.IsAny<CancellationToken>()))
@@ -281,7 +282,7 @@ public class ContainerPolicyTests
     public async Task MoveResourceAsync_ShouldReportTheCallersVersionUnmetWithoutMoving_WhenItIsNotTheCurrentOne()
     {
         // Arrange
-        using var settings = new ContainerPolicySettings(new ResourceContainerPolicy(), TimeSpan.Zero);
+        using var settings = new ContainerPolicySettings(new ResourceContainerPolicy(), TimeSpan.Zero, TimeSpan.Zero);
         var repository = new Mock<IResourceRepository>();
         repository.Setup(r => r.GetResourceVersionsAsync("c", "a", It.IsAny<CancellationToken>())).ReturnsAsync([Version("v1", 5)]);
 
@@ -294,5 +295,153 @@ public class ContainerPolicyTests
         Assert.Equal("v1", failed.CurrentVersionId);
         repository.Verify(r => r.MoveResourceAsync(It.IsAny<ResourceLocation>(), It.IsAny<ResourceLocation>(),
             It.IsAny<ResourceConditions?>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    /// <summary>Allows files of up to 10 bytes, except for containers whose policy store is down.</summary>
+    private sealed class FlakyPolicies : IResourcePolicyProvider
+    {
+        public static readonly ConcurrentDictionary<string, bool> Down = new();
+
+        public ValueTask<ResourceContainerPolicy?> GetPolicyAsync(string containerName, CancellationToken cancellationToken) =>
+            Down.ContainsKey(containerName)
+                ? throw new InvalidOperationException("The policy store is down.")
+                : ValueTask.FromResult<ResourceContainerPolicy?>(new ResourceContainerPolicy { MaxResourceSize = new ResourceSize(10) });
+    }
+
+    private static async Task<IResourceContainerClient> NewFlakyContainerAsync(ServiceProvider services) =>
+        await services.GetRequiredService<IResourceServiceClient>().CreateResourceContainerAsync($"c-{Guid.NewGuid():N}");
+
+    [Fact]
+    public async Task UploadAsync_ShouldCheckTheLastKnownPolicy_WhenThePolicyProviderFails()
+    {
+        // Arrange: the provider gave the container's policy once, then its store went down.
+        using ServiceProvider services = new ServiceCollection()
+            .AddResourcefull(o => o.UseInMemory().UseContainerPolicies(cacheFor: TimeSpan.Zero).UsePolicyProvider<FlakyPolicies>())
+            .BuildServiceProvider();
+        IResourceContainerClient container = await NewFlakyContainerAsync(services);
+        await container.UploadAsync("small", BinaryData.FromString("12345"));
+        FlakyPolicies.Down[container.ResourceContainerInfo.Name] = true;
+
+        // Act
+        Task tooLarge() => container.UploadAsync("large", new BinaryData(new byte[50]));
+        ResourceInfo stillAllowed = await container.UploadAsync("small2", BinaryData.FromString("12345"));
+
+        // Assert
+        Assert.Equal(ResourcePolicyRule.MaxResourceSize, (await Assert.ThrowsAsync<ResourcePolicyViolationException>(tooLarge)).Rule);
+        Assert.Equal(5, stillAllowed.ContentLength);
+    }
+
+    [Theory]
+    [InlineData(false, null)]   // the provider never gave the container's policy
+    [InlineData(true, 0)]       // it did, but nothing is kept
+    public async Task UploadAsync_ShouldThrowThePolicyProvidersException_WhenNoLastKnownPolicyIsKept(bool givenBefore, int? keepSeconds)
+    {
+        // Arrange
+        using ServiceProvider services = new ServiceCollection()
+            .AddResourcefull(o => o.UseInMemory()
+                .UseContainerPolicies(cacheFor: TimeSpan.Zero, keepLastKnownFor: keepSeconds is { } s ? TimeSpan.FromSeconds(s) : null)
+                .UsePolicyProvider<FlakyPolicies>())
+            .BuildServiceProvider();
+        IResourceContainerClient container = await NewFlakyContainerAsync(services);
+        if (givenBefore) await container.UploadAsync("small", BinaryData.FromString("12345"));
+        FlakyPolicies.Down[container.ResourceContainerInfo.Name] = true;
+
+        // Act
+        Task act() => container.UploadAsync("small2", BinaryData.FromString("12345"));
+
+        // Assert
+        await Assert.ThrowsAsync<InvalidOperationException>(act);
+    }
+
+    [Fact]
+    public async Task UploadAsync_ShouldThrowThePolicyProvidersException_WhenTheLastKnownPolicyIsOlderThanKeepLastKnownFor()
+    {
+        // Arrange
+        using ServiceProvider services = new ServiceCollection()
+            .AddResourcefull(o => o.UseInMemory()
+                .UseContainerPolicies(cacheFor: TimeSpan.Zero, keepLastKnownFor: TimeSpan.FromMilliseconds(50))
+                .UsePolicyProvider<FlakyPolicies>())
+            .BuildServiceProvider();
+        IResourceContainerClient container = await NewFlakyContainerAsync(services);
+        await container.UploadAsync("small", BinaryData.FromString("12345"));
+        FlakyPolicies.Down[container.ResourceContainerInfo.Name] = true;
+        await Task.Delay(TimeSpan.FromMilliseconds(300));
+
+        // Act
+        Task act() => container.UploadAsync("small2", BinaryData.FromString("12345"));
+
+        // Assert
+        await Assert.ThrowsAsync<InvalidOperationException>(act);
+    }
+
+    /// <summary>Gives a container's policy once, then fails, counting how often it's asked.</summary>
+    private sealed class CountingFailingPolicies : IResourcePolicyProvider
+    {
+        public static readonly ConcurrentDictionary<string, int> Asked = new();
+
+        public ValueTask<ResourceContainerPolicy?> GetPolicyAsync(string containerName, CancellationToken cancellationToken) =>
+            Asked.AddOrUpdate(containerName, 1, (_, n) => n + 1) == 1
+                ? ValueTask.FromResult<ResourceContainerPolicy?>(null)
+                : throw new InvalidOperationException("The policy store is down.");
+    }
+
+    [Fact]
+    public async Task ThrowIfReadOnlyAsync_ShouldAskTheFailingProviderOncePerCacheTime_WhenTheLastKnownPolicyStandsIn()
+    {
+        // Arrange: the provider gave the policy, then its cached answer ran out, and the provider went down.
+        using var settings = new ContainerPolicySettings(new ResourceContainerPolicy(), TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(5));
+        var policies = new ContainerPolicies(settings, new Mock<IResourceRepository>().Object, new CountingFailingPolicies());
+        var telemetry = new ClientTelemetry("test", new ResourcefullOptions());
+        string name = $"c-{Guid.NewGuid():N}";
+        await policies.ThrowIfReadOnlyAsync(name, telemetry, CancellationToken.None);
+        settings.Cache.Remove(name);
+
+        // Act: three writes during the outage, within one cache time of each other.
+        for (int i = 0; i < 3; i++) await policies.ThrowIfReadOnlyAsync(name, telemetry, CancellationToken.None);
+
+        // Assert: the first fell back to the last known policy, which the next two then found cached.
+        Assert.Equal(2, CountingFailingPolicies.Asked[name]);
+    }
+
+    /// <summary>Gives a container's policy once, then fails as a caller's canceled token makes it.</summary>
+    private sealed class CanceledPolicies : IResourcePolicyProvider
+    {
+        private static readonly ConcurrentDictionary<string, bool> Given = new();
+
+        public ValueTask<ResourceContainerPolicy?> GetPolicyAsync(string containerName, CancellationToken cancellationToken)
+        {
+            if (Given.TryAdd(containerName, true)) return ValueTask.FromResult<ResourceContainerPolicy?>(null);
+            cancellationToken.ThrowIfCancellationRequested();
+            throw new InvalidOperationException("Expected a canceled token.");
+        }
+    }
+
+    [Fact]
+    public async Task ThrowIfReadOnlyAsync_ShouldThrowOperationCanceled_WhenTheCallerCancelsWhileThePolicyProviderFails()
+    {
+        // Arrange: a last known policy is kept, but the failure is the caller's own cancellation.
+        using var settings = new ContainerPolicySettings(new ResourceContainerPolicy(), TimeSpan.Zero, TimeSpan.FromMinutes(5));
+        var policies = new ContainerPolicies(settings, new Mock<IResourceRepository>().Object, new CanceledPolicies());
+        var telemetry = new ClientTelemetry("test", new ResourcefullOptions());
+        string name = $"c-{Guid.NewGuid():N}";
+        await policies.ThrowIfReadOnlyAsync(name, telemetry, CancellationToken.None);
+        using var canceled = new CancellationTokenSource();
+        await canceled.CancelAsync();
+
+        // Act
+        Task act() => policies.ThrowIfReadOnlyAsync(name, telemetry, canceled.Token);
+
+        // Assert
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(act);
+    }
+
+    [Fact]
+    public void UseContainerPolicies_ShouldThrowArgumentOutOfRange_WhenKeepLastKnownForIsNegative()
+    {
+        // Arrange
+        var builder = new ResourcefullOptionsBuilder(new ServiceCollection());
+
+        // Act & Assert
+        Assert.Throws<ArgumentOutOfRangeException>(() => builder.UseContainerPolicies(keepLastKnownFor: TimeSpan.FromSeconds(-1)));
     }
 }

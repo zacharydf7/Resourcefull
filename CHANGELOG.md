@@ -36,8 +36,9 @@
   `MaxResourceSize`, `MaxContainerSize`, `MaxResourceCount`, `AllowedContentTypes` and `ReadOnly`. Sizes are
   `ResourceSize` values, such as `ResourceSize.Megabytes(100)`, or `"100 MB"` in configuration. A refused write throws
   `ResourcePolicyViolationException` and stores nothing, and `AddResourcefullExceptionHandler` turns it into 413, 409, 403
-  or 415. `GetUsageAsync` reports what a container holds. Providers get `GetContainerUsageAsync` with a default
-  implementation, so providers written for 3.1 keep working. See [Container policies](docs/container-policies.md).
+  or 415. When the policy provider fails, a container's last known policy stands in for up to 5 minutes
+  (`keepLastKnownFor`). `GetUsageAsync` reports what a container holds. Providers get `GetContainerUsageAsync` with a
+  default implementation, so providers written for 3.1 keep working. See [Container policies](docs/container-policies.md).
 - **Range downloads.** A `DownloadStreamingAsync` overload takes a `ResourceRange` and reads only those bytes from
   storage, for resuming downloads and seeking in media; every download's result now has `TotalLength`, and `Range`
   for a range. `Results.Resource(container, name)` in `Resourcefull.AspNetCore` looks the resource up itself, the

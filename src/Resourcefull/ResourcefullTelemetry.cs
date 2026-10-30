@@ -65,6 +65,10 @@ internal static class Telemetry
     public static readonly Counter<long> ExpireFailures = Meter.CreateCounter<long>("resourcefull.client.expire.failures",
         unit: "{version}", description: "Expired versions a sweep failed to delete; they stay for the next sweep.");
 
+    public static readonly Counter<long> LastKnownPolicyUses = Meter.CreateCounter<long>(
+        "resourcefull.client.policy.last_known_uses", unit: "{use}",
+        description: "Times a container's last known policy was used because the policy provider failed.");
+
     public static readonly Counter<long> CleanupHandlerFailures = Meter.CreateCounter<long>(
         "resourcefull.client.cleanup_handler.failures", unit: "{failure}",
         description: "Calls to the cleanup handler that threw; the version they reported stays.");
