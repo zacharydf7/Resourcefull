@@ -1,4 +1,13 @@
 {
+  "copy-16MiB": {
+    "RoundTrips": 13,
+    "LogicalReads": 18296,
+    "LogBytes": 18907136,
+    "AllocatedBytes": 727968,
+    "PeakHeapBytes": 739640,
+    "Seconds": 0.1112,
+    "ContentBytes": 16777216
+  },
   "delete-16MiB": {
     "RoundTrips": 5,
     "LogicalReads": 4888,
