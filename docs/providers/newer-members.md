@@ -87,6 +87,12 @@ To support it:
 - **Decide expiry in the delete.** `DeleteExpiredVersionAsync` deletes a version only if it's still expired when the
   delete runs, under whatever serializes writes to the name: `SetExpiryAsync` may have extended it since it was listed.
 - **Change nothing but the expiry** in `SetExpiryAsync`.
+- **Delete a batch together,** if you can. A sweep deletes each page of up to 100 expired versions it lists through
+  `DeleteExpiredVersionsAsync`, which returns the IDs of those it deleted. (An ID that two containers share, as an
+  import can make, the sweep deletes on its own, so the IDs a batch returns are never ambiguous.) Decide expiry for
+  each in the delete, as above, and make the next version current for a name whose current one goes. Its default
+  calls `DeleteExpiredVersionAsync` for each version; and if a batch fails, the sweep tries each of its versions that
+  way, so one version that keeps failing doesn't hold up the rest.
 
 ## Container usage
 

@@ -395,6 +395,31 @@ public interface IResourceRepository
         => throw new NotSupportedException($"{GetType().Name} doesn't support expiry.");
 
     /// <summary>
+    /// Deletes each of <paramref name="versions"/> that's still expired at <paramref name="now"/>, as
+    /// <see cref="DeleteExpiredVersionAsync"/> does for one, and returns the IDs of those it deleted; a version that's
+    /// gone, or no longer expired, is left out. A sweep deletes each page of expired versions it lists through it. A
+    /// provider should answer it in a few round trips; the default implementation, kept so providers written before it
+    /// still compile and work, calls <see cref="DeleteExpiredVersionAsync"/> for each.
+    /// <para>Coming in 3.2.</para>
+    /// </summary>
+    /// <param name="versions">The versions to delete if they're still expired.</param>
+    /// <param name="now">The time to decide expiry by.</param>
+    /// <param name="cancellationToken">Cancels the deletes; the versions already deleted stay deleted.</param>
+    /// <returns>The IDs of the versions it deleted.</returns>
+    /// <exception cref="NotSupportedException">The provider doesn't support expiry.</exception>
+    async Task<IReadOnlyCollection<string>> DeleteExpiredVersionsAsync(
+        IReadOnlyList<(ResourceLocation Resource, string VersionId)> versions, DateTimeOffset now,
+        CancellationToken cancellationToken = default)
+    {
+        var deleted = new List<string>();
+        foreach ((ResourceLocation resource, string versionId) in versions)
+        {
+            if (await DeleteExpiredVersionAsync(resource, versionId, now, cancellationToken)) deleted.Add(versionId);
+        }
+        return deleted;
+    }
+
+    /// <summary>
     /// Sets one version's <see cref="ResourceInfo.ExpiresAt"/>, or clears it with <see langword="null"/>, changing nothing
     /// else about it. <see cref="AddResourceAsync(string, ResourceInfo, Stream, ResourceWriteCondition, CancellationToken)"/>
     /// and <see cref="CopyResourceAsync"/> store it from the version they're given, and every read returns it.

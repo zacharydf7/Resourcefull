@@ -265,6 +265,34 @@ public class UploadRetryIntegrationTests(SqlServerFixture fixture)
         Assert.Empty(await repository.GetResourceVersionsAsync(c, "n"));
     }
 
+    [SkippableFact]
+    public async Task DeleteExpiredVersionsAsync_ShouldReportEveryDelete_WhenALaterTransactionsAcknowledgementIsLost()
+    {
+        fixture.SkipIfUnavailable();
+
+        // Arrange: five expired names of 64 chunks each, more than one transaction deletes, so the second's
+        // acknowledgement is lost.
+        var failure = new FailOnceInterceptor(failAfterCommit: true, commitsBeforeFailing: 1);
+        (ResourceSqlRepository repository, string c) = await NewRepositoryAsync(failure, arm: false);
+        var expiresAt = new DateTimeOffset(2000, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        List<(ResourceLocation, string)> versions = [];
+        for (int i = 0; i < 5; i++)
+        {
+            var version = new ResourceInfo { ContainerName = c, Name = $"n{i}", VersionId = $"v{i}", ExpiresAt = expiresAt };
+            await repository.AddResourceAsync(c, version, new MemoryStream(Payload));
+            versions.Add((new ResourceLocation(c, version.Name), version.VersionId));
+        }
+        failure.Arm();
+
+        // Act
+        IReadOnlyCollection<string> deleted = await repository.DeleteExpiredVersionsAsync(versions, DateTimeOffset.UtcNow);
+
+        // Assert
+        Assert.True(failure.Failed);
+        Assert.Equal(versions.Select(v => v.Item2).Order(), deleted.Order());
+        for (int i = 0; i < 5; i++) Assert.Empty(await repository.GetResourceVersionsAsync(c, $"n{i}"));
+    }
+
     private async Task<(ResourceSqlRepository, string)> NewRepositoryAsync(FailOnceInterceptor failure, bool arm = true)
     {
         DbContextOptions<ResourceDbContext> options = new DbContextOptionsBuilder<ResourceDbContext>()

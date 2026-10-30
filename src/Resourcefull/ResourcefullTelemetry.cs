@@ -168,17 +168,29 @@ internal sealed class ClientTelemetry(string provider, ResourcefullOptions optio
                 _ => violation.Rule.ToString()
             });
         }
+        activity.SetStatus(ActivityStatusCode.Error, options.Telemetry.RecordResourceNames ? exception.Message : null);
+        RecordException(activity, exception);
+    }
+
+    /// <summary>
+    /// Adds the exception to the span as an event, without marking it failed, for a failure the operation recovered
+    /// from. Its message goes on the span only when resource names may.
+    /// </summary>
+    public void RecordException(Activity? activity, Exception exception)
+    {
+        if (activity is null) return;
         if (options.Telemetry.RecordResourceNames)
         {
-            activity.SetStatus(ActivityStatusCode.Error, exception.Message);
             activity.AddException(exception);
         }
         else
         {
             // The default stack trace is exception.ToString(), which starts with the message; StackTrace has only frames.
-            activity.SetStatus(ActivityStatusCode.Error);
-            activity.AddException(exception,
-                new TagList { { "exception.message", errorType }, { "exception.stacktrace", exception.StackTrace } });
+            activity.AddException(exception, new TagList
+            {
+                { "exception.message", exception.GetType().FullName },
+                { "exception.stacktrace", exception.StackTrace }
+            });
         }
     }
 

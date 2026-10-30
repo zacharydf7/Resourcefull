@@ -90,7 +90,7 @@ metrics. It also has:
 | `export` | `ExportContainerAsync` | `resourcefull.resources`, `resourcefull.versions`: what it wrote; `resourcefull.pages`: the pages of 1,000 names it read |
 | `import` | `ImportContainerAsync` | `resourcefull.resources`, `resourcefull.versions`: what it stored |
 | `prune_container` | `PruneContainerAsync` | `resourcefull.pruned`: how many versions were past the limit |
-| `expire` | `DeleteExpiredAsync`, and each sweep of [`UseExpiry`](expiry.md), when it finds expired versions, read-only containers' included | `resourcefull.expired`: how many versions it deleted |
+| `expire` | `DeleteExpiredAsync`, and each sweep of [`UseExpiry`](expiry.md), when it finds expired versions, read-only containers' included | `resourcefull.expired`: how many versions it deleted; `resourcefull.batches`: how many batches of up to 100 it deleted them in; `resourcefull.batch_fallbacks`, when a batch failed and its versions were deleted one at a time instead: how many. Each failed batch's exception is recorded too, as on a failed operation, but the span isn't marked failed: the sweep carried on |
 | `list` | `GetResourcesAsync` | |
 | `list_page` | `GetResourcePageAsync`, and each page `ListResourcesAsync` fetches | `resourcefull.page_size` |
 | `list_versions` | `GetResourceVersionsAsync` | |

@@ -25,8 +25,11 @@
   changes or clears an expiry. An `IResourceCleanupHandler` hears about every version Resourcefull deletes by itself,
   expired or pruned, before it's deleted, for auditing. With expiry on, pruning sets a version to expire five minutes
   later instead of deleting it, so a download already reading it finishes. The `AddExpiresAt` migration adds a
-  nullable column and an index. Providers get three members whose defaults throw `NotSupportedException`. See
-  [Expiring resources](docs/expiry.md).
+  nullable column and an index. Providers get three members whose defaults throw `NotSupportedException`, and
+  `DeleteExpiredVersionsAsync`, which a sweep deletes each page of up to 100 expired versions through: with SQL
+  Server, one transaction for the page (more when its versions hold over 256 chunks, about 10 MB, so no transaction
+  logs a page of large files): 16 expired 1 MiB files take 14 round trips, where one version at a time took 98. Its
+  default deletes them one at a time. See [Expiring resources](docs/expiry.md).
 - **Copy, move and rename.** `CopyResourceAsync` copies a version to a name in the same or another container, as a
   new version there, and `MoveResourceAsync` moves a resource with every version, keeping their IDs; renaming is a
   move within the container. With SQL Server, no content passes through the application. A copy can be

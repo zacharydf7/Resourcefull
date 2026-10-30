@@ -32,6 +32,59 @@ public abstract partial class ResourcefullContractTests
     private static ResourceUploadOptions Expiring(DateTimeOffset expiresAt) => new() { ExpiresAt = expiresAt };
 
     [SkippableFact]
+    public async Task DeleteExpiredVersionsAsync_ShouldDeleteOnlyWhatsStillExpired_WhenGivenABatch()
+    {
+        // Arrange: a name whose expired current version has an older one behind it, a version whose expiry was
+        // extended since it was listed, and a version that doesn't exist.
+        using ServiceProvider provider = BuildServiceProvider(o => o.UseVersioning());
+        IResourceContainerClient container = await NewContainerAsync(provider);
+        string containerName = container.ResourceContainerInfo.Name;
+        ResourceInfo older = await container.UploadAsync("a", BinaryData.FromString("older"));
+        ResourceInfo current = await container.UploadAsync("a", BinaryData.FromString("current"), Expiring(Past));
+        ResourceInfo extended = await container.UploadAsync("b", BinaryData.FromString("b"), Expiring(Past));
+        await container.SetExpiryAsync("b", extended.VersionId, Future);
+        IResourceRepository repository = provider.GetRequiredService<IResourceRepository>();
+
+        // Act
+        IReadOnlyCollection<string> deleted = await repository.DeleteExpiredVersionsAsync(
+        [
+            (new ResourceLocation(containerName, "a"), current.VersionId),
+            (new ResourceLocation(containerName, "b"), extended.VersionId),
+            (new ResourceLocation(containerName, "c"), "missing")
+        ], DateTimeOffset.UtcNow);
+
+        // Assert
+        Assert.Equal([current.VersionId], deleted);
+        ResourceInfo nowCurrent = (await container.GetResourceInfoAsync("a"))!;
+        Assert.Equal(older.VersionId, nowCurrent.VersionId);
+        Assert.True(nowCurrent.IsLatest);
+        Assert.True(await container.ExistsAsync("b"));
+    }
+
+    [SkippableFact]
+    public async Task DeleteExpiredVersionsAsync_ShouldMakeTheLatestVersionLeftCurrent_WhenItDeletesSeveralOfAName()
+    {
+        // Arrange: three versions of a name, the two latest of them expired.
+        using ServiceProvider provider = BuildServiceProvider(o => o.UseVersioning());
+        IResourceContainerClient container = await NewContainerAsync(provider);
+        var location = new ResourceLocation(container.ResourceContainerInfo.Name, "a");
+        ResourceInfo kept = await container.UploadAsync("a", BinaryData.FromString("kept"));
+        ResourceInfo second = await container.UploadAsync("a", BinaryData.FromString("second"), Expiring(Past));
+        ResourceInfo third = await container.UploadAsync("a", BinaryData.FromString("third"), Expiring(Past));
+        IResourceRepository repository = provider.GetRequiredService<IResourceRepository>();
+
+        // Act
+        IReadOnlyCollection<string> deleted = await repository.DeleteExpiredVersionsAsync(
+            [(location, second.VersionId), (location, third.VersionId)], DateTimeOffset.UtcNow);
+
+        // Assert
+        Assert.Equal(new[] { second.VersionId, third.VersionId }.Order(), deleted.Order());
+        ResourceInfo current = Assert.Single(await container.GetResourceVersionsAsync("a"));
+        Assert.Equal(kept.VersionId, current.VersionId);
+        Assert.True(current.IsLatest);
+    }
+
+    [SkippableFact]
     public async Task DeleteExpiredAsync_ShouldDeleteOnlyExpiredVersions_WhenCalled()
     {
         // Arrange

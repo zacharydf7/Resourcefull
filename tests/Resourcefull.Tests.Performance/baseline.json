@@ -90,12 +90,12 @@
     "ContentBytes": 1048576
   },
   "expire-16-due-1MiB": {
-    "RoundTrips": 98,
-    "LogicalReads": 2694,
-    "LogBytes": 18377932,
-    "AllocatedBytes": 4780400,
-    "RetainedBytes": 0,
-    "Seconds": 0.1699,
+    "RoundTrips": 14,
+    "LogicalReads": 2821,
+    "LogBytes": 18348441,
+    "AllocatedBytes": 1470312,
+    "RetainedBytes": 704,
+    "Seconds": 0.1566,
     "ContentBytes": 0
   },
   "expire-nothing-due": {
@@ -153,12 +153,12 @@
     "ContentBytes": 0
   },
   "move-16MiB": {
-    "RoundTrips": 8,
-    "LogicalReads": 34,
-    "LogBytes": 4096,
-    "AllocatedBytes": 400016,
+    "RoundTrips": 7,
+    "LogicalReads": 35,
+    "LogBytes": 4915,
+    "AllocatedBytes": 395256,
     "RetainedBytes": 0,
-    "Seconds": 0.0059,
+    "Seconds": 0.0056,
     "ContentBytes": 0
   },
   "overwrite-16MiB": {

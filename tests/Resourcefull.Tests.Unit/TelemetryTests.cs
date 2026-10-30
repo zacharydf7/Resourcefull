@@ -4,6 +4,8 @@ using System.Diagnostics.Metrics;
 using System.Reflection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
+using Moq;
 using Resourcefull.InMemory;
 using Resourcefull.SqlServer;
 
@@ -276,7 +278,39 @@ public sealed class TelemetryTests : IDisposable
         // Assert
         Activity expire = Assert.Single(SpansIn(root), s => s.OperationName == "resourcefull expire");
         Assert.Equal(1, expire.GetTagItem("resourcefull.expired"));
+        Assert.Equal(1, expire.GetTagItem("resourcefull.batches"));
         Assert.Single(SpansIn(root), s => s.OperationName == "resourcefull set_expiry");
+    }
+
+    [Fact]
+    public async Task DeleteExpiredAsync_ShouldRecordTheFailedBatchWithoutFailingOrNamingTheResource_WhenItFallsBack()
+    {
+        // Arrange: a provider whose batch delete fails, naming the resource, but whose single delete works.
+        var repository = new Mock<IResourceRepository>();
+        var expired = new ResourceInfo
+        {
+            ContainerName = "c", Name = "secret.txt", VersionId = "v1", ExpiresAt = DateTimeOffset.UnixEpoch
+        };
+        repository.Setup(r => r.GetExpiredAsync(It.IsAny<DateTimeOffset>(), It.IsAny<int>(), null,
+            It.IsAny<CancellationToken>())).ReturnsAsync([expired]);
+        repository.Setup(r => r.DeleteExpiredVersionsAsync(It.IsAny<IReadOnlyList<(ResourceLocation, string)>>(),
+            It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("Deleting secret.txt failed."));
+        repository.Setup(r => r.DeleteExpiredVersionAsync(It.IsAny<ResourceLocation>(), "v1", It.IsAny<DateTimeOffset>(),
+            It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        var service = new ResourceServiceClient(repository.Object, Options.Create(new ResourcefullOptions()));
+        using Activity root = TestSource.StartActivity("test")!;
+
+        // Act
+        int deleted = await service.DeleteExpiredAsync();
+
+        // Assert
+        Assert.Equal(1, deleted);
+        Activity expire = Assert.Single(SpansIn(root), s => s.OperationName == "resourcefull expire");
+        Assert.Equal(1, expire.GetTagItem("resourcefull.batch_fallbacks"));
+        Assert.Equal(ActivityStatusCode.Unset, expire.Status);
+        ActivityEvent recorded = Assert.Single(expire.Events, e => e.Name == "exception");
+        Assert.DoesNotContain(recorded.Tags, t => t.Value?.ToString()?.Contains("secret.txt") == true);
     }
 
     [Fact]

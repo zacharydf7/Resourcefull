@@ -31,8 +31,9 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
     private const int ChunksPerReadPage = ChunksPerUploadBatch;
 
     /// <summary>
-    /// Caps the content one batch of a container or name delete removes, counted in chunks, so no single transaction has
-    /// to log a whole container or a name's whole history. A resource bigger than the cap still goes in a batch of its own.
+    /// Caps the content one batch of a container or name delete, or of an expiry sweep, removes, counted in chunks, so no
+    /// single transaction has to log a whole container or a name's whole history. A resource bigger than the cap still
+    /// goes in a batch of its own.
     /// </summary>
     internal int ChunksPerDeleteBatch { get; init; } = 256;
 
@@ -395,11 +396,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
             await using var transaction = await attempt.Database.BeginTransactionAsync(ct);
 
             // The in-memory provider the unit tests use has no locks.
-            if (attempt.Database.IsRelational())
-            {
-                foreach (ResourceLocation name in ordered)
-                    await LockNameAsync(attempt, name.ContainerName, name.ResourceName, ct);
-            }
+            if (attempt.Database.IsRelational()) await LockNamesAsync(attempt, ordered, ct);
 
             T result = await write(attempt, ct);
             await transaction.CommitAsync(ct);
@@ -423,15 +420,27 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
     /// name, rather than key-range locks on its rows, so writers can't deadlock by taking locks in different orders.
     /// Lock names are limited to 255 characters, so the name is hashed.
     /// </summary>
-    private static async Task LockNameAsync(ResourceDbContext dbContext, string resourceContainerName, string resourceName, CancellationToken cancellationToken)
-    {
-        string lockName = "Resourcefull:" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes($"{resourceContainerName}\n{resourceName}")));
+    private static Task LockNameAsync(ResourceDbContext dbContext, string resourceContainerName, string resourceName,
+        CancellationToken cancellationToken) =>
+        LockNamesAsync(dbContext, [new ResourceLocation(resourceContainerName, resourceName)], cancellationToken);
 
-        await dbContext.Database.ExecuteSqlAsync($"""
-            DECLARE @result int;
-            EXEC @result = sp_getapplock @Resource = {lockName}, @LockMode = 'Exclusive', @LockOwner = 'Transaction';
-            IF @result < 0 THROW 50000, 'Could not lock the resource name for writing.', 1;
-            """, cancellationToken);
+    /// <summary>Locks each name for the transaction, in the order given, in one round trip.</summary>
+    private static async Task LockNamesAsync(ResourceDbContext dbContext, IReadOnlyList<ResourceLocation> names,
+        CancellationToken cancellationToken)
+    {
+        if (names.Count == 0) return;
+        var sql = new StringBuilder("DECLARE @result int;");
+        var parameters = new object[names.Count];
+        for (int i = 0; i < names.Count; i++)
+        {
+            sql.Append($"EXEC @result = sp_getapplock @Resource = @lock{i}, @LockMode = 'Exclusive', ")
+                .Append("@LockOwner = 'Transaction';")
+                .Append("IF @result < 0 THROW 50000, 'Could not lock the resource name for writing.', 1;");
+            string key = $"{names[i].ContainerName}\n{names[i].ResourceName}";
+            parameters[i] = new SqlParameter($"@lock{i}",
+                "Resourcefull:" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(key))));
+        }
+        await dbContext.Database.ExecuteSqlRawAsync(sql.ToString(), parameters, cancellationToken);
     }
 
     private static async Task ThrowIfNotMetAsync(ResourceDbContext dbContext, ResourceConditions conditions,
@@ -864,6 +873,100 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
             if (!(found.Version.ExpiresAt <= now)) return false;
             return deletedInAnEarlierAttempt = await DeleteVersionAsync(dbContext, found.Version, found.Chunks, ct);
         }, cancellationToken);
+    }
+
+    public async Task<IReadOnlyCollection<string>> DeleteExpiredVersionsAsync(
+        IReadOnlyList<(ResourceLocation Resource, string VersionId)> versions, DateTimeOffset now,
+        CancellationToken cancellationToken = default)
+    {
+        var deleted = new List<string>();
+        List<(ResourceLocation Resource, string VersionId)> left = [.. versions.Distinct()];
+        while (left.Count > 0)
+        {
+            // What an earlier attempt deleted, should a retry follow a commit whose acknowledgement was lost.
+            List<(ResourceLocation, string)> deletedInAnEarlierAttempt = [];
+
+            // A transaction under every name's lock, so a change to an expiry can't come between the check and the
+            // delete. It deletes up to ChunksPerDeleteBatch chunks' worth, as a container or name delete does, and
+            // leaves the rest of the expired versions for the next.
+            List<(ResourceLocation Resource, string VersionId)> batch = left;
+            (List<(ResourceLocation Resource, string VersionId)> gone, left) = await WriteNamesAsync(
+                batch.Select(v => v.Resource),
+                async (dbContext, ct) =>
+                {
+                    var result = await DeleteExpiredBatchAsync(dbContext, batch, now, deletedInAnEarlierAttempt, ct);
+                    deletedInAnEarlierAttempt = result.Deleted;
+                    return result;
+                }, cancellationToken);
+            deleted.AddRange(gone.Select(v => v.VersionId));
+        }
+        return deleted;
+    }
+
+    /// <summary>
+    /// Deletes those of <paramref name="versions"/> still expired, up to <see cref="ChunksPerDeleteBatch"/> chunks' worth,
+    /// and returns the versions it deleted and those still expired that it left for another batch.
+    /// </summary>
+    private async Task<(List<(ResourceLocation, string)> Deleted, List<(ResourceLocation, string)> Left)>
+        DeleteExpiredBatchAsync(ResourceDbContext dbContext, List<(ResourceLocation Resource, string VersionId)> versions,
+            DateTimeOffset now, List<(ResourceLocation, string)> deletedInAnEarlierAttempt, CancellationToken ct)
+    {
+        string[] ids = [.. versions.Select(v => v.VersionId).Distinct()];
+        string[] batchContainers = [.. versions.Select(v => v.Resource.ContainerName).Distinct()];
+        string[] batchNames = [.. versions.Select(v => v.Resource.ResourceName).Distinct()];
+        var wanted = versions.ToHashSet();
+        // By container and name first, so it seeks on the clustered index rather than scanning the table.
+        var found = (await dbContext.Resources
+                .Where(r => batchContainers.Contains(r.ContainerName) && batchNames.Contains(r.Name)
+                    && ids.Contains(r.VersionId))
+                .Select(r => new { Version = r, Chunks = r.Chunks!.Count })
+                .ToListAsync(ct))
+            .Where(f => wanted.Contains(
+                (new ResourceLocation(f.Version.ContainerName, f.Version.Name), f.Version.VersionId!)))
+            .ToList();
+        var expired = found.Where(f => f.Version.ExpiresAt <= now).ToList();
+        int count = 0;
+        long chunks = 0;
+        foreach (var version in expired)
+        {
+            if (count > 0 && chunks + version.Chunks > ChunksPerDeleteBatch) break;
+            count++;
+            chunks += version.Chunks;
+        }
+        var deleting = expired.Take(count).ToList();
+
+        await DeleteLargeVersionsChunksAsync(dbContext, deleting.Select(d => (d.Version.Id, d.Chunks)), ct);
+        dbContext.Resources.RemoveRange(deleting.Select(d => d.Version));
+
+        // A name whose current version goes gets its most recently stored remaining version as current, as
+        // DeleteVersionAsync does for one.
+        var lostCurrent = deleting.Where(d => d.Version.IsLatest)
+            .Select(d => (d.Version.ContainerName, d.Version.Name)).ToHashSet();
+        if (lostCurrent.Count > 0)
+        {
+            long[] removed = [.. deleting.Select(d => d.Version.Id)];
+            string[] containers = [.. lostCurrent.Select(n => n.ContainerName).Distinct()];
+            string[] names = [.. lostCurrent.Select(n => n.Name).Distinct()];
+            List<ResourceModel> next = await dbContext.Resources
+                .Where(r => containers.Contains(r.ContainerName) && names.Contains(r.Name)
+                    && !removed.Contains(r.Id)
+                    && r.Id == dbContext.Resources
+                        .Where(o => o.ContainerName == r.ContainerName && o.Name == r.Name
+                            && !removed.Contains(o.Id))
+                        .Max(o => o.Id))
+                .ToListAsync(ct);
+            foreach (ResourceModel version in next.Where(v => lostCurrent.Contains((v.ContainerName, v.Name))))
+                version.IsLatest = true;
+        }
+
+        await dbContext.SaveChangesAsync(ct);
+
+        // A version gone already counts if an earlier attempt deleted it.
+        static (ResourceLocation, string) Key(ResourceModel version) =>
+            (new ResourceLocation(version.ContainerName, version.Name), version.VersionId!);
+        var foundKeys = found.Select(f => Key(f.Version)).ToHashSet();
+        return ([.. deleting.Select(d => Key(d.Version)), .. deletedInAnEarlierAttempt.Where(v => !foundKeys.Contains(v))],
+            [.. expired.Skip(deleting.Count).Select(e => Key(e.Version))]);
     }
 
     public Task<bool> SetExpiryAsync(ResourceLocation resource, string versionId, DateTimeOffset? expiresAt,

@@ -50,9 +50,11 @@ public class DeleteLockingIntegrationTests(SqlServerFixture fixture)
         { "version", 6_000, 8_000 },
         { "name", 6_000, 8_000 },
         { "container", 6_000, 8_000 },
+        { "expire", 6_000, 8_000 },
         { "version", ResourceSqlRepository.ChunksPerDeleteStatement - 1, ResourceChunker.ChunkSize },
         { "name", ResourceSqlRepository.ChunksPerDeleteStatement - 1, ResourceChunker.ChunkSize },
         { "container", ResourceSqlRepository.ChunksPerDeleteStatement - 1, ResourceChunker.ChunkSize },
+        { "expire", ResourceSqlRepository.ChunksPerDeleteStatement - 1, ResourceChunker.ChunkSize },
     };
 
     [SkippableTheory]
@@ -67,7 +69,8 @@ public class DeleteLockingIntegrationTests(SqlServerFixture fixture)
         string containerName = $"c-{Guid.NewGuid():N}";
         IResourceContainerClient container = await service.CreateResourceContainerAsync(containerName);
         await container.UploadAsync("big", BinaryData.FromString("older"));
-        ResourceInfo current = await container.UploadAsync("big", BinaryData.FromString("x"));
+        ResourceInfo current = await container.UploadAsync("big", BinaryData.FromString("x"),
+            what == "expire" ? new ResourceUploadOptions { ExpiresAt = DateTimeOffset.UtcNow.AddDays(-1) } : null);
         await InflateAsync(containerName, "big", chunks, bytes);
         long before = await LockEscalationsAsync();
 
@@ -76,12 +79,14 @@ public class DeleteLockingIntegrationTests(SqlServerFixture fixture)
         {
             "version" => await container.DeleteResourceIfExistsAsync("big", current.VersionId),
             "name" => await container.DeleteResourceIfExistsAsync("big"),
+            "expire" => (await provider.GetRequiredService<IResourceRepository>().DeleteExpiredVersionsAsync(
+                [(new ResourceLocation(containerName, "big"), current.VersionId)], DateTimeOffset.UtcNow)).Count == 1,
             _ => await service.DeleteResourceContainerIfExistsAsync(containerName)
         };
 
         // Assert
         Assert.True(deleted);
         Assert.Equal(before, await LockEscalationsAsync());
-        Assert.Equal(what == "version" ? 1 : 0, (await container.GetResourceVersionsAsync("big")).Count);
+        Assert.Equal(what is "version" or "expire" ? 1 : 0, (await container.GetResourceVersionsAsync("big")).Count);
     }
 }
