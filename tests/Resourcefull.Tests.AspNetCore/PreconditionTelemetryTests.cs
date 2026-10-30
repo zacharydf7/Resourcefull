@@ -31,6 +31,8 @@ public sealed class PreconditionTelemetryTests
         ActivitySource.AddActivityListener(listener);
 
         HttpResponseMessage response = await app.Client.SendAsync(request);
+        // The test server hands back the response before the request finishes and its span stops.
+        Assert.True(SpinWait.SpinUntil(() => !requests.IsEmpty, TimeSpan.FromSeconds(5)), "The request's span never stopped.");
         return (response.StatusCode, Assert.Single(requests).GetTagItem(tag));
     }
 
