@@ -19,7 +19,10 @@ same guarantees:
   versions as they stand after its own write. A prune that fails leaves the extra versions until a later upload of the
   name prunes them (see [Versioning](versioning.md#keeping-a-limited-number)).
 - **A download reads the version it resolved.** If another upload makes a newer version current while you read, you
-  keep reading the version the `ResourceInfo` describes.
+  keep reading the version the `ResourceInfo` describes, as long as that version still exists. An upload can delete
+  it: without versioning, an upload replaces the name's only version, and with versioning, an upload past
+  `maxVersions` prunes the oldest. With SQL Server, a download of a version deleted partway through throws
+  `IOException`, so a client downloading a file that's often replaced should be ready to download it again.
 - **Readers don't block writers.** With SQL Server, reads use row versions
   ([`READ_COMMITTED_SNAPSHOT`](providers/sql-server.md#read_committed_snapshot)) instead of shared locks, and
   deadlocks that contention still causes are retried for you.

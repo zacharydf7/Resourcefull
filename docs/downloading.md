@@ -30,7 +30,8 @@ if (download is not null)
 
 The stream and the `ResourceInfo` describe the same version, even if another upload makes a newer version current
 while you read. With SQL Server, if the version itself is deleted while you're reading it, the stream throws
-`IOException` rather than ending early.
+`IOException` rather than ending early. That includes an upload that replaces it: without versioning, each upload
+deletes the version before it, so a download of a file that's replaced often can fail partway and needs a retry.
 
 ## Downloading part of a resource
 
