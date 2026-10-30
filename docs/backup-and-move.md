@@ -45,6 +45,9 @@ The export is an ordinary zip, so you can open it with any zip tool to see what'
 - **`content/`** holds the files' contents, each once. Versions with the same content, such as a file uploaded twice
   or a copy, share one entry, so copies don't make the export bigger.
 
+The manifest records its format, and Resourcefull's tests import an export exactly as 3.2 writes it, so a later
+release can't change the format by accident.
+
 ## Exporting
 
 An export reads one version at a time, so a file's size doesn't change how much memory it uses; only the number of

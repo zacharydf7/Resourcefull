@@ -1,5 +1,6 @@
 using System.IO.Compression;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace Resourcefull;
 
@@ -31,14 +32,37 @@ internal static class ContainerArchive
         RespectRequiredConstructorParameters = true
     };
 
-    /// <summary>An export's description of the container, which <see cref="ReadManifestAsync"/> reads.</summary>
-    internal sealed record Manifest(int Format, IDictionary<string, string> Metadata, List<ManifestResource> Resources);
+    // The manifest's JSON names are the file format, so each is spelled out: renaming a property mustn't change them.
 
-    internal sealed record ManifestResource(string Name, List<ManifestVersion> Versions);
+    /// <summary>An export's description of the container, which <see cref="ReadManifestAsync"/> reads.</summary>
+    internal sealed record Manifest(
+        [property: JsonPropertyName("format")] int Format,
+        [property: JsonPropertyName("metadata")] IDictionary<string, string> Metadata,
+        [property: JsonPropertyName("resources")] List<ManifestResource> Resources);
+
+    internal sealed record ManifestResource(
+        [property: JsonPropertyName("name")] string Name,
+        [property: JsonPropertyName("versions")] List<ManifestVersion> Versions);
 
     /// <summary>A version as the export describes it; <c>Content</c> names the entry that holds its content.</summary>
-    internal sealed record ManifestVersion(string VersionId, DateTimeOffset LastModified, string? ContentType, long ContentLength,
-        string ContentHash, IDictionary<string, string> Metadata, ResourceOrigin? CopiedFrom, DateTimeOffset? ExpiresAt, string Content);
+    internal sealed record ManifestVersion(
+        [property: JsonPropertyName("versionId")] string VersionId,
+        [property: JsonPropertyName("lastModified")] DateTimeOffset LastModified,
+        [property: JsonPropertyName("contentType")] string? ContentType,
+        [property: JsonPropertyName("contentLength")] long ContentLength,
+        [property: JsonPropertyName("contentHash")] string ContentHash,
+        [property: JsonPropertyName("metadata")] IDictionary<string, string> Metadata,
+        [property: JsonPropertyName("copiedFrom")] ManifestOrigin? CopiedFrom,
+        [property: JsonPropertyName("expiresAt")] DateTimeOffset? ExpiresAt,
+        [property: JsonPropertyName("content")] string Content);
+
+    /// <summary>
+    /// A <see cref="ResourceOrigin"/> as the export describes it, so the public type can change without the format.
+    /// </summary>
+    internal sealed record ManifestOrigin(
+        [property: JsonPropertyName("containerName")] string ContainerName,
+        [property: JsonPropertyName("resourceName")] string ResourceName,
+        [property: JsonPropertyName("versionId")] string VersionId);
 
     public static async Task<ResourceExportResult> ExportAsync(IResourceRepository repository, ResourceContainerInfo container,
         Stream destination, CancellationToken cancellationToken)
@@ -86,8 +110,11 @@ internal static class ContainerArchive
                         contentSize += content.ContentLength;
                     }
 
+                    ManifestOrigin? origin = version.CopiedFrom is { } from
+                        ? new ManifestOrigin(from.ContainerName, from.ResourceName, from.VersionId)
+                        : null;
                     versions.Add(new ManifestVersion(version.VersionId, version.LastModified, version.ContentType, content.ContentLength,
-                        content.ContentHash, version.Metadata, version.CopiedFrom, version.ExpiresAt, entryName));
+                        content.ContentHash, version.Metadata, origin, version.ExpiresAt, entryName));
                 }
 
                 if (versions.Count == 0) continue;
@@ -127,7 +154,9 @@ internal static class ContainerArchive
                     ContentType = version.ContentType,
                     // Not declared, so content changed to another length is caught by the hash check below, as any change is.
                     Metadata = version.Metadata,
-                    CopiedFrom = version.CopiedFrom,
+                    CopiedFrom = version.CopiedFrom is { } from
+                        ? new ResourceOrigin(from.ContainerName, from.ResourceName, from.VersionId)
+                        : null,
                     ExpiresAt = version.ExpiresAt,
                     // Stored too, for applications on 2.x, which read it from storage.
                     Uri = uriProvider?.GetAbsoluteUri(new ResourcefullContext(containerName, resource.Name, version.VersionId))
