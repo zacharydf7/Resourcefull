@@ -1,5 +1,6 @@
 using System.Data.Common;
 using System.Security.Cryptography;
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
@@ -71,6 +72,93 @@ public class ContainerDeleteIntegrationTests(SqlServerFixture fixture)
         Assert.Equal("a", current.VersionId);
         Assert.True(current.IsLatest);
         await repository.DeleteResourceContainerAsync(containerName);
+    }
+
+    [SkippableTheory]
+    [InlineData(0)]
+    [InlineData(ResourceSqlRepository.ChunksPerDeleteStatement)] // so many that its chunks go before its row
+    public async Task DeleteResourceContainerAsync_ShouldLeaveAVersionAMoveTookAway_WhenTheMoveLandsAfterItWasListed(
+        int extraChunks)
+    {
+        fixture.SkipIfUnavailable();
+
+        // Arrange: a version moved to another container, the way a move does it, keeping its ID, as soon as the delete
+        // has listed it.
+        var (repository, _, _, containerName) = await NewRepositoriesAsync();
+        string destination = $"c-{Guid.NewGuid():N}";
+        await repository.AddResourceContainerAsync(new ResourceContainerInfo { Name = destination });
+        await AddAsync(repository, containerName, "a", "v1");
+        await AddChunksAsync(containerName, "a", extraChunks);
+        int chunks = await CountChunksAsync(containerName, "a");
+        var deleting = new ResourceSqlRepository(new PooledDbContextFactory<ResourceDbContext>(
+            new DbContextOptionsBuilder<ResourceDbContext>().UseSqlServer(fixture.ConnectionString)
+                .AddInterceptors(new MoveAfterListingInterceptor(fixture, containerName, destination)).Options));
+
+        // Act
+        await deleting.DeleteResourceContainerAsync(containerName);
+
+        // Assert
+        Assert.Null(await repository.GetResourceContainerInfoAsync(containerName));
+        Assert.Equal(["moved"], (await repository.GetAllResourceInfoAsync(destination)).Select(r => r.Name));
+        Assert.Equal(chunks, await CountChunksAsync(destination, "moved"));
+        await repository.DeleteResourceContainerAsync(destination);
+    }
+
+    /// <summary>Gives a version <paramref name="count"/> more one-byte chunks, written set-based.</summary>
+    private async Task AddChunksAsync(string containerName, string resourceName, int count)
+    {
+        await using SqlConnection connection = await fixture.OpenConnectionAsync();
+        await using SqlCommand command = connection.CreateCommand();
+        command.CommandText = """
+            INSERT INTO [ResourceChunks] ([ResourceId], [Index], [Data])
+            SELECT r.[Id], n.[i] + 100, 0x00
+            FROM [Resources] r
+            CROSS JOIN (SELECT TOP (@count) ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) AS [i]
+                        FROM sys.all_objects a CROSS JOIN sys.all_objects b) n
+            WHERE r.[ContainerName] = @container AND r.[Name] = @name
+            """;
+        command.Parameters.AddWithValue("@count", count);
+        command.Parameters.AddWithValue("@container", containerName);
+        command.Parameters.AddWithValue("@name", resourceName);
+        await command.ExecuteNonQueryAsync();
+    }
+
+    private async Task<int> CountChunksAsync(string containerName, string resourceName)
+    {
+        await using SqlConnection connection = await fixture.OpenConnectionAsync();
+        await using SqlCommand command = connection.CreateCommand();
+        command.CommandText = "SELECT COUNT(*) FROM [ResourceChunks] c JOIN [Resources] r ON r.[Id] = c.[ResourceId] " +
+            "WHERE r.[ContainerName] = @container AND r.[Name] = @name";
+        command.Parameters.AddWithValue("@container", containerName);
+        command.Parameters.AddWithValue("@name", resourceName);
+        return (int)(await command.ExecuteScalarAsync())!;
+    }
+
+    /// <summary>
+    /// Moves every version in <paramref name="source"/> to <paramref name="destination"/> as "moved", once, as soon as
+    /// a delete batch has listed its candidates.
+    /// </summary>
+    private sealed class MoveAfterListingInterceptor(SqlServerFixture fixture, string source, string destination)
+        : DbCommandInterceptor
+    {
+        private bool _moved;
+
+        public override async ValueTask<DbDataReader> ReaderExecutedAsync(DbCommand command,
+            CommandExecutedEventData eventData, DbDataReader result, CancellationToken cancellationToken = default)
+        {
+            if (!_moved && command.CommandText.Contains("FROM [Resources]") && command.CommandText.Contains("ORDER BY"))
+            {
+                _moved = true;
+                await using SqlConnection connection = await fixture.OpenConnectionAsync();
+                await using SqlCommand move = connection.CreateCommand();
+                move.CommandText = "UPDATE [Resources] SET [ContainerName] = @destination, [Name] = 'moved' " +
+                    "WHERE [ContainerName] = @source";
+                move.Parameters.AddWithValue("@destination", destination);
+                move.Parameters.AddWithValue("@source", source);
+                await move.ExecuteNonQueryAsync(cancellationToken);
+            }
+            return result;
+        }
     }
 
     private static Task<WrittenContent> AddAsync(ResourceSqlRepository repository, string containerName, string name,

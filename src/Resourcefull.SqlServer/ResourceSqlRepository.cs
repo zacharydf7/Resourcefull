@@ -957,9 +957,44 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
                 chunks += candidate.Chunks;
             }
 
-            await DeleteLargeVersionsChunksAsync(attempt, candidates.Where(c => batch.Contains(c.Id)).Select(c => (c.Id, c.Chunks)), ct);
-            attempt.Resources.RemoveRange(await attempt.Resources.Where(r => batch.Contains(r.Id)).ToListAsync(ct));
-            await attempt.SaveChangesAsync(ct);
+            // A large version's chunks are deleted in statements of their own before its row. Its row is locked first,
+            // and checked to be still in this container, so a move can't take it elsewhere in between and leave it
+            // without its content; a smaller version's row and chunks go in one statement that checks the container.
+            var deleting = new List<(long Id, int Chunks)>();
+            foreach (var candidate in candidates.Where(c => batch.Contains(c.Id)))
+            {
+                if (candidate.Chunks > ChunksPerDeleteStatement && attempt.Database.IsRelational()
+                    && (await attempt.Database.SqlQuery<int>($"""
+                        SELECT 1 AS [Value] FROM [Resources] WITH (UPDLOCK, ROWLOCK)
+                        WHERE [Id] = {candidate.Id} AND [ContainerName] = {resourceContainerName}
+                        """).ToListAsync(ct)).Count == 0)
+                    continue;
+                deleting.Add((candidate.Id, candidate.Chunks));
+            }
+
+            await DeleteLargeVersionsChunksAsync(attempt, deleting, ct);
+            if (attempt.Database.IsRelational())
+            {
+                // A statement per version, in one round trip, rather than loading and tracking each to delete it: SQL
+                // Server removes each version's chunks through the cascade with a seek. One statement for the whole
+                // batch would instead cascade with a scan of the chunk table, which locks all of it. Each also matches
+                // the container, so a version a move took to another container since it was listed stays there.
+                var sql = new StringBuilder();
+                var parameters = new object[batch.Count + 1];
+                parameters[0] = new SqlParameter("@container", resourceContainerName);
+                for (int i = 0; i < batch.Count; i++)
+                {
+                    sql.Append($"DELETE FROM [Resources] WHERE [Id] = @id{i} AND [ContainerName] = @container;");
+                    parameters[i + 1] = new SqlParameter($"@id{i}", batch[i]);
+                }
+                await attempt.Database.ExecuteSqlRawAsync(sql.ToString(), parameters, ct);
+            }
+            else
+            {
+                // The in-memory provider the unit tests use runs no SQL.
+                attempt.Resources.RemoveRange(await attempt.Resources.Where(r => batch.Contains(r.Id)).ToListAsync(ct));
+                await attempt.SaveChangesAsync(ct);
+            }
             return batch.Count;
         }
 
