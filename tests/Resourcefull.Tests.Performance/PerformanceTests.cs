@@ -208,7 +208,7 @@ public sealed class PerformanceTests(SqlServerFixture fixture, ITestOutputHelper
     [SkippableFact]
     public async Task GetResourcesAsync_ShouldStayWithinItsBaseline_WhenTheContainerHoldsAHundredResources()
     {
-        IResourceContainerClient container = await NewContainerAsync();
+        IResourceContainerClient container = await NewContainerAsync(ownDatabase: "list");
         for (int i = 0; i < 100; i++) await container.UploadAsync($"r{i}", new GeneratedStream(1024));
 
         await MeasureAsync("list-100", 0, run: _ => container.GetResourcesAsync());
@@ -218,7 +218,7 @@ public sealed class PerformanceTests(SqlServerFixture fixture, ITestOutputHelper
     public async Task GetResourcePageAsync_ShouldStayWithinItsBaseline_WhenReadingAPageFromTheMiddleOfFiveHundredResources()
     {
         // A page should cost what its own rows cost, wherever it starts, rather than reading the container up to it.
-        IResourceContainerClient container = await NewContainerAsync();
+        IResourceContainerClient container = await NewContainerAsync(ownDatabase: "page");
         for (int i = 0; i < 500; i++) await container.UploadAsync($"r{i:D3}", new GeneratedStream(16));
         var options = new ResourceListOptions { PageSize = 100 };
         string? middle = null;
@@ -230,7 +230,7 @@ public sealed class PerformanceTests(SqlServerFixture fixture, ITestOutputHelper
     [SkippableFact]
     public async Task GetResourceVersionsAsync_ShouldStayWithinItsBaseline_WhenTheResourceHasTwentyVersions()
     {
-        IResourceContainerClient container = await NewContainerAsync();
+        IResourceContainerClient container = await NewContainerAsync(ownDatabase: "versions");
         for (int i = 0; i < 20; i++) await container.UploadAsync("r", new GeneratedStream(1024));
 
         await MeasureAsync("versions-20", 0, run: _ => container.GetResourceVersionsAsync("r"));
@@ -277,7 +277,8 @@ public sealed class PerformanceTests(SqlServerFixture fixture, ITestOutputHelper
 
     /// <summary>
     /// A new container, in the shared database, or in a database of the scenario's own, named for
-    /// <paramref name="ownDatabase"/>, which it creates and migrates.
+    /// <paramref name="ownDatabase"/>, which it creates and migrates. A scenario that reads a range of rows has its own,
+    /// so how its rows lie on pages doesn't depend on what the scenarios before it stored, nor theirs on what it stores.
     /// </summary>
     private async Task<IResourceContainerClient> NewContainerAsync(string? ownDatabase = null)
     {
