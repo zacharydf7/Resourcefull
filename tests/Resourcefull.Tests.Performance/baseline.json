@@ -17,6 +17,24 @@
     "Seconds": 0.1485,
     "ContentBytes": 0
   },
+  "delete-20-versions-1MiB": {
+    "RoundTrips": 15,
+    "LogicalReads": 3594,
+    "LogBytes": 22931046,
+    "AllocatedBytes": 1112992,
+    "RetainedBytes": 64,
+    "Seconds": 0.1041,
+    "ContentBytes": 0
+  },
+  "delete-container-16MiB": {
+    "RoundTrips": 19,
+    "LogicalReads": 2231,
+    "LogBytes": 18338611,
+    "AllocatedBytes": 1235232,
+    "RetainedBytes": 64,
+    "Seconds": 0.0818,
+    "ContentBytes": 0
+  },
   "download-16MiB": {
     "RoundTrips": 18,
     "LogicalReads": 4303,
@@ -71,6 +89,15 @@
     "Seconds": 0.0147,
     "ContentBytes": 1048576
   },
+  "expire-16-due-1MiB": {
+    "RoundTrips": 98,
+    "LogicalReads": 2694,
+    "LogBytes": 18377932,
+    "AllocatedBytes": 4780400,
+    "RetainedBytes": 0,
+    "Seconds": 0.1699,
+    "ContentBytes": 0
+  },
   "expire-nothing-due": {
     "RoundTrips": 1,
     "LogicalReads": 2,
@@ -80,6 +107,15 @@
     "Seconds": 0.0019,
     "ContentBytes": 0
   },
+  "export-16MiB": {
+    "RoundTrips": 26,
+    "LogicalReads": 4293,
+    "LogBytes": 2457,
+    "AllocatedBytes": 8385424,
+    "RetainedBytes": 216,
+    "Seconds": 0.0965,
+    "ContentBytes": 16777222
+  },
   "get-info": {
     "RoundTrips": 1,
     "LogicalReads": 3,
@@ -88,6 +124,15 @@
     "RetainedBytes": 0,
     "Seconds": 0.0018,
     "ContentBytes": 0
+  },
+  "import-16MiB": {
+    "RoundTrips": 49,
+    "LogicalReads": 3448,
+    "LogBytes": 18378752,
+    "AllocatedBytes": 6824816,
+    "RetainedBytes": 64,
+    "Seconds": 0.151,
+    "ContentBytes": 16777222
   },
   "list-100": {
     "RoundTrips": 1,
@@ -107,6 +152,33 @@
     "Seconds": 0.0021,
     "ContentBytes": 0
   },
+  "move-16MiB": {
+    "RoundTrips": 8,
+    "LogicalReads": 34,
+    "LogBytes": 4096,
+    "AllocatedBytes": 400016,
+    "RetainedBytes": 0,
+    "Seconds": 0.0059,
+    "ContentBytes": 0
+  },
+  "overwrite-16MiB": {
+    "RoundTrips": 30,
+    "LogicalReads": 5517,
+    "LogBytes": 36677222,
+    "AllocatedBytes": 2620248,
+    "RetainedBytes": 64,
+    "Seconds": 0.2316,
+    "ContentBytes": 16777216
+  },
+  "restore-16MiB": {
+    "RoundTrips": 13,
+    "LogicalReads": 10216,
+    "LogBytes": 18342707,
+    "AllocatedBytes": 755408,
+    "RetainedBytes": 1480,
+    "Seconds": 0.1226,
+    "ContentBytes": 16777216
+  },
   "upload-16MiB": {
     "RoundTrips": 24,
     "LogicalReads": 3389,
@@ -123,6 +195,15 @@
     "AllocatedBytes": 2307008,
     "RetainedBytes": 120,
     "Seconds": 0.1309,
+    "ContentBytes": 16777216
+  },
+  "upload-16MiB-with-limits": {
+    "RoundTrips": 25,
+    "LogicalReads": 3814,
+    "LogBytes": 18338611,
+    "AllocatedBytes": 2423536,
+    "RetainedBytes": 64,
+    "Seconds": 0.1395,
     "ContentBytes": 16777216
   },
   "upload-1MiB": {

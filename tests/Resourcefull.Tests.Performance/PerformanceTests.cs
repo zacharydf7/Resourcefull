@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Resourcefull.SqlServer;
 using Resourcefull.SqlServer.Utilities;
+using Resourcefull.Tests.Contract;
 using Resourcefull.Tests.Integration;
 using Xunit.Abstractions;
 
@@ -268,6 +269,146 @@ public sealed class PerformanceTests(SqlServerFixture fixture, ITestOutputHelper
     }
 
     [SkippableFact]
+    public async Task DeleteResourceIfExistsAsync_ShouldStayWithinItsBaseline_WhenDeletingANameWithTwentyVersions()
+    {
+        // The versions go in batches that each commit, oldest first.
+        IResourceContainerClient container = await NewContainerAsync();
+        for (int i = 0; i <= Repetitions; i++)
+        {
+            for (int version = 0; version < 20; version++)
+                await container.UploadAsync($"r{i}", new GeneratedStream(Mebibyte));
+        }
+
+        await MeasureAsync("delete-20-versions-1MiB", 0,
+            run: iteration => container.DeleteResourceIfExistsAsync($"r{iteration}"));
+    }
+
+    [SkippableFact]
+    public async Task UploadAsync_ShouldStayWithinItsBaseline_WhenReplacingSixteenMebibytesWithoutVersioning()
+    {
+        // Without versioning, the version replaced is deleted in the same upload: compare upload-16MiB and
+        // delete-16MiB.
+        IResourceContainerClient container = await NewContainerAsync(versioned: false);
+        long length = 16L * Mebibyte;
+        var overwrite = new ResourceUploadOptions { Overwrite = true };
+        await container.UploadAsync("r", new GeneratedStream(length));
+
+        await MeasureAsync("overwrite-16MiB", length,
+            run: _ => container.UploadAsync("r", new GeneratedStream(length), overwrite));
+    }
+
+    [SkippableFact]
+    public async Task UploadAsync_ShouldStayWithinItsBaseline_WhenTheContainerHasLimits()
+    {
+        // What checking a container's limits adds to an upload: compare upload-16MiB.
+        var limits = new ResourceContainerPolicy
+        {
+            MaxResourceSize = ResourceSize.Megabytes(64),
+            MaxContainerSize = ResourceSize.Gigabytes(1),
+            MaxResourceCount = 1_000
+        };
+        IResourceContainerClient container =
+            await NewContainerAsync(configure: options => options.UseContainerPolicies(limits));
+        long length = 16L * Mebibyte;
+
+        await MeasureAsync("upload-16MiB-with-limits", length,
+            run: iteration => container.UploadAsync($"r{iteration}", new GeneratedStream(length)));
+    }
+
+    [SkippableFact]
+    public async Task RestoreVersionAsync_ShouldStayWithinItsBaseline_WhenRestoringSixteenMebibytes()
+    {
+        // A restore copies the old version's chunks in the database: compare copy-16MiB.
+        IResourceContainerClient container = await NewContainerAsync();
+        long length = 16L * Mebibyte;
+        string first = (await container.UploadAsync("r", new GeneratedStream(length))).VersionId;
+        await container.UploadAsync("r", new GeneratedStream(1024));
+
+        await MeasureAsync("restore-16MiB", length, run: _ => container.RestoreVersionAsync("r", first));
+    }
+
+    [SkippableFact]
+    public async Task MoveResourceAsync_ShouldStayWithinItsBaseline_WhenMovingSixteenMebibytes()
+    {
+        // A move changes only the versions' name, whatever their size.
+        IResourceContainerClient container = await NewContainerAsync();
+        string containerName = container.ResourceContainerInfo.Name;
+        for (int i = 0; i <= Repetitions; i++) await container.UploadAsync($"r{i}", new GeneratedStream(16 * Mebibyte));
+
+        await MeasureAsync("move-16MiB", 0,
+            run: iteration => container.MoveResourceAsync($"r{iteration}", containerName, $"moved{iteration}"));
+    }
+
+    [SkippableFact]
+    public async Task ExportAndImport_ShouldStayWithinTheirBaselines_WhenTheContainerHoldsSixteenMebibytes()
+    {
+        // In a database of its own, since both list the container's rows. Each resource a byte longer than the last, so
+        // their contents differ: an export stores identical content once.
+        IResourceContainerClient container = await NewContainerAsync(ownDatabase: "export");
+        long length = 0;
+        for (int i = 0; i < 4; i++)
+        {
+            await container.UploadAsync($"r{i}", new GeneratedStream(4 * Mebibyte + i));
+            length += 4 * Mebibyte + i;
+        }
+        IResourceServiceClient service = _provider!.GetRequiredService<IResourceServiceClient>();
+        string name = container.ResourceContainerInfo.Name;
+        var export = new MemoryStream();
+        await service.ExportContainerAsync(name, export);
+
+        await MeasureAsync("export-16MiB", length,
+            run: _ => service.ExportContainerAsync(name, Stream.Null));
+        await MeasureAsync("import-16MiB", length, run: iteration =>
+        {
+            export.Position = 0;
+            return service.ImportContainerAsync($"{name}-imported{iteration}", export);
+        });
+    }
+
+    [SkippableFact]
+    public async Task DeleteResourceContainerIfExistsAsync_ShouldStayWithinItsBaseline_WhenTheContainerHoldsSixteenMebibytes()
+    {
+        // In a database of its own, since it lists the container's rows.
+        IResourceContainerClient first = await NewContainerAsync(ownDatabase: "containers");
+        IResourceServiceClient service = _provider!.GetRequiredService<IResourceServiceClient>();
+        var names = new List<string> { first.ResourceContainerInfo.Name };
+        for (int i = 1; i <= Repetitions; i++)
+            names.Add((await service.CreateResourceContainerAsync($"{names[0]}-{i}")).ResourceContainerInfo.Name);
+        foreach (string name in names)
+        {
+            IResourceContainerClient container = service.GetResourceContainerClient(name);
+            for (int i = 0; i < 4; i++) await container.UploadAsync($"r{i}", new GeneratedStream(4 * Mebibyte));
+        }
+
+        await MeasureAsync("delete-container-16MiB", 0,
+            run: iteration => service.DeleteResourceContainerIfExistsAsync(names[iteration]));
+    }
+
+    [SkippableFact]
+    public async Task DeleteExpiredAsync_ShouldStayWithinItsBaseline_WhenSixteenVersionsAreDue()
+    {
+        // Each repetition moves the clock an hour on, so the next group of 16 versions of 1 MiB becomes due. In a
+        // database of its own, since the sweep reads the index of versions that expire.
+        var clock = new ManualTimeProvider { Now = DateTimeOffset.UtcNow };
+        DateTimeOffset start = clock.Now;
+        IResourceContainerClient container = await NewContainerAsync(ownDatabase: "expiry-due",
+            configure: options => options.Services.AddSingleton<TimeProvider>(clock));
+        for (int group = 0; group <= Repetitions; group++)
+        {
+            var due = new ResourceUploadOptions { ExpiresAt = start.AddHours(group + 1) };
+            for (int i = 0; i < 16; i++)
+                await container.UploadAsync($"g{group}-r{i}", new GeneratedStream(Mebibyte), due);
+        }
+        IResourceServiceClient service = _provider!.GetRequiredService<IResourceServiceClient>();
+
+        await MeasureAsync("expire-16-due-1MiB", 0, run: iteration =>
+        {
+            clock.Now = start.AddHours(iteration + 1).AddSeconds(1);
+            return service.DeleteExpiredAsync();
+        });
+    }
+
+    [SkippableFact]
     public async Task UploadAsync_ShouldStayWithinItsBaseline_WhenEightClientsUploadDifferentNamesAtOnce()
     {
         IResourceContainerClient container = await NewContainerAsync();
@@ -302,13 +443,19 @@ public sealed class PerformanceTests(SqlServerFixture fixture, ITestOutputHelper
     /// <paramref name="ownDatabase"/>, which it creates and migrates. A scenario that reads a range of rows has its own,
     /// so how its rows lie on pages doesn't depend on what the scenarios before it stored, nor theirs on what it stores.
     /// </summary>
-    private async Task<IResourceContainerClient> NewContainerAsync(string? ownDatabase = null)
+    private async Task<IResourceContainerClient> NewContainerAsync(string? ownDatabase = null,
+        Action<ResourcefullOptionsBuilder>? configure = null, bool versioned = true)
     {
         fixture.SkipIfUnavailable();
 
         _connectionString = ownDatabase is null ? fixture.ConnectionString : fixture.AllocateDatabase(ownDatabase);
         var services = new ServiceCollection();
-        services.AddResourcefull(options => options.UseSqlServer(_connectionString).UseVersioning(maxVersions: 50));
+        services.AddResourcefull(options =>
+        {
+            options.UseSqlServer(_connectionString);
+            if (versioned) options.UseVersioning(maxVersions: 50);
+            configure?.Invoke(options);
+        });
         services.ConfigureDbContext<ResourceDbContext>(options => options.AddInterceptors(_activity));
         _provider = services.BuildServiceProvider();
         if (ownDatabase is not null) await _provider.MigrateResourcefullDatabaseAsync();
@@ -367,16 +514,17 @@ public sealed class PerformanceTests(SqlServerFixture fixture, ITestOutputHelper
     }
 
     /// <summary>
-    /// Waits until SQL Server's background ghost cleanup has removed the rows earlier scenarios deleted. It runs seconds
-    /// after a delete and logs as it goes, about 6 MB for 96 MiB of deleted content, which would otherwise count
-    /// against whichever scenario happens to be measured then. Scanning the pages also queues them for cleanup. A few
-    /// ghosts can linger; cleaning one logs about 360 bytes, so the few left log far less than the gate's slack.
+    /// Waits until SQL Server's background ghost cleanup has removed the rows deleted in the scenario's database, by
+    /// earlier scenarios or by this one's warm-up. It runs seconds after a delete and logs as it goes, about 6 MB for
+    /// 96 MiB of deleted content, which would otherwise count against whichever scenario happens to be measured then.
+    /// Scanning the pages also queues them for cleanup. A few ghosts can linger; cleaning one logs about 360 bytes, so
+    /// the few left log far less than the gate's slack.
     /// </summary>
     private async Task WaitForGhostCleanupAsync()
     {
         const long LingeringGhosts = 64;
         var waited = Stopwatch.StartNew();
-        await using SqlConnection connection = await fixture.OpenConnectionAsync();
+        await using SqlConnection connection = await OpenScenarioDatabaseAsync();
         await using SqlCommand command = connection.CreateCommand();
         command.CommandText = "SELECT ISNULL(SUM([ghost_record_count]), 0) FROM sys.dm_db_index_physical_stats(DB_ID(), " +
             "OBJECT_ID('ResourceChunks'), NULL, NULL, 'DETAILED');";

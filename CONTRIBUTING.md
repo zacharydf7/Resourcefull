@@ -37,11 +37,11 @@ every push and pull request.
 
 ### Performance tests
 
-`tests/Resourcefull.Tests.Performance` measures uploads, downloads, listings and deletes through the public clients
-against SQL Server: the round trips each makes (commands, savepoints, and beginning and committing transactions), the
-logical reads they cost, the bytes it writes to the transaction log, the bytes it allocates, the memory it still holds
-once it's done (after collecting the heap, so garbage doesn't count), and how long it takes. It needs SQL Server like
-the integration tests:
+`tests/Resourcefull.Tests.Performance` measures uploads, downloads, listings, deletes, copies, moves, restores,
+exports, imports and expiry sweeps through the public clients against SQL Server: the round trips each makes
+(commands, savepoints, and beginning and committing transactions), the logical reads they cost, the bytes it writes to
+the transaction log, the bytes it allocates, the memory it still holds once it's done (after collecting the heap, so
+garbage doesn't count), and how long it takes. It needs SQL Server like the integration tests:
 
 ```shell
 dotnet test tests/Resourcefull.Tests.Performance -c Release --logger "console;verbosity=detailed"
