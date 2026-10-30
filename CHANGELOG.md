@@ -88,8 +88,9 @@
   take a version ID no longer needs `!`. Only the annotation changed: code that checked it for `null` still compiles.
   A provider must set it on every `ResourceInfo` it returns; one that assigns it from a nullable value now gets a
   nullable warning.
-- **Deleting a large container on SQL Server is cheaper:** each batch deletes its versions in one round trip without
-  loading them first, which halves what the application allocates and cuts round trips by about 40%.
+- **Deleting a large container on SQL Server is faster:** each batch deletes its versions in one round trip without
+  loading them first. A container of a million files deletes in about a third less time, with about 40% fewer round
+  trips and allocations.
 - **SQL Server stores content in about 11% less space.** New content goes in 40,200-byte chunks, which fill SQL
   Server's pages exactly; the 65,535-byte chunks of earlier releases also took a page of pointers each. Content already
   stored keeps its chunks and stays readable. Uploads also allocate about half the memory they did. See
