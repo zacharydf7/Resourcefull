@@ -58,8 +58,12 @@ stop people opening a file through links you've already given out:
 
 - **Keep expiry times short.** A link that expires in an hour can only leak for an hour. This is the main protection,
   so pick the shortest time that works for the people you share with.
-- **Delete or move the file.** Links to it stop working. A link that shows one version also stops when that version is
-  deleted, so restoring an older version or uploading a new one doesn't revive it.
+- **Delete or move the file.** Links to it stop working, with two exceptions to keep in mind. A link made with
+  `FollowCurrent` shows whatever is current under the name, so if a file is later uploaded under the same name, the
+  old link shows the new file. And a link that shows one version works again if that version comes back with its ID:
+  when the container is [imported](backup-and-move.md) under its original name, or the file is moved away and back.
+  Restoring an older version or uploading a new one doesn't revive a link to a deleted version, because those make
+  new versions.
 - **Throw away the keys, as a last resort.** Revoking your application's Data Protection keys makes every link ever
   created stop working at once. The same keys usually protect your sign-in cookies too, so this also signs everyone
   out. See Microsoft's guide to [key management](https://learn.microsoft.com/aspnet/core/security/data-protection/implementation/key-management), which covers revoking keys.
@@ -72,7 +76,7 @@ which file and version a token is for, so you can look it up.
 
 `IResourceLinkSigner.Check(token)` tells you whether a token is valid, expired or invalid, and for a valid or expired
 one, which file, version and expiry it carries. Use it to record which links are opened, to keep your own list of
-cancelled links, or to serve links some other way:
+canceled links, or to serve links some other way:
 
 ```csharp
 ResourceLinkCheck check = links.Check(token);

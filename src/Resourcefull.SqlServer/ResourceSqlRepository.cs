@@ -784,7 +784,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
 
         // Each batch commits on its own, so no single transaction holds the whole container's content. A batch takes
         // whole resources, each with its chunks, so a reader never sees part of one, until it reaches the chunk budget.
-        // Each pass removes only what earlier passes left, so a delete that is cancelled or fails partway is finished
+        // Each pass removes only what earlier passes left, so a delete that is canceled or fails partway is finished
         // by calling it again.
         while (true)
         {

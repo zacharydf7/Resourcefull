@@ -7,7 +7,7 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : I
     private readonly TimeProvider _clock = timeProvider ?? TimeProvider.System;
 
     // One gate guards all state, so every read sees a consistent snapshot and every change is atomic. It is a
-    // semaphore so that waiting for it can be cancelled; uploads buffer their content first, so it is never held
+    // semaphore so that waiting for it can be canceled; uploads buffer their content first, so it is never held
     // across I/O.
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly Dictionary<string, InMemoryResourceContainer> _containers = new(StringComparer.Ordinal);

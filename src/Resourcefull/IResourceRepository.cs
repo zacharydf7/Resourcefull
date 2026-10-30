@@ -25,7 +25,7 @@ namespace Resourcefull;
 /// <item>Store the <see cref="WrittenContent.ContentLength"/>, <see cref="WrittenContent.ContentHash"/> and
 /// <see cref="WrittenContent.LastModified"/> that <see cref="AddResourceAsync(string, ResourceInfo, Stream, bool, CancellationToken)"/> returns with the version, and return
 /// them on every read.</item>
-/// <item>Observe every <c>cancellationToken</c>: a cancelled operation throws <see cref="OperationCanceledException"/>
+/// <item>Observe every <c>cancellationToken</c>: a canceled operation throws <see cref="OperationCanceledException"/>
 /// and never reports success or a partial result.</item>
 /// <item>Be safe to call concurrently for the lifetime it is registered with.</item>
 /// </list>
@@ -46,7 +46,7 @@ public interface IResourceRepository
     /// when the stream can seek, and must not otherwise move it.
     /// </param>
     /// <param name="createOnly">Store only if no version of the name exists.</param>
-    /// <param name="cancellationToken">Cancels the write; a cancelled write stores nothing.</param>
+    /// <param name="cancellationToken">Cancels the write; a canceled write stores nothing.</param>
     /// <returns>
     /// The length and hash of what was stored, measured by reading <paramref name="stream"/> through a
     /// <see cref="HashingStream"/>; the measured length, not <see cref="ResourceInfo.ContentLength"/>, is stored. Also
@@ -62,7 +62,7 @@ public interface IResourceRepository
     /// <paramref name="createOnly"/> is set and the name already exists, or the name already has a version with this
     /// <see cref="ResourceInfo.VersionId"/>.
     /// </exception>
-    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was cancelled; nothing was stored.</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled; nothing was stored.</exception>
     Task<WrittenContent> AddResourceAsync(string resourceContainerName, ResourceInfo resourceInfo, Stream stream, bool createOnly = false, CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -77,7 +77,7 @@ public interface IResourceRepository
     /// <param name="resourceInfo">The version to store.</param>
     /// <param name="stream">The content, as for the other overload.</param>
     /// <param name="condition">What the name must be like for the version to be stored.</param>
-    /// <param name="cancellationToken">Cancels the write; a cancelled write stores nothing.</param>
+    /// <param name="cancellationToken">Cancels the write; a canceled write stores nothing.</param>
     /// <returns>As for the other overload.</returns>
     /// <exception cref="ResourcePreconditionFailedException">
     /// The name's current version doesn't meet <see cref="ResourceWriteCondition.Conditions"/>; nothing was stored.
@@ -202,7 +202,7 @@ public interface IResourceRepository
     /// <param name="resourceName">The resource's name.</param>
     /// <param name="versionId">The version to delete, or <see langword="null"/> for every version.</param>
     /// <param name="conditions">What the name's current version must be like.</param>
-    /// <param name="cancellationToken">Cancels the delete; a cancelled delete deletes nothing.</param>
+    /// <param name="cancellationToken">Cancels the delete; a canceled delete deletes nothing.</param>
     /// <returns>As for the other overload.</returns>
     /// <exception cref="ResourcePreconditionFailedException">
     /// The name's current version doesn't meet <paramref name="conditions"/>, or the name doesn't exist; nothing was deleted.
@@ -238,7 +238,7 @@ public interface IResourceRepository
 
     /// <summary>
     /// Deletes a container and every resource and version in it. A provider may do this in several steps for a large
-    /// container: if it is cancelled or fails partway, every version it hasn't deleted must still be whole, each
+    /// container: if it is canceled or fails partway, every version it hasn't deleted must still be whole, each
     /// remaining name must still have exactly one current version, and calling it again must finish the job.
     /// </summary>
     /// <returns><see langword="true"/> if the container existed and was deleted; otherwise <see langword="false"/>.</returns>

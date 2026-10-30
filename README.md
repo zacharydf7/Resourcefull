@@ -20,6 +20,18 @@ memory for tests, or in a storage provider of your own.
 - **Safe under concurrency:** each name always has exactly one current version, and create-only uploads can't
   overwrite each other.
 - **Your own storage:** implement `IResourceRepository` and register it with `UseProvider`.
+- **Made for ASP.NET Core:** serve downloads with ETags and conditional requests, accept uploads with preconditions,
+  and turn exceptions into the right status codes.
+
+Coming in 3.2, and documented on the site already:
+
+- **Container policies:** size limits, quotas, allowed file types and read-only containers, per container.
+- **Copy, move and rename,** within a container or between containers, keeping where each copy came from.
+- **Expiring files:** uploads that delete themselves, with a hook to audit every deletion.
+- **Signed links:** let anyone download one file, without signing in, until a time you choose.
+- **Backups:** export a container, every version, to a zip file, and import it into another store.
+- **Range downloads:** read part of a file, so videos can seek and downloads can resume.
+- **Health checks and telemetry:** OpenTelemetry spans and metrics for every operation.
 
 ## Quick start
 
@@ -28,7 +40,9 @@ dotnet add package Resourcefull
 dotnet add package Resourcefull.SqlServer   # or Resourcefull.InMemory
 ```
 
-Register Resourcefull with a provider, and provision the database:
+Register Resourcefull with a provider, and provision the database (here at startup, which suits a single instance;
+see the [SQL Server docs](https://zacharydf7.github.io/Resourcefull/docs/providers/sql-server.html) for deployment
+steps):
 
 ```csharp
 builder.Services.AddResourcefull(options => options

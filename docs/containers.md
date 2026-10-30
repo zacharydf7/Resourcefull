@@ -21,7 +21,7 @@ IResourceContainerClient invoices = await resources.CreateResourceContainerAsync
 Reads from a missing container return `null` or an empty list. An upload into one throws
 `ResourceContainerNotFoundException`, even when the container was deleted a moment before the upload ran.
 
-Deleting a large SQL Server container happens in batches that commit one at a time. If the delete is cancelled or
+Deleting a large SQL Server container happens in batches that commit one at a time. If the delete is canceled or
 fails partway, the versions it reached are gone, every other version is still whole, and each remaining name still has
 a current version. The container still exists, so call the delete again to finish.
 

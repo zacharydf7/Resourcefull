@@ -43,15 +43,31 @@ client has to send it again.
 Take an `IFormFile`. ASP.NET Core buffers form files, to disk above 64 KB, before your endpoint runs:
 
 ```csharp
+builder.Services.AddAntiforgery();
+// ...
+app.UseAntiforgery();
+
 app.MapPost("/files/{container}", async (string container, IFormFile file, IResourceServiceClient resources,
     CancellationToken cancellationToken) =>
 {
+    // A name your application chooses: the browser's file name is whatever the uploader says.
+    string name = $"uploads/{Guid.NewGuid():N}{Path.GetExtension(file.FileName)}";
     await using Stream content = file.OpenReadStream();
-    ResourceInfo stored = await resources.GetResourceContainerClient(container).UploadAsync(file.FileName, content,
-        new ResourceUploadOptions { Headers = new ResourceHeaders(file.ContentType, file.Length) }, cancellationToken);
+    ResourceInfo stored = await resources.GetResourceContainerClient(container).UploadAsync(name, content,
+        new ResourceUploadOptions
+        {
+            Headers = new ResourceHeaders(file.ContentType, file.Length),
+            Metadata = new Dictionary<string, string> { ["fileName"] = file.FileName }
+        }, cancellationToken);
     return Results.Created(stored.Uri, stored);
-}).DisableAntiforgery(); // or validate the form's antiforgery token
+});
 ```
+
+Minimal APIs check the form's antiforgery token for every endpoint that takes a form file, once `UseAntiforgery` is
+in the pipeline, so a page on another site can't make a signed-in user's browser upload for it. Render the token in
+your form with `@Html.AntiForgeryToken()` or `<AntiforgeryToken />`. Keep the browser's file name as metadata if you
+want to show it, but don't use it as the resource name: it can be anything, including a name that overwrites another
+file.
 
 A form file's stream can seek, so with SQL Server a transient failure partway through retries the upload.
 

@@ -43,6 +43,19 @@ application has logging set up, so one that keeps failing doesn't go unnoticed.
 To record the versions that pruning deletes, such as for an audit, register a
 [cleanup handler](expiry.md#auditing-whats-deleted) <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span>.
 
+## Changing the setting
+
+Versioning is a setting of each application, not something stored with the files. Every application that writes to
+the same store applies its own setting to the names it uploads:
+
+- **An application without `UseVersioning` keeps one version per name,** so its next upload of a name deletes every
+  older version of that name.
+- **Lowering `maxVersions`** deletes each name's extra versions the next time that name is uploaded, not straight away.
+
+So give every application that shares a store, workers and scheduled jobs included, the same `UseVersioning` setting.
+To turn versioning off for good, expect each name's history to go at its next upload; a
+[cleanup handler](expiry.md#auditing-whats-deleted) <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span> hears about every version deleted that way.
+
 ## Restoring
 
 `RestoreVersionAsync` copies an older version into a new current version. The older version stays where it is, so

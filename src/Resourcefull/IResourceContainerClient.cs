@@ -12,7 +12,7 @@ namespace Resourcefull;
 /// </summary>
 /// <remarks>
 /// Every operation has an overload that takes a <see cref="CancellationToken"/> as its last parameter. A
-/// cancelled operation throws <see cref="OperationCanceledException"/> and never returns a result, so a
+/// canceled operation throws <see cref="OperationCanceledException"/> and never returns a result, so a
 /// caller that cancels can trust that nothing it did not see was reported as done.
 /// </remarks>
 public interface IResourceContainerClient : IDisposable
@@ -60,11 +60,12 @@ public interface IResourceContainerClient : IDisposable
     /// <exception cref="NotSupportedException">
     /// <see cref="ResourceUploadOptions.Conditions"/> is set and the storage provider doesn't support conditional uploads.
     /// </exception>
+    /// <exception cref="ResourcePolicyViolationException">The container's policy refuses the upload; nothing was stored.</exception>
     public Task<ResourceInfo> UploadAsync(string resourceName, Stream content, ResourceUploadOptions? uploadOptions = null);
 
     /// <inheritdoc cref="UploadAsync(string, Stream, ResourceUploadOptions?)"/>
-    /// <param name="cancellationToken">Cancels the upload. A cancelled upload stores nothing.</param>
-    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was cancelled.</exception>
+    /// <param name="cancellationToken">Cancels the upload. A canceled upload stores nothing.</param>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
     public Task<ResourceInfo> UploadAsync(string resourceName, Stream content, ResourceUploadOptions? uploadOptions, CancellationToken cancellationToken);
 
     /// <summary>
@@ -75,8 +76,8 @@ public interface IResourceContainerClient : IDisposable
     public Task<ResourceInfo> UploadAsync(string resourceName, BinaryData content, ResourceUploadOptions? uploadOptions = null);
 
     /// <inheritdoc cref="UploadAsync(string, BinaryData, ResourceUploadOptions?)"/>
-    /// <param name="cancellationToken">Cancels the upload. A cancelled upload stores nothing.</param>
-    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was cancelled.</exception>
+    /// <param name="cancellationToken">Cancels the upload. A canceled upload stores nothing.</param>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
     public Task<ResourceInfo> UploadAsync(string resourceName, BinaryData content, ResourceUploadOptions? uploadOptions, CancellationToken cancellationToken);
 
     /// <summary>
@@ -87,11 +88,12 @@ public interface IResourceContainerClient : IDisposable
     /// <returns>The <see cref="ResourceInfo"/> for the newly created version, or <see langword="null"/> if the resource or version does not exist.</returns>
     /// <exception cref="InvalidOperationException">Versioning is not enabled.</exception>
     /// <exception cref="ArgumentException"><paramref name="resourceName"/> is null, empty, longer than 256 characters, or starts or ends with whitespace (<see cref="ArgumentNullException"/> when null); or <paramref name="versionId"/> is null or empty.</exception>
+    /// <exception cref="ResourcePolicyViolationException">The container's policy refuses the restored version; nothing was stored.</exception>
     public Task<ResourceInfo?> RestoreVersionAsync(string resourceName, string versionId);
 
     /// <inheritdoc cref="RestoreVersionAsync(string, string)"/>
-    /// <param name="cancellationToken">Cancels the restore. A cancelled restore creates no version.</param>
-    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was cancelled.</exception>
+    /// <param name="cancellationToken">Cancels the restore. A canceled restore creates no version.</param>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
     public Task<ResourceInfo?> RestoreVersionAsync(string resourceName, string versionId, CancellationToken cancellationToken);
 
     /// <summary>
@@ -106,7 +108,7 @@ public interface IResourceContainerClient : IDisposable
 
     /// <inheritdoc cref="DownloadStreamingAsync(string, string?)"/>
     /// <param name="cancellationToken">Cancels locating the resource. Pass a token to the returned stream's read methods to cancel the download itself.</param>
-    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was cancelled.</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
     public Task<ResourceDownloadResult?> DownloadStreamingAsync(string resourceName, string? versionId, CancellationToken cancellationToken);
 
     /// <summary>
@@ -128,7 +130,7 @@ public interface IResourceContainerClient : IDisposable
     /// </returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="range"/> has a negative offset or length, or starts past the end of the content.</exception>
     /// <exception cref="ArgumentException"><paramref name="resourceName"/> is null, empty, longer than 256 characters, or starts or ends with whitespace (<see cref="ArgumentNullException"/> when null).</exception>
-    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was cancelled.</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
     /// <exception cref="NotSupportedException">
     /// This default implementation, kept so implementations written for 3.1 still compile, doesn't download ranges.
     /// </exception>
@@ -147,7 +149,7 @@ public interface IResourceContainerClient : IDisposable
 
     /// <inheritdoc cref="DownloadContentAsync(string, string?)"/>
     /// <param name="cancellationToken">Cancels the download.</param>
-    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was cancelled.</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
     public Task<ResourceContent?> DownloadContentAsync(string resourceName, string? versionId, CancellationToken cancellationToken);
 
     /// <summary>
@@ -161,7 +163,7 @@ public interface IResourceContainerClient : IDisposable
 
     /// <inheritdoc cref="GetResourceInfoAsync(string, string?)"/>
     /// <param name="cancellationToken">Cancels the lookup.</param>
-    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was cancelled.</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
     public Task<ResourceInfo?> GetResourceInfoAsync(string resourceName, string? versionId, CancellationToken cancellationToken);
 
     /// <summary>
@@ -172,7 +174,7 @@ public interface IResourceContainerClient : IDisposable
 
     /// <inheritdoc cref="GetResourcesAsync()"/>
     /// <param name="cancellationToken">Cancels the listing.</param>
-    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was cancelled.</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
     public Task<IReadOnlyList<ResourceInfo>> GetResourcesAsync(CancellationToken cancellationToken);
 
     /// <summary>
@@ -184,7 +186,7 @@ public interface IResourceContainerClient : IDisposable
     /// <param name="cancellationToken">Cancels the listing.</param>
     /// <returns>The resources, ordered by name.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><see cref="ResourceListOptions.PageSize"/> is outside 1 to <see cref="ResourceListOptions.MaxPageSize"/>.</exception>
-    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was cancelled.</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
     /// <remarks>
     /// The default implementation, kept so implementations written for 3.0 still compile, fetches the pages through
     /// <see cref="GetResourcePageAsync"/>.
@@ -216,7 +218,7 @@ public interface IResourceContainerClient : IDisposable
     /// <returns>The page, and the token for the next one if there is one.</returns>
     /// <exception cref="ArgumentException"><paramref name="continuationToken"/> is malformed or comes from a listing of another prefix.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><see cref="ResourceListOptions.PageSize"/> is outside 1 to <see cref="ResourceListOptions.MaxPageSize"/>.</exception>
-    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was cancelled.</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
     /// <exception cref="NotSupportedException">
     /// This default implementation, kept so implementations written for 3.0 still compile, doesn't list by page.
     /// </exception>
@@ -236,7 +238,7 @@ public interface IResourceContainerClient : IDisposable
 
     /// <inheritdoc cref="GetResourceVersionsAsync(string)"/>
     /// <param name="cancellationToken">Cancels the listing.</param>
-    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was cancelled.</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
     public Task<IReadOnlyList<ResourceInfo>> GetResourceVersionsAsync(string resourceName, CancellationToken cancellationToken);
 
     /// <summary>
@@ -249,11 +251,12 @@ public interface IResourceContainerClient : IDisposable
     /// </param>
     /// <returns><see langword="true"/> if anything was deleted; otherwise <see langword="false"/>.</returns>
     /// <exception cref="ArgumentException"><paramref name="resourceName"/> is null, empty, longer than 256 characters, or starts or ends with whitespace (<see cref="ArgumentNullException"/> when null).</exception>
+    /// <exception cref="ResourcePolicyViolationException">The container is read-only; nothing was deleted.</exception>
     public Task<bool> DeleteResourceIfExistsAsync(string resourceName, string? versionId = null);
 
     /// <inheritdoc cref="DeleteResourceIfExistsAsync(string, string?)"/>
     /// <param name="cancellationToken">Cancels the delete.</param>
-    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was cancelled.</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
     public Task<bool> DeleteResourceIfExistsAsync(string resourceName, string? versionId, CancellationToken cancellationToken);
 
     /// <summary>
@@ -271,7 +274,7 @@ public interface IResourceContainerClient : IDisposable
     /// The name's current version doesn't meet <paramref name="conditions"/>, or the name doesn't exist; nothing was deleted.
     /// </exception>
     /// <exception cref="ArgumentException"><paramref name="resourceName"/> is null, empty, longer than 256 characters, or starts or ends with whitespace (<see cref="ArgumentNullException"/> when null).</exception>
-    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was cancelled.</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
     /// <exception cref="NotSupportedException">
     /// The implementation doesn't support conditions: this default implementation, kept so implementations written for
     /// 3.0 still compile, supports only <see langword="null"/> or empty <paramref name="conditions"/>.
@@ -293,7 +296,7 @@ public interface IResourceContainerClient : IDisposable
 
     /// <inheritdoc cref="ExistsAsync(string, string?)"/>
     /// <param name="cancellationToken">Cancels the check.</param>
-    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was cancelled.</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
     public Task<bool> ExistsAsync(string resourceName, string? versionId, CancellationToken cancellationToken);
 
     /// <summary>

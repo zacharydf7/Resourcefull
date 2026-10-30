@@ -73,7 +73,7 @@ but if yours relies on read-committed blocking, give Resourcefull a database of 
 ## Retries
 
 `UseSqlServer` turns on EF Core's retry policy for SQL Server's transient errors, including deadlocks (error 1205): up
-to 5 retries, at most 10 seconds apart. It stops once the operation's cancellation token is cancelled.
+to 5 retries, at most 10 seconds apart. It stops once the operation's cancellation token is canceled.
 
 An upload is retried as a whole, from its first byte. That's possible only when its stream can seek; an upload from a
 stream that can't, such as an HTTP request body, fails instead once its content has started, and stores nothing.

@@ -59,7 +59,13 @@ imports fail with a provider written for 3.1; exports work with any provider, be
 `GetExpiredAsync`, `DeleteExpiredVersionAsync` and `SetExpiryAsync` were added in 3.2, and `AddResourceAsync` and
 `CopyResourceAsync` should store `ResourceInfo.ExpiresAt` with the version and return it on every read. Their default
 implementations throw `NotSupportedException`, so [expiry](../expiry.md) logs a warning and stops with a provider
-written for 3.1. To support it:
+written for 3.1.
+
+A provider written for 3.1 doesn't refuse an expiry, though: `AddResourceAsync` stores the upload and drops
+`ExpiresAt`, and the clients can't tell, so the upload's result reports an expiry that will never happen. The same
+goes for `CopiedFrom` on copies and restores, which is lost. Store both before anyone uses expiry with your provider.
+
+To support it:
 
 - **List expired versions from an index, a batch at a time.** Expiry calls `GetExpiredAsync` every interval on every
   instance, so it should cost little when nothing has expired. Order them by `ExpiresAt`, then ordinally by version

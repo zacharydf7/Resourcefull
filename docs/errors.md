@@ -6,18 +6,25 @@ Resourcefull reports an expected absence with a return value and everything else
 |---|---|
 | A single resource, version or container that doesn't exist | `null` |
 | A listing with nothing in it | an empty list, never `null` |
-| An existence check or a conditional delete | `bool` |
+| An existence check, or a delete of something that may not exist (`…IfExistsAsync`) | `bool` |
 | A `null` name, or a missing argument | `ArgumentNullException`, before storage is contacted |
 | A name that breaks the [name rules](names.md) | `ResourceNameException`, an `ArgumentException`, before storage is contacted |
 | Uploading a name that exists, when the upload is create-only | `ResourceConflictException` |
 | Creating a container that exists | `ResourceConflictException` |
 | Uploading into a container that doesn't exist | `ResourceContainerNotFoundException` |
-| An upload or delete whose `ResourceConditions` the current version doesn't meet | `ResourcePreconditionFailedException` (nothing changes) |
+| An upload or delete whose `ResourceConditions` the current version doesn't meet, including a delete with conditions of a name that doesn't exist | `ResourcePreconditionFailedException` (nothing changes) |
+| Moving a resource onto a name that exists, or importing into a container that exists <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span> | `ResourceConflictException` |
+| A download range that starts past the end of the content <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span> | `ArgumentOutOfRangeException` |
+| A version deleted while it's being downloaded, with SQL Server | `IOException` from the download stream, rather than a stream that ends early |
+| Importing a file that isn't an export, describes something that can't be imported, or whose content was changed <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span> | `InvalidDataException` (nothing is left behind) |
+| Importing from a stream that can't seek <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span> | `ArgumentException` |
+| An import that fails, and then fails to delete what it imported <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span> | `AggregateException`, holding both failures |
+| A feature the storage provider doesn't support, such as a provider written for an earlier release | `NotSupportedException` |
 | An upload whose declared length differs from its content | `ResourceContentLengthMismatchException` (nothing is stored) |
 | A write that breaks its container's [policy](container-policies.md) <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span> | `ResourcePolicyViolationException` (nothing changes) |
 | Restoring a version while versioning is off | `InvalidOperationException` |
 | Configuring no provider, or two | `InvalidOperationException` from `AddResourcefull` |
-| A cancelled operation | `OperationCanceledException` |
+| A canceled operation | `OperationCanceledException` |
 | A storage failure | the provider's exception, such as `SqlException`; with SQL Server, a transient failure that outlasts the retries throws EF Core's `RetryLimitExceededException`, with the last failure as its inner exception |
 
 ## Resourcefull's exceptions

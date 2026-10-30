@@ -79,6 +79,15 @@ builder.Services.AddResourcefull(options => options.UseSqlServer(connectionStrin
 - **Your own deletes aren't reported:** audit those where your code makes them.
 - **It's a scoped service,** so it can use your other services.
 
+## With a provider of your own
+
+Expiry needs a provider that stores each version's `ExpiresAt` and can list and delete expired versions. Both built-in
+providers do. With a [provider of your own](providers/writing-a-provider.md) written for 3.1 or earlier, the expiry
+service logs a warning that the provider doesn't support it and stops. More importantly, uploads with an expiry are
+still accepted, but the provider drops the expiry, so those versions are never deleted. Check that your provider stores
+`ExpiresAt` before relying on expiry, for example by uploading with an expiry and reading `ResourceInfo.ExpiresAt`
+back.
+
 ## Telemetry
 
 Each sweep that finds expired versions records an `expire` operation, with `resourcefull.expired` counting the ones

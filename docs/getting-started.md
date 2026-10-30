@@ -25,7 +25,7 @@ builder.Services.AddResourcefull(options => options.UseInMemory());
 ```
 
 For SQL Server, pass the connection string of the database that will hold Resourcefull's tables, and provision that
-database once, here at startup:
+database. Here it happens at startup, which suits a single instance:
 
 ```csharp
 using Resourcefull;
@@ -39,8 +39,9 @@ var app = builder.Build();
 await app.Services.MigrateResourcefullDatabaseAsync();
 ```
 
-[SQL Server](providers/sql-server.md) covers choosing the database and provisioning it from a deployment step
-instead. `UseVersioning` is optional; see [Versioning](versioning.md).
+With several instances, provision from a deployment step instead: the first provisioning turns on a database setting
+that briefly disconnects every other session. [SQL Server](providers/sql-server.md) covers both. `UseVersioning` is
+optional; see [Versioning](versioning.md), and give every application that shares the database the same setting.
 
 ## Store and read a file
 
@@ -95,7 +96,9 @@ using Resourcefull;
 using Resourcefull.SqlServer;
 
 HostApplicationBuilder builder = Host.CreateApplicationBuilder(args);
-builder.Services.AddResourcefull(options => options.UseSqlServer(builder.Configuration.GetConnectionString("Resources")!));
+builder.Services.AddResourcefull(options => options
+    .UseSqlServer(builder.Configuration.GetConnectionString("Resources")!)
+    .UseVersioning(maxVersions: 10)); // the same as every other application using this database
 using IHost host = builder.Build();
 await host.Services.MigrateResourcefullDatabaseAsync();
 

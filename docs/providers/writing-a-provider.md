@@ -44,12 +44,15 @@ The XML documentation on each member states its contract in full. In short, a pr
   passes. Take an optional `TimeProvider` in the constructor, so an application or a test can set the clock.
 - **Store the content hash** from `WrittenContent` with the version, and return it as `ResourceInfo.ContentHash` on
   every read.
+- **Store `ExpiresAt` and `CopiedFrom`** <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span> from the `ResourceInfo` that `AddResourceAsync` and `CopyResourceAsync`
+  are given, and return them on every read. Nothing checks that a provider does: one that ignores them still accepts
+  uploads with an expiry, and those versions never expire. See [Members added since 3.0](newer-members.md#expiry).
 - **Return content as a read-only, forward-only stream:** `CanSeek` and `CanWrite` are `false`, `Length` is the
   content's full length, `Position` counts the bytes read, and seeking, setting `Position`, writing and `SetLength`
   throw `NotSupportedException`.
 - **Store container metadata**, and return copies, so callers can't change what's stored. Storing `Uri` is optional:
   the clients replace it with the URI provider's whenever they return a container or version.
-- **Honor cancellation:** a cancelled operation throws `OperationCanceledException` and leaves nothing half-done. The
+- **Honor cancellation:** a canceled operation throws `OperationCanceledException` and leaves nothing half-done. The
   one exception is deleting a container, which may stop between whole versions, as long as each remaining name keeps a
   current version and calling it again finishes the job.
 - **Be safe to call concurrently** for the lifetime it registers with.

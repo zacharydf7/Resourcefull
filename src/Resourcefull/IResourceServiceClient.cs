@@ -10,7 +10,7 @@ namespace Resourcefull;
 /// </summary>
 /// <remarks>
 /// Every operation that contacts the store has an overload that takes a <see cref="CancellationToken"/> as
-/// its last parameter. A cancelled operation throws <see cref="OperationCanceledException"/> and never
+/// its last parameter. A canceled operation throws <see cref="OperationCanceledException"/> and never
 /// returns a result.
 /// </remarks>
 public interface IResourceServiceClient
@@ -36,8 +36,8 @@ public interface IResourceServiceClient
     public Task<IResourceContainerClient> CreateResourceContainerAsync(string resourceContainerName, IDictionary<string, string>? metadata = null);
 
     /// <inheritdoc cref="CreateResourceContainerAsync(string, IDictionary{string, string}?)"/>
-    /// <param name="cancellationToken">Cancels the operation. A cancelled create leaves no container.</param>
-    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was cancelled.</exception>
+    /// <param name="cancellationToken">Cancels the operation. A canceled create leaves no container.</param>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
     public Task<IResourceContainerClient> CreateResourceContainerAsync(string resourceContainerName, IDictionary<string, string>? metadata, CancellationToken cancellationToken);
 
     /// <summary>
@@ -51,7 +51,7 @@ public interface IResourceServiceClient
 
     /// <inheritdoc cref="CreateResourceContainerIfNotExistsAsync(string, IDictionary{string, string}?)"/>
     /// <param name="cancellationToken">Cancels the operation.</param>
-    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was cancelled.</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
     public Task<IResourceContainerClient> CreateResourceContainerIfNotExistsAsync(string resourceContainerName, IDictionary<string, string>? metadata, CancellationToken cancellationToken);
 
     /// <summary>
@@ -64,7 +64,7 @@ public interface IResourceServiceClient
 
     /// <inheritdoc cref="GetResourceContainerInfoAsync(string)"/>
     /// <param name="cancellationToken">Cancels the lookup.</param>
-    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was cancelled.</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
     public Task<ResourceContainerInfo?> GetResourceContainerInfoAsync(string resourceContainerName, CancellationToken cancellationToken);
 
     /// <summary>
@@ -75,7 +75,7 @@ public interface IResourceServiceClient
 
     /// <inheritdoc cref="GetResourceContainersAsync()"/>
     /// <param name="cancellationToken">Cancels the listing.</param>
-    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was cancelled.</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
     public Task<IReadOnlyList<ResourceContainerInfo>> GetResourceContainersAsync(CancellationToken cancellationToken);
 
     /// <summary>
@@ -87,22 +87,23 @@ public interface IResourceServiceClient
 
     /// <inheritdoc cref="ContainerExistsAsync(string)"/>
     /// <param name="cancellationToken">Cancels the check.</param>
-    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was cancelled.</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
     public Task<bool> ContainerExistsAsync(string resourceContainerName, CancellationToken cancellationToken);
 
     /// <summary>
     /// Deletes a container (and everything in it) if it exists. A large container may be deleted in several steps: if
-    /// the delete is cancelled or fails partway, every version it didn't reach is still whole, each remaining name still
+    /// the delete is canceled or fails partway, every version it didn't reach is still whole, each remaining name still
     /// has its current version, and the container still exists, so calling it again finishes the job.
     /// </summary>
     /// <param name="resourceContainerName">The name of the container to delete.</param>
     /// <returns><see langword="true"/> if a container was deleted; otherwise <see langword="false"/>.</returns>
     /// <exception cref="ArgumentException"><paramref name="resourceContainerName"/> is null, empty, longer than 128 characters, or starts or ends with whitespace (<see cref="ArgumentNullException"/> when null).</exception>
+    /// <exception cref="ResourcePolicyViolationException">The container is read-only; nothing was deleted.</exception>
     public Task<bool> DeleteResourceContainerIfExistsAsync(string resourceContainerName);
 
     /// <inheritdoc cref="DeleteResourceContainerIfExistsAsync(string)"/>
     /// <param name="cancellationToken">Cancels the delete.</param>
-    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was cancelled.</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
     public Task<bool> DeleteResourceContainerIfExistsAsync(string resourceContainerName, CancellationToken cancellationToken);
 
     /// <summary>

@@ -140,6 +140,7 @@ Three rules keep the scripts generated and safe to run again:
 
 For maintainers: set `<Version>` in `src/Directory.Build.props`, and turn the release's labels from upcoming to
 added: in `docs/`, `index.md` and `src/`, replace `Coming in 3.2` with `Added in 3.2` and `rf-upcoming` with
-`rf-added`, and remove the sidebar markers from `template/public/main.css`. Merge to `main`, then push a matching tag
+`rf-added`, remove the sidebar markers from `template/public/main.css`, and move the README's "Coming in" list into
+its features. Merge to `main`, then push a matching tag
 (`v3.0.0`). The publish workflow runs every test, checks that the tag matches the version, and publishes the packages
 that it tested to nuget.org.
