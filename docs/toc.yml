@@ -2,6 +2,8 @@
   items:
   - name: Introduction
     href: index.md
+  - name: When to use Resourcefull
+    href: when-to-use.md
   - name: Getting started
     href: getting-started.md
 - name: Working with files
