@@ -56,5 +56,6 @@ ResourceDownloadResult? download = await invoices.DownloadStreamingAsync("2026/1
   [writing a provider](providers/writing-a-provider.md) of your own.
 - **Looking something up?** The [API reference](../api/index.md) lists every public type and member, and
   [Errors](errors.md) lists what each operation returns or throws.
+- **What's new, and what's next?** See [Releases and roadmap](releases.md).
 
 Contributing to Resourcefull itself? See [CONTRIBUTING.md](../CONTRIBUTING.md).

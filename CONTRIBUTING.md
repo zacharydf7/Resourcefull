@@ -149,7 +149,8 @@ For maintainers:
    `docs/`, `index.md` and `src/`, replace `Coming in 3.2` with `Added in 3.2` and `rf-upcoming` with `rf-added`,
    remove the sidebar markers from `template/public/main.css`, and move the README's "Coming in" list into its
    features. In `CHANGELOG.md`, turn `[Unreleased]` into `[3.2.0] - <date>`, start a new `[Unreleased]` section, and
-   update the compare links at the bottom.
+   update the compare links at the bottom. In `docs/releases.md`, turn the "Coming in" section into the release's
+   own, and update "What's next".
 2. **Merge to `main`, then push the tag** (`v3.2.0`). The publish workflow runs every test, checks that the tag
    matches the version, publishes the packages it tested to nuget.org, and creates a GitHub Release from the
    version's changelog section.

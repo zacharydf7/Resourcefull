@@ -155,6 +155,7 @@ storage is down.</p>
 <ul>
 <li><a href="api/index.md">API reference</a></li>
 <li><a href="docs/errors.md">Errors</a> and <a href="CHANGELOG.md">changelog</a></li>
+<li><a href="docs/releases.md">Releases and roadmap</a></li>
 <li><a href="docs/upgrading.md">Upgrading and versions</a></li>
 </ul>
 </div>

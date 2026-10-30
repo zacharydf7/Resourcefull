@@ -94,6 +94,8 @@
     href: upgrading.md
   - name: Upgrading to 3.0
     href: upgrading-to-3.md
+  - name: Releases and roadmap
+    href: releases.md
   - name: Changelog
     href: ../CHANGELOG.md
   - name: Samples
