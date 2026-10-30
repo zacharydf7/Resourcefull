@@ -1,5 +1,7 @@
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.DependencyInjection;
+using Resourcefull.SqlServer;
+using Resourcefull.SqlServer.Utilities;
 
 namespace Resourcefull.Tests.Integration;
 
@@ -10,9 +12,6 @@ namespace Resourcefull.Tests.Integration;
 [Collection(SqlServerCollection.Name)]
 public class DeleteLockingIntegrationTests(SqlServerFixture fixture)
 {
-    // More chunks than one statement can lock before SQL Server escalates.
-    private const int Chunks = 6_000;
-
     private async Task<long> LockEscalationsAsync()
     {
         await using SqlConnection connection = await fixture.OpenConnectionAsync();
@@ -22,31 +21,43 @@ public class DeleteLockingIntegrationTests(SqlServerFixture fixture)
         return Convert.ToInt64(await command.ExecuteScalarAsync());
     }
 
-    /// <summary>Gives a name's current version <see cref="Chunks"/> more chunks of 8,000 bytes, written set-based.</summary>
-    private async Task InflateAsync(string containerName, string resourceName)
+    /// <summary>Gives a name's current version <paramref name="chunks"/> more chunks of <paramref name="bytes"/> each, written set-based.</summary>
+    private async Task InflateAsync(string containerName, string resourceName, int chunks, int bytes)
     {
         await using SqlConnection connection = await fixture.OpenConnectionAsync();
         await using SqlCommand command = connection.CreateCommand();
         command.CommandText = """
             INSERT INTO [ResourceChunks] ([ResourceId], [Index], [Data])
-            SELECT r.[Id], n.[i] + 100, CAST(REPLICATE(CAST('x' AS varchar(max)), 8000) AS varbinary(max))
+            SELECT r.[Id], n.[i] + 100, CAST(REPLICATE(CAST('x' AS varchar(max)), @bytes) AS varbinary(max))
             FROM [Resources] r
             CROSS JOIN (SELECT TOP (@chunks) ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) AS [i]
                         FROM sys.all_objects a CROSS JOIN sys.all_objects b) n
             WHERE r.[ContainerName] = @container AND r.[Name] = @name AND r.[IsLatest] = 1
             """;
-        command.Parameters.AddWithValue("@chunks", Chunks);
+        command.Parameters.AddWithValue("@chunks", chunks);
+        command.Parameters.AddWithValue("@bytes", bytes);
         command.Parameters.AddWithValue("@container", containerName);
         command.Parameters.AddWithValue("@name", resourceName);
         command.CommandTimeout = 120;
         await command.ExecuteNonQueryAsync();
     }
 
+    // More chunks than one statement can delete before SQL Server escalates, deleted a statement at a time; and, with
+    // the one the upload stored, as many full-size chunks as go with their version in one statement, whose content
+    // pages are stored apart from their rows.
+    public static TheoryData<string, int, int> Cases => new()
+    {
+        { "version", 6_000, 8_000 },
+        { "name", 6_000, 8_000 },
+        { "container", 6_000, 8_000 },
+        { "version", ResourceSqlRepository.ChunksPerDeleteStatement - 1, ResourceChunker.ChunkSize },
+        { "name", ResourceSqlRepository.ChunksPerDeleteStatement - 1, ResourceChunker.ChunkSize },
+        { "container", ResourceSqlRepository.ChunksPerDeleteStatement - 1, ResourceChunker.ChunkSize },
+    };
+
     [SkippableTheory]
-    [InlineData("version")]
-    [InlineData("name")]
-    [InlineData("container")]
-    public async Task Delete_ShouldNotLockTheWholeChunkTable_WhenTheVersionHasThousandsOfChunks(string what)
+    [MemberData(nameof(Cases))]
+    public async Task Delete_ShouldNotLockTheWholeChunkTable_WhenTheVersionHasThousandsOfChunks(string what, int chunks, int bytes)
     {
         fixture.SkipIfUnavailable();
 
@@ -57,7 +68,7 @@ public class DeleteLockingIntegrationTests(SqlServerFixture fixture)
         IResourceContainerClient container = await service.CreateResourceContainerAsync(containerName);
         await container.UploadAsync("big", BinaryData.FromString("older"));
         ResourceInfo current = await container.UploadAsync("big", BinaryData.FromString("x"));
-        await InflateAsync(containerName, "big");
+        await InflateAsync(containerName, "big", chunks, bytes);
         long before = await LockEscalationsAsync();
 
         // Act

@@ -31,12 +31,18 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
     private const int ChunksPerReadPage = 16;
 
     /// <summary>
-    /// Caps the chunks one statement deletes, and the content one batch of a container or name delete removes, counted
-    /// in chunks, so no single transaction has to log a whole container or a name's whole history. SQL Server locks the
-    /// whole chunk table once a statement holds about 5,000 locks on it, which would hold up every upload, so a version
-    /// bigger than the cap goes in a batch of its own and its chunks go a statement at a time.
+    /// Caps the content one batch of a container or name delete removes, counted in chunks, so no single transaction has
+    /// to log a whole container or a name's whole history. A resource bigger than the cap still goes in a batch of its own.
     /// </summary>
     internal int ChunksPerDeleteBatch { get; init; } = 256;
+
+    /// <summary>
+    /// How many chunks one statement deletes. SQL Server locks the whole chunk table, holding up every upload, once a
+    /// statement holds 5,000 locks on the chunks' rows: one per chunk, since the locks on their content pages don't count
+    /// toward it. A version with more chunks than this has them deleted this many at a time before it goes; a smaller one
+    /// takes them with it.
+    /// </summary>
+    internal const int ChunksPerDeleteStatement = 1_000;
 
     public Task<WrittenContent> AddResourceAsync(string resourceContainerName, ResourceInfo resourceInfo, Stream stream, bool createOnly = false, CancellationToken cancellationToken = default) =>
         AddResourceAsync(resourceContainerName, resourceInfo, stream, new ResourceWriteCondition { CreateOnly = createOnly }, cancellationToken);
@@ -630,8 +636,8 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
                 return true;
 
             await ThrowIfNotMetAsync(dbContext, conditions, resourceContainerName, resourceName, ct);
-            ResourceModel? existingResource = await ResolveAsync(dbContext.Resources, resourceContainerName, resourceName, versionId, ct);
-            deletedInAnEarlierAttempt = existingResource != null && await DeleteVersionAsync(dbContext, existingResource, ct);
+            deletedInAnEarlierAttempt = await ResolveWithChunksAsync(dbContext.Resources, resourceContainerName, resourceName, versionId, ct) is { } found
+                && await DeleteVersionAsync(dbContext, found.Version, found.Chunks, ct);
             return deletedInAnEarlierAttempt;
         }, cancellationToken);
     }
@@ -656,7 +662,8 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
             {
                 // A retry after a commit whose acknowledgement was lost keeps the list it took, and doesn't check the
                 // conditions again: with versions deleted, they may no longer hold.
-                if (versions.Count == 0)
+                bool firstBatch = versions.Count == 0;
+                if (firstBatch)
                 {
                     await ThrowIfNotMetAsync(dbContext, conditions, resourceContainerName, resourceName, ct);
                     versions = [.. (await dbContext.Resources
@@ -675,11 +682,22 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
                     chunks += count;
                 }
 
-                // Only versions still under this name: a move between batches takes them, IDs and all, to another.
+                // The first batch's versions were read just now, under the name's lock, so they're removed by key. A
+                // later batch loads its versions again, only those still under this name: a move between batches takes
+                // them, IDs and all, to another.
                 List<long> ids = [.. batch.Select(v => v.Id)];
-                List<ResourceModel> found = await dbContext.Resources
-                    .Where(r => ids.Contains(r.Id) && r.ContainerName == resourceContainerName && r.Name == resourceName)
-                    .ToListAsync(ct);
+                List<ResourceModel> found;
+                if (firstBatch)
+                {
+                    found = [.. ids.Select(id => new ResourceModel { Id = id, ContainerName = resourceContainerName, Name = resourceName })];
+                    dbContext.Resources.AttachRange(found);
+                }
+                else
+                {
+                    found = await dbContext.Resources
+                        .Where(r => ids.Contains(r.Id) && r.ContainerName == resourceContainerName && r.Name == resourceName)
+                        .ToListAsync(ct);
+                }
                 await DeleteLargeVersionsChunksAsync(dbContext, found.Select(r => (r.Id, batch.First(v => v.Id == r.Id).Chunks)), ct);
                 dbContext.Resources.RemoveRange(found);
                 deletedAny |= found.Count > 0;
@@ -693,16 +711,15 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
     }
 
     /// <summary>
-    /// Deletes the chunks of the versions too big for the cascade a statement at a time, before the versions go. A batch
-    /// is otherwise within <see cref="ChunksPerDeleteBatch"/>, so its cascade stays well under the lock count that
-    /// escalates, without a round trip per version.
+    /// Deletes, <see cref="ChunksPerDeleteStatement"/> at a time, the chunks of versions with more than that many, before
+    /// the versions go. Smaller versions' chunks go with them, through the cascade, without a round trip apiece.
     /// </summary>
     private async Task DeleteLargeVersionsChunksAsync(ResourceDbContext dbContext, IEnumerable<(long Id, int Chunks)> versions,
         CancellationToken cancellationToken)
     {
         foreach ((long id, int chunks) in versions)
         {
-            if (chunks > ChunksPerDeleteBatch) await DeleteChunksAsync(dbContext, id, cancellationToken);
+            if (chunks > ChunksPerDeleteStatement) await DeleteChunksAsync(dbContext, id, cancellationToken);
         }
     }
 
@@ -716,7 +733,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
         if (!dbContext.Database.IsRelational()) return;
 
         while (await dbContext.Database.ExecuteSqlAsync(
-            $"DELETE TOP ({ChunksPerDeleteBatch}) FROM [ResourceChunks] WHERE [ResourceId] = {resourceId}", cancellationToken) == ChunksPerDeleteBatch)
+            $"DELETE TOP ({ChunksPerDeleteStatement}) FROM [ResourceChunks] WHERE [ResourceId] = {resourceId}", cancellationToken) == ChunksPerDeleteStatement)
         {
         }
     }
@@ -725,9 +742,9 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
     /// Deletes one version, under its name's lock; when it's the current version, the most recently stored of the rest
     /// becomes current.
     /// </summary>
-    private async Task<bool> DeleteVersionAsync(ResourceDbContext dbContext, ResourceModel version, CancellationToken cancellationToken)
+    private async Task<bool> DeleteVersionAsync(ResourceDbContext dbContext, ResourceModel version, int chunks, CancellationToken cancellationToken)
     {
-        await DeleteChunksAsync(dbContext, version.Id, cancellationToken);
+        await DeleteLargeVersionsChunksAsync(dbContext, [(version.Id, chunks)], cancellationToken);
         dbContext.Resources.Remove(version);
 
         if (version.IsLatest)
@@ -772,11 +789,11 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
         // Under the name's lock, so a change to the expiry can't come between the check and the delete.
         return WriteNameAsync(resource.ContainerName, resource.ResourceName, async (dbContext, ct) =>
         {
-            ResourceModel? version = await ResolveAsync(dbContext.Resources, resource.ContainerName, resource.ResourceName, versionId, ct);
             // A retry after a commit whose acknowledgement was lost finds the version gone.
-            if (version is null) return deletedInAnEarlierAttempt;
-            if (!(version.ExpiresAt <= now)) return false;
-            return deletedInAnEarlierAttempt = await DeleteVersionAsync(dbContext, version, ct);
+            if (await ResolveWithChunksAsync(dbContext.Resources, resource.ContainerName, resource.ResourceName, versionId, ct) is not { } found)
+                return deletedInAnEarlierAttempt;
+            if (!(found.Version.ExpiresAt <= now)) return false;
+            return deletedInAnEarlierAttempt = await DeleteVersionAsync(dbContext, found.Version, found.Chunks, ct);
         }, cancellationToken);
     }
 
@@ -916,6 +933,13 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
     private static Task<ResourceModel?> ResolveAsync(IQueryable<ResourceModel> query,
         string resourceContainerName, string resourceName, string? versionId, CancellationToken cancellationToken) =>
         Version(query, resourceContainerName, resourceName, versionId).FirstOrDefaultAsync(cancellationToken);
+
+    /// <summary>As <see cref="ResolveAsync"/>, with how many chunks the version has, for deleting it.</summary>
+    private static async Task<(ResourceModel Version, int Chunks)?> ResolveWithChunksAsync(IQueryable<ResourceModel> query,
+        string resourceContainerName, string resourceName, string? versionId, CancellationToken cancellationToken) =>
+        await Version(query, resourceContainerName, resourceName, versionId)
+            .Select(r => new { Version = r, Chunks = r.Chunks!.Count })
+            .FirstOrDefaultAsync(cancellationToken) is { } found ? (found.Version, found.Chunks) : null;
 
     /// <summary>The named version, or the current one when <paramref name="versionId"/> is null.</summary>
     private static IQueryable<ResourceModel> Version(IQueryable<ResourceModel> query, string resourceContainerName, string resourceName, string? versionId)
