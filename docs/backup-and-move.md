@@ -5,7 +5,8 @@
 You can write a whole container, every file and every version, to a single zip file, and turn that file back into a
 container later, in the same store or another one. Use it to:
 
-- **back up** one container before a risky change, or on a schedule;
+- **keep a copy** of one container before a risky change (to back up the whole store, see
+  [Backups and recovery](backups-and-recovery.md));
 - **move** a container between environments, such as from production to a staging copy;
 - **hand over** a customer's files, or keep a copy when you close their account.
 

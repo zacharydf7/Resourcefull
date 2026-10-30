@@ -54,12 +54,18 @@
     href: backup-and-move.md
 - name: Running in production
   items:
+  - name: Going to production
+    href: going-to-production.md
   - name: SQL Server
     href: providers/sql-server.md
+  - name: Running SQL Server
+    href: providers/sql-server-operations.md
   - name: How SQL Server stores files
     href: providers/sql-server-storage.md
   - name: Upgrading the database
     href: providers/sql-server-upgrades.md
+  - name: Backups and recovery
+    href: backups-and-recovery.md
   - name: Health checks
     href: health-checks.md
   - name: Telemetry

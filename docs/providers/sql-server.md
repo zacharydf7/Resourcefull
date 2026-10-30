@@ -16,7 +16,8 @@ application's, as long as none of your tables share the first three names. The h
 own EF Core migrations.
 
 A database of its own is the better default. Provisioning turns on [`READ_COMMITTED_SNAPSHOT`](#read_committed_snapshot),
-a setting of the whole database, and file content makes the database large, which affects how you back it up.
+a setting of the whole database, and file content makes the database large, which affects how you back it up (see
+[Backups and recovery](../backups-and-recovery.md)).
 
 Keep the connection string out of source control, in user secrets, environment variables or a secrets store. Anything
 `Microsoft.Data.SqlClient` accepts works.
