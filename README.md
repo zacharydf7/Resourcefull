@@ -1,5 +1,9 @@
 # Resourcefull
 
+[![NuGet](https://img.shields.io/nuget/v/Resourcefull.svg)](https://www.nuget.org/packages/Resourcefull)
+[![Build](https://github.com/zacharydf7/Resourcefull/actions/workflows/build.yml/badge.svg)](https://github.com/zacharydf7/Resourcefull/actions/workflows/build.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/zacharydf7/Resourcefull/blob/main/LICENSE)
+
 Resourcefull stores and serves files of any type and size from infrastructure you run yourself. Upload, download,
 list and version **resources** in named **containers** through one client API, and keep the bytes in SQL Server, in
 memory for tests, or in a storage provider of your own.
@@ -76,7 +80,8 @@ public class Reports(IResourceServiceClient resources)
 ## Documentation
 
 The [documentation site](https://zacharydf7.github.io/Resourcefull/) has guides for every feature, grouped by what
-you're trying to do, plus the API reference.
+you're trying to do, plus the API reference. Deciding between Resourcefull, object storage and the file system? See
+[When to use Resourcefull](https://zacharydf7.github.io/Resourcefull/docs/when-to-use.html).
 
 - [Introduction](https://zacharydf7.github.io/Resourcefull/docs/index.html): containers, resources, versions and
   providers
@@ -87,7 +92,7 @@ you're trying to do, plus the API reference.
   uploads and sharing files with links
 - [SQL Server](https://zacharydf7.github.io/Resourcefull/docs/providers/sql-server.html): provisioning, permissions
   and upgrades
-- [Upgrading to 3.0](https://zacharydf7.github.io/Resourcefull/docs/upgrading.html) and the
+- [Upgrading](https://zacharydf7.github.io/Resourcefull/docs/upgrading.html), including from 2.x, and the
   [changelog](https://github.com/zacharydf7/Resourcefull/blob/main/CHANGELOG.md)
 
 ## Contributing

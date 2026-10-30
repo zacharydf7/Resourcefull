@@ -24,10 +24,10 @@ public static class ResourcefullSqlOptionsExtensions
 
         builder.Services.AddDbContextFactory<ResourceDbContext>(options =>
             options.UseSqlServer(connectionString, sql =>
-                sql.EnableRetryOnFailure(
+                sql.ExecutionStrategy(dependencies => new RetryCountingExecutionStrategy(dependencies,
                     maxRetryCount: 5,
                     maxRetryDelay: TimeSpan.FromSeconds(10),
-                    errorNumbersToAdd: [1205])));
+                    errorNumbersToAdd: [1205]))));
         builder.Services.AddScoped(services => new ContentHashBackfill(services.GetRequiredService<IDbContextFactory<ResourceDbContext>>()));
         return builder;
     }

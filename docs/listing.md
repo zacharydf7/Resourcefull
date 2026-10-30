@@ -32,5 +32,7 @@ return Results.Ok(new { page.Resources, page.ContinuationToken });
 - **Continuation tokens** are opaque, URL-safe strings of at most about 1 KB, and they don't expire. Continue with the
   same prefix; the page size can change from page to page. A token from a listing of another prefix throws
   `ArgumentException`. The last page has no token.
+- **A container that doesn't exist** lists as empty, without an exception; see
+  [Reading from a container that doesn't exist](errors.md#reading-from-a-container-that-doesnt-exist).
 - **Cost:** with SQL Server, each page is one query that starts where the last one stopped, so a page costs about the
   same wherever it is in the container.

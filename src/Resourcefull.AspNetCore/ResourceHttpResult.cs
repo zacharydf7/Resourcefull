@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Headers;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.Net.Http.Headers;
 
 namespace Resourcefull.AspNetCore;
@@ -13,7 +14,7 @@ namespace Resourcefull.AspNetCore;
 /// stream is disposed once the response is sent or the client disconnects. A range request gets the whole content: for
 /// ranges, use <see cref="ResourceLookupHttpResult"/>, which opens the download itself.
 /// </summary>
-public sealed class ResourceHttpResult : IResult
+public sealed class ResourceHttpResult : IResult, IActionResult
 {
     internal ResourceHttpResult(ResourceDownloadResult download, ResourceResultOptions? options)
     {
@@ -94,4 +95,10 @@ public sealed class ResourceHttpResult : IResult
                 ? type.StartsWith(pattern[..^1], StringComparison.OrdinalIgnoreCase)
                 : string.Equals(type, pattern, StringComparison.OrdinalIgnoreCase)));
     }
+
+    /// <summary>
+    /// Runs the result as an MVC action result, so a Razor Pages handler, which can't return an <see cref="IResult"/>,
+    /// can return it. <para>Coming in 3.2.</para>
+    /// </summary>
+    Task IActionResult.ExecuteResultAsync(ActionContext context) => ExecuteAsync(context.HttpContext);
 }

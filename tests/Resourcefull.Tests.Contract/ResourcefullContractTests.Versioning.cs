@@ -188,7 +188,7 @@ public abstract partial class ResourcefullContractTests
         });
 
         // Act
-        ResourceInfo? restored = await container.RestoreVersionAsync("doc", first.VersionId!);
+        ResourceInfo? restored = await container.RestoreVersionAsync("doc", first.VersionId);
 
         // Assert
         IReadOnlyList<ResourceInfo> versions = await container.GetResourceVersionsAsync("doc");
@@ -200,5 +200,41 @@ public abstract partial class ResourcefullContractTests
         Assert.Equal("v1", current.Content.ToString());
         Assert.Equal("text/plain", current.ResourceInfo.ContentType);
         Assert.Equal(new Dictionary<string, string> { ["draft"] = "1" }, current.ResourceInfo.Metadata);
+    }
+
+    [SkippableFact]
+    public async Task Versions_ShouldBeOrderedAndPromotedByWhenTheyWereStored_WhenTheWritersClocksDisagree()
+    {
+        // Arrange: "first" is stored by a server whose clock is an hour ahead of the ones storing the later two.
+        var clock = new ManualTimeProvider();
+        using ServiceProvider provider = BuildServiceProvider(o =>
+        {
+            o.UseVersioning();
+            o.Services.AddSingleton<TimeProvider>(clock);
+        });
+        IResourceContainerClient container = await NewContainerAsync(provider);
+        DateTimeOffset now = clock.Now;
+        clock.Now = now.AddHours(1);
+        ResourceInfo first = await container.UploadAsync("n", BinaryData.FromString("1"));
+        clock.Now = now;
+        ResourceInfo second = await container.UploadAsync("n", BinaryData.FromString("2"));
+        ResourceInfo third = await container.UploadAsync("n", BinaryData.FromString("3"));
+
+        // Act
+        IReadOnlyList<ResourceInfo> versions = await container.GetResourceVersionsAsync("n");
+        ResourceInfo listed = Assert.Single(await container.GetResourcesAsync());
+        ResourceInfo paged = Assert.Single((await container.GetResourcePageAsync()).Resources);
+        string content = (await container.DownloadContentAsync("n"))!.Content.ToString();
+        await container.DeleteResourceIfExistsAsync("n", third.VersionId);
+        ResourceInfo? promoted = await container.GetResourceInfoAsync("n");
+        ResourceInfo listedAfter = Assert.Single(await container.GetResourcesAsync());
+
+        // Assert: the order they were stored in, not their LastModified, in every read.
+        Assert.Equal([third.VersionId, second.VersionId, first.VersionId], versions.Select(v => v.VersionId));
+        Assert.Equal((third.VersionId, third.VersionId, "3"), (listed.VersionId, paged.VersionId, content));
+        Assert.Equal(second.VersionId, promoted!.VersionId);
+        Assert.True(promoted.IsLatest);
+        Assert.Equal(second.VersionId, listedAfter.VersionId);
+        Assert.Equal("2", (await container.DownloadContentAsync("n"))!.Content.ToString());
     }
 }

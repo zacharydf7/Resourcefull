@@ -2,6 +2,8 @@
   items:
   - name: Introduction
     href: index.md
+  - name: When to use Resourcefull
+    href: when-to-use.md
   - name: Getting started
     href: getting-started.md
 - name: Working with files
@@ -30,12 +32,16 @@
   items:
   - name: ASP.NET Core
     href: aspnet-core/index.md
+  - name: Securing file endpoints
+    href: aspnet-core/securing-endpoints.md
   - name: Serving downloads
     href: aspnet-core/serving-downloads.md
   - name: Accepting uploads
     href: aspnet-core/accepting-uploads.md
   - name: Exceptions as status codes
     href: aspnet-core/status-codes.md
+  - name: MVC, Razor Pages and Blazor
+    href: aspnet-core/mvc-razor-blazor.md
   - name: URI providers
     href: uri-providers.md
   - name: Sharing files with links
@@ -52,16 +58,24 @@
     href: backup-and-move.md
 - name: Running in production
   items:
+  - name: Going to production
+    href: going-to-production.md
   - name: SQL Server
     href: providers/sql-server.md
+  - name: Running SQL Server
+    href: providers/sql-server-operations.md
   - name: How SQL Server stores files
     href: providers/sql-server-storage.md
   - name: Upgrading the database
     href: providers/sql-server-upgrades.md
+  - name: Backups and recovery
+    href: backups-and-recovery.md
   - name: Health checks
     href: health-checks.md
   - name: Telemetry
     href: telemetry.md
+  - name: Aspire
+    href: aspire.md
   - name: Troubleshooting
     href: troubleshooting.md
 - name: Testing and extending
@@ -76,8 +90,10 @@
   items:
   - name: Errors
     href: errors.md
-  - name: Upgrading to 3.0
+  - name: Upgrading
     href: upgrading.md
+  - name: Upgrading to 3.0
+    href: upgrading-to-3.md
   - name: Changelog
     href: ../CHANGELOG.md
   - name: Samples

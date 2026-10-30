@@ -8,7 +8,7 @@
 /// The content, or the range of it that was asked for, read-only and forward-only; it is read from the store as it is
 /// read. The caller disposes it.
 /// </param>
-public record ResourceDownloadResult(ResourceInfo ResourceInfo, Stream Stream)
+public record ResourceDownloadResult(ResourceInfo ResourceInfo, Stream Stream) : IDisposable, IAsyncDisposable
 {
     /// <summary>
     /// The length of the version's whole content, measured from what's stored, even when <see cref="Stream"/> holds a
@@ -21,4 +21,18 @@ public record ResourceDownloadResult(ResourceInfo ResourceInfo, Stream Stream)
     /// set; <see langword="null"/> when it holds the whole content.
     /// </summary>
     public ResourceRange? Range { get; init; }
+
+    /// <summary>Disposes <see cref="Stream"/>. <para>Coming in 3.2.</para></summary>
+    public void Dispose()
+    {
+        Stream.Dispose();
+        GC.SuppressFinalize(this);
+    }
+
+    /// <summary>Disposes <see cref="Stream"/>. <para>Coming in 3.2.</para></summary>
+    public async ValueTask DisposeAsync()
+    {
+        await Stream.DisposeAsync();
+        GC.SuppressFinalize(this);
+    }
 }

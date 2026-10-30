@@ -543,46 +543,6 @@ public class ResourceInMemoryRepositoryTests
     }
 
     [Fact]
-    public async Task AddResourceAsync_ShouldStoreACopyOfMetadata_WhenCallerMutatesTheDictionaryAfterwards()
-    {
-        // Arrange
-        var containerName = "containerName";
-        var resourceName = "resourceName";
-        var repository = new ResourceInMemoryRepository();
-        await repository.AddResourceContainerAsync(new ResourceContainerInfo { Name = containerName });
-        var metadata = new Dictionary<string, string> { ["key"] = "original" };
-        await repository.AddResourceAsync(containerName, new ResourceInfo { ContainerName = containerName, Name = resourceName, Metadata = metadata }, new MemoryStream());
-
-        // Act
-        metadata["key"] = "changed";
-        metadata["extra"] = "added";
-
-        // Assert
-        ResourceInfo? stored = await repository.GetResourceInfoAsync(containerName, resourceName);
-        Assert.Equal("original", stored!.Metadata["key"]);
-        Assert.False(stored.Metadata.ContainsKey("extra"));
-    }
-
-    [Fact]
-    public async Task GetResourceInfoAsync_ShouldReturnACopyOfMetadata_WhenCallerMutatesTheReturnedDictionary()
-    {
-        // Arrange
-        var containerName = "containerName";
-        var resourceName = "resourceName";
-        var repository = new ResourceInMemoryRepository();
-        await repository.AddResourceContainerAsync(new ResourceContainerInfo { Name = containerName });
-        await repository.AddResourceAsync(containerName, new ResourceInfo { ContainerName = containerName, Name = resourceName, Metadata = new Dictionary<string, string> { ["key"] = "original" } }, new MemoryStream());
-        ResourceInfo? first = await repository.GetResourceInfoAsync(containerName, resourceName);
-
-        // Act
-        first!.Metadata["key"] = "changed";
-
-        // Assert
-        ResourceInfo? second = await repository.GetResourceInfoAsync(containerName, resourceName);
-        Assert.Equal("original", second!.Metadata["key"]);
-    }
-
-    [Fact]
     public async Task GetResourceContainerInfoAsync_ShouldReturnACopyOfTheStoredMetadataAndUri_WhenTheContainerWasAddedWithThem()
     {
         // Arrange
@@ -628,71 +588,6 @@ public class ResourceInMemoryRepositoryTests
     }
 
     [Fact]
-    public async Task AddResourceAsync_ShouldThrowOperationCanceledAndStoreNothing_WhenTokenIsAlreadyCanceled()
-    {
-        // Arrange
-        var containerName = "containerName";
-        var repository = new ResourceInMemoryRepository();
-        await repository.AddResourceContainerAsync(new ResourceContainerInfo { Name = containerName });
-        var resourceInfo = new ResourceInfo { ContainerName = containerName, Name = "resourceName" };
-        using var cts = new CancellationTokenSource();
-        cts.Cancel();
-
-        // Act
-        Task act() => repository.AddResourceAsync(containerName, resourceInfo, new MemoryStream([1, 2, 3]), cancellationToken: cts.Token);
-
-        // Assert
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(act);
-        Assert.Empty(await repository.GetAllResourceInfoAsync(containerName));
-    }
-
-    [Fact]
-    public async Task AddResourceAsync_ShouldThrowOperationCanceledAndStoreNothing_WhenTokenIsCanceledMidStream()
-    {
-        // Arrange
-        var containerName = "containerName";
-        var repository = new ResourceInMemoryRepository();
-        await repository.AddResourceContainerAsync(new ResourceContainerInfo { Name = containerName });
-        var resourceInfo = new ResourceInfo { ContainerName = containerName, Name = "resourceName" };
-        using var cts = new CancellationTokenSource();
-        var content = new CancelAfterReadsStream(new byte[200_000], cts, readsBeforeCancel: 1);
-
-        // Act
-        Task act() => repository.AddResourceAsync(containerName, resourceInfo, content, cancellationToken: cts.Token);
-
-        // Assert
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(act);
-        Assert.Empty(await repository.GetAllResourceInfoAsync(containerName));
-    }
-
-    [Fact]
-    public async Task GetAllResourceInfoAsync_ShouldThrowOperationCanceled_WhenTokenIsAlreadyCanceled()
-    {
-        // Arrange & Act
-        var repository = new ResourceInMemoryRepository();
-        using var cts = new CancellationTokenSource();
-        cts.Cancel();
-
-        // Assert
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => repository.GetAllResourceInfoAsync("containerName", cts.Token));
-    }
-
-    [Fact]
-    public async Task GetResourceStreamAsync_ShouldThrowOperationCanceled_WhenTokenIsAlreadyCanceled()
-    {
-        // Arrange & Act
-        var containerName = "containerName";
-        var repository = new ResourceInMemoryRepository();
-        await repository.AddResourceContainerAsync(new ResourceContainerInfo { Name = containerName });
-        await repository.AddResourceAsync(containerName, new ResourceInfo { ContainerName = containerName, Name = "resourceName" }, new MemoryStream([1, 2, 3]));
-        using var cts = new CancellationTokenSource();
-        cts.Cancel();
-
-        // Assert
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => repository.GetResourceStreamAsync(containerName, "resourceName", null, cts.Token));
-    }
-
-    [Fact]
     public async Task DeleteResourceContainerAsync_ShouldThrowOperationCanceledAndDeleteNothing_WhenTokenIsAlreadyCanceled()
     {
         // Arrange
@@ -711,49 +606,6 @@ public class ResourceInMemoryRepositoryTests
     }
 
     [Fact]
-    public async Task GetResourceVersionsAsync_ShouldPutTheLastStoredVersionFirst_WhenItsClockIsBehind()
-    {
-        // Arrange: the second writer's clock is an hour behind the first's.
-        var clock = new ManualTimeProvider();
-        var repository = new ResourceInMemoryRepository(clock);
-        await repository.AddResourceContainerAsync(new ResourceContainerInfo { Name = "c" });
-        clock.Now = DateTime.UtcNow.AddHours(1);
-        await repository.AddResourceAsync("c", new ResourceInfo { ContainerName = "c", Name = "n", VersionId = "ahead" }, new MemoryStream());
-        clock.Now = DateTime.UtcNow;
-        await repository.AddResourceAsync("c", new ResourceInfo { ContainerName = "c", Name = "n", VersionId = "behind" }, new MemoryStream());
-
-        // Act
-        List<ResourceInfo> versions = await repository.GetResourceVersionsAsync("c", "n");
-        ResourceInfo? current = await repository.GetResourceInfoAsync("c", "n");
-
-        // Assert
-        Assert.Equal(["behind", "ahead"], versions.Select(v => v.VersionId));
-        Assert.True(versions[0].IsLatest);
-        Assert.Equal("behind", current!.VersionId);
-    }
-
-    [Fact]
-    public async Task DeleteResourceAsync_ShouldPromoteTheLastStoredRemainingVersion_WhenAnEarlierOneHasALaterClock()
-    {
-        // Arrange
-        var clock = new ManualTimeProvider();
-        var repository = new ResourceInMemoryRepository(clock);
-        await repository.AddResourceContainerAsync(new ResourceContainerInfo { Name = "c" });
-        clock.Now = DateTime.UtcNow.AddHours(1);
-        await repository.AddResourceAsync("c", new ResourceInfo { ContainerName = "c", Name = "n", VersionId = "first" }, new MemoryStream());
-        clock.Now = DateTime.UtcNow;
-        await repository.AddResourceAsync("c", new ResourceInfo { ContainerName = "c", Name = "n", VersionId = "second" }, new MemoryStream());
-        clock.Now = DateTime.UtcNow;
-        await repository.AddResourceAsync("c", new ResourceInfo { ContainerName = "c", Name = "n", VersionId = "third" }, new MemoryStream());
-
-        // Act
-        await repository.DeleteResourceAsync("c", "n", "third");
-
-        // Assert
-        Assert.Equal("second", (await repository.GetResourceInfoAsync("c", "n"))!.VersionId);
-    }
-
-    [Fact]
     public async Task DeleteResourceAsync_ShouldLeaveNoTraceOfTheName_WhenGivenTheIdOfItsOnlyVersion()
     {
         // Arrange
@@ -768,27 +620,6 @@ public class ResourceInMemoryRepositoryTests
         Assert.True(deleted);
         Assert.Empty(await repository.GetAllResourceInfoAsync("c"));
         await repository.AddResourceAsync("c", new ResourceInfo { ContainerName = "c", Name = "n", VersionId = "v2" }, new MemoryStream(), createOnly: true);
-    }
-
-    [Fact]
-    public async Task GetAllResourceInfoAsync_ShouldReturnTheLastStoredVersion_WhenItsClockIsBehind()
-    {
-        // Arrange: the second writer's clock is an hour behind the first's.
-        var clock = new ManualTimeProvider();
-        var repository = new ResourceInMemoryRepository(clock);
-        await repository.AddResourceContainerAsync(new ResourceContainerInfo { Name = "c" });
-        clock.Now = DateTime.UtcNow.AddHours(1);
-        await repository.AddResourceAsync("c", new ResourceInfo { ContainerName = "c", Name = "n", VersionId = "ahead" }, new MemoryStream([1]));
-        clock.Now = DateTime.UtcNow;
-        await repository.AddResourceAsync("c", new ResourceInfo { ContainerName = "c", Name = "n", VersionId = "behind" }, new MemoryStream([2]));
-
-        // Act
-        List<ResourceInfo> listed = await repository.GetAllResourceInfoAsync("c");
-        Stream? current = await repository.GetResourceStreamAsync("c", "n");
-
-        // Assert
-        Assert.Equal("behind", Assert.Single(listed).VersionId);
-        Assert.Equal(2, current!.ReadByte());
     }
 
     [Fact]

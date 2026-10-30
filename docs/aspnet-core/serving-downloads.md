@@ -5,6 +5,10 @@ reuse what hasn't changed without letting shared caches keep anyone's files, and
 managers ask for part of a file. `Results.Resource`
 does all of that from a download.
 
+> [!NOTE]
+> This endpoint leaves out authorization to stay short. Before you use it, see
+> [Securing file endpoints](securing-endpoints.md).
+
 ```csharp
 using Resourcefull.AspNetCore;
 
@@ -43,8 +47,9 @@ It answers **conditional requests** without reading the content:
   change;
 - **412 Precondition Failed** for an `If-Match` or `If-Unmodified-Since` that doesn't hold.
 
-A `HEAD` request gets the headers alone. The download stream is disposed once the response is sent, and the
-request's cancellation token stops the read when the client disconnects. **Range requests** get the whole file (200
+A `HEAD` request gets the headers alone. The download stream is disposed once the response is sent, so don't
+dispose the download in the endpoint: the response is sent after the endpoint returns. The request's cancellation
+token stops the read when the client disconnects. **Range requests** get the whole file (200
 rather than 206), because the download is already open; to answer them, see below.
 
 **404** comes from the endpoint: `DownloadStreamingAsync` returns `null` when the container, resource or version
@@ -68,13 +73,22 @@ It sends the same headers and answers the same conditional requests as above, an
 - **206 Partial Content** with `Content-Range` for one `Range: bytes=…`, reading only that range from storage. The
   forms `bytes=0-499`, `bytes=500-` and `bytes=-500` (the last 500 bytes) all work, and a range that runs past the end
   is cut there.
-- **`If-Range`** with the current ETag or `Last-Modified` keeps the range; otherwise the response is the whole file
-  (200), so a client resuming a download never joins parts of two versions.
+- **`If-Range`** with the ETag or `Last-Modified` of the version sent keeps the range; otherwise the response is the
+  whole file (200), so a client resuming a download never joins parts of two versions.
 - **416 Range Not Satisfiable**, with `Content-Range: bytes */length`, for a range that starts past the end.
 - **The whole file** (200) for a request with several ranges, which HTTP allows. Players and download managers ask
   for one range at a time.
 - **`Accept-Ranges: bytes`** on every response, so clients know they can ask.
 - **404** when the resource doesn't exist.
+
+To serve an older version with ranges, pass its ID as `versionId`, for example from the query string; a version that
+doesn't exist gets 404:
+
+```csharp
+app.MapMethods("/files/{container}/{**name}", ["GET", "HEAD"], (string container, string name, string? versionId,
+    IResourceServiceClient resources) =>
+    Results.Resource(resources.GetResourceContainerClient(container), name, versionId));
+```
 
 Conditional headers are evaluated first, so a matching `If-None-Match` gets 304 even with a `Range`. `TypedResults.Resource`
 takes the same arguments.

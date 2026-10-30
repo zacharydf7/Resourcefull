@@ -9,7 +9,7 @@ using Resourcefull.SqlServer;
 namespace Resourcefull.Tests.Integration;
 
 /// <summary>
-/// An upload, download or delete the execution strategy retries after a transient failure. An upload's retry needs a real
+/// A write or download the execution strategy retries after a transient failure. An upload's retry needs a real
 /// transaction to roll back, and a download's a real connection to read pages through, so these run against SQL Server,
 /// with one simulated failure injected at a chosen point.
 /// </summary>
@@ -119,6 +119,149 @@ public class UploadRetryIntegrationTests(SqlServerFixture fixture)
         Assert.Empty(await repository.GetResourceVersionsAsync(c, "n"));
     }
 
+    [SkippableFact]
+    public async Task AddResourceContainerAsync_ShouldCreateTheContainer_WhenTheCommitSucceedsButItsAcknowledgementIsLost()
+    {
+        fixture.SkipIfUnavailable();
+
+        // Arrange
+        var failure = new FailOnceInterceptor(failAfterCommit: true);
+        (ResourceSqlRepository repository, _) = await NewRepositoryAsync(failure);
+        string created = $"c-{Guid.NewGuid():N}";
+
+        // Act
+        await repository.AddResourceContainerAsync(new ResourceContainerInfo { Name = created });
+
+        // Assert
+        Assert.True(failure.Failed);
+        Assert.NotNull(await repository.GetResourceContainerInfoAsync(created));
+    }
+
+    [SkippableFact]
+    public async Task DeleteResourceContainerAsync_ShouldReportTheDelete_WhenTheCommitSucceedsButItsAcknowledgementIsLost()
+    {
+        fixture.SkipIfUnavailable();
+
+        // Arrange: the container is empty, so the first commit is the pass that finds no resources to delete.
+        var failure = new FailOnceInterceptor(failAfterCommit: true, commitsBeforeFailing: 1);
+        (ResourceSqlRepository repository, string c) = await NewRepositoryAsync(failure);
+
+        // Act
+        bool deleted = await repository.DeleteResourceContainerAsync(c);
+
+        // Assert
+        Assert.True(failure.Failed);
+        Assert.True(deleted);
+        Assert.Null(await repository.GetResourceContainerInfoAsync(c));
+    }
+
+    [SkippableFact]
+    public async Task CopyResourceAsync_ShouldReturnWhatItStoredWithoutCopyingAgain_WhenTheCommitSucceedsButItsAcknowledgementIsLost()
+    {
+        fixture.SkipIfUnavailable();
+
+        // Arrange
+        var failure = new FailOnceInterceptor(failAfterCommit: true);
+        (ResourceSqlRepository repository, string c) = await NewRepositoryAsync(failure, arm: false);
+        await repository.AddResourceAsync(c, Version(c), new MemoryStream(Payload));
+        failure.Arm();
+        var copy = new ResourceInfo { ContainerName = c, Name = "copy", VersionId = "v2" };
+
+        // Act
+        WrittenContent? written = await repository.CopyResourceAsync(new ResourceLocation(c, "n"), "v1", copy, new ResourceWriteCondition());
+
+        // Assert
+        Assert.True(failure.Failed);
+        Assert.Equal(Payload.Length, written!.ContentLength);
+        Assert.Equal(["v2"], (await repository.GetResourceVersionsAsync(c, "copy")).Select(v => v.VersionId));
+    }
+
+    [SkippableFact]
+    public async Task CopyResourceAsync_ShouldRetryAndStoreTheCopy_WhenACopyToItsOwnNameFailsPartway()
+    {
+        fixture.SkipIfUnavailable();
+
+        // Arrange: a restore copies an older version to its own name; the copy fails on its second save.
+        var failure = new FailOnceInterceptor(failAtSave: 2);
+        (ResourceSqlRepository repository, string c) = await NewRepositoryAsync(failure, arm: false);
+        await repository.AddResourceAsync(c, Version(c), new MemoryStream(Payload));
+        failure.Arm();
+        var restored = new ResourceInfo { ContainerName = c, Name = "n", VersionId = "v2", CopiedFrom = new ResourceOrigin(c, "n", "v1") };
+
+        // Act
+        WrittenContent? written = await repository.CopyResourceAsync(new ResourceLocation(c, "n"), "v1", restored, new ResourceWriteCondition());
+
+        // Assert
+        Assert.True(failure.Failed);
+        Assert.Equal(Payload.Length, written!.ContentLength);
+        Assert.Equal(["v2", "v1"], (await repository.GetResourceVersionsAsync(c, "n")).Select(v => v.VersionId));
+        Assert.Equal(Payload, await ReadAsync(repository, c));
+    }
+
+    [SkippableFact]
+    public async Task MoveResourceAsync_ShouldReportTheMove_WhenTheCommitSucceedsButItsAcknowledgementIsLost()
+    {
+        fixture.SkipIfUnavailable();
+
+        // Arrange
+        var failure = new FailOnceInterceptor(failAfterCommit: true);
+        (ResourceSqlRepository repository, string c) = await NewRepositoryAsync(failure, arm: false);
+        await repository.AddResourceAsync(c, Version(c), new MemoryStream(Payload));
+        failure.Arm();
+
+        // Act
+        bool moved = await repository.MoveResourceAsync(new ResourceLocation(c, "n"), new ResourceLocation(c, "moved"), null);
+
+        // Assert
+        Assert.True(failure.Failed);
+        Assert.True(moved);
+        Assert.Empty(await repository.GetResourceVersionsAsync(c, "n"));
+        Assert.Equal(["v1"], (await repository.GetResourceVersionsAsync(c, "moved")).Select(v => v.VersionId));
+    }
+
+    [SkippableFact]
+    public async Task SetExpiryAsync_ShouldReportTheChange_WhenTheCommitSucceedsButItsAcknowledgementIsLost()
+    {
+        fixture.SkipIfUnavailable();
+
+        // Arrange
+        var failure = new FailOnceInterceptor(failAfterCommit: true);
+        (ResourceSqlRepository repository, string c) = await NewRepositoryAsync(failure, arm: false);
+        await repository.AddResourceAsync(c, Version(c), new MemoryStream(Payload));
+        failure.Arm();
+        var expiresAt = new DateTimeOffset(2099, 1, 1, 0, 0, 0, TimeSpan.Zero);
+
+        // Act
+        bool changed = await repository.SetExpiryAsync(new ResourceLocation(c, "n"), "v1", expiresAt);
+
+        // Assert
+        Assert.True(failure.Failed);
+        Assert.True(changed);
+        Assert.Equal(expiresAt, (await repository.GetResourceInfoAsync(c, "n", "v1"))!.ExpiresAt);
+    }
+
+    [SkippableFact]
+    public async Task DeleteExpiredVersionAsync_ShouldReportTheDelete_WhenTheCommitSucceedsButItsAcknowledgementIsLost()
+    {
+        fixture.SkipIfUnavailable();
+
+        // Arrange
+        var failure = new FailOnceInterceptor(failAfterCommit: true);
+        (ResourceSqlRepository repository, string c) = await NewRepositoryAsync(failure, arm: false);
+        ResourceInfo version = Version(c);
+        version.ExpiresAt = new DateTimeOffset(2000, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        await repository.AddResourceAsync(c, version, new MemoryStream(Payload));
+        failure.Arm();
+
+        // Act
+        bool deleted = await repository.DeleteExpiredVersionAsync(new ResourceLocation(c, "n"), "v1", DateTimeOffset.UtcNow);
+
+        // Assert
+        Assert.True(failure.Failed);
+        Assert.True(deleted);
+        Assert.Empty(await repository.GetResourceVersionsAsync(c, "n"));
+    }
+
     private async Task<(ResourceSqlRepository, string)> NewRepositoryAsync(FailOnceInterceptor failure, bool arm = true)
     {
         DbContextOptions<ResourceDbContext> options = new DbContextOptionsBuilder<ResourceDbContext>()
@@ -182,11 +325,16 @@ public class UploadRetryIntegrationTests(SqlServerFixture fixture)
         protected override bool ShouldRetryOn(Exception exception) => exception is SimulatedTransientException;
     }
 
-    /// <summary>Throws once, either on the given save of the upload or just after its transaction commits.</summary>
-    private sealed class FailOnceInterceptor(int failAtSave = 0, bool failAfterCommit = false) : DbTransactionInterceptor, ISaveChangesInterceptor
+    /// <summary>
+    /// Throws once, either on the given save of the upload or just after a transaction commits, once
+    /// <paramref name="commitsBeforeFailing"/> commits have gone through.
+    /// </summary>
+    private sealed class FailOnceInterceptor(int failAtSave = 0, bool failAfterCommit = false, int commitsBeforeFailing = 0)
+        : DbTransactionInterceptor, ISaveChangesInterceptor
     {
         private bool _armed;
         private int _saves;
+        private int _commits;
 
         public bool Failed { get; private set; }
 
@@ -200,7 +348,7 @@ public class UploadRetryIntegrationTests(SqlServerFixture fixture)
 
         public override Task TransactionCommittedAsync(DbTransaction transaction, TransactionEndEventData eventData, CancellationToken cancellationToken = default)
         {
-            if (_armed && !Failed && failAfterCommit) Fail();
+            if (_armed && !Failed && failAfterCommit && _commits++ == commitsBeforeFailing) Fail();
             return Task.CompletedTask;
         }
 

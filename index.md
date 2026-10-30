@@ -34,7 +34,7 @@ app.MapPut("/files/{container}/{**name}",
         files.GetResourceContainerClient(container)
              .UploadFromRequestAsync(name, request));
 
-// Sends the file with ETags and range requests.
+// Sends the file with ETags and range requests (3.2).
 app.MapGet("/files/{container}/{**name}",
     (string container, string name,
      IResourceServiceClient files) =&gt;
@@ -71,8 +71,8 @@ without locks of your own.</p>
 </a>
 <a class="rf-card" href="docs/aspnet-core/index.md">
 <h3><i class="bi bi-globe2"></i>Made for ASP.NET Core</h3>
-<p>Serve downloads with ETags, 304s and range requests, accept uploads with preconditions, and turn errors into
-the right status codes.</p>
+<p>Serve downloads with ETags, 304s and range requests <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span>, accept uploads with
+preconditions, and turn errors into the right status codes.</p>
 </a>
 <a class="rf-card" href="docs/container-policies.md">
 <h3><i class="bi bi-sliders"></i>Quotas and rules <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span></h3>
@@ -121,6 +121,7 @@ storage is down.</p>
 <div class="rf-path">
 <h3>Web apps</h3>
 <ul>
+<li><a href="docs/aspnet-core/securing-endpoints.md">Securing file endpoints</a></li>
 <li><a href="docs/aspnet-core/serving-downloads.md">Serving downloads</a></li>
 <li><a href="docs/aspnet-core/accepting-uploads.md">Accepting uploads</a></li>
 <li><a href="docs/sharing-links.md">Sharing files with links</a></li>
@@ -154,7 +155,7 @@ storage is down.</p>
 <ul>
 <li><a href="api/index.md">API reference</a></li>
 <li><a href="docs/errors.md">Errors</a> and <a href="CHANGELOG.md">changelog</a></li>
-<li><a href="docs/upgrading.md">Upgrading to 3.0</a></li>
+<li><a href="docs/upgrading.md">Upgrading and versions</a></li>
 </ul>
 </div>
 </div>

@@ -26,10 +26,12 @@ public static class ResourcefullResults
         /// </summary>
         /// <param name="container">The container the resource is in.</param>
         /// <param name="resourceName">The name of the resource to send.</param>
+        /// <param name="versionId">The version to send; <see langword="null"/> sends the current one.</param>
         /// <param name="options">How to present it; <see langword="null"/> offers it as a download under its name.</param>
         /// <returns>The result, which opens the download when it runs and disposes it once it's sent.</returns>
-        public static IResult Resource(IResourceContainerClient container, string resourceName, ResourceResultOptions? options = null) =>
-            new ResourceLookupHttpResult(container, resourceName, options);
+        public static IResult Resource(IResourceContainerClient container, string resourceName, string? versionId = null,
+            ResourceResultOptions? options = null) =>
+            new ResourceLookupHttpResult(container, resourceName, options, versionId);
 
         /// <summary>
         /// Sends the resource a signed link grants, to whoever holds the link, without authentication. See
@@ -55,10 +57,10 @@ public static class ResourcefullTypedResults
         public static ResourceHttpResult Resource(ResourceDownloadResult download, ResourceResultOptions? options = null) =>
             new(download, options);
 
-        /// <inheritdoc cref="ResourcefullResults.Resource(IResourceContainerClient, string, ResourceResultOptions?)"/>
+        /// <inheritdoc cref="ResourcefullResults.Resource(IResourceContainerClient, string, string?, ResourceResultOptions?)"/>
         public static ResourceLookupHttpResult Resource(IResourceContainerClient container, string resourceName,
-            ResourceResultOptions? options = null) =>
-            new(container, resourceName, options);
+            string? versionId = null, ResourceResultOptions? options = null) =>
+            new(container, resourceName, options, versionId);
 
         /// <inheritdoc cref="ResourcefullResults.SharedResource(IResourceServiceClient, string)"/>
         public static SharedResourceHttpResult SharedResource(IResourceServiceClient resources, string token) =>

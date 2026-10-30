@@ -44,7 +44,7 @@ public abstract partial class ResourcefullContractTests
         var refused = new[]
         {
             await Record.ExceptionAsync(() => frozen.UploadAsync("other.txt", BinaryData.FromString("x"))),
-            await Record.ExceptionAsync(() => frozen.RestoreVersionAsync("notes.txt", stored.VersionId!)),
+            await Record.ExceptionAsync(() => frozen.RestoreVersionAsync("notes.txt", stored.VersionId)),
             await Record.ExceptionAsync(() => frozen.DeleteResourceIfExistsAsync("notes.txt")),
             await Record.ExceptionAsync(() => service.DeleteResourceContainerIfExistsAsync(name))
         };
@@ -166,7 +166,7 @@ public abstract partial class ResourcefullContractTests
         TestPolicyProvider.Policies[name] = new ResourceContainerPolicy { MaxResourceSize = 50 };
 
         // Act
-        Task act() => container.RestoreVersionAsync("a", large.VersionId!);
+        Task act() => container.RestoreVersionAsync("a", large.VersionId);
 
         // Assert
         Assert.Equal(ResourcePolicyRule.MaxResourceSize, (await Assert.ThrowsAsync<ResourcePolicyViolationException>(act)).Rule);

@@ -31,9 +31,11 @@ Without `UseContainerPolicies` or `UsePolicyProvider`, nothing is checked and no
 | `ReadOnly` | upload, restore, copy and move in or out, delete, deleting the container, changing an expiry | is refused before anything changes; and [expiry](expiry.md) leaves its expired versions until it's writable again |
 
 A refused write throws `ResourcePolicyViolationException`, whose `Rule` says which rule it broke, and stores nothing.
-A copy or move is checked for every version it brings, by its stored length (measured from its content, without
-reading it, for a version an early release stored without one); a rename within a container changes nothing it holds,
-so only `ReadOnly` applies to it.
+A restore, copy or move is checked for every version it brings, by its stored length (measured from its content,
+without reading it, for a version an early release stored without one), since its content doesn't pass through your
+application; a rename within a container changes nothing it holds, so only `ReadOnly` applies to it. A length an
+early release recorded wrongly isn't caught this way: the [hash backfill](providers/sql-server-upgrades.md#recording-hashes-for-older-versions)
+reports those.
 
 - **Sizes count every version.** `MaxContainerSize` includes older versions until they're pruned, so with
   [versioning](versioning.md) a container's history counts against it. Pruning is never refused. Overwriting a
@@ -43,7 +45,11 @@ so only `ReadOnly` applies to it.
 - **Lowering a limit** below what a container holds deletes nothing: it only refuses new writes.
 - **Writes at the same time can go slightly over.** The size and count limits read what the container holds once per
   write, so uploads running at the same moment can together pass `MaxContainerSize` or `MaxResourceCount` by up to
-  one upload each. For hard caps, such as billing, compare `GetUsageAsync` with the plan when it matters.
+  one upload each. Set `MaxResourceSize` alongside `MaxContainerSize` to bound that: without it, each of those uploads
+  may use all the room that's left. A move checks the versions it moves: if an upload to the source name makes a new
+  version current while it moves, it checks the policy again with that version. Like an upload, it can still go over
+  alongside other writes to the destination. For hard caps, such as billing, compare `GetUsageAsync` with the plan when
+  it matters.
 
 ## Sizes
 

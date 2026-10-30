@@ -26,7 +26,7 @@ public abstract partial class ResourcefullContractTests
         // Assert
         Assert.NotNull(copy);
         Assert.NotEqual(original.VersionId, copy.VersionId);
-        Assert.Equal(new ResourceOrigin(source.ResourceContainerInfo.Name, "report.pdf", original.VersionId!), copy.CopiedFrom);
+        Assert.Equal(new ResourceOrigin(source.ResourceContainerInfo.Name, "report.pdf", original.VersionId), copy.CopiedFrom);
         Assert.Equal((original.ContentHash, original.ContentLength, "application/pdf"), (copy.ContentHash, copy.ContentLength, copy.ContentType));
         Assert.Equal(payload, content!.Content.ToArray());
         Assert.Equal("ada", content.ResourceInfo.Metadata["author"]);
@@ -72,6 +72,29 @@ public abstract partial class ResourcefullContractTests
         Assert.Equal("existing", before);
         Assert.Equal("source", (await container.DownloadContentAsync("b"))!.Content.ToString());
         Assert.Single(await container.GetResourceVersionsAsync("b"));
+    }
+
+    [SkippableFact]
+    public async Task CopyResourceAsync_ShouldRefuseAnExistingNameButCopyToANewOne_WhenCreateOnlyWithVersioning()
+    {
+        // Arrange
+        using ServiceProvider provider = BuildServiceProvider(o => o.UseVersioning());
+        IResourceContainerClient container = await NewContainerAsync(provider);
+        await container.UploadAsync("a", BinaryData.FromString("source"));
+        await container.UploadAsync("b", BinaryData.FromString("existing"));
+        string name = container.ResourceContainerInfo.Name;
+        var createOnly = new ResourceCopyOptions { CreateOnly = true, Overwrite = true };
+
+        // Act
+        Task refused() => container.CopyResourceAsync("a", name, "b", createOnly);
+        await Assert.ThrowsAsync<ResourceConflictException>(refused);
+        ResourceInfo? created = await container.CopyResourceAsync("a", name, "c", createOnly);
+
+        // Assert
+        Assert.Single(await container.GetResourceVersionsAsync("b"));
+        Assert.Equal("existing", (await container.DownloadContentAsync("b"))!.Content.ToString());
+        Assert.Equal("source", (await container.DownloadContentAsync("c"))!.Content.ToString());
+        Assert.Equal("c", created!.Name);
     }
 
     [SkippableFact]
@@ -123,10 +146,10 @@ public abstract partial class ResourcefullContractTests
         await container.UploadAsync("notes.txt", BinaryData.FromString("second"));
 
         // Act
-        ResourceInfo? restored = await container.RestoreVersionAsync("notes.txt", first.VersionId!);
+        ResourceInfo? restored = await container.RestoreVersionAsync("notes.txt", first.VersionId);
 
         // Assert
-        var origin = new ResourceOrigin(container.ResourceContainerInfo.Name, "notes.txt", first.VersionId!);
+        var origin = new ResourceOrigin(container.ResourceContainerInfo.Name, "notes.txt", first.VersionId);
         Assert.Equal(origin, restored!.CopiedFrom);
         Assert.Equal(origin, (await container.GetResourceInfoAsync("notes.txt"))!.CopiedFrom);
     }

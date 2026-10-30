@@ -27,6 +27,20 @@ Resourcefull reports an expected absence with a return value and everything else
 | A canceled operation | `OperationCanceledException` |
 | A storage failure | the provider's exception, such as `SqlException`; with SQL Server, a transient failure that outlasts the retries throws EF Core's `RetryLimitExceededException`, with the last failure as its inner exception |
 
+## Reading from a container that doesn't exist
+
+Writing into a container that doesn't exist throws `ResourceContainerNotFoundException`, but reading from it and
+deleting from it treat it as an empty container: listings are empty, `GetUsageAsync` <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span> reports
+zero, downloads and `GetResourceInfoAsync` return `null`, and `ExistsAsync` and `…IfExistsAsync` deletes return
+`false`. So a misspelled container name looks like an empty container rather than an error. Where that
+matters, such as a container name that comes from a request, check the service client's `ContainerExistsAsync`
+first and answer 404 if it's `false`:
+
+```csharp
+if (!await resources.ContainerExistsAsync(name, cancellationToken)) return Results.NotFound();
+IResourceContainerClient container = resources.GetResourceContainerClient(name);
+```
+
 ## Resourcefull's exceptions
 
 All of them derive from `ResourcefullException`, so one `catch` handles any of them:

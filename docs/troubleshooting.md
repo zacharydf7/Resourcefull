@@ -1,5 +1,8 @@
 # Troubleshooting
 
+Errors that come from using Resourcefull's API. For problems in the database itself, such as a full transaction log,
+running out of connections or timeouts, see [Running SQL Server](providers/sql-server-operations.md#when-something-goes-wrong).
+
 ## `InvalidOperationException: No provider configured.`
 
 `AddResourcefull` needs exactly one provider: call `UseSqlServer`, `UseInMemory` or `UseProvider` inside it. Calling

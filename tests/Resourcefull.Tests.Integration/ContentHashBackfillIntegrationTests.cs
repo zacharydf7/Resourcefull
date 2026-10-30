@@ -39,7 +39,7 @@ public class ContentHashBackfillIntegrationTests(SqlServerFixture fixture)
             // Assert
             Assert.Equal(3, firstRun.Hashed);
             ContentLengthMismatch mismatch = Assert.Single(firstRun.Mismatches);
-            Assert.Equal(new ContentLengthMismatch("c", "b", second.VersionId!, 999, 200_000), mismatch);
+            Assert.Equal(new ContentLengthMismatch("c", "b", second.VersionId, 999, 200_000), mismatch);
             Assert.Equal(0, secondRun.Hashed);
             Assert.Equal(mismatch, Assert.Single(secondRun.Mismatches));
             Assert.Equal(first.ContentHash, (await container.GetResourceInfoAsync("a"))!.ContentHash);

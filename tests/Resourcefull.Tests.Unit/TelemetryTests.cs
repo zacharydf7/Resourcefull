@@ -2,8 +2,10 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
 using System.Reflection;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Resourcefull.InMemory;
+using Resourcefull.SqlServer;
 
 namespace Resourcefull.Tests.Unit;
 
@@ -268,7 +270,7 @@ public sealed class TelemetryTests : IDisposable
         using Activity root = TestSource.StartActivity("test")!;
 
         // Act
-        await container.SetExpiryAsync("a", stored.VersionId!, DateTimeOffset.UtcNow.AddDays(1));
+        await container.SetExpiryAsync("a", stored.VersionId, DateTimeOffset.UtcNow.AddDays(1));
         await service.DeleteExpiredAsync();
 
         // Assert
@@ -458,5 +460,94 @@ public sealed class TelemetryTests : IDisposable
         // Assert
         Assert.Equal(true, SpansIn(root).Single(s => s.OperationName == "resourcefull upload").GetTagItem("resourcefull.conditional"));
         Assert.Equal(7, SpansIn(root).Single(s => s.OperationName == "resourcefull list_page").GetTagItem("resourcefull.page_size"));
+    }
+
+    private sealed class FailingCleanupHandler : IResourceCleanupHandler
+    {
+        public ValueTask OnCleanupAsync(ResourceCleanup cleanup, CancellationToken cancellationToken) =>
+            throw new InvalidOperationException("The audit log is down.");
+    }
+
+    private List<Dictionary<string, object?>> MeasurementsOf(string instrument) =>
+        [.. _measurements.Where(m => m.Instrument == instrument).Select(m => m.Tags)];
+
+    [Fact]
+    public async Task UploadAsync_ShouldCountTheFailedPruneAndCleanupHandler_WhenTheHandlerThrowsWhilePruning()
+    {
+        // Arrange: without versioning, an overwrite prunes the version before it.
+        using ServiceProvider provider = new ServiceCollection()
+            .AddResourcefull(o => o.UseInMemory().UseCleanupHandler<FailingCleanupHandler>())
+            .BuildServiceProvider();
+        IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>().CreateResourceContainerAsync("c");
+        await container.UploadAsync("a", BinaryData.FromString("x"));
+
+        // Act
+        await container.UploadAsync("a", BinaryData.FromString("y"), new ResourceUploadOptions { Overwrite = true });
+
+        // Assert
+        Dictionary<string, object?> prune = Assert.Single(MeasurementsOf("resourcefull.client.prune.failures"));
+        Assert.Equal(("inmemory", "System.InvalidOperationException"), (prune["resourcefull.provider"], prune["error.type"]));
+        Dictionary<string, object?> handler = Assert.Single(MeasurementsOf("resourcefull.client.cleanup_handler.failures"));
+        Assert.Equal(("pruned", "System.InvalidOperationException"), (handler["resourcefull.cleanup_reason"], handler["error.type"]));
+    }
+
+    [Fact]
+    public async Task DeleteExpiredAsync_ShouldCountTheVersionsItDeleted_WhenSomeHaveExpired()
+    {
+        // Arrange
+        using ServiceProvider provider = NewServices();
+        IResourceServiceClient service = provider.GetRequiredService<IResourceServiceClient>();
+        IResourceContainerClient container = await service.CreateResourceContainerAsync("c");
+        var expired = new ResourceUploadOptions { ExpiresAt = DateTimeOffset.UtcNow.AddDays(-1) };
+        await container.UploadAsync("a", BinaryData.FromString("x"), expired);
+        await container.UploadAsync("b", BinaryData.FromString("x"), expired);
+
+        // Act
+        await service.DeleteExpiredAsync();
+
+        // Assert
+        Assert.Equal(2, MeasurementsOf("resourcefull.client.expired").Count(tags => Equals(tags["resourcefull.provider"], "inmemory")));
+        Assert.Empty(MeasurementsOf("resourcefull.client.expire.failures"));
+    }
+
+    [Fact]
+    public async Task DeleteExpiredAsync_ShouldCountTheFailedVersionsAndCleanupHandler_WhenTheHandlerThrows()
+    {
+        // Arrange
+        using ServiceProvider provider = new ServiceCollection()
+            .AddResourcefull(o => o.UseInMemory().UseCleanupHandler<FailingCleanupHandler>())
+            .BuildServiceProvider();
+        IResourceServiceClient service = provider.GetRequiredService<IResourceServiceClient>();
+        IResourceContainerClient container = await service.CreateResourceContainerAsync("c");
+        await container.UploadAsync("a", BinaryData.FromString("x"), new ResourceUploadOptions { ExpiresAt = DateTimeOffset.UtcNow.AddDays(-1) });
+
+        // Act
+        await Assert.ThrowsAsync<AggregateException>(() => service.DeleteExpiredAsync());
+
+        // Assert
+        Dictionary<string, object?> failure = Assert.Single(MeasurementsOf("resourcefull.client.expire.failures"));
+        Assert.Equal("System.InvalidOperationException", failure["error.type"]);
+        Assert.Equal("expired", Assert.Single(MeasurementsOf("resourcefull.client.cleanup_handler.failures"))["resourcefull.cleanup_reason"]);
+        Assert.Empty(MeasurementsOf("resourcefull.client.expired"));
+    }
+
+    [Fact]
+    public void RetryCountingExecutionStrategy_ShouldCountEachRetry_WhenATransientFailureIsRetried()
+    {
+        // Arrange: SQL Server's strategy retries a timeout, so no database is needed.
+        DbContextOptions<ResourceDbContext> options = new DbContextOptionsBuilder<ResourceDbContext>()
+            .UseSqlServer("Server=unused", sql => sql.ExecutionStrategy(dependencies =>
+                new RetryCountingExecutionStrategy(dependencies, maxRetryCount: 2, maxRetryDelay: TimeSpan.Zero, errorNumbersToAdd: [])))
+            .Options;
+        using var context = new ResourceDbContext(options);
+        int attempts = 0;
+
+        // Act
+        context.Database.CreateExecutionStrategy().Execute(() => ++attempts < 3 ? throw new TimeoutException() : attempts);
+
+        // Assert
+        List<Dictionary<string, object?>> retries = MeasurementsOf("resourcefull.sqlserver.retries");
+        Assert.Equal(2, retries.Count);
+        Assert.All(retries, tags => Assert.Equal(("sqlserver", "System.TimeoutException"), (tags["resourcefull.provider"], tags["error.type"])));
     }
 }

@@ -5,7 +5,8 @@
 You can write a whole container, every file and every version, to a single zip file, and turn that file back into a
 container later, in the same store or another one. Use it to:
 
-- **back up** one container before a risky change, or on a schedule;
+- **keep a copy** of one container before a risky change (to back up the whole store, see
+  [Backups and recovery](backups-and-recovery.md));
 - **move** a container between environments, such as from production to a staging copy;
 - **hand over** a customer's files, or keep a copy when you close their account.
 
@@ -43,6 +44,9 @@ The export is an ordinary zip, so you can open it with any zip tool to see what'
   content hash, and which file in the zip holds its content.
 - **`content/`** holds the files' contents, each once. Versions with the same content, such as a file uploaded twice
   or a copy, share one entry, so copies don't make the export bigger.
+
+The manifest records its format, and Resourcefull's tests import an export exactly as 3.2 writes it, so a later
+release can't change the format by accident.
 
 ## Exporting
 
@@ -95,8 +99,9 @@ app.MapPost("/admin/containers/{name}/import", async (string name, HttpRequest r
 
 - **The manifest is checked first.** Names that break the [name rules](names.md), repeated
   names or version IDs, and missing fields are refused (`InvalidDataException`) before anything is created.
-- **Every file is checked against its hash** as it's imported, so content damaged in storage or on the way is refused
-  (`InvalidDataException`) rather than restored wrong.
+- **Every file is checked against its hash and length** as it's imported, so content damaged in storage or on the way
+  is refused (`InvalidDataException`) rather than restored wrong. A file longer than the length the manifest gives it
+  is refused before more than that is stored.
 - **A failed import deletes what it created.** If anything goes wrong, such as a refused file or a canceled import, the
   import deletes the container again. Fix the cause and import again. If the delete fails too, as it can when the
   database is unreachable or out of space, you get an `AggregateException` holding both errors, and should delete the
@@ -109,6 +114,11 @@ app.MapPost("/admin/containers/{name}/import", async (string name, HttpRequest r
 The hashes in an export catch accidental damage, not deliberate edits: whoever can change a file's content can change
 its hash in `manifest.json` too. An export is as trustworthy as where it came from, so only import files your
 application wrote, or that came from someone you trust, and keep backups where only you can change them.
+
+An export is also compressed, so a small file can describe far more content than its own size: many versions of one
+highly compressible file, for example. An import writes what its manifest declares, so to bound what any import can
+write, give containers a `MaxContainerSize` with [container policies](container-policies.md); an import is checked
+against it like any upload.
 
 ### Things to know
 

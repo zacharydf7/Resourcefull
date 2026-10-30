@@ -4,6 +4,10 @@ Files reach an API in one of two ways: as the whole body of a `PUT` request, whi
 in an HTML form. This page covers both, how to let only one of several editors save, and how to accept files larger
 than the web server allows by default.
 
+> [!NOTE]
+> This endpoint leaves out authorization to stay short. Before you use it, see
+> [Securing file endpoints](securing-endpoints.md).
+
 ```csharp
 app.MapPut("/files/{container}/{**name}", (string container, string name, HttpRequest request,
     IResourceServiceClient resources, CancellationToken cancellationToken) =>

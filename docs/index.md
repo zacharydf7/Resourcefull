@@ -6,6 +6,7 @@ decides where the bytes go: SQL Server in production, process memory in tests, o
 
 It's for applications that keep files people upload or download, such as invoices, profile pictures, reports, contract
 scans or video, and want them next to the rest of their data, rather than in a cloud service.
+[When to use Resourcefull](when-to-use.md) compares it with the alternatives.
 
 ## The building blocks
 

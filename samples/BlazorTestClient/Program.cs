@@ -2,6 +2,7 @@ using BlazorTestClient.Components;
 using BlazorTestClient.Utilities;
 using Microsoft.AspNetCore.StaticFiles;
 using Resourcefull;
+using Resourcefull.AspNetCore;
 using Resourcefull.InMemory;
 using Resourcefull.SqlServer;
 
@@ -45,5 +46,12 @@ app.UseAntiforgery();
 
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
+
+// The page links here to download, so a file streams from storage to the browser instead of being read into memory
+// and sent through the page's connection. Like the rest of this sample, it's open to anyone: see the docs' "Securing
+// file endpoints" before using it elsewhere.
+app.MapMethods("/download/{container}/{**name}", ["GET", "HEAD"], (string container, string name, string? versionId,
+    IResourceServiceClient resources) =>
+    Results.Resource(resources.GetResourceContainerClient(container), name, versionId));
 
 app.Run();

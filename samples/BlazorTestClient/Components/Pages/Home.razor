@@ -1,7 +1,6 @@
 ﻿@page "/"
 @using Microsoft.Extensions.Options
 @inject IResourceServiceClient ResourceServiceClient
-@inject IJSRuntime JSRuntime
 @inject FileExtensionContentTypeProvider FileExtensionContentTypeProvider
 @inject IServiceScopeFactory ScopeFactory
 
@@ -64,7 +63,7 @@
                         <td>@resource.ContentLength</td>
                         <td class="uri-cell">@resource.Uri</td>
                         <td><button class="btn btn-danger" @onclick="() => DeleteResource(resource)">Delete</button></td>
-                        <td><button class="btn btn-secondary" @onclick="() => DownloadResource(resource)">Download</button></td>
+                        <td><a class="btn btn-secondary" href="@DownloadUrl(resource)">Download</a></td>
                         @if (_options.IsVersioningEnabled)
                         {
                             <td>
@@ -104,7 +103,7 @@
                                                 <td>@version.ContentLength</td>
                                                 <td class="uri-cell">@version.Uri</td>
                                                 <td><button class="btn btn-danger" @onclick="() => DeleteResource(version, true)">Delete</button></td>
-                                                <td><button class="btn btn-secondary" @onclick="() => DownloadResource(version)">Download</button></td>
+                                                <td><a class="btn btn-secondary" href="@DownloadUrl(version)">Download</a></td>
                                                 <td><button class="btn btn-success" @onclick="() => RestoreResourceVersion(version)">Restore</button></td>
                                             </tr>
                                         }
@@ -196,17 +195,11 @@
         }
     }
 
-    public async Task DownloadResource(ResourceInfo resourceInfo)
-    {
-        var containerClient = ResourceServiceClient.GetResourceContainerClient(resourceInfo.ContainerName);
-        var result = await containerClient.DownloadStreamingAsync(resourceInfo.Name, resourceInfo.VersionId);
-        if (result is null) return;
-        await using Stream stream = result.Stream;
-        using var ms = new MemoryStream();
-        await stream.CopyToAsync(ms);
-        var fileContent = ms.ToArray();
-        await JSRuntime.InvokeVoidAsync("downloadFile", result.ResourceInfo.Name, fileContent);
-    }
+    // A link to the download endpoint in Program.cs, so the file streams from storage to the browser rather than through
+    // this page's connection.
+    private static string DownloadUrl(ResourceInfo resource) =>
+        $"download/{Uri.EscapeDataString(resource.ContainerName)}/{string.Join('/', resource.Name.Split('/').Select(Uri.EscapeDataString))}" +
+        $"?versionId={Uri.EscapeDataString(resource.VersionId)}";
 
     public async Task UploadResource(InputFileChangeEventArgs args, string containerName)
     {
@@ -219,7 +212,8 @@
         var containerClient = ResourceServiceClient.GetResourceContainerClient(containerName);
         try
         {
-            await containerClient.UploadAsync(args.File.Name, args.File.OpenReadStream(args.File.Size), resourceUploadOptions);
+            await using Stream content = args.File.OpenReadStream(args.File.Size);
+            await containerClient.UploadAsync(args.File.Name, content, resourceUploadOptions);
             _errorMessages.Clear();
         }
         catch (ResourcefullException ex)

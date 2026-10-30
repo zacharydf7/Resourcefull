@@ -1,5 +1,6 @@
 using System.IO.Compression;
 using System.Security.Cryptography;
+using System.Text.Json.Nodes;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Resourcefull.Tests.Contract;
@@ -154,6 +155,7 @@ public abstract partial class ResourcefullContractTests
     [InlineData("\"name\": \"a\"", "\"name\": \"a \"")]                      // a name the rules refuse
     [InlineData("\"name\": \"b\"", "\"name\": \"a\"")]                       // the same name twice
     [InlineData("\"contentType\": null,", "")]                               // a field left out
+    [InlineData("\"contentLength\": 1,", "\"contentLength\": -1,")]          // a negative length
     public async Task ImportContainerAsync_ShouldRefuseBeforeCreatingAnything_WhenTheManifestWasEdited(string original, string edited)
     {
         // Arrange
@@ -163,6 +165,40 @@ public abstract partial class ResourcefullContractTests
         await source.UploadAsync("a", BinaryData.FromString("x"));
         await source.UploadAsync("b", BinaryData.FromString("y"));
         MemoryStream export = await ExportAsync(service, source.ResourceContainerInfo.Name);
+        await EditManifestAsync(export, original, edited);
+        string restoredName = NewContainerName();
+
+        // Act
+        Task act() => service.ImportContainerAsync(restoredName, export);
+
+        // Assert
+        await Assert.ThrowsAsync<InvalidDataException>(act);
+        Assert.False(await service.ContainerExistsAsync(restoredName));
+    }
+
+    [SkippableFact]
+    public async Task ImportContainerAsync_ShouldRefuseAndLeaveNoContainer_WhenAFileIsLongerThanItsManifestSays()
+    {
+        // Arrange: the content and its hash are untouched; only the length the manifest gives it is shorter.
+        using ServiceProvider provider = BuildServiceProvider();
+        IResourceServiceClient service = ServiceOf(provider);
+        IResourceContainerClient source = await NewContainerAsync(provider);
+        await source.UploadAsync("a", BinaryData.FromString("hello"));
+        MemoryStream export = await ExportAsync(service, source.ResourceContainerInfo.Name);
+        await EditManifestAsync(export, "\"contentLength\": 5,", "\"contentLength\": 4,");
+        string restoredName = NewContainerName();
+
+        // Act
+        Task act() => service.ImportContainerAsync(restoredName, export);
+
+        // Assert
+        await Assert.ThrowsAsync<InvalidDataException>(act);
+        Assert.False(await service.ContainerExistsAsync(restoredName));
+    }
+
+    /// <summary>Replaces the first <paramref name="original"/> in the export's manifest, and rewinds the export.</summary>
+    private static async Task EditManifestAsync(MemoryStream export, string original, string edited)
+    {
         await using (ZipArchive zip = await ZipArchive.CreateAsync(export, ZipArchiveMode.Update, leaveOpen: true, entryNameEncoding: null))
         {
             ZipArchiveEntry manifest = zip.GetEntry("manifest.json")!;
@@ -176,14 +212,6 @@ public abstract partial class ResourcefullContractTests
             await write.WriteAsync(System.Text.Encoding.UTF8.GetBytes(text[..at] + edited + text[(at + original.Length)..]));
         }
         export.Position = 0;
-        string restoredName = NewContainerName();
-
-        // Act
-        Task act() => service.ImportContainerAsync(restoredName, export);
-
-        // Assert
-        await Assert.ThrowsAsync<InvalidDataException>(act);
-        Assert.False(await service.ContainerExistsAsync(restoredName));
     }
 
     [SkippableFact]
@@ -324,5 +352,106 @@ public abstract partial class ResourcefullContractTests
         // Assert
         Assert.Equal(2, (await service.GetResourceContainerClient(restoredName).GetUsageAsync()).ResourceCount);
         Assert.Equal(2, imported.VersionCount);
+    }
+
+    /// <summary>
+    /// A format 1 export as 3.2 writes it: a copy, a name with two versions that share their content, a content type,
+    /// metadata with mixed-case keys, and an expiry. Exports already written have to stay readable, so this text must
+    /// never change; a new format gets a test of its own.
+    /// </summary>
+    private const string Format1Manifest = """
+        {
+          "format": 1,
+          "metadata": { "Team": "billing" },
+          "resources": [
+            {
+              "name": "copy.txt",
+              "versions": [
+                {
+                  "versionId": "0193a1b2-0000-7000-8000-000000000003",
+                  "lastModified": "2026-01-02T03:04:07+00:00",
+                  "contentType": null,
+                  "contentLength": 5,
+                  "contentHash": "sha256:2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824",
+                  "metadata": {},
+                  "copiedFrom": { "containerName": "notes", "resourceName": "notes.txt", "versionId": "0193a1b2-0000-7000-8000-000000000001" },
+                  "expiresAt": null,
+                  "content": "content/2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+                }
+              ]
+            },
+            {
+              "name": "notes.txt",
+              "versions": [
+                {
+                  "versionId": "0193a1b2-0000-7000-8000-000000000001",
+                  "lastModified": "2026-01-02T03:04:05+00:00",
+                  "contentType": "text/plain",
+                  "contentLength": 5,
+                  "contentHash": "sha256:2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824",
+                  "metadata": { "Author": "ada" },
+                  "copiedFrom": null,
+                  "expiresAt": null,
+                  "content": "content/2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+                },
+                {
+                  "versionId": "0193a1b2-0000-7000-8000-000000000002",
+                  "lastModified": "2026-01-02T03:04:06+00:00",
+                  "contentType": "text/plain",
+                  "contentLength": 5,
+                  "contentHash": "sha256:2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824",
+                  "metadata": {},
+                  "copiedFrom": null,
+                  "expiresAt": "2099-12-31T00:00:00+00:00",
+                  "content": "content/2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+                }
+              ]
+            }
+          ]
+        }
+        """;
+
+    [SkippableFact]
+    public async Task ImportContainerAsync_ShouldReadAFormat1ExportAndExportItAgainUnchanged_WhenGivenOneAs32WroteIt()
+    {
+        // Arrange
+        using ServiceProvider provider = BuildServiceProvider(o => o.UseVersioning());
+        IResourceServiceClient service = ServiceOf(provider);
+        var golden = new MemoryStream();
+        await using (ZipArchive zip = await ZipArchive.CreateAsync(golden, ZipArchiveMode.Create, leaveOpen: true,
+            entryNameEncoding: null))
+        {
+            await using (Stream manifest = await zip.CreateEntry("manifest.json").OpenAsync())
+                await manifest.WriteAsync(System.Text.Encoding.UTF8.GetBytes(Format1Manifest));
+            const string hello = "content/2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824";
+            await using Stream content = await zip.CreateEntry(hello).OpenAsync();
+            await content.WriteAsync("hello"u8.ToArray());
+        }
+        golden.Position = 0;
+        string name = NewContainerName();
+
+        // Act
+        await service.ImportContainerAsync(name, golden);
+        MemoryStream exported = await ExportAsync(service, name);
+
+        // Assert: what was read, and that writing it again gives the same manifest.
+        IResourceContainerClient container = service.GetResourceContainerClient(name);
+        IReadOnlyList<ResourceInfo> versions = await container.GetResourceVersionsAsync("notes.txt");
+        Assert.Equal(["0193a1b2-0000-7000-8000-000000000002", "0193a1b2-0000-7000-8000-000000000001"],
+            versions.Select(v => v.VersionId));
+        Assert.Equal(new DateTimeOffset(2026, 1, 2, 3, 4, 6, TimeSpan.Zero), versions[0].LastModified);
+        Assert.Equal(new DateTimeOffset(2099, 12, 31, 0, 0, 0, TimeSpan.Zero), versions[0].ExpiresAt);
+        Assert.Equal("ada", versions[1].Metadata["Author"]);
+        Assert.Equal("text/plain", versions[1].ContentType);
+        Assert.Equal(new ResourceOrigin("notes", "notes.txt", "0193a1b2-0000-7000-8000-000000000001"),
+            (await container.GetResourceInfoAsync("copy.txt"))!.CopiedFrom);
+        Assert.Equal("hello", (await container.DownloadContentAsync("copy.txt"))!.Content.ToString());
+        await using ZipArchive written = await ZipArchive.CreateAsync(exported, ZipArchiveMode.Read, leaveOpen: false,
+            entryNameEncoding: null);
+        string manifestText;
+        await using (Stream read = await written.GetEntry("manifest.json")!.OpenAsync())
+            manifestText = await new StreamReader(read).ReadToEndAsync();
+        Assert.True(JsonNode.DeepEquals(JsonNode.Parse(Format1Manifest), JsonNode.Parse(manifestText)),
+            manifestText);
     }
 }

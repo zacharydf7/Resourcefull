@@ -85,6 +85,80 @@ ResourceInfo? info = await invoices.GetResourceInfoAsync("2026-10.pdf");
 bool deleted = await invoices.DeleteResourceIfExistsAsync("2026-10.pdf");
 ```
 
+## Your first file API
+
+Here's a complete ASP.NET Core app that stores files you send it and gives them back, using the
+`Resourcefull.AspNetCore` package for the HTTP side:
+
+```shell
+dotnet new web -n Files
+cd Files
+dotnet add package Resourcefull.SqlServer
+dotnet add package Resourcefull.AspNetCore
+```
+
+Point it at a database in `appsettings.json`. On Windows, LocalDB comes with Visual Studio; anywhere else, run SQL
+Server in a container (`docker run -e ACCEPT_EULA=Y -e MSSQL_SA_PASSWORD=Your_password1 -p 1433:1433
+mcr.microsoft.com/mssql/server:2022-latest`) and use `Server=localhost;User Id=sa;Password=Your_password1;
+TrustServerCertificate=True;Database=Files` instead:
+
+```json
+{
+  "ConnectionStrings": {
+    "Resources": "Server=(localdb)\MSSQLLocalDB;Database=Files;Trusted_Connection=True"
+  }
+}
+```
+
+Then replace `Program.cs`:
+
+```csharp
+using Resourcefull;
+using Resourcefull.AspNetCore;
+using Resourcefull.SqlServer;
+
+var builder = WebApplication.CreateBuilder(args);
+builder.Services.AddResourcefull(options => options
+    .UseSqlServer(builder.Configuration.GetConnectionString("Resources")!)
+    .UseVersioning(maxVersions: 10));
+// Missing files answer 404, a broken rule 400 or 409, rather than 500.
+builder.Services.AddResourcefullExceptionHandler();
+
+var app = builder.Build();
+app.UseExceptionHandler();
+await app.Services.MigrateResourcefullDatabaseAsync();
+
+// The container the endpoints store into, created once.
+using (IServiceScope scope = app.Services.CreateScope())
+    await scope.ServiceProvider.GetRequiredService<IResourceServiceClient>().CreateResourceContainerIfNotExistsAsync("files");
+
+app.MapPut("/files/{**name}", (string name, HttpRequest request, IResourceServiceClient resources,
+    CancellationToken cancellationToken) =>
+    resources.GetResourceContainerClient("files").UploadFromRequestAsync(name, request, null, cancellationToken));
+
+app.MapGet("/files/{**name}", (string name, IResourceServiceClient resources) =>
+    Results.Resource(resources.GetResourceContainerClient("files"), name));
+
+app.Run();
+```
+
+The download endpoint's `Results.Resource(container, name)`, which also answers range requests, is new in 3.2
+<span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span>. With 3.1, download first and pass the result, as [Serving downloads](aspnet-core/serving-downloads.md)
+shows.
+
+Run it with `dotnet run`, then send it a file and read it back, using the address `dotnet run` prints:
+
+```shell
+curl -X PUT -H "Content-Type: application/pdf" --data-binary @report.pdf http://localhost:5000/files/2026/report.pdf
+curl -o copy.pdf http://localhost:5000/files/2026/report.pdf
+```
+
+The first `curl` answers `201 Created` with what was stored, the second downloads it. Uploading again keeps the
+older version, because of `UseVersioning`.
+
+This app lets anyone read and write every file, which is fine on your own machine. Before it goes anywhere else, read
+[Securing file endpoints](aspnet-core/securing-endpoints.md) and [Going to production](going-to-production.md).
+
 ## In a console app or worker
 
 Resourcefull registers its clients as scoped services, so outside a web request create a scope for each unit of work:
@@ -114,6 +188,7 @@ using (IServiceScope scope = host.Services.CreateScope())
 
 ## Next steps
 
+- [Going to production](going-to-production.md): what to set up before real users and real data arrive.
 - [Uploads and downloads](uploading.md) for streams, lengths, hashes and cancellation.
 - [ASP.NET Core](aspnet-core/index.md) for serving files from an API with the right status codes and
   headers.

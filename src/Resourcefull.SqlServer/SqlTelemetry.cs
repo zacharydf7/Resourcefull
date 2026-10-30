@@ -1,16 +1,36 @@
 using System.Diagnostics;
+using System.Diagnostics.Metrics;
+using System.Globalization;
 using System.Reflection;
+using Microsoft.Data.SqlClient;
 
 namespace Resourcefull.SqlServer;
 
 /// <summary>
-/// Spans for the SQL Server package's own operations, the backfill, migrations and health check, published under the
-/// same source name as the clients' spans and tagged the same way.
+/// Spans for the SQL Server package's own operations, the backfill, migrations and health check, and its count of
+/// retries, published under the same source and meter names as the clients' and tagged the same way.
 /// </summary>
 internal static class SqlTelemetry
 {
-    private static readonly ActivitySource Source = new(ResourcefullTelemetry.ActivitySourceName,
-        typeof(SqlTelemetry).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion);
+    private static readonly string? Version =
+        typeof(SqlTelemetry).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
+
+    private static readonly ActivitySource Source = new(ResourcefullTelemetry.ActivitySourceName, Version);
+
+    private static readonly Meter Meter = new(ResourcefullTelemetry.MeterName, Version);
+
+    private static readonly Counter<long> Retries = Meter.CreateCounter<long>("resourcefull.sqlserver.retries", unit: "{retry}",
+        description: "Database calls retried after a transient failure, such as a deadlock or a dropped connection.");
+
+    /// <summary>Counts a retry, tagged with the failure's type and, for a SQL Server error, its number.</summary>
+    public static void CountRetry(Exception exception)
+    {
+        if (!Retries.Enabled) return;
+        var tags = new TagList { { "resourcefull.provider", "sqlserver" }, { "error.type", exception.GetType().FullName } };
+        if ((exception as SqlException ?? exception.InnerException as SqlException) is { } sql)
+            tags.Add("db.response.status_code", sql.Number.ToString(CultureInfo.InvariantCulture));
+        Retries.Add(1, tags);
+    }
 
     public static Activity? Start(string operation)
     {

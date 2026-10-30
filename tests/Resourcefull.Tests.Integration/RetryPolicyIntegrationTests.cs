@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+using System.Diagnostics.Metrics;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -7,7 +9,7 @@ namespace Resourcefull.Tests.Integration;
 
 /// <summary>
 /// The retry policy that <c>UseSqlServer</c> configures, against a real deadlock: SQL Server picks the low-priority
-/// session as the victim (error 1205), and the policy must run that work again rather than fail it.
+/// session as the victim (error 1205), and the policy must run that work again, counting the retry, rather than fail it.
 /// </summary>
 [Collection(SqlServerCollection.Name)]
 public class RetryPolicyIntegrationTests(SqlServerFixture fixture)
@@ -35,6 +37,19 @@ public class RetryPolicyIntegrationTests(SqlServerFixture fixture)
         var bLocked = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var aLocked = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         int attempts = 0;
+        // Other tests may retry at the same time, so only this deadlock's error number is looked for.
+        var retries = new ConcurrentQueue<string?>();
+        using var listener = new MeterListener();
+        listener.InstrumentPublished = (instrument, l) =>
+        {
+            if (instrument.Name == "resourcefull.sqlserver.retries") l.EnableMeasurementEvents(instrument);
+        };
+        listener.SetMeasurementEventCallback<long>((_, _, tags, _) =>
+        {
+            foreach (KeyValuePair<string, object?> tag in tags)
+                if (tag.Key == "db.response.status_code") retries.Enqueue(tag.Value as string);
+        });
+        listener.Start();
 
         // The opponent locks B, then waits for A; it commits once the deadlock is resolved in its favor.
         Task opponent = Task.Run(async () =>
@@ -76,6 +91,7 @@ public class RetryPolicyIntegrationTests(SqlServerFixture fixture)
 
         // Assert: the first attempt was the victim, and the retry stored the work after the opponent's.
         Assert.Equal(2, attempts);
+        Assert.Contains("1205", retries);
         await using SqlConnection check = await fixture.OpenConnectionAsync();
         await using SqlCommand read = check.CreateCommand();
         read.CommandText = $"SELECT (SELECT V FROM {tableA}) * 10 + (SELECT V FROM {tableB});";

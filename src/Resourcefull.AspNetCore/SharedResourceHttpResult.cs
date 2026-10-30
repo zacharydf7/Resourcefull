@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Features;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Resourcefull.AspNetCore;
@@ -13,7 +14,7 @@ namespace Resourcefull.AspNetCore;
 /// <c>Referer</c> header of pages the file links to, nor kept by shared caches.
 /// <para>Coming in 3.2.</para>
 /// </summary>
-public sealed class SharedResourceHttpResult : IResult
+public sealed class SharedResourceHttpResult : IResult, IActionResult
 {
     internal SharedResourceHttpResult(IResourceServiceClient resources, string token)
     {
@@ -62,4 +63,10 @@ public sealed class SharedResourceHttpResult : IResult
                 break;
         }
     }
+
+    /// <summary>
+    /// Runs the result as an MVC action result, so a Razor Pages handler, which can't return an <see cref="IResult"/>,
+    /// can return it.
+    /// </summary>
+    Task IActionResult.ExecuteResultAsync(ActionContext context) => ExecuteAsync(context.HttpContext);
 }

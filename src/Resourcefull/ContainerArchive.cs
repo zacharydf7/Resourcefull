@@ -1,5 +1,6 @@
 using System.IO.Compression;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace Resourcefull;
 
@@ -31,14 +32,37 @@ internal static class ContainerArchive
         RespectRequiredConstructorParameters = true
     };
 
-    /// <summary>An export's description of the container, which <see cref="ReadManifestAsync"/> reads.</summary>
-    internal sealed record Manifest(int Format, IDictionary<string, string> Metadata, List<ManifestResource> Resources);
+    // The manifest's JSON names are the file format, so each is spelled out: renaming a property mustn't change them.
 
-    internal sealed record ManifestResource(string Name, List<ManifestVersion> Versions);
+    /// <summary>An export's description of the container, which <see cref="ReadManifestAsync"/> reads.</summary>
+    internal sealed record Manifest(
+        [property: JsonPropertyName("format")] int Format,
+        [property: JsonPropertyName("metadata")] IDictionary<string, string> Metadata,
+        [property: JsonPropertyName("resources")] List<ManifestResource> Resources);
+
+    internal sealed record ManifestResource(
+        [property: JsonPropertyName("name")] string Name,
+        [property: JsonPropertyName("versions")] List<ManifestVersion> Versions);
 
     /// <summary>A version as the export describes it; <c>Content</c> names the entry that holds its content.</summary>
-    internal sealed record ManifestVersion(string VersionId, DateTimeOffset LastModified, string? ContentType, long ContentLength,
-        string ContentHash, IDictionary<string, string> Metadata, ResourceOrigin? CopiedFrom, DateTimeOffset? ExpiresAt, string Content);
+    internal sealed record ManifestVersion(
+        [property: JsonPropertyName("versionId")] string VersionId,
+        [property: JsonPropertyName("lastModified")] DateTimeOffset LastModified,
+        [property: JsonPropertyName("contentType")] string? ContentType,
+        [property: JsonPropertyName("contentLength")] long ContentLength,
+        [property: JsonPropertyName("contentHash")] string ContentHash,
+        [property: JsonPropertyName("metadata")] IDictionary<string, string> Metadata,
+        [property: JsonPropertyName("copiedFrom")] ManifestOrigin? CopiedFrom,
+        [property: JsonPropertyName("expiresAt")] DateTimeOffset? ExpiresAt,
+        [property: JsonPropertyName("content")] string Content);
+
+    /// <summary>
+    /// A <see cref="ResourceOrigin"/> as the export describes it, so the public type can change without the format.
+    /// </summary>
+    internal sealed record ManifestOrigin(
+        [property: JsonPropertyName("containerName")] string ContainerName,
+        [property: JsonPropertyName("resourceName")] string ResourceName,
+        [property: JsonPropertyName("versionId")] string VersionId);
 
     public static async Task<ResourceExportResult> ExportAsync(IResourceRepository repository, ResourceContainerInfo container,
         Stream destination, CancellationToken cancellationToken)
@@ -86,8 +110,11 @@ internal static class ContainerArchive
                         contentSize += content.ContentLength;
                     }
 
-                    versions.Add(new ManifestVersion(version.VersionId!, version.LastModified, version.ContentType, content.ContentLength,
-                        content.ContentHash, version.Metadata, version.CopiedFrom, version.ExpiresAt, entryName));
+                    ManifestOrigin? origin = version.CopiedFrom is { } from
+                        ? new ManifestOrigin(from.ContainerName, from.ResourceName, from.VersionId)
+                        : null;
+                    versions.Add(new ManifestVersion(version.VersionId, version.LastModified, version.ContentType, content.ContentLength,
+                        content.ContentHash, version.Metadata, origin, version.ExpiresAt, entryName));
                 }
 
                 if (versions.Count == 0) continue;
@@ -125,15 +152,20 @@ internal static class ContainerArchive
                     VersionId = version.VersionId,
                     LastModified = version.LastModified,
                     ContentType = version.ContentType,
-                    // Not declared, so content changed to another length is caught by the hash check below, as any change is.
+                    // Not declared: the entry's stream refuses content longer than the manifest's length, and the hash
+                    // check below catches any other change.
                     Metadata = version.Metadata,
-                    CopiedFrom = version.CopiedFrom,
+                    CopiedFrom = version.CopiedFrom is { } from
+                        ? new ResourceOrigin(from.ContainerName, from.ResourceName, from.VersionId)
+                        : null,
                     ExpiresAt = version.ExpiresAt,
                     // Stored too, for applications on 2.x, which read it from storage.
                     Uri = uriProvider?.GetAbsoluteUri(new ResourcefullContext(containerName, resource.Name, version.VersionId))
                 };
 
-                await using Stream content = await entry.OpenAsync(cancellationToken);
+                // Able to go back to its start, so a provider that retries a transient failure can read it again.
+                await using Stream content = new RewindableEntryStream(entry, await entry.OpenAsync(cancellationToken),
+                    version.ContentLength);
                 var usage = new ResourceContainerUsage(contentSize, resourceCount, versionCount);
                 Stream checkedContent = policies is not null && await policies.CheckNewVersionAsync(containerName, resource.Name, restore: false,
                     version.ContentType, version.ContentLength, telemetry, cancellationToken, usage) is { } limit
@@ -194,14 +226,93 @@ internal static class ContainerArchive
             foreach (ManifestVersion version in resource.Versions)
             {
                 if (version.VersionId.Length is 0 || version.VersionId.Length > ResourceNames.MaxVersionIdLength
-                    || !versionIds.Add(version.VersionId) || version.Content.Length is 0 || version.ContentHash.Length is 0)
+                    || !versionIds.Add(version.VersionId) || version.Content.Length is 0 || version.ContentHash.Length is 0
+                    || version.ContentLength < 0)
                 {
                     throw new InvalidDataException($"The export describes a version of {resource.Name} that can't be imported: " +
-                        "a version ID that's empty, too long or repeated, or no content or hash.");
+                        "a version ID that's empty, too long or repeated, no content or hash, or a negative length.");
                 }
             }
         }
 
         return manifest;
+    }
+}
+
+/// <summary>
+/// A zip entry's content that can seek back to its start, by opening the entry again; it can't seek anywhere else. It
+/// refuses content longer than <paramref name="declaredLength"/>, the length the export's manifest gives the version,
+/// before returning it, so a small, highly compressed entry can't write more than the manifest says.
+/// </summary>
+internal sealed class RewindableEntryStream(ZipArchiveEntry entry, Stream opened, long declaredLength) : Stream
+{
+    private Stream? _content = opened;
+    private long _position;
+
+    public override bool CanRead => true;
+    public override bool CanSeek => true;
+    public override bool CanWrite => false;
+    public override long Length => entry.Length;
+
+    public override long Position
+    {
+        get => _position;
+        set => Seek(value, SeekOrigin.Begin);
+    }
+
+    /// <summary>Goes back to the start; the entry is opened again by the next read.</summary>
+    public override long Seek(long offset, SeekOrigin origin)
+    {
+        if (origin != SeekOrigin.Begin || offset != 0)
+            throw new NotSupportedException("An export's entry can only go back to its start.");
+        if (_position == 0) return 0;
+        _content?.Dispose();
+        _content = null;
+        _position = 0;
+        return 0;
+    }
+
+    public override int Read(byte[] buffer, int offset, int count) => Read(buffer.AsSpan(offset, count));
+
+    public override int Read(Span<byte> buffer) => Counted((_content ??= entry.Open()).Read(buffer));
+
+    public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) =>
+        ReadAsync(buffer.AsMemory(offset, count), cancellationToken).AsTask();
+
+    public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+    {
+        _content ??= await entry.OpenAsync(cancellationToken);
+        return Counted(await _content.ReadAsync(buffer, cancellationToken));
+    }
+
+    private int Counted(int read)
+    {
+        _position += read;
+        if (_position > declaredLength)
+        {
+            throw new InvalidDataException($"The export's file {entry.FullName} is longer than the {declaredLength} bytes its " +
+                "manifest gives it: the export was damaged or changed.");
+        }
+
+        return read;
+    }
+
+    public override void Flush()
+    {
+    }
+
+    public override void SetLength(long value) => throw new NotSupportedException();
+    public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing) _content?.Dispose();
+        base.Dispose(disposing);
+    }
+
+    public override async ValueTask DisposeAsync()
+    {
+        if (_content is not null) await _content.DisposeAsync();
+        await base.DisposeAsync();
     }
 }

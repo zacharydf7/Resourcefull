@@ -92,4 +92,7 @@ back.
 
 Each sweep that finds expired versions records an `expire` operation, with `resourcefull.expired` counting the ones
 it deleted, and a sweep that finds none records nothing. A read-only container's expired versions count as found, so
-while one keeps some, every sweep records an operation, deleting none of those. `SetExpiryAsync` records `set_expiry`. See [Telemetry](telemetry.md).
+while one keeps some, every sweep records an operation, deleting none of those. `SetExpiryAsync` records `set_expiry`.
+Counters add up the versions sweeps delete (`resourcefull.client.expired`) and fail to delete
+(`resourcefull.client.expire.failures`), and the cleanup handler's failures; see
+[Work that happens out of sight](telemetry.md#work-that-happens-out-of-sight).

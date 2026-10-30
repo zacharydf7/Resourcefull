@@ -127,7 +127,7 @@ public class ContainerUsageIntegrationTests(SqlServerFixture fixture)
         // Assert
         Assert.Equal(legacy.ContentHash, copy!.ContentHash);
         Assert.Equal(legacy.ContentHash, (await container.GetResourceInfoAsync("b"))!.ContentHash);
-        Assert.Equal(new ResourceOrigin(containerName, "a", legacy.VersionId!), (await container.GetResourceInfoAsync("b"))!.CopiedFrom);
+        Assert.Equal(new ResourceOrigin(containerName, "a", legacy.VersionId), (await container.GetResourceInfoAsync("b"))!.CopiedFrom);
         Assert.Equal("hello", (await container.DownloadContentAsync("b"))!.Content.ToString());
     }
 }

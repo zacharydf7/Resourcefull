@@ -1,5 +1,9 @@
+using System.IO.Compression;
+using System.Security.Cryptography;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Moq;
+using Resourcefull.InMemory;
 
 namespace Resourcefull.Tests.Unit;
 
@@ -446,5 +450,108 @@ public class ResourceServiceClientTests
 
         // Assert
         repository.Verify(r => r.DeleteResourceContainerAsync("name", cts.Token), Times.Once);
+    }
+
+    [Fact]
+    public async Task DeleteExpiredAsync_ShouldPassTheToken_WhenCalledWithOne()
+    {
+        // Arrange
+        using var cts = new CancellationTokenSource();
+        var repository = new Mock<IResourceRepository>();
+        var expired = new ResourceInfo { ContainerName = "c", Name = "n", VersionId = "v1", ExpiresAt = DateTimeOffset.UnixEpoch };
+        repository.Setup(r => r.GetExpiredAsync(It.IsAny<DateTimeOffset>(), It.IsAny<int>(), null, It.IsAny<CancellationToken>())).ReturnsAsync([expired]);
+        repository.Setup(r => r.DeleteExpiredVersionAsync(It.IsAny<ResourceLocation>(), "v1", It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        var service = NewService(repository.Object);
+
+        // Act
+        await service.DeleteExpiredAsync(cts.Token);
+
+        // Assert: the check for any, the batch, and the delete.
+        repository.Verify(r => r.GetExpiredAsync(It.IsAny<DateTimeOffset>(), It.IsAny<int>(), null, cts.Token), Times.Exactly(2));
+        repository.Verify(r => r.DeleteExpiredVersionAsync(new ResourceLocation("c", "n"), "v1", It.IsAny<DateTimeOffset>(), cts.Token), Times.Once);
+    }
+
+    [Fact]
+    public async Task ExportContainerAsync_ShouldPassTheToken_WhenCalledWithOne()
+    {
+        // Arrange
+        using var cts = new CancellationTokenSource();
+        var repository = new Mock<IResourceRepository>();
+        var version = new ResourceInfo { ContainerName = "name", Name = "a", VersionId = "v1" };
+        repository.Setup(r => r.GetResourceContainerInfoAsync("name", It.IsAny<CancellationToken>())).ReturnsAsync(new ResourceContainerInfo { Name = "name" });
+        repository.Setup(r => r.GetAllResourceInfoAsync("name", It.IsAny<CancellationToken>())).ReturnsAsync([version]);
+        repository.Setup(r => r.GetResourceVersionsAsync("name", "a", It.IsAny<CancellationToken>())).ReturnsAsync([version]);
+        repository.Setup(r => r.GetResourceStreamAsync("name", "a", "v1", It.IsAny<CancellationToken>())).ReturnsAsync(() => new MemoryStream([1]));
+        var service = NewService(repository.Object);
+
+        // Act
+        await service.ExportContainerAsync("name", new MemoryStream(), cts.Token);
+
+        // Assert: the container, its names, each name's versions, and each version's content.
+        repository.Verify(r => r.GetResourceContainerInfoAsync("name", cts.Token), Times.Once);
+        repository.Verify(r => r.GetAllResourceInfoAsync("name", cts.Token), Times.Once);
+        repository.Verify(r => r.GetResourceVersionsAsync("name", "a", cts.Token), Times.Once);
+        repository.Verify(r => r.GetResourceStreamAsync("name", "a", "v1", cts.Token), Times.Once);
+    }
+
+    [Fact]
+    public async Task ImportContainerAsync_ShouldGiveTheProviderContentItCanReadAgain_WhenImporting()
+    {
+        // Arrange: an export of one file, and a provider that reads each version twice, as one that retries does.
+        using ServiceProvider services = new ServiceCollection().AddResourcefull(o => o.UseInMemory()).BuildServiceProvider();
+        IResourceServiceClient source = services.GetRequiredService<IResourceServiceClient>();
+        await (await source.CreateResourceContainerAsync("c")).UploadAsync("a", BinaryData.FromString("hello"));
+        var export = new MemoryStream();
+        await source.ExportContainerAsync("c", export);
+        export.Position = 0;
+        var reads = new List<string>();
+        var repository = new Mock<IResourceRepository>();
+        repository.Setup(r => r.ImportVersionAsync("d", It.IsAny<ResourceInfo>(), It.IsAny<Stream>(), It.IsAny<CancellationToken>()))
+            .Returns(async (string _, ResourceInfo _, Stream content, CancellationToken _) =>
+            {
+                reads.Add(await new StreamReader(content, leaveOpen: true).ReadToEndAsync());
+                content.Position = 0;
+                reads.Add(await new StreamReader(content, leaveOpen: true).ReadToEndAsync());
+                return new WrittenContent(5, "sha256:2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824", DateTimeOffset.UtcNow);
+            });
+        var client = new ResourceServiceClient(repository.Object, Options.Create(new ResourcefullOptions()));
+
+        // Act
+        await client.ImportContainerAsync("d", export);
+
+        // Assert
+        Assert.Equal(["hello", "hello"], reads);
+    }
+
+    [Fact]
+    public async Task ImportContainerAsync_ShouldPassTheToken_WhenCalledWithOne()
+    {
+        // Arrange: the export of a container holding one version of "a".
+        using var cts = new CancellationTokenSource();
+        var repository = new Mock<IResourceRepository>();
+        string hash = "sha256:" + Convert.ToHexStringLower(SHA256.HashData([1]));
+        repository.Setup(r => r.ImportVersionAsync("name", It.IsAny<ResourceInfo>(), It.IsAny<Stream>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new WrittenContent(1, hash, DateTimeOffset.UnixEpoch));
+        var export = new MemoryStream();
+        using (var zip = new ZipArchive(export, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            using (Stream content = zip.CreateEntry("content/one").Open()) content.WriteByte(1);
+            using var writer = new StreamWriter(zip.CreateEntry("manifest.json").Open());
+            writer.Write($$"""
+                { "format": 1, "metadata": {}, "resources": [ { "name": "a", "versions": [ {
+                  "versionId": "v1", "lastModified": "2026-01-01T00:00:00+00:00", "contentType": null, "contentLength": 1,
+                  "contentHash": "{{hash}}", "metadata": {}, "copiedFrom": null, "expiresAt": null, "content": "content/one" } ] } ] }
+                """);
+        }
+        export.Position = 0;
+        var service = NewService(repository.Object);
+
+        // Act
+        await service.ImportContainerAsync("name", export, cts.Token);
+
+        // Assert: the container, and each version.
+        repository.Verify(r => r.AddResourceContainerAsync(It.Is<ResourceContainerInfo>(c => c.Name == "name"), cts.Token), Times.Once);
+        repository.Verify(r => r.ImportVersionAsync("name", It.Is<ResourceInfo>(v => v.VersionId == "v1"), It.IsAny<Stream>(), cts.Token), Times.Once);
     }
 }

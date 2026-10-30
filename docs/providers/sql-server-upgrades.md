@@ -2,13 +2,14 @@
 
 New releases of `Resourcefull.SqlServer` can add to the database's schema. This page covers bringing a
 database up to date, and recording hashes for files stored before the database kept them. Moving from a release
-before 3.0 has steps of its own; see [Upgrading to 3.0](../upgrading.md).
+before 3.0 has steps of its own; see [Upgrading to 3.0](../upgrading-to-3.md).
 
 ## Upgrading the schema
 
 New releases can add migrations. Before upgrading the package in production:
 
-1. Check the [upgrade guide](../upgrading.md#upgrading-the-database) for migrations that need preparation.
+1. Check [what the release changes in the database](../upgrading.md#what-each-release-changes-in-the-database), and,
+   from before 3.0, the [3.0 guide](../upgrading-to-3.md#upgrading-the-database), for migrations that need preparation.
 2. Back up the database.
 3. Apply the migrations, with `MigrateResourcefullDatabaseAsync` or the scripts, during a maintenance window if the
    upgrade guide says a migration needs one.

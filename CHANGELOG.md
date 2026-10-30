@@ -1,13 +1,14 @@
 # Changelog
 
-## Unreleased
+## [Unreleased]
 
 ### Added
 
 - **Exporting and importing containers.** `ExportContainerAsync` writes a container, every version of every file, to
   a zip, and `ImportContainerAsync` creates a new container from one, keeping each version's ID and `LastModified`.
-  Imports check the manifest and every file's hash, and delete what they created if anything fails. Providers get
-  `ImportVersionAsync`, which returns what it stored and whose default throws `NotSupportedException`. See
+  Imports check the manifest and every file's hash and length, and delete what they created if anything fails.
+  Providers get `ImportVersionAsync`, which returns what it stored and whose default throws `NotSupportedException`.
+  With SQL Server, a version whose write hits a transient failure is retried, reading its file from the export again. See
   [Backing up and moving containers](docs/backup-and-move.md).
 - **Signed, expiring links.** `Resourcefull.AspNetCore` can create links that let anyone download one file, without
   signing in, until they expire: `AddResourcefullLinks`, `IResourceLinkSigner.CreateTokenAsync` and
@@ -22,10 +23,13 @@
   [Expiring resources](docs/expiry.md).
 - **Copy, move and rename.** `CopyResourceAsync` copies a version to a name in the same or another container, as a
   new version there, and `MoveResourceAsync` moves a resource with every version, keeping their IDs; renaming is a
-  move within the container. With SQL Server, no content passes through the application. A copy or restore records
+  move within the container. With SQL Server, no content passes through the application. A copy can be
+  create-only or conditional, as an upload can. A copy or restore records
   its source in the new `ResourceInfo.CopiedFrom`. Providers get `CopyResourceAsync`, with a default implementation,
   and `MoveResourceAsync`, which throws `NotSupportedException` until implemented. The `AddCopiedFrom` migration adds
-  three nullable columns. See [Copying and moving](docs/copying-and-moving.md).
+  three nullable columns. `RestoreVersionAsync` restores through `CopyResourceAsync`, so with SQL Server a restore
+  runs within the database and is retried after a transient failure (for a version stored before 3.0, once the hash
+  backfill has recorded its hash). See [Copying and moving](docs/copying-and-moving.md).
 - **Container policies.** `UseContainerPolicies` sets limits for every container, and `UsePolicyProvider` gives any
   container its own, such as a quota for each user's container that an admin can change while the application runs:
   `MaxResourceSize`, `MaxContainerSize`, `MaxResourceCount`, `AllowedContentTypes` and `ReadOnly`. Sizes are
@@ -35,18 +39,26 @@
   implementation, so providers written for 3.1 keep working. See [Container policies](docs/container-policies.md).
 - **Range downloads.** A `DownloadStreamingAsync` overload takes a `ResourceRange` and reads only those bytes from
   storage, for resuming downloads and seeking in media; every download's result now has `TotalLength`, and `Range`
-  for a range. `Results.Resource(container, name)` in `Resourcefull.AspNetCore` looks the resource up itself and
-  answers `Range` requests with 206 Partial Content, honoring `If-Range`, and 416 for a range past the end. Providers
-  get a range overload of `GetResourceStreamAsync` with a default implementation, so providers written for 3.1 keep
-  working. See [Downloading part of a resource](docs/downloading.md#downloading-part-of-a-resource).
+  for a range. `Results.Resource(container, name)` in `Resourcefull.AspNetCore` looks the resource up itself, the
+  current version or the `versionId` given, and answers `Range` requests with 206 Partial Content, honoring
+  `If-Range`, and 416 for a range past the end. Providers get a range overload of `GetResourceStreamAsync` with a
+  default implementation, so providers written for 3.1 keep working.
+  See [Downloading part of a resource](docs/downloading.md#downloading-part-of-a-resource).
 - **Health checks.** `AddHealthChecks().AddResourcefullCheck()` reports whether storage can be reached through any
   provider, and `AddResourcefullSqlServerCheck()` also reports Unhealthy when the database is missing migrations this
   release needs, and Degraded when a newer release has upgraded it. See [Health checks](docs/health-checks.md).
 - **Telemetry.** Every client operation records a trace span and metrics, through `ActivitySource` and `Meter`
   named `Resourcefull`: each operation's duration, and the bytes uploaded and downloaded, tagged by operation,
   provider and error type. SQL Server's migrations and hash backfill record spans. Resource names, and failure
-  messages that may contain them, go on spans only with `UseTelemetry(t => t.RecordResourceNames = true)`. Nothing is
-  measured until something subscribes. See [Telemetry](docs/telemetry.md).
+  messages that may contain them, go on spans only with `UseTelemetry(t => t.RecordResourceNames = true)`. Counters
+  for failed prunes, expired versions deleted and failed, cleanup handler failures, and SQL Server's retries show work
+  that doesn't fail the call that started it. Nothing is measured until something subscribes. See
+  [Telemetry](docs/telemetry.md).
+- **Disposable downloads.** `ResourceDownloadResult` implements `IDisposable` and `IAsyncDisposable`, disposing its
+  stream, so `await using` works on the download itself.
+- **Razor Pages.** The results `TypedResults.Resource` and `TypedResults.SharedResource` return are also MVC action
+  results, so a Razor Pages handler, which can't return an `IResult`, can return them. See
+  [MVC, Razor Pages and Blazor](docs/aspnet-core/mvc-razor-blazor.md#razor-pages).
 
 ### Changed
 
@@ -63,8 +75,18 @@
 - **A new look.** The packages have a new icon, and the [documentation site](https://zacharydf7.github.io/Resourcefull/)
   has a new design, a home page, and a sidebar grouped by what you're trying to do. Pages that covered several topics
   are split into one page each; links to the old pages still work.
+- **`ResourceInfo.VersionId` is non-nullable,** since every stored version has one, so passing it to methods that
+  take a version ID no longer needs `!`. Only the annotation changed: code that checked it for `null` still compiles.
+  A provider must set it on every `ResourceInfo` it returns; one that assigns it from a nullable value now gets a
+  nullable warning.
 
-## 3.1.0
+### Fixed
+
+- **Creating or deleting a container on SQL Server** no longer reports failure after succeeding. When the database
+  committed but the connection failed before saying so, the automatic retry ran again and reported a conflict for a
+  create, or a concurrency error for a delete; now it recognizes its own success, as uploads already did.
+
+## [3.1.0] - 2026-10-29
 
 New features, all additive: code written for 3.0 keeps compiling, and custom providers keep working. The one thing to
 check is a test that expects exactly `ArgumentException` for a bad name; it's now the subclass
@@ -100,10 +122,10 @@ check is a test that expects exactly `ArgumentException` for a bad name; it's no
 - With SQL Server, a delete whose commit succeeded but whose acknowledgement was lost to a transient error, and was
   retried, reported that nothing was deleted. It now reports the delete.
 
-## 3.0.0
+## [3.0.0] - 2026-10-29
 
 The first release of Resourcefull for general use. Coming from an earlier release, read
-[Upgrading to 3.0](docs/upgrading.md) first: it lists every change to code, behavior and the database, with what each
+[Upgrading to 3.0](docs/upgrading-to-3.md) first: it lists every change to code, behavior and the database, with what each
 needs from you. Items marked *(from 1.x)* were already in 2.x.
 
 ### Added
@@ -146,3 +168,7 @@ needs from you. Items marked *(from 1.x)* were already in 2.x.
 - Uploads and downloads of any size use a fixed amount of memory, and uploads make about half as many round trips.
 - An upload into a container deleted moments before reports the missing container. *(from 1.x)*
 - Deleting a large container works in bounded batches, and can be resumed if it stops partway.
+
+[Unreleased]: https://github.com/zacharydf7/Resourcefull/compare/v3.1.0...HEAD
+[3.1.0]: https://github.com/zacharydf7/Resourcefull/compare/v3.0.0...v3.1.0
+[3.0.0]: https://github.com/zacharydf7/Resourcefull/releases/tag/v3.0.0

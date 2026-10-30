@@ -16,7 +16,8 @@ application's, as long as none of your tables share the first three names. The h
 own EF Core migrations.
 
 A database of its own is the better default. Provisioning turns on [`READ_COMMITTED_SNAPSHOT`](#read_committed_snapshot),
-a setting of the whole database, and file content makes the database large, which affects how you back it up.
+a setting of the whole database, and file content makes the database large, which affects how you back it up (see
+[Backups and recovery](../backups-and-recovery.md)).
 
 Keep the connection string out of source control, in user secrets, environment variables or a secrets store. Anything
 `Microsoft.Data.SqlClient` accepts works.
@@ -37,7 +38,7 @@ Run it from a deployment step, or at startup of a single instance. Turning on `R
 first provisioning does, disconnects every other session on the database.
 
 **With the scripts.** `Resourcefull.SqlServer` ships idempotent SQL scripts in its package's `scripts` folder, for
-example `~/.nuget/packages/resourcefull.sqlserver/3.0.0/scripts/`. Create the database, then run `Resourcefull.sql`
+example `~/.nuget/packages/resourcefull.sqlserver/<version>/scripts/`. Create the database, then run `Resourcefull.sql`
 connected to it:
 
 ```shell
@@ -73,10 +74,14 @@ but if yours relies on read-committed blocking, give Resourcefull a database of 
 ## Retries
 
 `UseSqlServer` turns on EF Core's retry policy for SQL Server's transient errors, including deadlocks (error 1205): up
-to 5 retries, at most 10 seconds apart. It stops once the operation's cancellation token is canceled.
+to 5 retries, at most 10 seconds apart. It stops once the operation's cancellation token is canceled. Each retry is
+counted in the `resourcefull.sqlserver.retries` metric, with the error number; see [Telemetry](../telemetry.md).
 
 An upload is retried as a whole, from its first byte. That's possible only when its stream can seek; an upload from a
 stream that can't, such as an HTTP request body, fails instead once its content has started, and stores nothing.
+Copies, restores and imports <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span> are retried too: copies and restores run within the database, and an import
+reads the version's file from the export again. The exception is copying or restoring a version stored before 3.0
+that has no hash yet, which reads it through the application; [record the hashes](sql-server-upgrades.md#recording-hashes-for-older-versions) to retry those too.
 
 Once it's running, see [How SQL Server stores files](sql-server-storage.md) for what to expect from it, and
 [Upgrading the database](sql-server-upgrades.md) for moving to a new release.

@@ -80,9 +80,9 @@ public abstract partial class ResourcefullContractTests
         // Act
         bool[] found =
         [
-            await container.SetExpiryAsync("extended", extended.VersionId!, Future),
-            await container.SetExpiryAsync("cleared", cleared.VersionId!, null),
-            await container.SetExpiryAsync("shortened", shortened.VersionId!, Past),
+            await container.SetExpiryAsync("extended", extended.VersionId, Future),
+            await container.SetExpiryAsync("cleared", cleared.VersionId, null),
+            await container.SetExpiryAsync("shortened", shortened.VersionId, Past),
             await container.SetExpiryAsync("missing", "no-such-version", Future)
         ];
         await ServiceOf(provider).DeleteExpiredAsync();
@@ -107,7 +107,7 @@ public abstract partial class ResourcefullContractTests
         // Act
         ResourceInfo? plainCopy = await container.CopyResourceAsync("a", name, "copy", new ResourceCopyOptions { VersionId = first.VersionId });
         ResourceInfo? expiringCopy = await container.CopyResourceAsync("a", name, "expiring", new ResourceCopyOptions { ExpiresAt = Past });
-        ResourceInfo? restored = await container.RestoreVersionAsync("a", first.VersionId!);
+        ResourceInfo? restored = await container.RestoreVersionAsync("a", first.VersionId);
         await container.MoveResourceAsync("a", name, "moved");
 
         // Assert
@@ -179,12 +179,12 @@ public abstract partial class ResourcefullContractTests
         IResourceContainerClient container = await NewContainerAsync(provider);
         ResourceInfo stored = await container.UploadAsync("a", BinaryData.FromString("x"), Expiring(Past));
         DateTimeOffset sweepTime = DateTimeOffset.UtcNow;
-        await container.SetExpiryAsync("a", stored.VersionId!, Future);
+        await container.SetExpiryAsync("a", stored.VersionId, Future);
         IResourceRepository repository = provider.GetRequiredService<IResourceRepository>();
 
         // Act
         bool deleted = await repository.DeleteExpiredVersionAsync(new ResourceLocation(container.ResourceContainerInfo.Name, "a"),
-            stored.VersionId!, sweepTime);
+            stored.VersionId, sweepTime);
 
         // Assert
         Assert.False(deleted);
@@ -282,7 +282,7 @@ public abstract partial class ResourcefullContractTests
         TestPolicyProvider.Policies[name] = new ResourceContainerPolicy { ReadOnly = true };
 
         // Act
-        Task act() => container.SetExpiryAsync("a", stored.VersionId!, Future);
+        Task act() => container.SetExpiryAsync("a", stored.VersionId, Future);
 
         // Assert
         Assert.Equal(ResourcePolicyRule.ReadOnly, (await Assert.ThrowsAsync<ResourcePolicyViolationException>(act)).Rule);
