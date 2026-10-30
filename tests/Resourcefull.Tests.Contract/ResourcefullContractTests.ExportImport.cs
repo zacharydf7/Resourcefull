@@ -411,14 +411,11 @@ public abstract partial class ResourcefullContractTests
         }
         """;
 
-    [SkippableFact]
-    public async Task ImportContainerAsync_ShouldReadAFormat1ExportAndExportItAgainUnchanged_WhenGivenOneAs32WroteIt()
+    /// <summary>The export <see cref="Format1Manifest"/> describes, ready to import.</summary>
+    private static async Task<MemoryStream> Format1ExportAsync()
     {
-        // Arrange
-        using ServiceProvider provider = BuildServiceProvider(o => o.UseVersioning());
-        IResourceServiceClient service = ServiceOf(provider);
-        var golden = new MemoryStream();
-        await using (ZipArchive zip = await ZipArchive.CreateAsync(golden, ZipArchiveMode.Create, leaveOpen: true,
+        var export = new MemoryStream();
+        await using (ZipArchive zip = await ZipArchive.CreateAsync(export, ZipArchiveMode.Create, leaveOpen: true,
             entryNameEncoding: null))
         {
             await using (Stream manifest = await zip.CreateEntry("manifest.json").OpenAsync())
@@ -427,7 +424,38 @@ public abstract partial class ResourcefullContractTests
             await using Stream content = await zip.CreateEntry(hello).OpenAsync();
             await content.WriteAsync("hello"u8.ToArray());
         }
-        golden.Position = 0;
+        export.Position = 0;
+        return export;
+    }
+
+    [SkippableFact]
+    public async Task PruneContainerAsync_ShouldPruneTheVersionsAnImportKeptPastTheLimit_WhenCalled()
+    {
+        // Arrange: the export's notes.txt has two versions; this store keeps one.
+        using ServiceProvider provider = BuildServiceProvider(o => o.UseVersioning(1));
+        IResourceServiceClient service = ServiceOf(provider);
+        string name = NewContainerName();
+        await service.ImportContainerAsync(name, await Format1ExportAsync());
+
+        // Act
+        int pruned = await service.PruneContainerAsync(name);
+        int prunedAgain = await service.PruneContainerAsync(name);
+
+        // Assert: the older version went; the current one, and the other name's only one, stayed.
+        IResourceContainerClient container = service.GetResourceContainerClient(name);
+        Assert.Equal((1, 0), (pruned, prunedAgain));
+        Assert.Equal(["0193a1b2-0000-7000-8000-000000000002"],
+            (await container.GetResourceVersionsAsync("notes.txt")).Select(v => v.VersionId));
+        Assert.Single(await container.GetResourceVersionsAsync("copy.txt"));
+    }
+
+    [SkippableFact]
+    public async Task ImportContainerAsync_ShouldReadAFormat1ExportAndExportItAgainUnchanged_WhenGivenOneAs32WroteIt()
+    {
+        // Arrange
+        using ServiceProvider provider = BuildServiceProvider(o => o.UseVersioning());
+        IResourceServiceClient service = ServiceOf(provider);
+        MemoryStream golden = await Format1ExportAsync();
         string name = NewContainerName();
 
         // Act

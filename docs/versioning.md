@@ -40,6 +40,14 @@ upload of the name prunes them. Until then they're ordinary versions you can lis
 logged as a warning, with its exception, under the `Resourcefull.ResourceContainerClient` category, when your
 application has logging set up, so one that keeps failing doesn't go unnoticed.
 
+To prune a whole container at once <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span>, such as after fixing what made prunes fail, or after an
+[import](backup-and-move.md), which keeps every version it's given, call the service client's `PruneContainerAsync`. It
+prunes every name as an upload would, and returns how many versions were past the limit:
+
+```csharp
+int pruned = await resources.PruneContainerAsync("contracts");
+```
+
 With [expiry](expiry.md) turned on <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span>, pruning doesn't delete a version at once: it sets it to expire five
 minutes later, and the expiry sweep deletes it then. A download already reading it can finish, rather than fail
 partway. Until it's deleted, it's listed, readable and counted toward [container policies](container-policies.md)

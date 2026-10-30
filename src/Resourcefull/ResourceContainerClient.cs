@@ -188,7 +188,8 @@ internal partial class ResourceContainerClient(IResourceRepository resourceRepos
     /// see all of them, so together they never keep more than the limit; without versioning the limit is one, which
     /// is what an overwrite leaves.
     /// </summary>
-    private async Task PruneAsync(string containerName, string resourceName, CancellationToken cancellationToken)
+    /// <returns>How many versions were past the limit.</returns>
+    private async Task<int> PruneAsync(string containerName, string resourceName, CancellationToken cancellationToken)
     {
         int keep = options.IsVersioningEnabled ? options.MaxVersions : 1;
         List<ResourceInfo> versions = await resourceRepository.GetResourceVersionsAsync(containerName, resourceName, cancellationToken);
@@ -202,6 +203,53 @@ internal partial class ResourceContainerClient(IResourceRepository resourceRepos
 
             await DeletePrunedAsync(version, now, cancellationToken);
         }
+
+        return Math.Max(0, versions.Count - keep);
+    }
+
+    /// <summary>
+    /// Prunes every name in the container, a page of names at a time, as each name's own writes would. A read-only
+    /// container is refused, as any change to it is.
+    /// </summary>
+    /// <returns>How many versions were past the limit, in the names pruned.</returns>
+    /// <exception cref="AggregateException">Some names weren't pruned; the others were.</exception>
+    internal async Task<int> PruneAllAsync(CancellationToken cancellationToken)
+    {
+        if (policies is not null) await policies.ThrowIfReadOnlyAsync(ContainerName, _telemetry, cancellationToken);
+        int pruned = 0, failed = 0;
+        // The first few failures are enough to say why; an outage of the cleanup handler's dependency fails every name.
+        var failures = new List<Exception>();
+        string? afterName = null;
+        while (true)
+        {
+            List<ResourceInfo> page = await resourceRepository.GetResourcePageAsync(ContainerName, null, afterName,
+                ResourceListOptions.DefaultPageSize, cancellationToken);
+            foreach (ResourceInfo resource in page)
+            {
+                try
+                {
+                    pruned += await PruneAsync(ContainerName, resource.Name, cancellationToken);
+                }
+                catch (Exception exception) when (exception is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+                {
+                    // One name that keeps failing, such as one the cleanup handler refuses, mustn't hold up the rest.
+                    failed++;
+                    _telemetry.CountFailure(Telemetry.PruneFailures, exception);
+                    if (failures.Count < ResourceServiceClient.FailuresKept) failures.Add(exception);
+                }
+            }
+
+            if (page.Count < ResourceListOptions.DefaultPageSize) break;
+            afterName = page[^1].Name;
+        }
+
+        if (failed > 0)
+        {
+            throw new AggregateException($"{failed} resources weren't pruned, and keep their extra versions until a later prune; " +
+                $"{pruned} versions past the limit were pruned in the others. The first {failures.Count} failures follow.", failures);
+        }
+
+        return pruned;
     }
 
     /// <summary>Deletes a pruned version, telling the cleanup handler first.</summary>

@@ -41,7 +41,7 @@ own. Each carries `resourcefull.provider`, and all but `resourcefull.client.expi
 
 | Instrument | Unit | What it counts |
 |---|---|---|
-| `resourcefull.client.prune.failures` | {failure} | prunes of older versions that failed after the upload, restore or copy was stored; the older versions stay until a later prune |
+| `resourcefull.client.prune.failures` | {failure} | prunes of older versions that failed after the upload, restore or copy was stored, or for a resource `PruneContainerAsync` couldn't prune; the older versions stay until a later prune |
 | `resourcefull.client.expired` | {version} | expired versions that [expiry](expiry.md) sweeps deleted |
 | `resourcefull.client.expire.failures` | {version} | expired versions a sweep failed to delete; they stay for the next sweep |
 | `resourcefull.client.policy.last_known_uses` | {use} | times a container's last known [policy](container-policies.md) was used because the policy provider failed, at most once per container each `cacheFor` |
@@ -89,6 +89,7 @@ metrics. It also has:
 | `set_expiry` | `SetExpiryAsync` | |
 | `export` | `ExportContainerAsync` | `resourcefull.resources`, `resourcefull.versions`: what it wrote |
 | `import` | `ImportContainerAsync` | `resourcefull.resources`, `resourcefull.versions`: what it stored |
+| `prune_container` | `PruneContainerAsync` | `resourcefull.pruned`: how many versions were past the limit |
 | `expire` | `DeleteExpiredAsync`, and each sweep of [`UseExpiry`](expiry.md), when it finds expired versions, read-only containers' included | `resourcefull.expired`: how many versions it deleted |
 | `list` | `GetResourcesAsync` | |
 | `list_page` | `GetResourcePageAsync`, and each page `ListResourcesAsync` fetches | `resourcefull.page_size` |
@@ -105,7 +106,7 @@ metrics. It also has:
 
 `GetResourceContainerClient` doesn't contact storage, so it records nothing. With
 [container policies](container-policies.md), every operation that checks one (`upload`, `restore`, `copy`, `move`,
-`delete` and `delete_container`) records a `resourcefull get_policy` child span when it asks the policy provider, and
+`delete`, `delete_container` and `prune_container`) records a `resourcefull get_policy` child span when it asks the policy provider, and
 `resourcefull.policy_rule` when the policy refuses it. When the provider fails and the container's last known policy is
 used instead, the `get_policy` span records the failure and `resourcefull.policy_last_known`.
 

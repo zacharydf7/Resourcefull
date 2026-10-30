@@ -280,6 +280,27 @@ public sealed class TelemetryTests : IDisposable
     }
 
     [Fact]
+    public async Task PruneContainerAsync_ShouldRecordHowManyVersionsWerePastTheLimit_WhenCalled()
+    {
+        // Arrange: versioning keeps three, then a service keeping one prunes the container.
+        using ServiceProvider provider = NewServices();
+        IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>().CreateResourceContainerAsync("c");
+        await container.UploadAsync("a", BinaryData.FromString("1"));
+        await container.UploadAsync("a", BinaryData.FromString("2"));
+        await container.UploadAsync("a", BinaryData.FromString("3"));
+        var keepingOne = new ResourceServiceClient(provider.GetRequiredService<IResourceRepository>(),
+            Microsoft.Extensions.Options.Options.Create(new ResourcefullOptions { IsVersioningEnabled = true, MaxVersions = 1 }));
+        using Activity root = TestSource.StartActivity("test")!;
+
+        // Act
+        await keepingOne.PruneContainerAsync("c");
+
+        // Assert
+        Activity prune = Assert.Single(SpansIn(root), s => s.OperationName == "resourcefull prune_container");
+        Assert.Equal(2, prune.GetTagItem("resourcefull.pruned"));
+    }
+
+    [Fact]
     public async Task DeleteExpiredAsync_ShouldRecordNothing_WhenNothingHasExpired()
     {
         // Arrange

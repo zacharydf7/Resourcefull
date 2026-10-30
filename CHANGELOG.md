@@ -56,6 +56,9 @@
   for failed prunes, expired versions deleted and failed, cleanup handler failures, and SQL Server's retries show work
   that doesn't fail the call that started it. Nothing is measured until something subscribes. See
   [Telemetry](docs/telemetry.md).
+- **Pruning a whole container.** `PruneContainerAsync` prunes every resource in a container to `MaxVersions`, as each
+  upload prunes its own name, for after an import or a failed prune. See
+  [Versioning](docs/versioning.md#keeping-a-limited-number).
 - **SQL Server options.** `UseSqlServer(connectionString, sql => ...)` changes EF Core's SQL Server options after
   Resourcefull's own, such as the command timeout or the retries. See [SQL Server](docs/providers/sql-server.md#retries).
 - **Disposable downloads.** `ResourceDownloadResult` implements `IDisposable` and `IAsyncDisposable`, disposing its

@@ -124,7 +124,12 @@ against it like any upload.
 
 - **Versions over `MaxVersions` are kept.** An import restores the whole history it was given, even if the store keeps
   fewer versions of each file. The extra versions are [pruned](versioning.md#keeping-a-limited-number) the next time each
-  file is uploaded.
+  file is uploaded, or all at once with `PruneContainerAsync`:
+
+  ```csharp
+  await resources.ImportContainerAsync("restored", file);
+  await resources.PruneContainerAsync("restored");
+  ```
 - **Expired versions come back too.** A version whose expiry has passed is restored, then deleted by the next
   [expiry](expiry.md) sweep.
 - **Names stay the same, but the container's name is yours to choose,** so the same export can be imported several

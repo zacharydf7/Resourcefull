@@ -57,7 +57,7 @@ internal static class Telemetry
         unit: "By", description: "Content bytes read from download streams, counted as they're read.");
 
     public static readonly Counter<long> PruneFailures = Meter.CreateCounter<long>("resourcefull.client.prune.failures",
-        unit: "{failure}", description: "Prunes of older versions that failed after their write was stored; the versions stay.");
+        unit: "{failure}", description: "Prunes of older versions that failed, after a write or in a container prune; the versions stay.");
 
     public static readonly Counter<long> Expired = Meter.CreateCounter<long>("resourcefull.client.expired",
         unit: "{version}", description: "Expired versions that sweeps deleted.");

@@ -181,4 +181,32 @@ public interface IResourceServiceClient
     /// </exception>
     public Task<int> DeleteExpiredAsync(CancellationToken cancellationToken = default)
         => throw new NotSupportedException($"{GetType().Name} doesn't support expiry.");
+
+    /// <summary>
+    /// Prunes every resource in the container to <see cref="ResourcefullOptions.MaxVersions"/> (one without versioning),
+    /// as each upload prunes its own name, telling the <see cref="IResourceCleanupHandler"/> as a prune does. Run it after
+    /// an import, which keeps every version it was given, or after a prune failed and its name hasn't been written since.
+    /// With <see cref="ResourcefullOptionsBuilder.UseExpiry"/>, the versions past the limit are set to expire five
+    /// minutes later rather than deleted at once, as a prune does.
+    /// <para>Coming in 3.2.</para>
+    /// </summary>
+    /// <param name="resourceContainerName">The container to prune; a container that doesn't exist has nothing to prune.</param>
+    /// <param name="cancellationToken">Stops the pruning; the versions already pruned stay pruned.</param>
+    /// <returns>How many versions were past the limit.</returns>
+    /// <exception cref="AggregateException">
+    /// Some resources weren't pruned, because the cleanup handler or the provider failed for them; the others were, and
+    /// the failed ones keep their extra versions until a later prune. Its message counts them, and it holds the first few
+    /// failures.
+    /// </exception>
+    /// <exception cref="ResourcePolicyViolationException">The container is read-only.</exception>
+    /// <exception cref="ArgumentException">
+    /// <paramref name="resourceContainerName"/> breaks the name rules (<see cref="ResourceNameException"/>), or is null
+    /// (<see cref="ArgumentNullException"/>).
+    /// </exception>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
+    /// <exception cref="NotSupportedException">
+    /// This default implementation, kept so implementations written for 3.1 still compile, doesn't prune.
+    /// </exception>
+    public Task<int> PruneContainerAsync(string resourceContainerName, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException($"{GetType().Name} doesn't prune containers.");
 }

@@ -444,4 +444,21 @@ public class ContainerPolicyTests
         // Act & Assert
         Assert.Throws<ArgumentOutOfRangeException>(() => builder.UseContainerPolicies(keepLastKnownFor: TimeSpan.FromSeconds(-1)));
     }
+
+    [Fact]
+    public async Task PruneContainerAsync_ShouldThrowPolicyViolation_WhenTheContainerIsReadOnly()
+    {
+        // Arrange
+        using ServiceProvider services = new ServiceCollection()
+            .AddResourcefull(o => o.UseInMemory().UseContainerPolicies(new ResourceContainerPolicy { ReadOnly = true }))
+            .BuildServiceProvider();
+        IResourceServiceClient service = services.GetRequiredService<IResourceServiceClient>();
+        await service.CreateResourceContainerAsync("c");
+
+        // Act
+        Task act() => service.PruneContainerAsync("c");
+
+        // Assert
+        Assert.Equal(ResourcePolicyRule.ReadOnly, (await Assert.ThrowsAsync<ResourcePolicyViolationException>(act)).Rule);
+    }
 }

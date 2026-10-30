@@ -120,6 +120,15 @@ internal class ResourceServiceClient(IResourceRepository resourceRepository, IOp
     public Task<bool> DeleteResourceContainerIfExistsAsync(string resourceContainerName)
         => DeleteResourceContainerIfExistsAsync(resourceContainerName, CancellationToken.None);
 
+    public Task<int> PruneContainerAsync(string resourceContainerName, CancellationToken cancellationToken = default)
+        => _telemetry.RunAsync("prune_container", resourceContainerName, null, async activity =>
+        {
+            ResourceNames.ThrowIfInvalidContainerName(resourceContainerName);
+            int pruned = await NewContainerClient(new ResourceContainerInfo { Name = resourceContainerName }).PruneAllAsync(cancellationToken);
+            activity?.SetTag("resourcefull.pruned", pruned);
+            return pruned;
+        });
+
     public async Task<int> DeleteExpiredAsync(CancellationToken cancellationToken = default)
     {
         DateTimeOffset now = (timeProvider ?? TimeProvider.System).GetUtcNow();
@@ -189,8 +198,11 @@ internal class ResourceServiceClient(IResourceRepository resourceRepository, IOp
     /// <summary>How many expired versions one query lists, so a cleanup holds a bounded batch at a time.</summary>
     private const int ExpiredPerBatch = 100;
 
-    /// <summary>How many of a sweep's failures it keeps to throw, to say why without holding one per failed version.</summary>
-    private const int FailuresKept = 10;
+    /// <summary>
+    /// How many failures a sweep or a container prune keeps to throw, to say why without holding one per failed version
+    /// or resource.
+    /// </summary>
+    internal const int FailuresKept = 10;
 
     public Task<ResourceExportResult> ExportContainerAsync(string resourceContainerName, Stream destination,
         CancellationToken cancellationToken = default)

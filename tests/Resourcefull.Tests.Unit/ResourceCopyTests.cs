@@ -89,6 +89,7 @@ public class ResourceCopyTests
             repository.ImportVersionAsync("c", new ResourceInfo { ContainerName = "c", Name = "a" }, new MemoryStream()));
         await Assert.ThrowsAsync<NotSupportedException>(() => service.ExportContainerAsync("c", new MemoryStream()));
         await Assert.ThrowsAsync<NotSupportedException>(() => service.ImportContainerAsync("c", new MemoryStream()));
+        await Assert.ThrowsAsync<NotSupportedException>(() => service.PruneContainerAsync("c"));
     }
 
     [Fact]

@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -226,5 +227,74 @@ public class ExpiryTests
         handler.Verify(h => h.OnCleanupAsync(It.Is<ResourceCleanup>(c => c.Reason == ResourceCleanupReason.Pruned && c.Resource.VersionId == "v1"),
             It.IsAny<CancellationToken>()));
         repository.Verify(r => r.DeleteResourceAsync("c", "a", "v1", It.IsAny<CancellationToken>()));
+    }
+
+    /// <summary>Refuses the versions of the names a test lists, as an audit system that's down for them.</summary>
+    private sealed class RefusingCleanupHandler : IResourceCleanupHandler
+    {
+        public static readonly ConcurrentDictionary<string, bool> Refusing = new();
+
+        public ValueTask OnCleanupAsync(ResourceCleanup cleanup, CancellationToken cancellationToken) =>
+            Refusing.ContainsKey(cleanup.Resource.ContainerName + "/" + cleanup.Resource.Name)
+                || Refusing.ContainsKey(cleanup.Resource.ContainerName + "/*")
+                ? throw new InvalidOperationException("The audit system is down.")
+                : ValueTask.CompletedTask;
+    }
+
+    /// <summary>A container whose names each have two versions under a limit of one, as an import leaves them.</summary>
+    private static async Task<(IResourceServiceClient Service, string Container)> OverLimitAsync(ServiceProvider services, int names)
+    {
+        IResourceServiceClient service = services.GetRequiredService<IResourceServiceClient>();
+        string name = $"c-{Guid.NewGuid():N}";
+        IResourceContainerClient container = await service.CreateResourceContainerAsync(name);
+        // Each upload's own prune is refused, so the older versions stay.
+        RefusingCleanupHandler.Refusing[name + "/*"] = true;
+        for (int i = 0; i < names; i++)
+        {
+            await container.UploadAsync($"n{i:D5}", BinaryData.FromString("1"));
+            await container.UploadAsync($"n{i:D5}", BinaryData.FromString("2"));
+        }
+
+        RefusingCleanupHandler.Refusing.TryRemove(name + "/*", out _);
+        return (service, name);
+    }
+
+    private static ServiceProvider NewRefusingServices() => new ServiceCollection()
+        .AddResourcefull(o => o.UseInMemory().UseVersioning(1).UseCleanupHandler<RefusingCleanupHandler>())
+        .BuildServiceProvider();
+
+    [Fact]
+    public async Task PruneContainerAsync_ShouldPruneEveryName_WhenTheContainerHasMoreThanOnePageOfNames()
+    {
+        // Arrange
+        using ServiceProvider services = NewRefusingServices();
+        (IResourceServiceClient service, string name) = await OverLimitAsync(services, ResourceListOptions.DefaultPageSize + 1);
+
+        // Act
+        int pruned = await service.PruneContainerAsync(name);
+
+        // Assert
+        Assert.Equal(ResourceListOptions.DefaultPageSize + 1, pruned);
+        Assert.Single(await service.GetResourceContainerClient(name).GetResourceVersionsAsync($"n{ResourceListOptions.DefaultPageSize:D5}"));
+    }
+
+    [Fact]
+    public async Task PruneContainerAsync_ShouldPruneTheOtherNamesThenThrow_WhenOneNamesPruneFails()
+    {
+        // Arrange: the cleanup handler refuses the first name.
+        using ServiceProvider services = NewRefusingServices();
+        (IResourceServiceClient service, string name) = await OverLimitAsync(services, 3);
+        RefusingCleanupHandler.Refusing[name + "/n00000"] = true;
+
+        // Act
+        Task act() => service.PruneContainerAsync(name);
+
+        // Assert
+        AggregateException failed = await Assert.ThrowsAsync<AggregateException>(act);
+        Assert.IsType<InvalidOperationException>(Assert.Single(failed.InnerExceptions));
+        IResourceContainerClient container = service.GetResourceContainerClient(name);
+        Assert.Equal(2, (await container.GetResourceVersionsAsync("n00000")).Count);
+        Assert.Single(await container.GetResourceVersionsAsync("n00001"));
+        Assert.Single(await container.GetResourceVersionsAsync("n00002"));
     }
 }
