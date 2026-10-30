@@ -85,10 +85,11 @@ internal static class Baseline
         if (measured > limit) failures.Add(line);
     }
 
-    private static void Record(string path, string scenario, Measurement measured)
+    /// <summary>Adds <paramref name="scenario"/>'s measurements to the results file at <paramref name="path"/>.</summary>
+    internal static void Record<T>(string path, string scenario, T measured)
     {
-        SortedDictionary<string, Measurement> all = File.Exists(path)
-            ? JsonSerializer.Deserialize<SortedDictionary<string, Measurement>>(File.ReadAllText(path), JsonOptions)!
+        SortedDictionary<string, T> all = File.Exists(path)
+            ? JsonSerializer.Deserialize<SortedDictionary<string, T>>(File.ReadAllText(path), JsonOptions)!
             : [];
         all[scenario] = measured;
         File.WriteAllText(path, JsonSerializer.Serialize(all, JsonOptions) + Environment.NewLine);

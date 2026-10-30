@@ -68,6 +68,22 @@ Locally the comparison is only reported, since your machine and SQL Server diffe
 are what later changes are held to. Once `baseline.json` has entries, a new scenario fails its first CI run for lack
 of one; copy its entry from that run's artifact into `baseline.json`.
 
+### Scale tests
+
+The performance tests stop at 64 MiB files and containers of a few hundred names. `ScaleTests` in the same project
+measures a file of 1 to 4 GiB and a container of a million names, seeded straight into the database: the same
+measurements, plus the tempdb pages it allocates, how much the version store grows, the row and page locks it takes,
+and how often it escalates them to a whole-table lock. They take many minutes, so they're skipped unless
+`RESOURCEFULL_SCALE` is `true`, and their results are reported, not compared with a baseline. Run them from GitHub
+with the **Scale** workflow, which takes the file size and the number of names as inputs and uploads
+`scale-results.json`, or locally:
+
+```shell
+RESOURCEFULL_SCALE=true RESOURCEFULL_SCALE_GIB=1 RESOURCEFULL_SCALE_ROWS=1000000 \
+  dotnet test tests/Resourcefull.Tests.Performance -c Release --filter "FullyQualifiedName~ScaleTests" \
+  --logger "console;verbosity=detailed"
+```
+
 ### How the tests are organized
 
 - `tests/Resourcefull.Tests.Contract` is one suite of behavior every provider must share. It runs against the

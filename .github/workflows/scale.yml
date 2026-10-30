@@ -1,0 +1,62 @@
+name: Scale
+
+# What operations cost with a file of gibibytes and a container of a million names, which the performance tests don't
+# reach. It takes many minutes, so it runs only when started by hand; its measurements are reported in the log and the
+# scale-results artifact, not held to a baseline.
+on:
+  workflow_dispatch:
+    inputs:
+      gibibytes:
+        description: "Size of the large file, in GiB"
+        type: choice
+        options: [ "1", "2", "3", "4" ]
+        default: "1"
+      rows:
+        description: "Names in the large container (1 to 9,999,999)"
+        type: number
+        default: 1000000
+
+permissions:
+  contents: read
+
+jobs:
+  scale:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    services:
+      sqlserver:
+        # The performance job's image, so the two measure the same server.
+        image: mcr.microsoft.com/mssql/server:2022-CU27-GDR1-ubuntu-22.04
+        env:
+          ACCEPT_EULA: "Y"
+          MSSQL_SA_PASSWORD: "Resourcefull(!)Scale1"
+          MSSQL_PID: "Developer"
+        ports:
+          - 1433:1433
+    env:
+      RESOURCEFULL_TEST_SQLSERVER: >-
+        Server=127.0.0.1,1433;User Id=sa;Password=Resourcefull(!)Scale1;TrustServerCertificate=True;Encrypt=False
+      RESOURCEFULL_TEST_SQL_READY_TIMEOUT_SECONDS: "120"
+      RESOURCEFULL_SCALE: "true"
+      RESOURCEFULL_SCALE_GIB: ${{ inputs.gibibytes }}
+      RESOURCEFULL_SCALE_ROWS: ${{ inputs.rows }}
+    steps:
+    - uses: actions/checkout@v7
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v6
+      with:
+        global-json-file: global.json
+    - name: Restore dependencies
+      run: dotnet restore
+    - name: Build
+      run: dotnet build --no-restore --configuration Release
+    - name: Test
+      run: >-
+        dotnet test tests/Resourcefull.Tests.Performance --no-build --configuration Release
+        --filter "FullyQualifiedName~ScaleTests" --logger "console;verbosity=detailed"
+    - name: Upload the measurements
+      if: always()
+      uses: actions/upload-artifact@v7
+      with:
+        name: scale-results
+        path: tests/Resourcefull.Tests.Performance/bin/Release/net10.0/scale-results.json
