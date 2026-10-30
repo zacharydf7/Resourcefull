@@ -32,6 +32,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Resourcefull.AspNetCore", "
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Resourcefull.Tests.AspNetCore", "tests\Resourcefull.Tests.AspNetCore\Resourcefull.Tests.AspNetCore.csproj", "{DD156F81-1085-499B-B2DA-C2C83210108E}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FileService", "samples\FileService\FileService.csproj", "{7B29C2E1-1D2B-4DBD-BF37-089954D2302A}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -174,6 +176,18 @@ Global
 		{DD156F81-1085-499B-B2DA-C2C83210108E}.Release|x64.Build.0 = Release|Any CPU
 		{DD156F81-1085-499B-B2DA-C2C83210108E}.Release|x86.ActiveCfg = Release|Any CPU
 		{DD156F81-1085-499B-B2DA-C2C83210108E}.Release|x86.Build.0 = Release|Any CPU
+		{7B29C2E1-1D2B-4DBD-BF37-089954D2302A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7B29C2E1-1D2B-4DBD-BF37-089954D2302A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7B29C2E1-1D2B-4DBD-BF37-089954D2302A}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{7B29C2E1-1D2B-4DBD-BF37-089954D2302A}.Debug|x64.Build.0 = Debug|Any CPU
+		{7B29C2E1-1D2B-4DBD-BF37-089954D2302A}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{7B29C2E1-1D2B-4DBD-BF37-089954D2302A}.Debug|x86.Build.0 = Debug|Any CPU
+		{7B29C2E1-1D2B-4DBD-BF37-089954D2302A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7B29C2E1-1D2B-4DBD-BF37-089954D2302A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7B29C2E1-1D2B-4DBD-BF37-089954D2302A}.Release|x64.ActiveCfg = Release|Any CPU
+		{7B29C2E1-1D2B-4DBD-BF37-089954D2302A}.Release|x64.Build.0 = Release|Any CPU
+		{7B29C2E1-1D2B-4DBD-BF37-089954D2302A}.Release|x86.ActiveCfg = Release|Any CPU
+		{7B29C2E1-1D2B-4DBD-BF37-089954D2302A}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

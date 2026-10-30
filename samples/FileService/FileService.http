@@ -1,0 +1,47 @@
+@host = http://localhost:5191
+# A token from: dotnet user-jwts create --project samples/FileService --name alice -o token
+@token = paste-a-token-here
+
+### Upload a file; its type comes from its extension
+PUT {{host}}/files/notes/hello.txt
+Authorization: Bearer {{token}}
+
+hello, resourcefull
+
+### Upload it only if it doesn't exist yet: 412 if it does
+PUT {{host}}/files/notes/hello.txt
+Authorization: Bearer {{token}}
+If-None-Match: *
+
+hello again
+
+### A type the service doesn't accept, whatever type the request claims: 415
+PUT {{host}}/files/run.exe
+Authorization: Bearer {{token}}
+Content-Type: image/png
+
+MZ
+
+### List your files
+GET {{host}}/files/
+Authorization: Bearer {{token}}
+
+### Download part of a file: 206
+GET {{host}}/files/notes/hello.txt
+Authorization: Bearer {{token}}
+Range: bytes=7-
+
+### How much of your quota you've used
+GET {{host}}/usage
+Authorization: Bearer {{token}}
+
+### Share a file for a day; open the url it returns without a token
+POST {{host}}/files/share/notes/hello.txt
+Authorization: Bearer {{token}}
+
+### Delete a file
+DELETE {{host}}/files/notes/hello.txt
+Authorization: Bearer {{token}}
+
+### Is the service ready for requests?
+GET {{host}}/health/ready
