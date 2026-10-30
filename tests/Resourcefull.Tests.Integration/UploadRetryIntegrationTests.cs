@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage;
 using Resourcefull.SqlServer;
+using Resourcefull.SqlServer.Utilities;
 
 namespace Resourcefull.Tests.Integration;
 
@@ -16,26 +17,28 @@ namespace Resourcefull.Tests.Integration;
 [Collection(SqlServerCollection.Name)]
 public class UploadRetryIntegrationTests(SqlServerFixture fixture)
 {
-    // 32 chunks, so the content goes in over several batches.
-    private static readonly byte[] Payload = RandomNumberGenerator.GetBytes(65_535 * 32);
+    // Several batches of chunks.
+    private static readonly byte[] Payload = RandomNumberGenerator.GetBytes(ResourceChunker.ChunkSize * 64);
     private static readonly string PayloadHash = "sha256:" + Convert.ToHexStringLower(SHA256.HashData(Payload));
+    private const long PartwayThroughTheSecondBatch =
+        ResourceChunker.ChunkSize * (ResourceSqlRepository.ChunksPerUploadBatch + 4L);
 
     [SkippableFact]
     public async Task AddResourceAsync_ShouldReadTheContentAgainFromWhereItStartedAndStoreIt_WhenASeekableUploadFailsPartway()
     {
         fixture.SkipIfUnavailable();
 
-        // Arrange: the third save is the second batch of chunks, after some content has been written; the content
+        // Arrange: the content fails partway through its second batch of chunks, after the first has been written; it
         // starts past a header the caller has already read.
-        var failure = new FailOnceInterceptor(failAtSave: 3);
-        (ResourceSqlRepository repository, string c) = await NewRepositoryAsync(failure);
-        var content = new MemoryStream([.. "header"u8, .. Payload]) { Position = "header"u8.Length };
+        (ResourceSqlRepository repository, string c) = await NewRepositoryAsync(new FailOnceInterceptor());
+        var content = new FailOnceStream(new MemoryStream([.. "header"u8, .. Payload]) { Position = "header"u8.Length },
+            PartwayThroughTheSecondBatch);
 
         // Act
         WrittenContent written = await repository.AddResourceAsync(c, Version(c), content);
 
         // Assert
-        Assert.True(failure.Failed);
+        Assert.True(content.Failed);
         Assert.Equal(PayloadHash, written.ContentHash);
         Assert.Equal(Payload.Length, written.ContentLength);
         Assert.Equal(Payload, await ReadAsync(repository, c));
@@ -47,12 +50,12 @@ public class UploadRetryIntegrationTests(SqlServerFixture fixture)
     {
         fixture.SkipIfUnavailable();
 
-        // Arrange
-        var failure = new FailOnceInterceptor(failAtSave: 3);
-        (ResourceSqlRepository repository, string c) = await NewRepositoryAsync(failure);
+        // Arrange: the content fails partway through its second batch of chunks, after the first has been written.
+        (ResourceSqlRepository repository, string c) = await NewRepositoryAsync(new FailOnceInterceptor());
+        var content = new FailOnceStream(new NonSeekableStream(Payload), PartwayThroughTheSecondBatch);
 
         // Act
-        Task act() => repository.AddResourceAsync(c, Version(c), new NonSeekableStream(Payload));
+        Task act() => repository.AddResourceAsync(c, Version(c), content);
 
         // Assert
         InvalidOperationException refusal = await Assert.ThrowsAsync<InvalidOperationException>(act);
@@ -381,6 +384,40 @@ public class UploadRetryIntegrationTests(SqlServerFixture fixture)
             }
             return ValueTask.FromResult(result);
         }
+    }
+
+    /// <summary>
+    /// Throws a simulated transient failure once, at the first read after <paramref name="failAt"/> bytes have been read,
+    /// as a provider's write could fail partway through the content.
+    /// </summary>
+    private sealed class FailOnceStream(Stream inner, long failAt) : Stream
+    {
+        private long _read;
+
+        public bool Failed { get; private set; }
+
+        public override bool CanRead => true;
+        public override bool CanSeek => inner.CanSeek;
+        public override bool CanWrite => false;
+        public override long Length => inner.Length;
+        public override long Position { get => inner.Position; set => inner.Position = value; }
+
+        public override int Read(byte[] buffer, int offset, int count)
+        {
+            if (!Failed && _read >= failAt)
+            {
+                Failed = true;
+                throw new SimulatedTransientException();
+            }
+            int read = inner.Read(buffer, offset, count);
+            _read += read;
+            return read;
+        }
+
+        public override void Flush() { }
+        public override long Seek(long offset, SeekOrigin origin) => inner.Seek(offset, origin);
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
     }
 
     private sealed class NonSeekableStream(byte[] content) : MemoryStream(content)

@@ -88,6 +88,10 @@
   take a version ID no longer needs `!`. Only the annotation changed: code that checked it for `null` still compiles.
   A provider must set it on every `ResourceInfo` it returns; one that assigns it from a nullable value now gets a
   nullable warning.
+- **SQL Server stores content in about 11% less space.** New content goes in 40,200-byte chunks, which fill SQL
+  Server's pages exactly; the 65,535-byte chunks of earlier releases also took a page of pointers each. Content already
+  stored keeps its chunks and stays readable. Uploads also allocate about half the memory they did. See
+  [How SQL Server stores files](docs/providers/sql-server-storage.md).
 
 ### Fixed
 

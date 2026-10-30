@@ -124,10 +124,32 @@ public sealed class PerformanceTests(SqlServerFixture fixture, ITestOutputHelper
         ResourceDownloadResult? download = await container.DownloadStreamingAsync("r");
         await using (Stream content = download!.Stream) await content.CopyToAsync(Stream.Null);
 
-        // Every full 64 KB chunk lies on at least eight 8 KB pages.
+        // Every full chunk lies on at least five pages.
         long fullChunks = Mebibyte / ResourceChunker.ChunkSize;
-        Assert.True(_activity.LogicalReads >= fullChunks * 8,
+        Assert.True(_activity.LogicalReads >= fullChunks * 5,
             $"Only {_activity.LogicalReads} logical reads were counted for {fullChunks} full chunks.");
+    }
+
+    [SkippableFact]
+    public async Task UploadAsync_ShouldTakeNoMorePagesThanItsContentFills_WhenGiven16Mebibytes()
+    {
+        // Content pages hold 8,040 bytes each. In a database of its own, so nothing else's pages are counted.
+        const int ContentBytesPerPage = 8_040;
+        IResourceContainerClient container = await NewContainerAsync(ownDatabase: "storage");
+        long length = 16L * Mebibyte;
+        await container.UploadAsync("r", new GeneratedStream(length));
+
+        await using SqlConnection connection = await OpenScenarioDatabaseAsync();
+        await using SqlCommand command = connection.CreateCommand();
+        command.CommandText = "SELECT SUM([lob_used_page_count]) FROM sys.dm_db_partition_stats " +
+            "WHERE [object_id] = OBJECT_ID('ResourceChunks');";
+        long pages = (long)(await command.ExecuteScalarAsync())!;
+
+        // A few pages over for the table's own allocation pages.
+        long contentPages = (length + ContentBytesPerPage - 1) / ContentBytesPerPage;
+        output.WriteLine($"{pages:#,0} content pages for {length:#,0} bytes, which fill {contentPages:#,0}.");
+        Assert.True(pages <= contentPages + 8,
+            $"{pages:#,0} content pages were used for {contentPages:#,0} pages of content.");
     }
 
     [SkippableFact]

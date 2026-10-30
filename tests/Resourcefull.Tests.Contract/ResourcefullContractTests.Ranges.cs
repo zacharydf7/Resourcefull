@@ -5,14 +5,14 @@ namespace Resourcefull.Tests.Contract;
 
 public abstract partial class ResourcefullContractTests
 {
-    // Several chunks long, in providers that store content in pieces of 64 KiB.
+    // Several chunks long, in providers that store content in pieces, such as SQL Server's of 40,200 bytes.
     private const int RangedLength = 150_000;
 
     public static TheoryData<long, long?, long> Ranges => new()
     {
         { 0, 10, 10 },
-        { 65_530, 20, 20 },          // across a chunk boundary
-        { 65_535, 65_535, 65_535 },  // exactly the second chunk
+        { 40_190, 20, 20 },          // across a chunk boundary
+        { 40_200, 40_200, 40_200 },  // exactly the second chunk
         { 100_000, null, 50_000 },   // to the end
         { 149_990, 100, 10 },        // past the end, so cut there
         { 0, null, RangedLength },   // the whole content

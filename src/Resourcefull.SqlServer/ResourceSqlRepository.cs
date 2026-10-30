@@ -26,9 +26,9 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
     private const int SqlUniqueConstraintViolation = 2627;
     private const int MaxResourcesPerDeleteBatch = 100;
 
-    // About 1 MB of content per round trip while uploading and downloading.
-    private const int ChunksPerUploadBatch = 16;
-    private const int ChunksPerReadPage = 16;
+    // At least 1 MiB of content per round trip while uploading and downloading.
+    internal const int ChunksPerUploadBatch = (1024 * 1024 + ResourceChunker.ChunkSize - 1) / ResourceChunker.ChunkSize;
+    private const int ChunksPerReadPage = ChunksPerUploadBatch;
 
     /// <summary>
     /// Caps the content one batch of a container or name delete removes, counted in chunks, so no single transaction has
@@ -314,12 +314,38 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
         }
     }
 
-    /// <summary>Inserts a batch of chunks and stops tracking them, so the context doesn't keep the content.</summary>
+    /// <summary>
+    /// Inserts a batch of chunks in one command, in the context's transaction, and empties the batch. The command is
+    /// sent straight through SqlClient: tracking each chunk, or sending the command through EF Core's raw SQL, more than
+    /// doubled what an upload allocated.
+    /// </summary>
     private static async Task SaveChunksAsync(ResourceDbContext dbContext, List<ResourceChunkModel> batch, CancellationToken cancellationToken)
     {
-        dbContext.ResourceChunks.AddRange(batch);
-        await dbContext.SaveChangesAsync(cancellationToken);
-        foreach (ResourceChunkModel chunk in batch) dbContext.Entry(chunk).State = EntityState.Detached;
+        if (batch.Count == 0) return;
+
+        if (dbContext.Database.IsRelational())
+        {
+            await using DbCommand command = NewCommand(dbContext);
+            command.Transaction = dbContext.Database.CurrentTransaction!.GetDbTransaction();
+            var sql = new StringBuilder("INSERT INTO [ResourceChunks] ([ResourceId], [Index], [Data]) VALUES ");
+            command.Parameters.Add(new SqlParameter("@resourceId", batch[0].ResourceId));
+            for (int i = 0; i < batch.Count; i++)
+            {
+                sql.Append(i == 0 ? "" : ", ").Append($"(@resourceId, @index{i}, @data{i})");
+                command.Parameters.Add(new SqlParameter($"@index{i}", batch[i].Index));
+                command.Parameters.Add(new SqlParameter($"@data{i}", SqlDbType.VarBinary, -1) { Value = batch[i].Data });
+            }
+            command.CommandText = sql.ToString();
+            await command.ExecuteNonQueryAsync(cancellationToken);
+        }
+        else
+        {
+            // The in-memory provider the unit tests use runs no SQL; untracked after, so it doesn't keep the content.
+            dbContext.ResourceChunks.AddRange(batch);
+            await dbContext.SaveChangesAsync(cancellationToken);
+            foreach (ResourceChunkModel chunk in batch) dbContext.Entry(chunk).State = EntityState.Detached;
+        }
+
         batch.Clear();
     }
 

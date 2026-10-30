@@ -9,7 +9,7 @@ public class ResourceChunkerTests
     public async Task ChunksAsync_ShouldReturnResourceChunks_WhenResourceIsSuccessfullyChunked()
     {
         // Arrange
-        var chunkSize = 65535;
+        var chunkSize = ResourceChunker.ChunkSize;
         var numberOfChunks = 3;
         var bytes = new byte[chunkSize * numberOfChunks];
         for (var i = 0; i < bytes.Length; i++)
@@ -41,7 +41,7 @@ public class ResourceChunkerTests
     public async Task ChunksAsync_ShouldNumberChunksSequentiallyFromOne_WhenStreamSpansMultipleChunks()
     {
         // Arrange
-        var bytes = new byte[65535 * 2 + 10];
+        var bytes = new byte[ResourceChunker.ChunkSize * 2 + 10];
         Stream stream = new MemoryStream(bytes);
 
         // Act
@@ -69,7 +69,7 @@ public class ResourceChunkerTests
     {
         // Arrange
         using var cts = new CancellationTokenSource();
-        var stream = new CancelAfterReadsStream(new byte[65535 * 3], cts, readsBeforeCancel: 1);
+        var stream = new CancelAfterReadsStream(new byte[ResourceChunker.ChunkSize * 3], cts, readsBeforeCancel: 1);
 
         // Act & Assert
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => ResourceChunker.ChunksAsync(stream, reuseAfter: 16, cts.Token).ToListAsync().AsTask());
@@ -79,7 +79,7 @@ public class ResourceChunkerTests
     public async Task ChunksAsync_ShouldFillEveryChunkButTheLast_WhenTheStreamReturnsShortReads()
     {
         // Arrange
-        byte[] bytes = new byte[65535 * 2 + 10];
+        byte[] bytes = new byte[ResourceChunker.ChunkSize * 2 + 10];
         new Random(1).NextBytes(bytes);
         var stream = new ShortReadStream(bytes, maxRead: 1000);
 
@@ -87,7 +87,7 @@ public class ResourceChunkerTests
         List<ResourceChunkModel> chunks = await ResourceChunker.ChunksAsync(stream, reuseAfter: 16).ToListAsync();
 
         // Assert
-        Assert.Equal([65535, 65535, 10], chunks.Select(c => c.Data.Length));
+        Assert.Equal([ResourceChunker.ChunkSize, ResourceChunker.ChunkSize, 10], chunks.Select(c => c.Data.Length));
         Assert.Equal(bytes, chunks.SelectMany(c => c.Data));
     }
 
@@ -95,8 +95,8 @@ public class ResourceChunkerTests
     public async Task ChunksAsync_ShouldShareFullChunksBuffersInTurnAndGiveTheLastItsOwn_WhenGivenReuseAfter()
     {
         // Arrange: five chunks, each filled with its own number, read two at a time as the repository stores them.
-        byte[] bytes = new byte[65535 * 4 + 10];
-        for (int i = 0; i < bytes.Length; i++) bytes[i] = (byte)(i / 65535);
+        byte[] bytes = new byte[ResourceChunker.ChunkSize * 4 + 10];
+        for (int i = 0; i < bytes.Length; i++) bytes[i] = (byte)(i / ResourceChunker.ChunkSize);
         var chunks = new List<ResourceChunkModel>();
         var contentAsRead = new List<byte[]>();
 

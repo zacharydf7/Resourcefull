@@ -1,5 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using System.Text;
+using Resourcefull.SqlServer;
+using Resourcefull.SqlServer.Utilities;
 
 namespace Resourcefull.Tests.Integration;
 
@@ -26,8 +28,10 @@ public class CancellationIntegrationTests(SqlServerFixture fixture)
         IReadOnlyList<ResourceInfo> versionsBefore = await container.GetResourceVersionsAsync("doc");
         int chunksBefore = await CountChunksAsync(containerName);
         using var cts = new CancellationTokenSource();
-        // Canceled after 20 of 32 chunks, once the first batch of chunks has been written to the database.
-        var content = new CancelAfterReadsStream(new byte[65_535 * 32], cts, readsBeforeCancel: 20);
+        // Canceled partway through the second batch of chunks, once the first has been written to the database.
+        const int Batch = ResourceSqlRepository.ChunksPerUploadBatch;
+        var content = new CancelAfterReadsStream(new byte[ResourceChunker.ChunkSize * Batch * 2],
+            cts, readsBeforeCancel: Batch + 4);
 
         // Act
         Task act() => container.UploadAsync("doc", content, null, cts.Token);

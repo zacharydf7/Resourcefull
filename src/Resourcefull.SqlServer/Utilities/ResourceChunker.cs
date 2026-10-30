@@ -5,8 +5,12 @@ namespace Resourcefull.SqlServer.Utilities;
 
 internal class ResourceChunker
 {
-    /// <summary>The size of every chunk but a version's last.</summary>
-    public const int ChunkSize = 65535;
+    /// <summary>
+    /// The size of every chunk but a version's last: five of SQL Server's content pages, which hold 8,040 bytes each,
+    /// exactly. A value over five pages also takes a page of pointers to them, so the 65,535-byte chunks of earlier
+    /// releases took nine pages for eight pages of content.
+    /// </summary>
+    public const int ChunkSize = 40_200;
 
     /// <summary>
     /// Reads the stream one chunk at a time, so the caller can store each before the next is read. Every chunk but the
