@@ -127,32 +127,15 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
             if (attempt.Database.IsRelational())
                 await LockNameAsync(attempt, resourceContainerName, resourceInfo.Name, ct);
 
-            List<ResourceModel> priorLatest = await attempt.Resources
-                .Where(r => r.ContainerName == resourceContainerName && r.Name == resourceInfo.Name && r.IsLatest)
-                .ToListAsync(ct);
-            if (createOnly && priorLatest.Count > 0)
-                throw new ResourceConflictException($"Resource with name {resourceInfo.Name} already exists.");
-            if (conditions is not null)
-            {
-                ResourceModel? current = priorLatest.FirstOrDefault();
-                ThrowIfNotMet(conditions, resourceInfo.Name, current?.VersionId, current?.ContentHash);
-            }
+            List<ResourceModel> priorLatest =
+                await CurrentForWriteAsync(attempt, resourceContainerName, resourceInfo.Name, condition, ct);
 
             // Stamped under the name's lock as the version becomes current, not before its content was read. A wrong
             // declared length throws here, before anything about the name changes.
             written = content.Complete(resourceInfo.ContentLength, lastModified ?? _clock.GetUtcNow());
 
-            // Clear the old current version before setting the new one, so the unique "latest" index never holds
-            // two rows for the name in the middle of the write.
-            foreach (ResourceModel prior in priorLatest) prior.IsLatest = false;
-            await attempt.SaveChangesAsync(ct);
-
             attempt.Attach(resource);
-            resource.IsLatest = true;
-            resource.ContentLength = written.ContentLength;
-            resource.ContentHash = written.ContentHash;
-            resource.LastModified = written.LastModified;
-            await attempt.SaveChangesAsync(ct);
+            await MakeCurrentAsync(attempt, priorLatest, resource, written, ct);
 
             await transaction.CommitAsync(ct);
         }
@@ -246,13 +229,8 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
                     .FirstOrDefaultAsync(ct);
                 if (from is null) return null;
 
-                List<ResourceModel> priorLatest = await attempt.Resources
-                    .Where(r => r.ContainerName == destination.ContainerName && r.Name == destination.Name && r.IsLatest)
-                    .ToListAsync(ct);
-                if (condition.CreateOnly && priorLatest.Count > 0)
-                    throw new ResourceConflictException($"Resource with name {destination.Name} already exists.");
-                if (condition.Conditions is { } conditions)
-                    ThrowIfNotMet(conditions, destination.Name, priorLatest.FirstOrDefault()?.VersionId, priorLatest.FirstOrDefault()?.ContentHash);
+                List<ResourceModel> priorLatest =
+                    await CurrentForWriteAsync(attempt, destination.ContainerName, destination.Name, condition, ct);
 
                 ResourceModel copy = NewVersion(destination.ContainerName, destination);
                 attempt.Resources.Add(copy);
@@ -262,15 +240,9 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
                     $"INSERT INTO [ResourceChunks] ([ResourceId], [Index], [Data]) SELECT {copy.Id}, [Index], [Data] FROM [ResourceChunks] WHERE [ResourceId] = {from.Id}",
                     ct);
 
-                // As for an upload, the old current version is cleared before the copy is made current.
-                foreach (ResourceModel prior in priorLatest) prior.IsLatest = false;
-                await attempt.SaveChangesAsync(ct);
-                copy.IsLatest = true;
-                copy.ContentLength = from.Length;
-                copy.ContentHash = from.ContentHash;
-                copy.LastModified = _clock.GetUtcNow();
-                await attempt.SaveChangesAsync(ct);
-                return written = new WrittenContent(from.Length, from.ContentHash!, copy.LastModified);
+                var stored = new WrittenContent(from.Length, from.ContentHash!, _clock.GetUtcNow());
+                await MakeCurrentAsync(attempt, priorLatest, copy, stored, ct);
+                return written = stored;
             }, cancellationToken);
         }
         catch (DbUpdateException exception) when (exception.InnerException is SqlException { Number: SqlForeignKeyViolation })
@@ -312,6 +284,46 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
             await ThrowIfContainerMissingAsync(destination.ContainerName, exception, cancellationToken);
             throw;
         }
+    }
+
+    /// <summary>
+    /// The name's current version, read under the name's lock, for a write that will replace it: a create-only write to
+    /// a name that has one throws <see cref="ResourceConflictException"/>, and conditions that don't hold throw
+    /// <see cref="ResourcePreconditionFailedException"/>.
+    /// </summary>
+    private static async Task<List<ResourceModel>> CurrentForWriteAsync(ResourceDbContext attempt,
+        string resourceContainerName, string resourceName, ResourceWriteCondition condition,
+        CancellationToken cancellationToken)
+    {
+        List<ResourceModel> priorLatest = await attempt.Resources
+            .Where(r => r.ContainerName == resourceContainerName && r.Name == resourceName && r.IsLatest)
+            .ToListAsync(cancellationToken);
+        if (condition.CreateOnly && priorLatest.Count > 0)
+            throw new ResourceConflictException($"Resource with name {resourceName} already exists.");
+        if (condition.Conditions is { } conditions)
+        {
+            ResourceModel? current = priorLatest.FirstOrDefault();
+            ThrowIfNotMet(conditions, resourceName, current?.VersionId, current?.ContentHash);
+        }
+        return priorLatest;
+    }
+
+    /// <summary>
+    /// Makes <paramref name="version"/> its name's current version, with the length, hash and time
+    /// <paramref name="written"/> gives. The old current version is cleared and saved first, so the unique "latest"
+    /// index never holds two rows for the name in the middle of the write.
+    /// </summary>
+    private static async Task MakeCurrentAsync(ResourceDbContext attempt, List<ResourceModel> priorLatest,
+        ResourceModel version, WrittenContent written, CancellationToken cancellationToken)
+    {
+        foreach (ResourceModel prior in priorLatest) prior.IsLatest = false;
+        await attempt.SaveChangesAsync(cancellationToken);
+
+        version.IsLatest = true;
+        version.ContentLength = written.ContentLength;
+        version.ContentHash = written.ContentHash;
+        version.LastModified = written.LastModified;
+        await attempt.SaveChangesAsync(cancellationToken);
     }
 
     /// <summary>
