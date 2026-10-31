@@ -1,11 +1,11 @@
 {
   "copy-16MiB": {
-    "RoundTrips": 12,
-    "LogicalReads": 10207,
-    "LogBytes": 18345984,
-    "AllocatedBytes": 728584,
-    "RetainedBytes": 64,
-    "Seconds": 0.0996,
+    "RoundTrips": 13,
+    "LogicalReads": 10214,
+    "LogBytes": 18345164,
+    "AllocatedBytes": 726360,
+    "RetainedBytes": 40,
+    "Seconds": 0.1764,
     "ContentBytes": 16777216
   },
   "delete-16MiB": {
@@ -19,11 +19,11 @@
   },
   "delete-20-versions-1MiB": {
     "RoundTrips": 15,
-    "LogicalReads": 3131,
-    "LogBytes": 22931865,
-    "AllocatedBytes": 1127200,
+    "LogicalReads": 3594,
+    "LogBytes": 22931046,
+    "AllocatedBytes": 1112992,
     "RetainedBytes": 64,
-    "Seconds": 0.0895,
+    "Seconds": 0.1041,
     "ContentBytes": 0
   },
   "delete-container-16MiB": {
@@ -136,11 +136,11 @@
   },
   "list-100": {
     "RoundTrips": 1,
-    "LogicalReads": 8,
+    "LogicalReads": 9,
     "LogBytes": 0,
-    "AllocatedBytes": 296128,
-    "RetainedBytes": 64,
-    "Seconds": 0.0038,
+    "AllocatedBytes": 295872,
+    "RetainedBytes": 40,
+    "Seconds": 0.0032,
     "ContentBytes": 0
   },
   "list-page-100-of-500": {
@@ -154,11 +154,11 @@
   },
   "move-16MiB": {
     "RoundTrips": 7,
-    "LogicalReads": 28,
-    "LogBytes": 4096,
-    "AllocatedBytes": 400352,
+    "LogicalReads": 35,
+    "LogBytes": 4915,
+    "AllocatedBytes": 395256,
     "RetainedBytes": 0,
-    "Seconds": 0.0065,
+    "Seconds": 0.0056,
     "ContentBytes": 0
   },
   "overwrite-16MiB": {
