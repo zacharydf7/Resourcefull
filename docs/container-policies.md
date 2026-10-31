@@ -91,10 +91,11 @@ builder.Services.AddResourcefull(options => options
     .UseConfiguration(builder.Configuration.GetSection("Resourcefull")));
 ```
 
-The `ContainerPolicies` section turns policies on, and anything left out keeps its default. A key that isn't one of
-these settings, such as a misspelled `MaxResourceSise`, stops the application at startup with the key's name, rather
-than being ignored. The same section can hold the other settings; see
-[Settings from configuration](getting-started.md#settings-from-configuration).
+The `ContainerPolicies` section turns policies on, and anything left out keeps its default. An empty
+`AllowedContentTypes`, `[]` or `null`, allows every type, as leaving it out does; to refuse every write, set
+`"ReadOnly": true`. A key that isn't one of these settings, such as a misspelled `MaxResourceSise`, stops the
+application at startup with the key's name, rather than being ignored. The same section can hold the other settings;
+see [Settings from configuration](getting-started.md#settings-from-configuration).
 
 A size is a number followed by `B`, `KB`, `MB`, `GB` or `TB` (or `KiB` and so on, which mean the same), such as
 `"1.5 GB"`; a number alone is bytes. `ResourceContainerPolicy` also binds on its own, with

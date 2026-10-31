@@ -301,11 +301,13 @@ public class ResourcefullOptionsBuilder
     }
 
     /// <summary>
-    /// A list of text, such as a JSON array of strings; an empty one, such as <c>[]</c>, is an empty list.
+    /// A list of text, such as a JSON array of strings. An empty one, such as <c>[]</c>, reads as not set, as
+    /// <c>null</c> does: configuration can't tell them apart, and an empty list of allowed types would refuse every
+    /// upload.
     /// </summary>
     private static string[]? ReadList(IConfigurationSection section, string key)
     {
-        if (Child(section, key) is not { } list) return null;
+        if (Child(section, key) is not { } list || (list.Value is null or "" && !list.GetChildren().Any())) return null;
         string? notAList = !string.IsNullOrEmpty(list.Value) ? list.Value
             : list.GetChildren().Any(item => item.Value is null) ? "a section" : null;
         if (notAList is not null)

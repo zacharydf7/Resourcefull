@@ -71,20 +71,30 @@ public class ResourcefullServiceCollectionExtensionsTests
     [Fact]
     public void UseConfiguration_ShouldTurnOnEachFeatureWithItsDefaults_WhenGivenItsSectionEmpty()
     {
-        // Act: an empty list of types is a list that allows none, as binding the policy reads it.
-        using ServiceProvider provider = ConfiguredFrom("""
-            {
-              "Resourcefull": {
-                "Versioning": {}, "Expiry": {}, "ContainerPolicies": { "Defaults": { "AllowedContentTypes": [] } }
-              }
-            }
-            """);
+        // Act
+        using ServiceProvider provider = ConfiguredFrom(
+            """{ "Resourcefull": { "Versioning": {}, "Expiry": {}, "ContainerPolicies": {} } }""");
 
         // Assert
         ResourcefullOptions options = provider.GetRequiredService<IOptions<ResourcefullOptions>>().Value;
         Assert.Equal((true, 100), (options.IsVersioningEnabled, options.MaxVersions));
         Assert.Equal(TimeSpan.FromMinutes(1), provider.GetRequiredService<ExpirySettings>().Interval);
-        Assert.Empty(provider.GetRequiredService<ContainerPolicySettings>().Defaults.AllowedContentTypes!);
+        Assert.Equivalent(new ResourceContainerPolicy(),
+            provider.GetRequiredService<ContainerPolicySettings>().Defaults);
+    }
+
+    [Theory]
+    [InlineData("[]")]
+    [InlineData("null")]
+    public void UseConfiguration_ShouldAllowAnyContentType_WhenGivenAllowedContentTypesEmptyOrNull(string types)
+    {
+        // Act: the two read the same, and refusing every type would refuse every upload.
+        using ServiceProvider provider = ConfiguredFrom($$"""
+            { "Resourcefull": { "ContainerPolicies": { "Defaults": { "AllowedContentTypes": {{types}} } } } }
+            """);
+
+        // Assert
+        Assert.Null(provider.GetRequiredService<ContainerPolicySettings>().Defaults.AllowedContentTypes);
     }
 
     [Fact]
