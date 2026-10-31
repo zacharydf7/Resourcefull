@@ -70,7 +70,8 @@ internal class ResourceConfiguration : IEntityTypeConfiguration<ResourceModel>
             .HasDatabaseName("IX_Resources_ExpiresAt");
 
         // A version an upload is still storing is left out of every query, so nothing sees it until it's complete; only
-        // the upload and the deletes, of a container or of abandoned uploads, ask for it with IgnoreQueryFilters.
+        // the upload and the deletes, of a container or of abandoned uploads, ask for it with IgnoreQueryFilters. Reads
+        // of a name's current version skip the filter too, since a current version is never staged.
         builder.HasQueryFilter(r => r.StagedAt == null);
 
         // Only the versions being stored, so the sweep for abandoned uploads reads nothing else; with their IDs, so it's

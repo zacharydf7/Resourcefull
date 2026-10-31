@@ -59,6 +59,9 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
     /// </summary>
     private static readonly TimeSpan StagedStampInterval = TimeSpan.FromMinutes(10);
 
+    /// <summary>A staged version's hash until it's stored: as long as a real one, which replaces it.</summary>
+    private static readonly string StagedContentHash = "sha256:" + new string('0', 64);
+
     public Task<WrittenContent> AddResourceAsync(string resourceContainerName, ResourceInfo resourceInfo, Stream stream, bool createOnly = false, CancellationToken cancellationToken = default) =>
         AddResourceAsync(resourceContainerName, resourceInfo, stream, new ResourceWriteCondition { CreateOnly = createOnly }, cancellationToken);
 
@@ -182,6 +185,10 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
             // Inserted first, so a missing container is reported before any content is read.
             ResourceModel resource = NewVersion(resourceContainerName, resourceInfo);
             resource.StagedAt = _clock.GetUtcNow();
+            // With a hash as long as its real one, so making it current changes the row in place. Inserted without
+            // one, the version index's pages were measured half full after storing 500 names, so a page of a listing
+            // read 12 pages rather than 8. Nothing reads a staged version to see it.
+            resource.ContentHash = StagedContentHash;
             attempt.Resources.Add(resource);
             // Without a transaction, the insert commits as it runs.
             committing = transaction is null;
@@ -1461,8 +1468,10 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
     {
         query = query.Where(r => r.ContainerName == resourceContainerName && r.Name == resourceName);
 
+        // A current version is never staged, so the filter on staged versions goes. With its condition, SQL Server
+        // was measured caching a scan for this query in some runs, rather than a seek.
         return versionId == null
-            ? query.Where(r => r.IsLatest)
+            ? query.IgnoreQueryFilters().Where(r => r.IsLatest)
             : query.Where(r => r.VersionId == versionId);
     }
 
