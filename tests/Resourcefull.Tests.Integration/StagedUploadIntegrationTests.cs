@@ -77,6 +77,29 @@ public class StagedUploadIntegrationTests(SqlServerFixture fixture)
     }
 
     [SkippableFact]
+    public async Task UploadAsync_ShouldSayItsVersionWasDeleted_WhenTheStagedVersionIsDeletedPartway()
+    {
+        fixture.SkipIfUnavailable();
+
+        // Arrange: an upload paused with a batch stored, whose staged version is then deleted, as the sweep deletes an
+        // abandoned one.
+        using ServiceProvider provider = fixture.BuildServiceProvider();
+        IResourceContainerClient container = await NewContainerAsync(provider);
+        var content = new PausingStream(Payload, PauseAt);
+        Task<ResourceInfo> upload = container.UploadAsync("video.mp4", content);
+        await content.Paused;
+        await ExecuteAsync("DELETE FROM [Resources] WHERE [ContainerName] = @c", container.Name);
+
+        // Act
+        content.Resume();
+
+        // Assert
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => upload);
+        Assert.Contains("deleted before it was complete", exception.Message);
+        Assert.Equal(0, await StoredRowsAsync(container.Name));
+    }
+
+    [SkippableFact]
     public async Task UploadAsync_ShouldLeaveNothingBehind_WhenCanceledPartway()
     {
         fixture.SkipIfUnavailable();

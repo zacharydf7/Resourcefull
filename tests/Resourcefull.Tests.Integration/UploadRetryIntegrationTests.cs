@@ -45,6 +45,27 @@ public class UploadRetryIntegrationTests(SqlServerFixture fixture)
     }
 
     [SkippableFact]
+    public async Task AddResourceAsync_ShouldKeepItsStagedVersion_WhenItsInsertIsStoredButItsAcknowledgementIsLost()
+    {
+        fixture.SkipIfUnavailable();
+
+        // Arrange: the staged version's insert, the upload's first statement, commits as it runs, then its connection
+        // fails as it closes, so the retry finds the version, as its own.
+        var failure = new FailOnceOnCloseInterceptor();
+        (ResourceSqlRepository repository, string c) = await NewRepositoryAsync(failure);
+        failure.Arm();
+
+        // Act
+        WrittenContent written = await repository.AddResourceAsync(c, Version(c), new NonSeekableStream(Payload));
+
+        // Assert
+        Assert.True(failure.Failed);
+        Assert.Equal(PayloadHash, written.ContentHash);
+        Assert.True(Assert.Single(await repository.GetResourceVersionsAsync(c, "n")).IsLatest);
+        Assert.Equal(Payload, await ReadAsync(repository, c));
+    }
+
+    [SkippableFact]
     public async Task ImportVersionAsync_ShouldRefuseTheVersion_WhenItExistsAndTheFirstInsertFailedTransiently()
     {
         fixture.SkipIfUnavailable();

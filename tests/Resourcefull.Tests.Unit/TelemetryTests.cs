@@ -310,6 +310,37 @@ public sealed class TelemetryTests : IDisposable
     }
 
     [Fact]
+    public async Task DeleteExpiredAsync_ShouldReportBothKindsOfFailure_WhenAVersionAndDeletingAbandonedUploadsFail()
+    {
+        // Arrange: an expired version that can't be deleted, in a batch or alone, and an abandoned-upload sweep that
+        // fails.
+        var repository = new Mock<IResourceRepository>();
+        repository.Setup(r => r.DeleteAbandonedUploadsAsync(It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("The sweep failed."));
+        repository.Setup(r => r.GetExpiredAsync(It.IsAny<DateTimeOffset>(), It.IsAny<int>(), null,
+            It.IsAny<CancellationToken>())).ReturnsAsync([new ResourceInfo
+            {
+                ContainerName = "c", Name = "a", VersionId = "v1", ExpiresAt = DateTimeOffset.UnixEpoch
+            }]);
+        repository.Setup(r => r.DeleteExpiredVersionsAsync(It.IsAny<IReadOnlyList<(ResourceLocation, string)>>(),
+            It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("The batch failed."));
+        repository.Setup(r => r.DeleteExpiredVersionAsync(It.IsAny<ResourceLocation>(), "v1", It.IsAny<DateTimeOffset>(),
+            It.IsAny<CancellationToken>())).ThrowsAsync(new InvalidOperationException("The version failed."));
+        var service = new ResourceServiceClient(repository.Object, Options.Create(new ResourcefullOptions()));
+
+        // Act
+        Task act() => service.DeleteExpiredAsync();
+
+        // Assert
+        var failure = await Assert.ThrowsAsync<AggregateException>(act);
+        Assert.Contains("1 expired versions weren't deleted", failure.Message);
+        Assert.Contains("The first 1 failures follow, then the one from deleting what stopped uploads left behind",
+            failure.Message);
+        Assert.Equal(["The version failed.", "The sweep failed."], failure.InnerExceptions.Select(e => e.Message));
+    }
+
+    [Fact]
     public async Task DeleteExpiredAsync_ShouldDeleteExpiredVersionsAndReport_WhenDeletingAbandonedUploadsFails()
     {
         // Arrange

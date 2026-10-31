@@ -290,9 +290,16 @@ internal class ResourceServiceClient(IResourceRepository resourceRepository, IOp
             if (abandoned > 0) activity?.SetTag("resourcefull.abandoned_uploads", abandoned);
             activity?.SetTag("resourcefull.batches", batches);
             if (fallbacks > 0) activity?.SetTag("resourcefull.batch_fallbacks", fallbacks);
-            if (abandonedFailure is not null) failures.Add(abandonedFailure);
             if (failed > 0)
-                throw new AggregateException($"{failed} expired versions weren't deleted, and stay for the next sweep; {deleted} were. The first {failures.Count} failures follow.", failures);
+            {
+                string alsoAbandoned = abandonedFailure is null
+                    ? ""
+                    : ", then the one from deleting what stopped uploads left behind";
+                throw new AggregateException(
+                    $"{failed} expired versions weren't deleted, and stay for the next sweep; " +
+                        $"{deleted} were. The first {failures.Count} failures follow{alsoAbandoned}.",
+                    abandonedFailure is null ? failures : [.. failures, abandonedFailure]);
+            }
             if (abandonedFailure is not null) ExceptionDispatchInfo.Throw(abandonedFailure);
             return deleted;
         });
