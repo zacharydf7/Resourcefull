@@ -55,8 +55,9 @@ public abstract partial class ResourcefullContractTests
         // Act
         Task act() => service.CreateResourceContainerAsync(name);
 
-        // Assert
-        await Assert.ThrowsAsync<ResourceConflictException>(act);
+        // Assert: about the container, not a resource in it.
+        var exception = await Assert.ThrowsAsync<ResourceConflictException>(act);
+        Assert.Equal((name, null), (exception.ContainerName, exception.ResourceName));
     }
 
     [SkippableFact]

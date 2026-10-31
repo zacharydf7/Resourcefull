@@ -82,7 +82,7 @@ public class ResourcefullOptionsBuilder
     {
         if (maxVersions <= 0)
         {
-            throw new InvalidOperationException($"Value for {nameof(maxVersions)} must be greater than zero.");
+            throw new ArgumentOutOfRangeException(nameof(maxVersions), maxVersions, "Keep at least one version.");
         }
 
         Services.Configure<ResourcefullOptions>(options =>

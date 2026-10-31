@@ -6,6 +6,9 @@ namespace Resourcefull;
 /// </summary>
 public class ResourcefullException : Exception
 {
+    private string? _containerName;
+    private string? _resourceName;
+
     /// <summary>Creates the exception with a message.</summary>
     /// <param name="message">The message that describes the error.</param>
     public ResourcefullException(string message) : base(message) { }
@@ -14,6 +17,31 @@ public class ResourcefullException : Exception
     /// <param name="message">The message that describes the error.</param>
     /// <param name="innerException">The exception that caused this one.</param>
     public ResourcefullException(string message, Exception innerException) : base(message, innerException) { }
+
+    /// <summary>
+    /// The container the error is about: for a copy or move, the destination when that's where the problem is, and
+    /// for a <see cref="ResourcePolicyViolationException"/>, the container whose policy refused the write.
+    /// <para>Coming in 3.2.</para>
+    /// </summary>
+    public string? ContainerName { get => _containerName; init => _containerName = value; }
+
+    /// <summary>
+    /// The resource the error is about, or <see langword="null"/> when it's about a container, as a
+    /// <see cref="ResourceConflictException"/> for a container that exists is.
+    /// <para>Coming in 3.2.</para>
+    /// </summary>
+    public string? ResourceName { get => _resourceName; init => _resourceName = value; }
+
+    /// <summary>
+    /// Records the container and resource of the operation that failed, unless whoever threw the exception already
+    /// said what it's about, so an exception from a provider that doesn't set them still has them.
+    /// </summary>
+    internal virtual void LocateIfUnknown(string? containerName, string? resourceName)
+    {
+        if (_containerName is not null || _resourceName is not null) return;
+        _containerName = containerName;
+        _resourceName = resourceName;
+    }
 }
 
 /// <summary>
@@ -45,6 +73,41 @@ public sealed class ResourceNameException : ArgumentException
     /// <param name="message">The message that describes the error.</param>
     /// <param name="paramName">The name of the argument that holds the name.</param>
     public ResourceNameException(string message, string? paramName) : base(message, paramName) { }
+
+    /// <summary>Creates the exception with a message, the argument that broke the rules, and its value.</summary>
+    /// <param name="message">The message that describes the error.</param>
+    /// <param name="paramName">The name of the argument that holds the name.</param>
+    /// <param name="name">The name that broke the rules.</param>
+    /// <remarks>Coming in 3.2.</remarks>
+    public ResourceNameException(string message, string? paramName, string? name) : base(message, paramName)
+    {
+        Name = name;
+    }
+
+    /// <summary>
+    /// The name that broke the rules, or <see langword="null"/> when whoever threw the exception didn't say.
+    /// <para>Coming in 3.2.</para>
+    /// </summary>
+    public string? Name { get; }
+}
+
+/// <summary>
+/// Thrown when a range download starts past the end of the content. Nothing is read. Maps naturally to an HTTP 416,
+/// with <see cref="ContentLength"/> in its <c>Content-Range</c> header.
+/// <para>Coming in 3.2.</para>
+/// </summary>
+public sealed class ResourceRangeNotSatisfiableException : ResourcefullException
+{
+    /// <summary>Creates the exception with a message and the content's length.</summary>
+    /// <param name="message">The message that describes the error.</param>
+    /// <param name="contentLength">How many bytes the content has.</param>
+    public ResourceRangeNotSatisfiableException(string message, long contentLength) : base(message)
+    {
+        ContentLength = contentLength;
+    }
+
+    /// <summary>How many bytes the content has, so a range within it can be asked for instead.</summary>
+    public long ContentLength { get; }
 }
 
 /// <summary>
@@ -80,6 +143,13 @@ public sealed class ResourceContentLengthMismatchException : ResourcefullExcepti
     /// <summary>Creates the exception with a message.</summary>
     /// <param name="message">The message that describes the error.</param>
     public ResourceContentLengthMismatchException(string message) : base(message) { }
+
+    /// <summary>Creates the exception with a message and the exception that caused it.</summary>
+    /// <param name="message">The message that describes the error.</param>
+    /// <param name="innerException">The exception that caused this one.</param>
+    /// <remarks>Coming in 3.2.</remarks>
+    public ResourceContentLengthMismatchException(string message, Exception innerException)
+        : base(message, innerException) { }
 }
 
 /// <summary>
@@ -97,6 +167,10 @@ public sealed class ResourceContainerNotFoundException : ResourcefullException
     /// <param name="message">The message that describes the error.</param>
     /// <param name="innerException">The exception that caused this one.</param>
     public ResourceContainerNotFoundException(string message, Exception innerException) : base(message, innerException) { }
+
+    // It's about the container, so it never names a resource, whichever operation it came from.
+    internal override void LocateIfUnknown(string? containerName, string? resourceName) =>
+        base.LocateIfUnknown(containerName, null);
 }
 
 /// <summary>

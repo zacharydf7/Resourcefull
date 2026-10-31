@@ -135,7 +135,12 @@ public interface IResourceContainerClient : IDisposable
     /// its <see cref="ResourceDownloadResult.Range"/> says, and <see cref="ResourceDownloadResult.TotalLength"/> is the
     /// whole content's length.
     /// </returns>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="range"/> has a negative offset or length, or starts past the end of the content.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <paramref name="range"/> has a negative offset or length.
+    /// </exception>
+    /// <exception cref="ResourceRangeNotSatisfiableException">
+    /// <paramref name="range"/> starts past the end of the content.
+    /// </exception>
     /// <exception cref="ArgumentException"><paramref name="resourceName"/> is null, empty, longer than 256 characters, or starts or ends with whitespace (<see cref="ArgumentNullException"/> when null).</exception>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
     /// <exception cref="NotSupportedException">

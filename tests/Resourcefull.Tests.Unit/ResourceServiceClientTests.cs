@@ -561,6 +561,63 @@ public class ResourceServiceClientTests
     }
 
     [Fact]
+    public async Task DeleteResourceIfExistsAsync_ShouldSayWhichResourceFailed_WhenTheProviderDoesNot()
+    {
+        // Arrange: a provider written before exceptions said what they're about.
+        var repository = new Mock<IResourceRepository>();
+        repository.Setup(r => r.DeleteResourceAsync("c", "n", null, It.IsAny<ResourceConditions>(),
+            It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new ResourcePreconditionFailedException("Not met.", null, null));
+        IResourceContainerClient container = NewService(repository.Object).GetResourceContainerClient("c");
+
+        // Act
+        Task act() => container.DeleteResourceIfExistsAsync("n", null,
+            new ResourceConditions { IfMatchVersionId = "v1" }, CancellationToken.None);
+
+        // Assert
+        var exception = await Assert.ThrowsAsync<ResourcePreconditionFailedException>(act);
+        Assert.Equal(("c", "n"), (exception.ContainerName, exception.ResourceName));
+    }
+
+    [Fact]
+    public async Task CopyResourceAsync_ShouldNameTheDestination_WhenTheProviderDoesNot()
+    {
+        // Arrange: a provider written before exceptions said what they're about, whose destination name exists.
+        var repository = new Mock<IResourceRepository>();
+        repository.Setup(r => r.GetResourceInfoAsync("c", "a", null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ResourceInfo { ContainerName = "c", Name = "a", VersionId = "v1" });
+        repository.Setup(r => r.CopyResourceAsync(It.IsAny<ResourceLocation>(), "v1", It.IsAny<ResourceInfo>(),
+            It.IsAny<ResourceWriteCondition>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new ResourceConflictException("Exists."));
+        IResourceContainerClient container = NewService(repository.Object).GetResourceContainerClient("c");
+
+        // Act
+        Task act() => container.CopyResourceAsync("a", "d", "b");
+
+        // Assert
+        var exception = await Assert.ThrowsAsync<ResourceConflictException>(act);
+        Assert.Equal(("d", "b"), (exception.ContainerName, exception.ResourceName));
+    }
+
+    [Fact]
+    public async Task MoveResourceAsync_ShouldNameOnlyTheDestinationContainer_WhenTheProviderDoesNotAndItIsMissing()
+    {
+        // Arrange
+        var repository = new Mock<IResourceRepository>();
+        repository.Setup(r => r.MoveResourceAsync(It.IsAny<ResourceLocation>(), It.IsAny<ResourceLocation>(),
+            It.IsAny<ResourceConditions?>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new ResourceContainerNotFoundException("Missing."));
+        IResourceContainerClient container = NewService(repository.Object).GetResourceContainerClient("c");
+
+        // Act
+        Task act() => container.MoveResourceAsync("a", "d", "b");
+
+        // Assert
+        var exception = await Assert.ThrowsAsync<ResourceContainerNotFoundException>(act);
+        Assert.Equal(("d", null), (exception.ContainerName, exception.ResourceName));
+    }
+
+    [Fact]
     public async Task DeleteExpiredAsync_ShouldDeleteEachVersionOnItsOwn_WhenTheBatchFails()
     {
         // Arrange: two expired versions, and a provider whose batch delete fails but whose single deletes work.

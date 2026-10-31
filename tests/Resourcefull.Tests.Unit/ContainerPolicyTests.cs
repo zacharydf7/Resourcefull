@@ -96,7 +96,7 @@ public class ContainerPolicyTests
     public void LimitedContentStream_ShouldCountFromWhereItIsRewound_WhenAProviderRetriesTheUpload()
     {
         // Arrange: exactly the limit, read once, then again after a rewind, as a retry reads it.
-        var limit = new ContentLimit(100, ResourcePolicyRule.MaxResourceSize, 100, "too large");
+        var limit = new ContentLimit(100, ResourcePolicyRule.MaxResourceSize, 100, "c", "too large");
         using var stream = new LimitedContentStream(new MemoryStream(new byte[100]), limit);
         stream.CopyTo(Stream.Null);
 
@@ -112,7 +112,7 @@ public class ContainerPolicyTests
     public void LimitedContentStream_ShouldThrowTheRulesViolation_WhenMoreThanTheLimitIsRead()
     {
         // Arrange
-        var limit = new ContentLimit(10, ResourcePolicyRule.MaxContainerSize, 500, "no room");
+        var limit = new ContentLimit(10, ResourcePolicyRule.MaxContainerSize, 500, "c", "no room");
         using var stream = new LimitedContentStream(new MemoryStream(new byte[11]), limit);
 
         // Act
@@ -187,6 +187,33 @@ public class ContainerPolicyTests
 
         // Assert
         Assert.Equivalent(new ResourceContainerPolicy(), policy);
+    }
+
+    private sealed class ReadOnlyDestination : IResourcePolicyProvider
+    {
+        public ValueTask<ResourceContainerPolicy?> GetPolicyAsync(string containerName,
+            CancellationToken cancellationToken) =>
+            ValueTask.FromResult<ResourceContainerPolicy?>(
+                new ResourceContainerPolicy { ReadOnly = containerName == "d" });
+    }
+
+    [Fact]
+    public async Task CopyResourceAsync_ShouldNameTheContainerWhosePolicyRefused_WhenTheDestinationIsReadOnly()
+    {
+        // Arrange
+        using ServiceProvider provider = new ServiceCollection()
+            .AddResourcefull(o => o.UseInMemory().UsePolicyProvider<ReadOnlyDestination>()).BuildServiceProvider();
+        var service = provider.GetRequiredService<IResourceServiceClient>();
+        IResourceContainerClient source = await service.CreateResourceContainerAsync("c");
+        await service.CreateResourceContainerAsync("d");
+        await source.UploadAsync("a", BinaryData.FromString("x"));
+
+        // Act
+        Task act() => source.CopyResourceAsync("a", "d", "b");
+
+        // Assert: it's about the destination container, not the resource being copied.
+        var exception = await Assert.ThrowsAsync<ResourcePolicyViolationException>(act);
+        Assert.Equal(("d", null), (exception.ContainerName, exception.ResourceName));
     }
 
     [Fact]

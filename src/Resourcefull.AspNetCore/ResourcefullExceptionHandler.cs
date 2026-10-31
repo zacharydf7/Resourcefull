@@ -7,7 +7,8 @@ namespace Resourcefull.AspNetCore;
 /// <summary>
 /// Turns Resourcefull's exceptions into problem details responses: <see cref="ResourceConflictException"/> into 409,
 /// <see cref="ResourceContainerNotFoundException"/> into 404, <see cref="ResourceContentLengthMismatchException"/> and
-/// <see cref="ResourceNameException"/> into 400, <see cref="ResourcePreconditionFailedException"/> into 412, and
+/// <see cref="ResourceNameException"/> into 400, <see cref="ResourcePreconditionFailedException"/> into 412,
+/// <see cref="ResourceRangeNotSatisfiableException"/> into 416 with the content's length in <c>Content-Range</c>, and
 /// <see cref="ResourcePolicyViolationException"/> into 413 for content too large for the size limits, 409 for a
 /// container that holds as many resources as it may, 403 for a read-only container, and 415 for a content type it
 /// doesn't allow. Their
@@ -28,6 +29,7 @@ public sealed class ResourcefullExceptionHandler(IProblemDetailsService problemD
             ResourceContainerNotFoundException => StatusCodes.Status404NotFound,
             ResourceContentLengthMismatchException or ResourceNameException => StatusCodes.Status400BadRequest,
             ResourcePreconditionFailedException => StatusCodes.Status412PreconditionFailed,
+            ResourceRangeNotSatisfiableException => StatusCodes.Status416RangeNotSatisfiable,
             ResourcePolicyViolationException { Rule: ResourcePolicyRule.MaxResourceSize or ResourcePolicyRule.MaxContainerSize }
                 => StatusCodes.Status413PayloadTooLarge,
             ResourcePolicyViolationException { Rule: ResourcePolicyRule.MaxResourceCount } => StatusCodes.Status409Conflict,
@@ -38,6 +40,8 @@ public sealed class ResourcefullExceptionHandler(IProblemDetailsService problemD
         if (status is null) return false;
 
         httpContext.Response.StatusCode = status.Value;
+        if (exception is ResourceRangeNotSatisfiableException range)
+            httpContext.Response.Headers.ContentRange = $"bytes */{range.ContentLength}";
         return await problemDetails.TryWriteAsync(new ProblemDetailsContext
         {
             HttpContext = httpContext,

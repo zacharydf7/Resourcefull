@@ -34,7 +34,7 @@ public class ResourceNamesTests
     public void ThrowIfInvalidResourceName_ShouldThrowResourceNameExceptionNamingTheArgument_WhenGivenANonNullInvalidName(string name)
     {
         var exception = Assert.Throws<ResourceNameException>(() => ResourceNames.ThrowIfInvalidResourceName(name, "resourceName"));
-        Assert.Equal("resourceName", exception.ParamName);
+        Assert.Equal(("resourceName", name), (exception.ParamName, exception.Name));
     }
 
     [Fact]

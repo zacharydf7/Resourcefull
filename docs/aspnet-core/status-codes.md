@@ -15,6 +15,7 @@ app.UseExceptionHandler();
 | `ResourceContentLengthMismatchException` | 400 Bad Request |
 | `ResourceNameException`, for a name that breaks the [name rules](../names.md) | 400 Bad Request |
 | `ResourcePreconditionFailedException` | 412 Precondition Failed |
+| `ResourceRangeNotSatisfiableException` <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span>, for a download range that starts past the end | 416 Range Not Satisfiable, with `Content-Range: bytes */` and the content's length |
 | `ResourcePolicyViolationException` <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span>, for a write that breaks its [container's policy](../container-policies.md) | 413 Content Too Large for the size limits, 409 Conflict for `MaxResourceCount`, 403 Forbidden for `ReadOnly`, 415 Unsupported Media Type for `AllowedContentTypes` |
 
 The responses are [problem details](https://www.rfc-editor.org/rfc/rfc9457) whose title is the exception's message.

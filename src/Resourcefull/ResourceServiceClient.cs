@@ -291,7 +291,10 @@ internal class ResourceServiceClient(IResourceRepository resourceRepository, IOp
             ResourceNames.ThrowIfInvalidContainerName(resourceContainerName);
             ArgumentNullException.ThrowIfNull(destination);
             ResourceContainerInfo container = await resourceRepository.GetResourceContainerInfoAsync(resourceContainerName, cancellationToken)
-                ?? throw new ResourceContainerNotFoundException($"Resource Container with the name {resourceContainerName} does not exist.");
+                ?? throw new ResourceContainerNotFoundException($"The container {resourceContainerName} doesn't exist.")
+                {
+                    ContainerName = resourceContainerName
+                };
 
             ResourceExportResult exported = await ContainerArchive.ExportAsync(resourceRepository, container,
                 destination, activity, cancellationToken);

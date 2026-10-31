@@ -94,7 +94,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
                 && r.VersionId == resourceInfo.VersionId, ct))
             {
                 if (written != null) return;
-                throw new ResourceConflictException($"Resource {resourceInfo.Name} already has a version {resourceInfo.VersionId}.");
+                throw VersionExists(resourceContainerName, resourceInfo.Name, resourceInfo.VersionId);
             }
 
             // Any other retry has to read the content again, once some of it has been read.
@@ -107,7 +107,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
             // Checked again under the lock below; this only spares reading the content of an upload that will fail.
             if (createOnly && await attempt.Resources.AnyAsync(r => r.ContainerName == resourceContainerName
                 && r.Name == resourceInfo.Name && r.IsLatest, ct))
-                throw new ResourceConflictException($"Resource with name {resourceInfo.Name} already exists.");
+                throw ResourceExists(resourceContainerName, resourceInfo.Name);
 
             // Inserted first, so a missing container is reported before any content is read.
             ResourceModel resource = NewVersion(resourceContainerName, resourceInfo);
@@ -118,8 +118,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
             }
             catch (DbUpdateException exception) when (IsUniqueViolation(exception))
             {
-                throw new ResourceConflictException(
-                    $"Resource {resourceInfo.Name} already has a version {resourceInfo.VersionId}.", exception);
+                throw VersionExists(resourceContainerName, resourceInfo.Name, resourceInfo.VersionId, exception);
             }
             // Untracked while the chunks go in, or each would be added to its Chunks collection and kept.
             attempt.Entry(resource).State = EntityState.Detached;
@@ -209,7 +208,13 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
     {
         using ResourceDbContext dbContext = dbContextFactory.CreateDbContext();
         if (!await dbContext.ResourceContainers.AnyAsync(x => x.Name == resourceContainerName, cancellationToken))
-            throw new ResourceContainerNotFoundException($"Resource Container with the name {resourceContainerName} does not exist.", exception);
+        {
+            throw new ResourceContainerNotFoundException($"The container {resourceContainerName} doesn't exist.",
+                exception)
+            {
+                ContainerName = resourceContainerName
+            };
+        }
     }
 
     public async Task<WrittenContent?> CopyResourceAsync(ResourceLocation source, string? sourceVersionId, ResourceInfo destination,
@@ -238,7 +243,8 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
                 if (await attempt.Resources.AnyAsync(r => r.ContainerName == destination.ContainerName && r.Name == destination.Name
                     && r.VersionId == destination.VersionId, ct))
                 {
-                    return written ?? throw new ResourceConflictException($"Resource {destination.Name} already has a version {destination.VersionId}.");
+                    return written
+                        ?? throw VersionExists(destination.ContainerName, destination.Name, destination.VersionId);
                 }
 
                 // Read under the source name's lock, so the version can't be deleted while its chunks are copied.
@@ -282,9 +288,13 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
                     && r.Name == source.ResourceName && r.IsLatest, ct);
                 // A retry after a commit whose acknowledgement was lost finds the resource already moved.
                 if (current is null) return moved;
-                if (sourceConditions is not null) ThrowIfNotMet(sourceConditions, source.ResourceName, current.VersionId, current.ContentHash);
+                if (sourceConditions is not null)
+                {
+                    ThrowIfNotMet(sourceConditions, source.ContainerName, source.ResourceName, current.VersionId,
+                        current.ContentHash);
+                }
                 if (await attempt.Resources.AnyAsync(r => r.ContainerName == destination.ContainerName && r.Name == destination.ResourceName, ct))
-                    throw new ResourceConflictException($"Resource with name {destination.ResourceName} already exists.");
+                    throw ResourceExists(destination.ContainerName, destination.ResourceName);
 
                 // Only the versions' container and name change: their chunks hang off their IDs, so no content is copied.
                 // The stored URI, which only 2.x reads, would name the old place, so it's cleared rather than left wrong.
@@ -317,11 +327,11 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
             .Where(r => r.ContainerName == resourceContainerName && r.Name == resourceName && r.IsLatest)
             .ToListAsync(cancellationToken);
         if (condition.CreateOnly && priorLatest.Count > 0)
-            throw new ResourceConflictException($"Resource with name {resourceName} already exists.");
+            throw ResourceExists(resourceContainerName, resourceName);
         if (condition.Conditions is { } conditions)
         {
             ResourceModel? current = priorLatest.FirstOrDefault();
-            ThrowIfNotMet(conditions, resourceName, current?.VersionId, current?.ContentHash);
+            ThrowIfNotMet(conditions, resourceContainerName, resourceName, current?.VersionId, current?.ContentHash);
         }
         return priorLatest;
     }
@@ -462,14 +472,15 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
             .Where(r => r.ContainerName == resourceContainerName && r.Name == resourceName && r.IsLatest)
             .Select(r => new { r.VersionId, r.ContentHash })
             .FirstOrDefaultAsync(cancellationToken);
-        ThrowIfNotMet(conditions, resourceName, current?.VersionId, current?.ContentHash);
+        ThrowIfNotMet(conditions, resourceContainerName, resourceName, current?.VersionId, current?.ContentHash);
     }
 
     /// <summary>
     /// A <see langword="null"/> <paramref name="currentVersionId"/> means the name has no current version, which meets
     /// no condition; empty conditions are no conditions.
     /// </summary>
-    private static void ThrowIfNotMet(ResourceConditions conditions, string resourceName, string? currentVersionId, string? currentContentHash)
+    private static void ThrowIfNotMet(ResourceConditions conditions, string resourceContainerName, string resourceName,
+        string? currentVersionId, string? currentContentHash)
     {
         if (conditions.IfMatchVersionId is null && conditions.IfMatchContentHash is null) return;
 
@@ -478,10 +489,31 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
             || (conditions.IfMatchContentHash is { } hash && hash != currentContentHash))
         {
             throw new ResourcePreconditionFailedException(currentVersionId is null
-                ? $"Resource {resourceName} has no current version to meet the conditions."
-                : $"Resource {resourceName}'s current version {currentVersionId} doesn't meet the conditions.",
-                currentVersionId, currentContentHash);
+                ? $"The resource {resourceName} in the container {resourceContainerName} has no current version to " +
+                    "meet the conditions."
+                : $"The current version {currentVersionId} of the resource {resourceName} in the container " +
+                    $"{resourceContainerName} doesn't meet the conditions.",
+                currentVersionId, currentContentHash)
+            {
+                ContainerName = resourceContainerName, ResourceName = resourceName
+            };
         }
+    }
+
+    private static ResourceConflictException ResourceExists(string resourceContainerName, string resourceName) =>
+        new($"The resource {resourceName} already exists in the container {resourceContainerName}.")
+        {
+            ContainerName = resourceContainerName, ResourceName = resourceName
+        };
+
+    private static ResourceConflictException VersionExists(string resourceContainerName, string resourceName,
+        string versionId, Exception? innerException = null)
+    {
+        string message =
+            $"The resource {resourceName} in the container {resourceContainerName} already has a version {versionId}.";
+        return innerException is null
+            ? new(message) { ContainerName = resourceContainerName, ResourceName = resourceName }
+            : new(message, innerException) { ContainerName = resourceContainerName, ResourceName = resourceName };
     }
 
     private static bool IsUniqueViolation(DbUpdateException exception) =>
@@ -1025,7 +1057,8 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
                 // A retry after a commit whose acknowledgement was lost finds the container it created. It can't tell
                 // that from a commit that failed while another caller created the name, which counts as created too.
                 if (created) return true;
-                throw new ResourceConflictException($"Resource Container with the name {resourceContainerInfo.Name} already exists.", exception);
+                throw new ResourceConflictException($"The container {resourceContainerInfo.Name} already exists.",
+                    exception) { ContainerName = resourceContainerInfo.Name };
             }
 
             return created = true;

@@ -58,7 +58,9 @@ public abstract partial class ResourcefullContractTests
         Assert.Equal(payload.Length, undeclared.ContentLength);
         Assert.Equal(payload.Length, (await container.GetResourceInfoAsync("undeclared.bin"))!.ContentLength);
         Assert.Equal(undeclared.ContentHash, declared.ContentHash);
-        Assert.IsType<ResourceContentLengthMismatchException>(wrong);
+        var mismatch = Assert.IsType<ResourceContentLengthMismatchException>(wrong);
+        Assert.Contains("wrong.bin", mismatch.Message);
+        Assert.Equal((container.Name, "wrong.bin"), (mismatch.ContainerName, mismatch.ResourceName));
         Assert.False(await container.ExistsAsync("wrong.bin"));
     }
 

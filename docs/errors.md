@@ -14,7 +14,8 @@ Resourcefull reports an expected absence with a return value and everything else
 | Uploading into a container that doesn't exist | `ResourceContainerNotFoundException` |
 | An upload or delete whose `ResourceConditions` the current version doesn't meet, including a delete with conditions of a name that doesn't exist | `ResourcePreconditionFailedException` (nothing changes) |
 | Moving a resource onto a name that exists, or importing into a container that exists <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span> | `ResourceConflictException` |
-| A download range that starts past the end of the content <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span> | `ArgumentOutOfRangeException` |
+| A download range that starts past the end of the content <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span> | `ResourceRangeNotSatisfiableException`, with the content's length |
+| A download range with a negative offset or length <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span> | `ArgumentOutOfRangeException` |
 | A version deleted while it's being downloaded, with SQL Server | `IOException` from the download stream, rather than a stream that ends early |
 | Importing a file that isn't an export, describes something that can't be imported, or whose content was changed <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span> | `InvalidDataException` (nothing is left behind) |
 | Importing from a stream that can't seek <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span> | `ArgumentException` |
@@ -23,6 +24,7 @@ Resourcefull reports an expected absence with a return value and everything else
 | An upload whose declared length differs from its content | `ResourceContentLengthMismatchException` (nothing is stored) |
 | A write that breaks its container's [policy](container-policies.md) <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span> | `ResourcePolicyViolationException` (nothing changes) |
 | Restoring a version while versioning is off | `InvalidOperationException` |
+| `UseVersioning` with fewer than one version | `ArgumentOutOfRangeException` |
 | Configuring no provider, or two | `InvalidOperationException` from `AddResourcefull` |
 | A canceled operation | `OperationCanceledException` |
 | A storage failure | the provider's exception, such as `SqlException`; with SQL Server, a transient failure that outlasts the retries throws EF Core's `RetryLimitExceededException`, with the last failure as its inner exception |
@@ -52,9 +54,25 @@ All of them derive from `ResourcefullException`, so one `catch` handles any of t
 | `ResourceContentLengthMismatchException` | The upload's declared length didn't match its content. | 400 Bad Request |
 | `ResourcePreconditionFailedException` | The name's current version didn't meet the upload's or delete's conditions. | 412 Precondition Failed |
 | `ResourcePolicyViolationException` <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span> | The write broke its container's policy; `Rule` says which rule, and `Limit` its limit. | 413 for the size limits, 409 for `MaxResourceCount`, 403 for `ReadOnly`, 415 for `AllowedContentTypes` |
+| `ResourceRangeNotSatisfiableException` <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span> | The download range starts past the end of the content; `ContentLength` says how long it is. | 416 Range Not Satisfiable |
 
 `ResourceNameException` derives from `ArgumentException` rather than `ResourcefullException`, so existing
-`catch (ArgumentException)` code still catches it; it maps to 400 Bad Request.
+`catch (ArgumentException)` code still catches it; it maps to 400 Bad Request. Its `Name` <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span> is the name that
+broke the rules.
+
+### What an exception is about
+
+`ContainerName` and `ResourceName` <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span> say what a `ResourcefullException` is about, so you don't have to read its
+message:
+
+- **A resource:** both are set. For a copy or move whose destination is the problem, such as a destination name that
+  exists, they name the destination.
+- **A container:** only `ContainerName` is set, as for creating a container that exists, or for a
+  `ResourcePolicyViolationException`, which names the container whose policy refused the write.
+
+They're set whatever the storage provider: when a provider doesn't set them, the client fills them in from the call
+that failed. They aren't sent in HTTP responses or recorded in telemetry, so a resource name in them stays within
+your application.
 
 ```csharp
 try

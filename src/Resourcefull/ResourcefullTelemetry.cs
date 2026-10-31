@@ -122,6 +122,7 @@ internal sealed class ClientTelemetry(string provider, ResourcefullOptions optio
         catch (Exception exception)
         {
             errorType = exception.GetType().FullName;
+            (exception as ResourcefullException)?.LocateIfUnknown(containerName, resourceName);
             RecordFailure(activity, exception);
             throw;
         }

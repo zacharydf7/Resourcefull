@@ -41,7 +41,8 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : I
             await UnderLockAsync(() =>
             {
                 if (_containers.ContainsKey(resourceContainerName))
-                    ThrowIfNotMet(conditions, resourceInfo.Name, VersionsOf(resourceContainerName, resourceInfo.Name).MaxBy(r => r.Sequence));
+                    ThrowIfNotMet(conditions, resourceContainerName, resourceInfo.Name,
+                        VersionsOf(resourceContainerName, resourceInfo.Name).MaxBy(r => r.Sequence));
                 return true;
             }, cancellationToken);
         }
@@ -56,15 +57,22 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : I
             // Checked in the same step as the insert, so a container deleted while the content was read is reported
             // rather than written into.
             InMemoryResourceContainer container = _containers.GetValueOrDefault(resourceContainerName)
-                ?? throw new ResourceContainerNotFoundException($"Resource Container with the name {resourceContainerName} does not exist.");
+                ?? throw ContainerMissing(resourceContainerName);
 
             if (createOnly && container.Resources.ContainsKey(resourceInfo.Name))
-                throw new ResourceConflictException($"Resource with name {resourceInfo.Name} already exists.");
+                throw ResourceExists(resourceContainerName, resourceInfo.Name);
 
             container.Resources.TryGetValue(resourceInfo.Name, out List<InMemoryResource>? versions);
             if (versions != null && versions.Any(v => v.ResourceInfo.VersionId == resourceInfo.VersionId))
-                throw new ResourceConflictException($"Resource {resourceInfo.Name} already has a version {resourceInfo.VersionId}.");
-            if (conditions is not null) ThrowIfNotMet(conditions, resourceInfo.Name, versions?.MaxBy(r => r.Sequence));
+            {
+                throw new ResourceConflictException($"The resource {resourceInfo.Name} in the container " +
+                    $"{resourceContainerName} already has a version {resourceInfo.VersionId}.")
+                {
+                    ContainerName = resourceContainerName, ResourceName = resourceInfo.Name
+                };
+            }
+            if (conditions is not null)
+                ThrowIfNotMet(conditions, resourceContainerName, resourceInfo.Name, versions?.MaxBy(r => r.Sequence));
 
             // Stamped as the version becomes current, not before its content was read. A wrong declared length throws
             // here, before anything is stored.
@@ -81,11 +89,13 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : I
             if (Resolve(VersionsOf(source.ContainerName, source.ResourceName), sourceVersionId) is not { } from) return null;
 
             InMemoryResourceContainer container = _containers.GetValueOrDefault(destination.ContainerName)
-                ?? throw new ResourceContainerNotFoundException($"Resource Container with the name {destination.ContainerName} does not exist.");
+                ?? throw ContainerMissing(destination.ContainerName);
             container.Resources.TryGetValue(destination.Name, out List<InMemoryResource>? versions);
             if (condition.CreateOnly && versions is not null)
-                throw new ResourceConflictException($"Resource with name {destination.Name} already exists.");
-            if (condition.Conditions is { } conditions) ThrowIfNotMet(conditions, destination.Name, versions?.MaxBy(r => r.Sequence));
+                throw ResourceExists(destination.ContainerName, destination.Name);
+            if (condition.Conditions is { } conditions)
+                ThrowIfNotMet(conditions, destination.ContainerName, destination.Name,
+                    versions?.MaxBy(r => r.Sequence));
 
             // Stored content is never changed, so the copy can share it.
             var written = new WrittenContent(from.Content.Length, from.ResourceInfo.ContentHash!, _clock.GetUtcNow());
@@ -103,11 +113,13 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : I
                 return false;
             }
 
-            if (sourceConditions is not null) ThrowIfNotMet(sourceConditions, source.ResourceName, versions.MaxBy(r => r.Sequence));
+            if (sourceConditions is not null)
+                ThrowIfNotMet(sourceConditions, source.ContainerName, source.ResourceName,
+                    versions.MaxBy(r => r.Sequence));
             InMemoryResourceContainer to = _containers.GetValueOrDefault(destination.ContainerName)
-                ?? throw new ResourceContainerNotFoundException($"Resource Container with the name {destination.ContainerName} does not exist.");
+                ?? throw ContainerMissing(destination.ContainerName);
             if (to.Resources.ContainsKey(destination.ResourceName))
-                throw new ResourceConflictException($"Resource with name {destination.ResourceName} already exists.");
+                throw ResourceExists(destination.ContainerName, destination.ResourceName);
 
             from.Resources.Remove(source.ResourceName);
             foreach (InMemoryResource version in versions)
@@ -234,7 +246,8 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : I
         ResourceConditions conditions, CancellationToken cancellationToken = default) =>
         UnderLockAsync(() =>
         {
-            ThrowIfNotMet(conditions, resourceName, VersionsOf(resourceContainerName, resourceName).MaxBy(r => r.Sequence));
+            ThrowIfNotMet(conditions, resourceContainerName, resourceName,
+                VersionsOf(resourceContainerName, resourceName).MaxBy(r => r.Sequence));
 
             if (_containers.GetValueOrDefault(resourceContainerName) is not { } container
                 || !container.Resources.TryGetValue(resourceName, out List<InMemoryResource>? versions))
@@ -272,7 +285,12 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : I
                 Metadata = new Dictionary<string, string>(resourceContainerInfo.Metadata)
             };
             if (!_containers.TryAdd(resourceContainerInfo.Name, container))
-                throw new ResourceConflictException($"Resource Container with the name {resourceContainerInfo.Name} already exists.");
+            {
+                throw new ResourceConflictException($"The container {resourceContainerInfo.Name} already exists.")
+                {
+                    ContainerName = resourceContainerInfo.Name
+                };
+            }
             return true;
         }, cancellationToken);
 
@@ -307,7 +325,17 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : I
     }
 
     /// <summary>A name with no current version meets no condition; empty conditions are no conditions.</summary>
-    private static void ThrowIfNotMet(ResourceConditions conditions, string resourceName, InMemoryResource? current)
+    private static ResourceContainerNotFoundException ContainerMissing(string resourceContainerName) =>
+        new($"The container {resourceContainerName} doesn't exist.") { ContainerName = resourceContainerName };
+
+    private static ResourceConflictException ResourceExists(string resourceContainerName, string resourceName) =>
+        new($"The resource {resourceName} already exists in the container {resourceContainerName}.")
+        {
+            ContainerName = resourceContainerName, ResourceName = resourceName
+        };
+
+    private static void ThrowIfNotMet(ResourceConditions conditions, string resourceContainerName, string resourceName,
+        InMemoryResource? current)
     {
         if (conditions.IfMatchVersionId is null && conditions.IfMatchContentHash is null) return;
 
@@ -317,8 +345,13 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : I
             || (conditions.IfMatchContentHash is { } hash && hash != contentHash))
         {
             throw new ResourcePreconditionFailedException(current is null
-                ? $"Resource {resourceName} has no current version to meet the conditions."
-                : $"Resource {resourceName}'s current version {versionId} doesn't meet the conditions.", versionId, contentHash);
+                ? $"The resource {resourceName} in the container {resourceContainerName} has no current version to " +
+                    "meet the conditions."
+                : $"The current version {versionId} of the resource {resourceName} in the container " +
+                    $"{resourceContainerName} doesn't meet the conditions.", versionId, contentHash)
+            {
+                ContainerName = resourceContainerName, ResourceName = resourceName
+            };
         }
     }
 

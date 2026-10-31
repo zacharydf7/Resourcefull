@@ -197,6 +197,41 @@ public abstract partial class ResourcefullContractTests
     }
 
     [SkippableFact]
+    public async Task CopyResourceAsync_ShouldNameTheDestination_WhenTheDestinationExists()
+    {
+        // Arrange
+        using ServiceProvider provider = BuildServiceProvider();
+        IResourceContainerClient source = await NewContainerAsync(provider);
+        IResourceContainerClient destination = await NewContainerAsync(provider);
+        await source.UploadAsync("draft.txt", BinaryData.FromString("draft"));
+        await destination.UploadAsync("final.txt", BinaryData.FromString("final"));
+
+        // Act
+        Task act() => source.CopyResourceAsync("draft.txt", destination.Name, "final.txt");
+
+        // Assert
+        var exception = await Assert.ThrowsAsync<ResourceConflictException>(act);
+        Assert.Equal((destination.Name, "final.txt"), (exception.ContainerName, exception.ResourceName));
+    }
+
+    [SkippableFact]
+    public async Task CopyResourceAsync_ShouldNameOnlyTheContainer_WhenTheDestinationContainerIsMissing()
+    {
+        // Arrange
+        using ServiceProvider provider = BuildServiceProvider();
+        IResourceContainerClient source = await NewContainerAsync(provider);
+        await source.UploadAsync("draft.txt", BinaryData.FromString("draft"));
+        string missing = NewContainerName();
+
+        // Act
+        Task act() => source.CopyResourceAsync("draft.txt", missing, "final.txt");
+
+        // Assert: it's about the container.
+        var exception = await Assert.ThrowsAsync<ResourceContainerNotFoundException>(act);
+        Assert.Equal((missing, null), (exception.ContainerName, exception.ResourceName));
+    }
+
+    [SkippableFact]
     public async Task RenameResourceAsync_ShouldMoveEveryVersionToTheNewName_WhenCalled()
     {
         // Arrange

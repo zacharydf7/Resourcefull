@@ -19,7 +19,7 @@ public class ResourcefullOptionsBuilderTests
         var builder = new ResourcefullOptionsBuilder(new ServiceCollection());
 
         // Assert
-        Assert.Throws<InvalidOperationException>(() => builder.UseVersioning(maxVersions));
+        Assert.Throws<ArgumentOutOfRangeException>("maxVersions", () => builder.UseVersioning(maxVersions));
     }
 
     [Fact]

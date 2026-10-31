@@ -13,6 +13,7 @@ public class ResourcefullExceptionHandlerTests
         { new ResourceContentLengthMismatchException("The length doesn't match."), HttpStatusCode.BadRequest },
         { new ResourceNameException("Name must not start or end with whitespace.", "resourceName"), HttpStatusCode.BadRequest },
         { new ResourcePreconditionFailedException("Resource report.txt doesn't meet the conditions.", "v2", "sha256:current"), HttpStatusCode.PreconditionFailed },
+        { new ResourceRangeNotSatisfiableException("Past the end.", 100), HttpStatusCode.RequestedRangeNotSatisfiable },
         { new ResourcePolicyViolationException("Too large.", ResourcePolicyRule.MaxResourceSize, 10), HttpStatusCode.RequestEntityTooLarge },
         { new ResourcePolicyViolationException("No room.", ResourcePolicyRule.MaxContainerSize, 10), HttpStatusCode.RequestEntityTooLarge },
         { new ResourcePolicyViolationException("Too many.", ResourcePolicyRule.MaxResourceCount, 10), HttpStatusCode.Conflict },
@@ -36,6 +37,20 @@ public class ResourcefullExceptionHandlerTests
         ProblemDetails problem = (await response.Content.ReadFromJsonAsync<ProblemDetails>())!;
         Assert.Equal(exception.Message, problem.Title);
         Assert.Equal((int)status, problem.Status);
+    }
+
+    [Fact]
+    public async Task TryHandleAsync_ShouldSendTheContentLength_WhenTheRangeIsNotSatisfiable()
+    {
+        // Arrange
+        await using TestApp app =
+            await TestApp.StartAsync(new ResourceRangeNotSatisfiableException("Past the end.", 100));
+
+        // Act
+        HttpResponseMessage response = await app.Client.GetAsync("/throw");
+
+        // Assert
+        Assert.Equal("bytes */100", response.Content.Headers.ContentRange!.ToString());
     }
 
     [Fact]

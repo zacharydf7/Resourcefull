@@ -51,7 +51,8 @@ ResourceDownloadResult? part = await container.DownloadStreamingAsync("talk.mp4"
 - **The stream holds just the range:** its `Length` is the range's length. `part.Range` says which bytes it holds, and
   `part.TotalLength` is the whole content's length, measured from what's stored.
 - **A range that runs past the end is cut at the end,** and `part.Range` shows the cut. A range that starts past the
-  end throws `ArgumentOutOfRangeException`.
+  end throws `ResourceRangeNotSatisfiableException`, whose `ContentLength` is the content's length, and which the
+  [exception handler](aspnet-core/status-codes.md) answers with 416.
 - **Only the range is read from storage.** With SQL Server, reading the last MiB of a large file costs about what
   reading a 1 MiB file does.
 - **To download a resource in parts,** pass the version ID from the first part's `ResourceInfo` to the rest, so a

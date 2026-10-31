@@ -122,7 +122,7 @@ public sealed class ResourceLookupHttpResult : IResult, IActionResult
             {
                 return await Container.DownloadStreamingAsync(ResourceName, versionId, part, cancellationToken);
             }
-            catch (ArgumentOutOfRangeException)
+            catch (ResourceRangeNotSatisfiableException)
             {
             }
         }

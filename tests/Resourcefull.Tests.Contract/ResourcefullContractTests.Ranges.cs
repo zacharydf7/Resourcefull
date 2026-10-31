@@ -61,11 +61,29 @@ public abstract partial class ResourcefullContractTests
         Assert.Null(result.Range);
     }
 
+    [SkippableFact]
+    public async Task DownloadStreamingAsync_ShouldThrowRangeNotSatisfiableWithTheLength_WhenTheRangeStartsPastTheEnd()
+    {
+        // Arrange
+        using ServiceProvider provider = BuildServiceProvider();
+        IResourceContainerClient container = await NewContainerAsync(provider);
+        await container.UploadAsync("video.mp4", new MemoryStream(new byte[RangedLength]));
+
+        // Act
+        Task act() => container.DownloadStreamingAsync("video.mp4", null, new ResourceRange(RangedLength + 1, null),
+            CancellationToken.None);
+
+        // Assert
+        var exception = await Assert.ThrowsAsync<ResourceRangeNotSatisfiableException>(act);
+        Assert.Equal(RangedLength, exception.ContentLength);
+        Assert.Equal((container.Name, "video.mp4"), (exception.ContainerName, exception.ResourceName));
+    }
+
     [SkippableTheory]
-    [InlineData(RangedLength + 1, null)]
     [InlineData(-1, 10L)]
     [InlineData(0, -1L)]
-    public async Task DownloadStreamingAsync_ShouldThrowArgumentOutOfRange_WhenTheRangeStartsPastTheEndOrIsNegative(long offset, long? length)
+    public async Task DownloadStreamingAsync_ShouldThrowArgumentOutOfRange_WhenTheRangeIsNegative(long offset,
+        long? length)
     {
         // Arrange
         using ServiceProvider provider = BuildServiceProvider();

@@ -60,11 +60,24 @@ internal partial class ResourceContainerClient(IResourceRepository resourceRepos
         {
             return await SaveNewResourceVersionAsync("upload", content, resourceInfo, createOnly, conditions, cancellationToken);
         }
+        catch (ResourceContentLengthMismatchException exception)
+        {
+            throw new ResourceContentLengthMismatchException(
+                $"The resource {resourceName} wasn't stored in the container {ContainerName}: {exception.Message}",
+                exception)
+            {
+                ContainerName = ContainerName, ResourceName = resourceName
+            };
+        }
         catch (ResourceConflictException exception) when (!uploadOptions.CreateOnly)
         {
             throw new ResourceConflictException(
-                $"Resource with name {resourceName} already exists. " +
-                $"Set {nameof(uploadOptions.Overwrite)} to true in {nameof(ResourceUploadOptions)} to overwrite existing resources.", exception);
+                $"The resource {resourceName} already exists in the container {ContainerName}. Set " +
+                $"{nameof(uploadOptions.Overwrite)} to true in {nameof(ResourceUploadOptions)} to replace it.",
+                exception)
+            {
+                ContainerName = ContainerName, ResourceName = resourceName
+            };
         }
     }
 
@@ -86,10 +99,13 @@ internal partial class ResourceContainerClient(IResourceRepository resourceRepos
     private async Task<ResourceInfo?> RestoreCoreAsync(string resourceName, string versionId, CancellationToken cancellationToken)
     {
         if (!options.IsVersioningEnabled)
-            throw new InvalidOperationException("Versioning must be enabled in order to restore versions.");
+        {
+            throw new InvalidOperationException(
+                $"The resource {resourceName} in the container {ContainerName} can't be restored: versioning is off.");
+        }
         ResourceNames.ThrowIfInvalidResourceName(resourceName);
         if (string.IsNullOrEmpty(versionId))
-            throw new ArgumentException($"{nameof(versionId)} cannot be empty.", nameof(versionId));
+            throw new ArgumentException($"{nameof(versionId)} can't be empty.", nameof(versionId));
 
         ResourceInfo? resourceInfo = await resourceRepository.GetResourceInfoAsync(ContainerName, resourceName, versionId, cancellationToken);
         if (resourceInfo == null) return null;
@@ -343,7 +359,10 @@ internal partial class ResourceContainerClient(IResourceRepository resourceRepos
         if (part.Offset > totalLength)
         {
             await stream.DisposeAsync();
-            throw new ArgumentOutOfRangeException(nameof(range), part, $"The range starts past the end of the content, which is {totalLength} bytes long.");
+            throw new ResourceRangeNotSatisfiableException(
+                $"The range starts at byte {part.Offset}, past the end of the resource {resourceName}, which is " +
+                $"{totalLength} bytes long.",
+                totalLength) { ContainerName = ContainerName, ResourceName = resourceName };
         }
 
         long length = Math.Min(part.Length ?? long.MaxValue, totalLength - part.Offset);
@@ -498,8 +517,20 @@ internal partial class ResourceContainerClient(IResourceRepository resourceRepos
             CopiedFrom = new ResourceOrigin(ContainerName, resourceName, source.VersionId),
             ExpiresAt = copyOptions.ExpiresAt
         });
-        WrittenContent? written = await resourceRepository.CopyResourceAsync(new ResourceLocation(ContainerName, resourceName),
-            source.VersionId, copy, new ResourceWriteCondition { CreateOnly = createOnly, Conditions = conditions }, cancellationToken);
+        WrittenContent? written;
+        try
+        {
+            written = await resourceRepository.CopyResourceAsync(new ResourceLocation(ContainerName, resourceName),
+                source.VersionId, copy, new ResourceWriteCondition { CreateOnly = createOnly, Conditions = conditions },
+                cancellationToken);
+        }
+        catch (ResourcefullException exception) when (exception is ResourceConflictException
+            or ResourceContainerNotFoundException or ResourcePreconditionFailedException)
+        {
+            // A copy's only conditions are the destination's, so each of these is about the destination.
+            exception.LocateIfUnknown(destinationContainer, destinationName);
+            throw;
+        }
         return written is null ? null : await CompleteNewVersionAsync(copy, written);
     }
 
@@ -540,7 +571,11 @@ internal partial class ResourceContainerClient(IResourceRepository resourceRepos
             if (conditions?.IfMatchVersionId is { } required && required != current.VersionId)
             {
                 throw new ResourcePreconditionFailedException(
-                    $"Resource {resourceName}'s current version isn't {required}.", current.VersionId, current.ContentHash);
+                    $"The current version of the resource {resourceName} in the container {ContainerName} isn't " +
+                    $"{required}.", current.VersionId, current.ContentHash)
+                {
+                    ContainerName = ContainerName, ResourceName = resourceName
+                };
             }
 
             try
@@ -560,8 +595,21 @@ internal partial class ResourceContainerClient(IResourceRepository resourceRepos
 
         async Task<ResourceInfo?> MoveAsync(ResourceConditions? sourceConditions)
         {
-            if (!await resourceRepository.MoveResourceAsync(new ResourceLocation(ContainerName, resourceName),
-                new ResourceLocation(destinationContainer, destinationName), sourceConditions, cancellationToken))
+            bool done;
+            try
+            {
+                done = await resourceRepository.MoveResourceAsync(new ResourceLocation(ContainerName, resourceName),
+                    new ResourceLocation(destinationContainer, destinationName), sourceConditions, cancellationToken);
+            }
+            catch (ResourcefullException exception)
+                when (exception is ResourceConflictException or ResourceContainerNotFoundException)
+            {
+                // A move's conditions are the source's, but a name that exists or a missing container is at the
+                // destination.
+                exception.LocateIfUnknown(destinationContainer, destinationName);
+                throw;
+            }
+            if (!done)
             {
                 return null;
             }
@@ -589,7 +637,7 @@ internal partial class ResourceContainerClient(IResourceRepository resourceRepos
         {
             ResourceNames.ThrowIfInvalidResourceName(resourceName);
             if (string.IsNullOrEmpty(versionId))
-                throw new ArgumentException($"{nameof(versionId)} cannot be empty.", nameof(versionId));
+                throw new ArgumentException($"{nameof(versionId)} can't be empty.", nameof(versionId));
             if (policies is not null) await policies.ThrowIfReadOnlyAsync(ContainerName, _telemetry, cancellationToken);
             return await resourceRepository.SetExpiryAsync(new ResourceLocation(ContainerName, resourceName), versionId, expiresAt, cancellationToken);
         });

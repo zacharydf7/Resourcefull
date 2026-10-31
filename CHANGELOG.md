@@ -50,6 +50,11 @@
   (`keepLastKnownFor`). `GetUsageAsync` reports what a container holds, and `GetPolicyAsync` the limits its writes
   are checked against. Providers get `GetContainerUsageAsync` with a
   default implementation, so providers written for 3.1 keep working. See [Container policies](docs/container-policies.md).
+- **Exceptions say what they're about.** `ResourcefullException` has `ContainerName` and `ResourceName`, set by
+  Resourcefull's providers and filled in by the clients for a provider that doesn't. A container conflict has no
+  `ResourceName`, so it can be told from a resource conflict without reading the message. `ResourceNameException`
+  has `Name`, the name that broke the rules. Every message names the container or resource it's about, in one wording.
+  See [Errors](docs/errors.md#what-an-exception-is-about).
 - **Settings from configuration.** `UseConfiguration(section)` reads versioning, expiry, telemetry and container
   policy settings from configuration, such as appsettings.json. Each section present turns its feature on, and a key
   that isn't a setting stops the application at startup. See
@@ -58,7 +63,9 @@
   storage, for resuming downloads and seeking in media; every download's result now has `TotalLength`, and `Range`
   for a range. `Results.Resource(container, name)` in `Resourcefull.AspNetCore` looks the resource up itself, the
   current version or the `versionId` given, and answers `Range` requests with 206 Partial Content, honoring
-  `If-Range`, and 416 for a range past the end. Providers get a range overload of `GetResourceStreamAsync` with a
+  `If-Range`, and 416 for a range past the end. A range past the end throws `ResourceRangeNotSatisfiableException`,
+  with the content's length, which `AddResourcefullExceptionHandler` answers with 416. Providers get a range overload
+  of `GetResourceStreamAsync` with a
   default implementation, so providers written for 3.1 keep working.
   See [Downloading part of a resource](docs/downloading.md#downloading-part-of-a-resource).
 - **Health checks.** `AddHealthChecks().AddResourcefullCheck()` reports whether storage can be reached through any
@@ -84,6 +91,8 @@
 
 ### Changed
 
+- **`UseVersioning` with fewer than one version** throws `ArgumentOutOfRangeException`, as `UseExpiry` and
+  `UseContainerPolicies` do for a value out of range, rather than `InvalidOperationException`.
 - **The core package has three new dependencies,** for features new in this release:
   `Microsoft.Extensions.Caching.Memory` (container policies' cache), `Microsoft.Extensions.Diagnostics.HealthChecks`
   (`AddResourcefullCheck`) and `Microsoft.Extensions.Hosting.Abstractions` (the `UseExpiry` sweep). ASP.NET Core

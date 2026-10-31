@@ -63,7 +63,8 @@ internal sealed class ContainerPolicies(ContainerPolicySettings settings, IResou
         ContentLimit? limit = null;
         if (policy.MaxResourceSize is { } maxSize)
         {
-            limit = new ContentLimit(maxSize.Bytes, ResourcePolicyRule.MaxResourceSize, maxSize.Bytes, TooLargeMessage(containerName, maxSize));
+            limit = new ContentLimit(maxSize.Bytes, ResourcePolicyRule.MaxResourceSize, maxSize.Bytes, containerName,
+                TooLargeMessage(containerName, maxSize));
         }
 
         if (policy.MaxContainerSize is { } maxContainerSize)
@@ -72,7 +73,7 @@ internal sealed class ContainerPolicies(ContainerPolicySettings settings, IResou
             if (limit is null || room < limit.Bytes)
             {
                 limit = new ContentLimit(room, ResourcePolicyRule.MaxContainerSize, maxContainerSize.Bytes,
-                    NoRoomMessage(containerName, usage, maxContainerSize));
+                    containerName, NoRoomMessage(containerName, usage, maxContainerSize));
             }
         }
 
@@ -102,19 +103,25 @@ internal sealed class ContainerPolicies(ContainerPolicySettings settings, IResou
         if (policy.MaxResourceCount is { } maxCount && usage!.ResourceCount >= maxCount)
             throw CountExceeded(destinationContainer, usage, maxCount);
         if (policy.MaxResourceSize is { } maxSize && versions.Any(v => v.ContentLength > maxSize.Bytes))
-            throw new ResourcePolicyViolationException(TooLargeMessage(destinationContainer, maxSize), ResourcePolicyRule.MaxResourceSize, maxSize.Bytes);
+        {
+            throw new ResourcePolicyViolationException(TooLargeMessage(destinationContainer, maxSize),
+                ResourcePolicyRule.MaxResourceSize, maxSize.Bytes) { ContainerName = destinationContainer };
+        }
         if (policy.MaxContainerSize is { } maxContainerSize
             && usage!.StoredSize.Bytes + versions.Sum(v => v.ContentLength ?? 0) > maxContainerSize.Bytes)
         {
             throw new ResourcePolicyViolationException(NoRoomMessage(destinationContainer, usage, maxContainerSize),
-                ResourcePolicyRule.MaxContainerSize, maxContainerSize.Bytes);
+                ResourcePolicyRule.MaxContainerSize, maxContainerSize.Bytes) { ContainerName = destinationContainer };
         }
     }
 
     private static void ThrowIfReadOnly(string containerName, ResourceContainerPolicy policy)
     {
         if (policy.ReadOnly == true)
-            throw new ResourcePolicyViolationException($"The container {containerName} is read-only.", ResourcePolicyRule.ReadOnly);
+        {
+            throw new ResourcePolicyViolationException($"The container {containerName} is read-only.",
+                ResourcePolicyRule.ReadOnly) { ContainerName = containerName };
+        }
     }
 
     private static void ThrowIfTypeNotAllowed(string containerName, ResourceContainerPolicy policy, string? contentType)
@@ -124,12 +131,13 @@ internal sealed class ContainerPolicies(ContainerPolicySettings settings, IResou
             throw new ResourcePolicyViolationException(contentType is null
                 ? $"The container {containerName} accepts only content that declares a type: {string.Join(", ", allowed)}."
                 : $"The container {containerName} doesn't accept content of type {contentType}, only {string.Join(", ", allowed)}.",
-                ResourcePolicyRule.AllowedContentTypes);
+                ResourcePolicyRule.AllowedContentTypes) { ContainerName = containerName };
         }
     }
 
     private static ResourcePolicyViolationException CountExceeded(string containerName, ResourceContainerUsage usage, long maxCount) =>
-        new($"The container {containerName} holds {usage.ResourceCount} resources, as many as it may.", ResourcePolicyRule.MaxResourceCount, maxCount);
+        new($"The container {containerName} holds {usage.ResourceCount} resources, as many as it may.",
+            ResourcePolicyRule.MaxResourceCount, maxCount) { ContainerName = containerName };
 
     private static string TooLargeMessage(string containerName, ResourceSize maxSize) =>
         $"The content is larger than the container {containerName} allows for one resource, {maxSize}.";
@@ -209,9 +217,11 @@ internal sealed class ContainerPolicies(ContainerPolicySettings settings, IResou
 }
 
 /// <summary>How many bytes a new version may have, and the rule that refuses one with more.</summary>
-internal sealed record ContentLimit(long Bytes, ResourcePolicyRule Rule, long RuleLimit, string Message)
+internal sealed record ContentLimit(long Bytes, ResourcePolicyRule Rule, long RuleLimit, string ContainerName,
+    string Message)
 {
-    public ResourcePolicyViolationException Exception() => new(Message, Rule, RuleLimit);
+    public ResourcePolicyViolationException Exception() =>
+        new(Message, Rule, RuleLimit) { ContainerName = ContainerName };
 }
 
 /// <summary>

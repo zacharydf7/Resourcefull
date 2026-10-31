@@ -50,21 +50,25 @@ public static class ResourceNames
         ArgumentNullException.ThrowIfNull(name, paramName);
 
         if (string.IsNullOrWhiteSpace(name))
-            throw new ResourceNameException("Name must not be empty or only whitespace.", paramName);
+            throw new ResourceNameException($"The name \"{name}\" is empty or only whitespace.", paramName, name);
         if (FindProblem(name, maxLength) is { } problem)
-            throw new ResourceNameException(problem, paramName);
+            throw new ResourceNameException(problem, paramName, name);
     }
 
     /// <summary>What's wrong with a name that isn't blank, or <see langword="null"/> if nothing is.</summary>
     private static string? FindProblem(string name, int maxLength)
     {
         if (name.Length > maxLength)
-            return $"Name must be at most {maxLength} characters.";
+        {
+            // Names that long are at least 129 characters, so the first 40 are enough to recognize one by.
+            return $"The name \"{name[..40]}…\" is {name.Length} characters long, more than the {maxLength} a " +
+                "name may have.";
+        }
 
         // SQL Server ignores trailing spaces when comparing strings, so "a" and "a " would be the same name there but
         // different names everywhere else.
         if (char.IsWhiteSpace(name[0]) || char.IsWhiteSpace(name[^1]))
-            return "Name must not start or end with whitespace.";
+            return $"The name \"{name}\" starts or ends with whitespace, which a name mustn't.";
 
         return null;
     }
