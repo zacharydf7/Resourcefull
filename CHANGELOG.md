@@ -84,6 +84,10 @@
 
 ### Changed
 
+- **The core package has three new dependencies,** for features new in this release:
+  `Microsoft.Extensions.Caching.Memory` (container policies' cache), `Microsoft.Extensions.Diagnostics.HealthChecks`
+  (`AddResourcefullCheck`) and `Microsoft.Extensions.Hosting.Abstractions` (the `UseExpiry` sweep). ASP.NET Core
+  applications already have them; others take them on upgrading.
 - **Downloads are safer by default.** `Results.Resource` sends `Cache-Control: private, no-cache`, so shared caches
   such as CDNs no longer keep files (set `ResourceResultOptions.CacheControl` to cache public files), and
   `X-Content-Type-Options: nosniff`. `Inline` now displays only types that are safe to show (common image formats
