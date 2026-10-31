@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Resourcefull.SqlServer;
 using Resourcefull.SqlServer.Models;
+using Resourcefull.SqlServer.Utilities;
 using Resourcefull.Tests.Contract;
 using System.Text;
 
@@ -21,6 +22,80 @@ public class ResourceSqlRepositoryTests
             .AddInterceptors(interceptors)
             .Options;
         return (new ResourceDbContext(options), new PooledDbContextFactory<ResourceDbContext>(options));
+    }
+
+    [Fact]
+    public async Task AddResourceAsync_ShouldMoveTheStagedTimeForward_WhenTenMinutesPassWhileItsContentArrives()
+    {
+        // Arrange: three batches of content, and eleven minutes passing after the first, so the next chunk moves the
+        // staged version's time forward; what it reads is checked partway through the third.
+        (ResourceDbContext context, var factory) = NewDatabase();
+        await context.ResourceContainers.AddAsync(new ResourceContainerModel { Name = "c" });
+        await context.SaveChangesAsync();
+        var clock = new ManualTimeProvider();
+        DateTimeOffset started = clock.Now;
+        var repository = new ResourceSqlRepository(factory, clock);
+        const int batch = ResourceChunker.ChunkSize * ResourceSqlRepository.ChunksPerUploadBatch;
+        DateTimeOffset? stampedDuringUpload = null;
+        var content = new CallbackStream(new byte[batch * 3], [
+            (batch + 1, () => clock.Now = started.AddMinutes(11)),
+            (batch * 2 + ResourceChunker.ChunkSize * 3, () =>
+            {
+                using ResourceDbContext check = factory.CreateDbContext();
+                stampedDuringUpload = check.Resources.IgnoreQueryFilters().Single(r => r.ContainerName == "c").StagedAt;
+            })]);
+
+        // Act
+        await repository.AddResourceAsync("c", Version("c", "n", DateTime.UtcNow), content);
+
+        // Assert
+        Assert.Equal(started.AddMinutes(11), stampedDuringUpload);
+        using ResourceDbContext after = factory.CreateDbContext();
+        Assert.Null(after.Resources.IgnoreQueryFilters().Single(r => r.ContainerName == "c").StagedAt);
+    }
+
+    [Fact]
+    public async Task DeleteResourceContainerAsync_ShouldDeleteStagedVersionsToo_WhenAnUploadIsStillStoringOne()
+    {
+        // Arrange: a version an upload is still storing, which every other query leaves out.
+        (ResourceDbContext context, var factory) = NewDatabase();
+        await context.ResourceContainers.AddAsync(new ResourceContainerModel { Name = "c" });
+        context.Resources.Add(new ResourceModel
+        {
+            ContainerName = "c", Name = "n", VersionId = "v1", StagedAt = DateTimeOffset.UtcNow
+        });
+        await context.SaveChangesAsync();
+        var repository = new ResourceSqlRepository(factory);
+
+        // Act
+        bool deleted = await repository.DeleteResourceContainerAsync("c");
+
+        // Assert
+        Assert.True(deleted);
+        using ResourceDbContext after = factory.CreateDbContext();
+        Assert.Empty(after.Resources.IgnoreQueryFilters());
+    }
+
+    /// <summary>Content that runs each callback once its reads pass the callback's position.</summary>
+    private sealed class CallbackStream(byte[] content, (long At, Action Callback)[] callbacks) : MemoryStream(content)
+    {
+        private int _next;
+
+        public override int Read(byte[] buffer, int offset, int count)
+        {
+            while (_next < callbacks.Length && Position >= callbacks[_next].At) callbacks[_next++].Callback();
+            int limit = _next < callbacks.Length ? (int)Math.Min(count, callbacks[_next].At - Position) : count;
+            return base.Read(buffer, offset, Math.Max(1, limit));
+        }
+
+        public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            while (_next < callbacks.Length && Position >= callbacks[_next].At) callbacks[_next++].Callback();
+            int limit = _next < callbacks.Length
+                ? (int)Math.Min(buffer.Length, callbacks[_next].At - Position)
+                : buffer.Length;
+            return base.ReadAsync(buffer[..Math.Max(1, limit)], cancellationToken);
+        }
     }
 
     private static ResourceInfo Version(string container, string name, DateTime when) => new()

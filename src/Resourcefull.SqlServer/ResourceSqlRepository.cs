@@ -5,6 +5,7 @@ using Resourcefull.SqlServer.Models;
 using Resourcefull.SqlServer.Utilities;
 using System.Data;
 using System.Data.Common;
+using System.Diagnostics;
 using System.Linq.Expressions;
 using System.Runtime.CompilerServices;
 using System.Runtime.ExceptionServices;
@@ -51,6 +52,13 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
     /// </summary>
     internal const int NameLockNotGrantedError = 50001;
 
+    /// <summary>
+    /// How often an upload moves its staged version's <see cref="ResourceModel.StagedAt"/> forward, as a chunk arrives:
+    /// well within the hour after which the expiry sweep takes a staged version as abandoned, so an upload is safe as
+    /// long as a chunk, about 40 KB, arrives every 50 minutes, far slower than Kestrel lets a request body go.
+    /// </summary>
+    private static readonly TimeSpan StagedStampInterval = TimeSpan.FromMinutes(10);
+
     public Task<WrittenContent> AddResourceAsync(string resourceContainerName, ResourceInfo resourceInfo, Stream stream, bool createOnly = false, CancellationToken cancellationToken = default) =>
         AddResourceAsync(resourceContainerName, resourceInfo, stream, new ResourceWriteCondition { CreateOnly = createOnly }, cancellationToken);
 
@@ -66,52 +74,117 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
     /// Stores a new version as the name's current one: an upload, stamped with the time it becomes current, or an
     /// import, stamped with <paramref name="lastModified"/>, the time it was first stored.
     /// </summary>
+    /// <remarks>
+    /// It's stored in three steps, so no transaction, lock or connection is held while the content arrives, however
+    /// slowly it does:
+    /// <list type="number">
+    /// <item>A short transaction inserts the version, staged, so nothing else sees it.</item>
+    /// <item>
+    /// The content goes in a batch at a time, each committed on its own and, after a transient failure, sent again on
+    /// its own from the bytes it holds, so even content that can't be read twice survives one.
+    /// </item>
+    /// <item>A short transaction under the name's lock checks the conditions and makes the version current.</item>
+    /// </list>
+    /// A version that isn't finished is deleted, or, should that fail too, left for the sweep of abandoned uploads.
+    /// </remarks>
     private async Task<WrittenContent> AddVersionAsync(string resourceContainerName, ResourceInfo resourceInfo, Stream stream,
         ResourceWriteCondition condition, DateTimeOffset? lastModified, CancellationToken cancellationToken)
     {
-        bool createOnly = condition.CreateOnly;
-        ResourceConditions? conditions = condition.Conditions;
+        using ResourceDbContext dbContext = dbContextFactory.CreateDbContext();
+        IExecutionStrategy strategy = dbContext.Database.CreateExecutionStrategy();
+        ResourceModel? staged = null;
+        bool stored = false;
+        try
+        {
+            staged = await StartVersionAsync(strategy, resourceContainerName, resourceInfo, condition, cancellationToken);
+            using var content = new HashingStream(stream);
+            int batches = await StoreContentAsync(dbContext, strategy, staged.Id, content, cancellationToken);
+            // On the client's span only, never an application's own; added to, so an import's counts every version's.
+            if (Activity.Current is { } activity && activity.Source.Name == ResourcefullTelemetry.ActivitySourceName)
+            {
+                int before = activity.GetTagItem("resourcefull.batches") as int? ?? 0;
+                activity.SetTag("resourcefull.batches", before + batches);
+            }
+            WrittenContent written = await FinishVersionAsync(resourceContainerName, resourceInfo, staged, content,
+                condition, lastModified, cancellationToken);
+            stored = true;
+            return written;
+        }
+        catch (Exception exception) when (IsForeignKeyViolation(exception) || exception is DbUpdateConcurrencyException)
+        {
+            // Its container was deleted meanwhile, taking the staged version with it; or the staged version alone is
+            // gone, as the sweep of abandoned uploads takes one whose upload stored nothing for an hour.
+            await ThrowIfContainerMissingAsync(resourceContainerName, exception, cancellationToken);
+            if (staged is null) throw;
+            throw new InvalidOperationException($"The resource {resourceInfo.Name} wasn't stored in the container " +
+                $"{resourceContainerName}: its version was deleted before it was complete.", exception);
+        }
+        finally
+        {
+            if (!stored && staged is not null)
+            {
+                try
+                {
+                    await DeleteStagedVersionAsync(strategy, staged.Id, null, CancellationToken.None);
+                }
+                catch (Exception)
+                {
+                    // The upload's own failure is the one to report; the sweep of abandoned uploads deletes this later.
+                }
+            }
+        }
+    }
 
-        // The content streams into the version's chunks a batch at a time, so memory stays bounded whatever its size,
-        // all in one transaction, so none of it is visible until the version is complete and current. The name's lock
-        // is taken only at the end, to make the version current, so writers of one name queue for that switch rather
-        // than for each other's content.
-        WrittenContent? written = null;
-        bool contentRead = false;
-        Exception? lastFailure = null;
-        // Where the content starts, so a retry can read it again from there.
-        long? start = stream.CanSeek ? stream.Position : null;
+    private static bool IsForeignKeyViolation(Exception exception) =>
+        (exception as SqlException ?? exception.InnerException as SqlException) is { Number: SqlForeignKeyViolation };
 
-        async Task AttemptAsync(CancellationToken ct)
+    /// <summary>
+    /// Inserts the version, staged, after the checks that spare reading the content of an upload that would fail, and
+    /// returns it, untracked. Without checks the insert is a statement of its own, which commits as it runs; with them,
+    /// the checks and the insert share a transaction.
+    /// </summary>
+    private async Task<ResourceModel> StartVersionAsync(IExecutionStrategy strategy, string resourceContainerName,
+        ResourceInfo resourceInfo, ResourceWriteCondition condition, CancellationToken cancellationToken)
+    {
+        bool committing = false;
+        return await strategy.ExecuteAsync(async ct =>
         {
             using ResourceDbContext attempt = NewWriteContext();
 
-            // A retry after a commit whose acknowledgement was lost finds its own version already stored. A first
-            // attempt on SQL Server skips the look, a round trip on every write: the insert below is refused if the
-            // name already has the version. The in-memory provider the unit tests use doesn't enforce the unique index.
-            if ((written != null || !attempt.Database.IsRelational()) && await attempt.Resources.AnyAsync(r =>
-                r.ContainerName == resourceContainerName && r.Name == resourceInfo.Name
-                && r.VersionId == resourceInfo.VersionId, ct))
+            // A retry after a commit whose acknowledgement was lost finds its own version staged. A first attempt on SQL
+            // Server skips the look, a round trip on every write: the insert below is refused if the name already has the
+            // version. The in-memory provider the unit tests use doesn't enforce the unique index.
+            if (committing || !attempt.Database.IsRelational())
             {
-                if (written != null) return;
-                throw VersionExists(resourceContainerName, resourceInfo.Name, resourceInfo.VersionId);
+                ResourceModel? existing = await attempt.Resources.IgnoreQueryFilters().AsNoTracking()
+                    .FirstOrDefaultAsync(r => r.ContainerName == resourceContainerName && r.Name == resourceInfo.Name
+                        && r.VersionId == resourceInfo.VersionId, ct);
+                if (existing is not null)
+                {
+                    // Its own only while staged: a stored version with the ID, which an import names, is another's.
+                    if (committing && existing.StagedAt is not null) return existing;
+                    throw VersionExists(resourceContainerName, resourceInfo.Name, resourceInfo.VersionId);
+                }
             }
 
-            // Any other retry has to read the content again, once some of it has been read.
-            if (contentRead && start == null)
-                throw new InvalidOperationException($"Storing resource {resourceInfo.Name} failed with a transient error, and its content can't be read again to retry.", lastFailure);
-            if (contentRead) stream.Position = start!.Value;
+            // Conditions are checked after the insert, so a version that fails them mustn't stay; create-only is
+            // checked before it, so needs no transaction.
+            await using IDbContextTransaction? transaction = condition.Conditions is not null
+                ? await attempt.Database.BeginTransactionAsync(ct)
+                : null;
 
-            await using var transaction = await attempt.Database.BeginTransactionAsync(ct);
-
-            // Checked again under the lock below; this only spares reading the content of an upload that will fail.
-            if (createOnly && await attempt.Resources.AnyAsync(r => r.ContainerName == resourceContainerName
+            // Checked again as the version becomes current; this only spares reading the content of an upload that will
+            // fail.
+            if (condition.CreateOnly && await attempt.Resources.AnyAsync(r => r.ContainerName == resourceContainerName
                 && r.Name == resourceInfo.Name && r.IsLatest, ct))
                 throw ResourceExists(resourceContainerName, resourceInfo.Name);
 
             // Inserted first, so a missing container is reported before any content is read.
             ResourceModel resource = NewVersion(resourceContainerName, resourceInfo);
+            resource.StagedAt = _clock.GetUtcNow();
             attempt.Resources.Add(resource);
+            // Without a transaction, the insert commits as it runs.
+            committing = transaction is null;
             try
             {
                 await attempt.SaveChangesAsync(ct);
@@ -120,67 +193,171 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
             {
                 throw VersionExists(resourceContainerName, resourceInfo.Name, resourceInfo.VersionId, exception);
             }
-            // Untracked while the chunks go in, or each would be added to its Chunks collection and kept.
-            attempt.Entry(resource).State = EntityState.Detached;
 
-            // Checked again under the lock below, like create-only; this only spares reading the content of an upload
-            // that will fail. After the insert, so a missing container is reported rather than unmet conditions.
-            if (conditions is not null)
+            // Checked again as the version becomes current, like create-only. After the insert, so a missing container
+            // is reported rather than unmet conditions.
+            if (condition.Conditions is { } conditions)
                 await ThrowIfNotMetAsync(attempt, conditions, resourceContainerName, resourceInfo.Name, ct);
 
-            contentRead = true;
-            using var content = new HashingStream(stream);
-            var batch = new List<ResourceChunkModel>(ChunksPerUploadBatch);
-            // Each batch is stored before the next is read, so the batch's buffers can be reused for it.
-            await foreach (ResourceChunkModel chunk in ResourceChunker.ChunksAsync(content, ChunksPerUploadBatch, ct))
+            if (transaction is not null)
             {
-                chunk.ResourceId = resource.Id;
-                batch.Add(chunk);
-                if (batch.Count == ChunksPerUploadBatch) await SaveChunksAsync(attempt, batch, ct);
+                committing = true;
+                await transaction.CommitAsync(ct);
             }
-            await SaveChunksAsync(attempt, batch, ct);
+            attempt.Entry(resource).State = EntityState.Detached;
+            return resource;
+        }, cancellationToken);
+    }
 
-            // The in-memory provider the unit tests use has no locks.
-            if (attempt.Database.IsRelational())
-                await LockNameAsync(attempt, resourceContainerName, resourceInfo.Name, ct);
+    /// <summary>
+    /// Stores the content's chunks a batch at a time, so memory stays bounded whatever its size, each batch committed on
+    /// its own. Every few minutes a batch also moves the version's <see cref="ResourceModel.StagedAt"/> forward, and goes
+    /// with what it has, however little, so the sweep of abandoned uploads leaves a slow upload alone.
+    /// </summary>
+    /// <returns>How many batches it stored.</returns>
+    private async Task<int> StoreContentAsync(ResourceDbContext dbContext, IExecutionStrategy strategy, long resourceId,
+        Stream content, CancellationToken cancellationToken)
+    {
+        int batches = 0;
+        DateTimeOffset lastStamped = _clock.GetUtcNow();
+        var batch = new List<ResourceChunkModel>(ChunksPerUploadBatch);
+        // Each batch is stored before the chunker reuses its buffers: it shares ChunksPerUploadBatch of them in turn,
+        // and a batch holds at most that many chunks, however early it goes.
+        await foreach (ResourceChunkModel chunk in
+            ResourceChunker.ChunksAsync(content, ChunksPerUploadBatch, cancellationToken))
+        {
+            chunk.ResourceId = resourceId;
+            batch.Add(chunk);
+            bool stamp = _clock.GetUtcNow() - lastStamped >= StagedStampInterval;
+            if (batch.Count < ChunksPerUploadBatch && !stamp) continue;
+
+            await StoreBatchAsync(dbContext, strategy, batch, stamp, cancellationToken);
+            batches++;
+            if (stamp) lastStamped = _clock.GetUtcNow();
+        }
+        if (batch.Count == 0) return batches;
+        await StoreBatchAsync(dbContext, strategy, batch, stamp: false, cancellationToken);
+        return batches + 1;
+    }
+
+    /// <summary>
+    /// Makes the staged version its name's current one, under the name's lock, once the conditions and a declared length
+    /// hold, and returns what was stored.
+    /// </summary>
+    private Task<WrittenContent> FinishVersionAsync(string resourceContainerName, ResourceInfo resourceInfo,
+        ResourceModel staged, HashingStream content, ResourceWriteCondition condition, DateTimeOffset? lastModified,
+        CancellationToken cancellationToken)
+    {
+        WrittenContent? written = null;
+        return WriteNameAsync(resourceContainerName, resourceInfo.Name, async (attempt, ct) =>
+        {
+            // A retry after a commit whose acknowledgement was lost finds it current, which the filter lets it see.
+            if (written is not null && await attempt.Resources.AsNoTracking()
+                .FirstOrDefaultAsync(r => r.Id == staged.Id, ct) is { } stored)
+            {
+                return new WrittenContent(stored.ContentLength!.Value, stored.ContentHash!, stored.LastModified);
+            }
 
             List<ResourceModel> priorLatest =
                 await CurrentForWriteAsync(attempt, resourceContainerName, resourceInfo.Name, condition, ct);
 
             // Stamped under the name's lock as the version becomes current, not before its content was read. A wrong
             // declared length throws here, before anything about the name changes.
-            written = content.Complete(resourceInfo.ContentLength, lastModified ?? _clock.GetUtcNow());
+            WrittenContent completed = content.Complete(resourceInfo.ContentLength, lastModified ?? _clock.GetUtcNow());
 
-            attempt.Attach(resource);
-            await MakeCurrentAsync(attempt, priorLatest, resource, written, ct);
+            // Attached as it was staged, whatever an earlier attempt changed, so only what changes now is saved. Should
+            // it be gone, the save throws DbUpdateConcurrencyException, which the caller reports.
+            ResourceModel version = attempt.Resources.Attach(new ResourceModel
+            {
+                Id = staged.Id, ContainerName = staged.ContainerName, Name = staged.Name, StagedAt = staged.StagedAt
+            }).Entity;
+            version.StagedAt = null;
+            await MakeCurrentAsync(attempt, priorLatest, version, completed, ct);
+            return written = completed;
+        }, cancellationToken);
+    }
 
-            await transaction.CommitAsync(ct);
-        }
-
-        try
+    /// <summary>
+    /// Deletes a version and its content if it's still staged, and, given <paramref name="staleBefore"/>, has been since
+    /// before then. Its chunks go a statement at a time when there are many, as any version's do.
+    /// </summary>
+    /// <returns>Whether it deleted the version.</returns>
+    private async Task<bool> DeleteStagedVersionAsync(IExecutionStrategy strategy, long resourceId,
+        DateTimeOffset? staleBefore, CancellationToken cancellationToken)
+    {
+        bool deletedInAnEarlierAttempt = false;
+        return await strategy.ExecuteAsync(async ct =>
         {
-            using ResourceDbContext dbContext = dbContextFactory.CreateDbContext();
-            await dbContext.Database.CreateExecutionStrategy().ExecuteAsync(async ct =>
+            using ResourceDbContext attempt = NewWriteContext();
+            await using var transaction = await attempt.Database.BeginTransactionAsync(ct);
+
+            // Locked as it's read, so an upload can't make it current, or move its stamp forward, before it goes. A retry
+            // after a commit whose acknowledgement was lost finds it gone.
+            List<int> chunks = attempt.Database.IsRelational()
+                ? await attempt.Database.SqlQuery<int>($"""
+                    SELECT (SELECT COUNT(*) FROM [ResourceChunks] c WHERE c.[ResourceId] = r.[Id]) AS [Value]
+                    FROM [Resources] r WITH (UPDLOCK, ROWLOCK)
+                    WHERE r.[Id] = {resourceId} AND r.[StagedAt] IS NOT NULL
+                        AND ({staleBefore} IS NULL OR r.[StagedAt] < {staleBefore})
+                    """).ToListAsync(ct)
+                : await attempt.Resources.IgnoreQueryFilters()
+                    .Where(r => r.Id == resourceId && r.StagedAt != null
+                        && (staleBefore == null || r.StagedAt < staleBefore))
+                    .Select(r => r.Chunks!.Count)
+                    .ToListAsync(ct);
+            if (chunks.Count == 0) return deletedInAnEarlierAttempt;
+
+            await DeleteLargeVersionsChunksAsync(attempt, [(resourceId, chunks[0])], ct);
+            attempt.Resources.Remove(attempt.Resources.Attach(
+                new ResourceModel { Id = resourceId, ContainerName = "", Name = "" }).Entity);
+            await attempt.SaveChangesAsync(ct);
+            deletedInAnEarlierAttempt = true;
+            await transaction.CommitAsync(ct);
+            return true;
+        }, cancellationToken);
+    }
+
+    public async Task<int> DeleteAbandonedUploadsAsync(DateTimeOffset staleBefore,
+        CancellationToken cancellationToken = default)
+    {
+        using ResourceDbContext dbContext = dbContextFactory.CreateDbContext();
+        IExecutionStrategy strategy = dbContext.Database.CreateExecutionStrategy();
+        int deleted = 0;
+        var failures = new List<Exception>();
+        long afterId = 0;
+        while (true)
+        {
+            // A seek on the index of staged versions, so a sweep that finds none reads nothing else. Each page starts
+            // after the last, so versions that fail to delete can't hold up the rest.
+            List<long> abandoned = await dbContext.Resources.IgnoreQueryFilters()
+                .Where(r => r.StagedAt != null && r.StagedAt < staleBefore && r.Id > afterId)
+                .OrderBy(r => r.Id)
+                .Select(r => r.Id)
+                .Take(MaxResourcesPerDeleteBatch)
+                .ToListAsync(cancellationToken);
+            foreach (long resourceId in abandoned)
             {
                 try
                 {
-                    await AttemptAsync(ct);
+                    if (await DeleteStagedVersionAsync(strategy, resourceId, staleBefore, cancellationToken)) deleted++;
                 }
                 catch (Exception exception)
+                    when (exception is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
                 {
-                    // Kept for the refusal above, should the execution strategy retry after it.
-                    lastFailure = exception;
-                    throw;
+                    failures.Add(exception);
                 }
-            }, cancellationToken);
+            }
+            if (abandoned.Count < MaxResourcesPerDeleteBatch) break;
+            afterId = abandoned[^1];
+        }
 
-            return written!;
-        }
-        catch (DbUpdateException exception) when (exception.InnerException is SqlException { Number: SqlForeignKeyViolation })
+        SqlTelemetry.CountAbandonedUploads(deleted);
+        if (failures.Count > 0)
         {
-            await ThrowIfContainerMissingAsync(resourceContainerName, exception, cancellationToken);
-            throw;
+            throw new AggregateException($"{failures.Count} abandoned uploads' versions weren't deleted, and stay for " +
+                $"the next sweep; {deleted} were.", failures);
         }
+        return deleted;
     }
 
     /// <summary>A version about to be stored, not yet current, stamped now.</summary>
@@ -355,37 +532,67 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
     }
 
     /// <summary>
-    /// Inserts a batch of chunks in one command, in the context's transaction, and empties the batch. The command is
-    /// sent straight through SqlClient: tracking each chunk, or sending the command through EF Core's raw SQL, more than
-    /// doubled what an upload allocated.
+    /// Inserts a batch of chunks in one statement, committed as it runs, and empties the batch; with
+    /// <paramref name="stamp"/>, the same round trip moves the version's <see cref="ResourceModel.StagedAt"/> forward.
+    /// After a transient failure the strategy sends the batch again from the same buffers, and a retry after a commit
+    /// whose acknowledgement was lost, refused because the chunks are already stored, has nothing left to do. The
+    /// command is sent straight through SqlClient: tracking each chunk, or sending the command through EF Core's raw SQL,
+    /// more than doubled what an upload allocated.
     /// </summary>
-    private static async Task SaveChunksAsync(ResourceDbContext dbContext, List<ResourceChunkModel> batch, CancellationToken cancellationToken)
+    private async Task StoreBatchAsync(ResourceDbContext dbContext, IExecutionStrategy strategy,
+        List<ResourceChunkModel> batch, bool stamp, CancellationToken cancellationToken)
     {
-        if (batch.Count == 0) return;
-
-        if (dbContext.Database.IsRelational())
+        bool sentBefore = false;
+        await strategy.ExecuteAsync(async ct =>
         {
-            await using DbCommand command = NewCommand(dbContext);
-            command.Transaction = dbContext.Database.CurrentTransaction!.GetDbTransaction();
-            var sql = new StringBuilder("INSERT INTO [ResourceChunks] ([ResourceId], [Index], [Data]) VALUES ");
-            command.Parameters.Add(new SqlParameter("@resourceId", batch[0].ResourceId));
-            for (int i = 0; i < batch.Count; i++)
+            bool retry = sentBefore;
+            sentBefore = true;
+            long resourceId = batch[0].ResourceId;
+            DateTimeOffset now = _clock.GetUtcNow();
+
+            if (!dbContext.Database.IsRelational())
             {
-                sql.Append(i == 0 ? "" : ", ").Append($"(@resourceId, @index{i}, @data{i})");
-                command.Parameters.Add(new SqlParameter($"@index{i}", batch[i].Index));
-                command.Parameters.Add(new SqlParameter($"@data{i}", SqlDbType.VarBinary, -1) { Value = batch[i].Data });
+                dbContext.ResourceChunks.AddRange(batch);
+                if (stamp)
+                {
+                    (await dbContext.Resources.IgnoreQueryFilters().SingleAsync(r => r.Id == resourceId, ct)).StagedAt =
+                        now;
+                }
+                await dbContext.SaveChangesAsync(ct);
+                dbContext.ChangeTracker.Clear();
+                return;
             }
-            command.CommandText = sql.ToString();
-            await command.ExecuteNonQueryAsync(cancellationToken);
-        }
-        else
-        {
-            // The in-memory provider the unit tests use runs no SQL; untracked after, so it doesn't keep the content.
-            dbContext.ResourceChunks.AddRange(batch);
-            await dbContext.SaveChangesAsync(cancellationToken);
-            foreach (ResourceChunkModel chunk in batch) dbContext.Entry(chunk).State = EntityState.Detached;
-        }
 
+            await dbContext.Database.OpenConnectionAsync(ct);
+            try
+            {
+                await using DbCommand command = NewCommand(dbContext);
+                var sql = new StringBuilder("INSERT INTO [ResourceChunks] ([ResourceId], [Index], [Data]) VALUES ");
+                command.Parameters.Add(new SqlParameter("@resourceId", resourceId));
+                for (int i = 0; i < batch.Count; i++)
+                {
+                    sql.Append(i == 0 ? "" : ", ").Append($"(@resourceId, @index{i}, @data{i})");
+                    command.Parameters.Add(new SqlParameter($"@index{i}", batch[i].Index));
+                    command.Parameters.Add(
+                        new SqlParameter($"@data{i}", SqlDbType.VarBinary, -1) { Value = batch[i].Data });
+                }
+                if (stamp)
+                {
+                    sql.Append("; UPDATE [Resources] SET [StagedAt] = @now WHERE [Id] = @resourceId");
+                    command.Parameters.Add(new SqlParameter("@now", now));
+                }
+                command.CommandText = sql.ToString();
+                await command.ExecuteNonQueryAsync(ct);
+            }
+            catch (SqlException exception)
+                when (retry && exception.Number is SqlUniqueConstraintViolation or SqlUniqueIndexViolation)
+            {
+            }
+            finally
+            {
+                await dbContext.Database.CloseConnectionAsync();
+            }
+        }, cancellationToken);
         batch.Clear();
     }
 
@@ -1110,7 +1317,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
                 COUNT_BIG(*) AS [VersionCount],
                 COUNT_BIG(CASE WHEN r.[ContentLength] IS NULL THEN 1 END) AS [Unmeasured]
             FROM [Resources] r
-            WHERE r.[ContainerName] = {resourceContainerName}
+            WHERE r.[ContainerName] = {resourceContainerName} AND r.[StagedAt] IS NULL
             """).ToListAsync(cancellationToken))[0];
         long storedSize = usage.StoredSize;
         if (usage.Unmeasured > 0)
@@ -1118,7 +1325,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
             storedSize += await dbContext.Database.SqlQuery<long>($"""
                 SELECT COALESCE(SUM(CAST(DATALENGTH(ch.[Data]) AS bigint)), 0) AS [Value]
                 FROM [Resources] r JOIN [ResourceChunks] ch ON ch.[ResourceId] = r.[Id]
-                WHERE r.[ContainerName] = {resourceContainerName} AND r.[ContentLength] IS NULL
+                WHERE r.[ContainerName] = {resourceContainerName} AND r.[ContentLength] IS NULL AND r.[StagedAt] IS NULL
                 """).SingleAsync(cancellationToken);
         }
 
@@ -1141,7 +1348,9 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
 
         async Task<int> DeleteBatchAsync(ResourceDbContext attempt, CancellationToken ct)
         {
-            var candidates = await attempt.Resources
+            // Staged versions too, so an abandoned upload's chunks go in batches with the rest rather than all at once
+            // when the container's row does.
+            var candidates = await attempt.Resources.IgnoreQueryFilters()
                 .Where(r => r.ContainerName == resourceContainerName)
                 .OrderBy(r => r.Name).ThenBy(r => r.VersionId)
                 .Select(r => new { r.Id, r.Name, r.IsLatest, Chunks = r.Chunks!.Count })
@@ -1205,7 +1414,8 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
             else
             {
                 // The in-memory provider the unit tests use runs no SQL.
-                attempt.Resources.RemoveRange(await attempt.Resources.Where(r => batch.Contains(r.Id)).ToListAsync(ct));
+                attempt.Resources.RemoveRange(
+                    await attempt.Resources.IgnoreQueryFilters().Where(r => batch.Contains(r.Id)).ToListAsync(ct));
                 await attempt.SaveChangesAsync(ct);
             }
             return batch.Count;

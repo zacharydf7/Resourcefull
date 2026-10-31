@@ -69,6 +69,17 @@ internal class ResourceConfiguration : IEntityTypeConfiguration<ResourceModel>
             .HasFilter("[ExpiresAt] IS NOT NULL")
             .HasDatabaseName("IX_Resources_ExpiresAt");
 
+        // A version an upload is still storing is left out of every query, so nothing sees it until it's complete; only
+        // the upload and the deletes, of a container or of abandoned uploads, ask for it with IgnoreQueryFilters.
+        builder.HasQueryFilter(r => r.StagedAt == null);
+
+        // Only the versions being stored, so the sweep for abandoned uploads reads nothing else; with their IDs, so it's
+        // the cheapest plan however few versions there are, and a sweep that finds none reads no pages.
+        builder.HasIndex(r => r.StagedAt)
+            .IncludeProperties(r => r.Id)
+            .HasFilter("[StagedAt] IS NOT NULL")
+            .HasDatabaseName("IX_Resources_StagedAt");
+
         builder.HasMany(r => r.Chunks)
             .WithOne()
             .HasForeignKey(c => c.ResourceId)

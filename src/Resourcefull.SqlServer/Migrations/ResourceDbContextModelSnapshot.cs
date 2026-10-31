@@ -117,6 +117,9 @@ namespace Resourcefull.SqlServer.Migrations
                         .HasColumnType("nvarchar(256)")
                         .UseCollation("Latin1_General_100_BIN2");
 
+                    b.Property<DateTimeOffset?>("StagedAt")
+                        .HasColumnType("datetimeoffset");
+
                     b.Property<string>("Uri")
                         .HasColumnType("nvarchar(max)");
 
@@ -130,6 +133,12 @@ namespace Resourcefull.SqlServer.Migrations
                     b.HasKey("Id");
 
                     SqlServerKeyBuilderExtensions.IsClustered(b.HasKey("Id"), false);
+
+                    b.HasIndex("StagedAt")
+                        .HasDatabaseName("IX_Resources_StagedAt")
+                        .HasFilter("[StagedAt] IS NOT NULL");
+
+                    SqlServerIndexBuilderExtensions.IncludeProperties(b.HasIndex("StagedAt"), new[] { "Id" });
 
                     b.HasIndex("ContainerName", "Name")
                         .IsUnique()

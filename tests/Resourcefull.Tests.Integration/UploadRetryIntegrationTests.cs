@@ -1,5 +1,6 @@
 using System.Data.Common;
 using System.Security.Cryptography;
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
@@ -24,33 +25,54 @@ public class UploadRetryIntegrationTests(SqlServerFixture fixture)
         ResourceChunker.ChunkSize * (ResourceSqlRepository.ChunksPerUploadBatch + 4L);
 
     [SkippableFact]
-    public async Task AddResourceAsync_ShouldReadTheContentAgainFromWhereItStartedAndStoreIt_WhenASeekableUploadFailsPartway()
+    public async Task AddResourceAsync_ShouldStoreTheContentOnce_WhenABatchIsStoredButItsAcknowledgementIsLost()
     {
         fixture.SkipIfUnavailable();
 
-        // Arrange: the content fails partway through its second batch of chunks, after the first has been written; it
-        // starts past a header the caller has already read.
-        (ResourceSqlRepository repository, string c) = await NewRepositoryAsync(new FailOnceInterceptor());
-        var content = new FailOnceStream(new MemoryStream([.. "header"u8, .. Payload]) { Position = "header"u8.Length },
-            PartwayThroughTheSecondBatch);
+        // Arrange: the second batch is stored, but its connection fails as it closes, so it's sent again, from what it
+        // holds since the content can't be read twice, and refused as already there.
+        var failure = new FailOnceOnCloseInterceptor();
+        (ResourceSqlRepository repository, string c) = await NewRepositoryAsync(failure);
+        var content = new ArmingStream(new NonSeekableStream(Payload), PartwayThroughTheSecondBatch, failure.Arm);
 
         // Act
         WrittenContent written = await repository.AddResourceAsync(c, Version(c), content);
 
         // Assert
-        Assert.True(content.Failed);
+        Assert.True(failure.Failed);
         Assert.Equal(PayloadHash, written.ContentHash);
-        Assert.Equal(Payload.Length, written.ContentLength);
         Assert.Equal(Payload, await ReadAsync(repository, c));
-        Assert.Single(await repository.GetResourceVersionsAsync(c, "n"));
     }
 
     [SkippableFact]
-    public async Task AddResourceAsync_ShouldRefuseToRetryAndStoreNothing_WhenANonSeekableUploadFailsPartway()
+    public async Task ImportVersionAsync_ShouldRefuseTheVersion_WhenItExistsAndTheFirstInsertFailedTransiently()
     {
         fixture.SkipIfUnavailable();
 
-        // Arrange: the content fails partway through its second batch of chunks, after the first has been written.
+        // Arrange: the version an import names is stored already, and the import's first insert fails before it reaches
+        // the server, so its retry finds that version, which isn't its own.
+        var failure = new FailOnceInterceptor(failAtSave: 1);
+        (ResourceSqlRepository repository, string c) = await NewRepositoryAsync(failure, arm: false);
+        await repository.AddResourceAsync(c, Version(c), new MemoryStream(Payload));
+        failure.Arm();
+        ResourceInfo imported = Version(c);
+        imported.LastModified = DateTimeOffset.UnixEpoch;
+
+        // Act
+        Task act() => repository.ImportVersionAsync(c, imported, new MemoryStream("other"u8.ToArray()));
+
+        // Assert
+        await Assert.ThrowsAsync<ResourceConflictException>(act);
+        Assert.True(failure.Failed);
+        Assert.Equal(Payload, await ReadAsync(repository, c));
+    }
+
+    [SkippableFact]
+    public async Task AddResourceAsync_ShouldStoreNothingAndLeaveNothingStaged_WhenTheContentFailsPartway()
+    {
+        fixture.SkipIfUnavailable();
+
+        // Arrange: reading the content fails after its first batch is stored, which no retry can help.
         (ResourceSqlRepository repository, string c) = await NewRepositoryAsync(new FailOnceInterceptor());
         var content = new FailOnceStream(new NonSeekableStream(Payload), PartwayThroughTheSecondBatch);
 
@@ -58,9 +80,21 @@ public class UploadRetryIntegrationTests(SqlServerFixture fixture)
         Task act() => repository.AddResourceAsync(c, Version(c), content);
 
         // Assert
-        InvalidOperationException refusal = await Assert.ThrowsAsync<InvalidOperationException>(act);
-        Assert.IsType<SimulatedTransientException>(refusal.InnerException);
+        await Assert.ThrowsAsync<SimulatedTransientException>(act);
         Assert.Empty(await repository.GetResourceVersionsAsync(c, "n"));
+        Assert.Equal(0, await StoredRowsAsync(c));
+    }
+
+    /// <summary>Every version row and chunk of the container's, staged or not.</summary>
+    private async Task<int> StoredRowsAsync(string containerName)
+    {
+        await using SqlConnection connection = await fixture.OpenConnectionAsync();
+        await using SqlCommand command = connection.CreateCommand();
+        command.CommandText = "SELECT (SELECT COUNT(*) FROM [Resources] WHERE [ContainerName] = @c) + " +
+            "(SELECT COUNT(*) FROM [ResourceChunks] ch JOIN [Resources] r ON r.[Id] = ch.[ResourceId] " +
+            "WHERE r.[ContainerName] = @c)";
+        command.Parameters.AddWithValue("@c", containerName);
+        return (int)(await command.ExecuteScalarAsync())!;
     }
 
     [SkippableFact]
@@ -296,14 +330,20 @@ public class UploadRetryIntegrationTests(SqlServerFixture fixture)
 
     private async Task<(ResourceSqlRepository, string)> NewRepositoryAsync(FailOnceInterceptor failure, bool arm = true)
     {
+        (ResourceSqlRepository repository, string containerName) = await NewRepositoryAsync((IInterceptor)failure);
+        if (arm) failure.Arm();
+        return (repository, containerName);
+    }
+
+    private async Task<(ResourceSqlRepository, string)> NewRepositoryAsync(IInterceptor interceptor)
+    {
         DbContextOptions<ResourceDbContext> options = new DbContextOptionsBuilder<ResourceDbContext>()
             .UseSqlServer(fixture.ConnectionString, sql => sql.ExecutionStrategy(dependencies => new RetryOnSimulatedFailure(dependencies)))
-            .AddInterceptors(failure)
+            .AddInterceptors(interceptor)
             .Options;
         var repository = new ResourceSqlRepository(new PooledDbContextFactory<ResourceDbContext>(options));
         string containerName = $"c-{Guid.NewGuid():N}";
         await repository.AddResourceContainerAsync(new ResourceContainerInfo { Name = containerName });
-        if (arm) failure.Arm();
         return (repository, containerName);
     }
 
@@ -439,6 +479,34 @@ public class UploadRetryIntegrationTests(SqlServerFixture fixture)
                 throw new SimulatedTransientException();
             }
             int read = inner.Read(buffer, offset, count);
+            _read += read;
+            return read;
+        }
+
+        public override void Flush() { }
+        public override long Seek(long offset, SeekOrigin origin) => inner.Seek(offset, origin);
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+    }
+
+    /// <summary>
+    /// Calls <paramref name="arm"/> once <paramref name="armAt"/> bytes have been read, so a failure strikes the next
+    /// thing the upload does, which is storing the batch those bytes are in.
+    /// </summary>
+    private sealed class ArmingStream(Stream inner, long armAt, Action arm) : Stream
+    {
+        private long _read;
+
+        public override bool CanRead => true;
+        public override bool CanSeek => inner.CanSeek;
+        public override bool CanWrite => false;
+        public override long Length => inner.Length;
+        public override long Position { get => inner.Position; set => inner.Position = value; }
+
+        public override int Read(byte[] buffer, int offset, int count)
+        {
+            int read = inner.Read(buffer, offset, count);
+            if (_read < armAt && _read + read >= armAt) arm();
             _read += read;
             return read;
         }

@@ -395,6 +395,21 @@ public interface IResourceRepository
         => throw new NotSupportedException($"{GetType().Name} doesn't support expiry.");
 
     /// <summary>
+    /// Deletes what uploads that stopped before finishing left behind, for a provider that stores a version's content
+    /// before it makes the version visible, as SQL Server's does: anything such an upload last added to before
+    /// <paramref name="staleBefore"/>. The expiry sweep calls it. The default implementation, for a provider that leaves
+    /// nothing behind, does nothing.
+    /// <para>Coming in 3.2.</para>
+    /// </summary>
+    /// <param name="staleBefore">
+    /// Leave alone what an upload added to at or after this time: it may still be running.
+    /// </param>
+    /// <param name="cancellationToken">Cancels the deletes; what's already deleted stays deleted.</param>
+    /// <returns>How many uploads' leftovers it deleted.</returns>
+    Task<int> DeleteAbandonedUploadsAsync(DateTimeOffset staleBefore, CancellationToken cancellationToken = default)
+        => Task.FromResult(0);
+
+    /// <summary>
     /// Deletes each of <paramref name="versions"/> that's still expired at <paramref name="now"/>, as
     /// <see cref="DeleteExpiredVersionAsync"/> does for one, and returns those it deleted; a version that's
     /// gone, or no longer expired, is left out. A sweep deletes each page of expired versions it lists through it. A

@@ -89,12 +89,11 @@ public class RetryPolicyIntegrationTests(SqlServerFixture fixture)
     }
 
     [SkippableFact]
-    public async Task UploadAsync_ShouldRetryTheUpload_WhenItsNameLockIsChosenAsADeadlockVictim()
+    public async Task DeleteExpiredVersionsAsync_ShouldRetryTheDeletes_WhenANameLockIsChosenAsADeadlockVictim()
     {
         fixture.SkipIfUnavailable();
 
-        // Arrange: the opponent holds the name's lock, then waits on the upload's version row, stored before the upload
-        // asks for the lock.
+        // Arrange: two expired names, whose locks the delete takes in one statement, "a" first; the opponent holds "b"'s.
         string connectionString = new SqlConnectionStringBuilder(fixture.ConnectionString) { Pooling = false }.ConnectionString;
         var services = new ServiceCollection();
         services.AddResourcefull(options => options.UseSqlServer(connectionString));
@@ -102,6 +101,9 @@ public class RetryPolicyIntegrationTests(SqlServerFixture fixture)
         var service = provider.GetRequiredService<IResourceServiceClient>();
         string containerName = $"c-{Guid.NewGuid():N}";
         IResourceContainerClient container = await service.CreateResourceContainerAsync(containerName);
+        var expired = new ResourceUploadOptions { ExpiresAt = DateTimeOffset.UtcNow.AddDays(-1) };
+        ResourceInfo a = await container.UploadAsync("a", BinaryData.FromString("a"), expired);
+        ResourceInfo b = await container.UploadAsync("b", BinaryData.FromString("b"), expired);
         var retries = new ConcurrentQueue<string?>();
         using MeterListener listener = ListenForRetries(retries);
         await using var opponent = new SqlConnection(connectionString);
@@ -109,17 +111,12 @@ public class RetryPolicyIntegrationTests(SqlServerFixture fixture)
         await using SqlTransaction transaction = (SqlTransaction)await opponent.BeginTransactionAsync();
         // On its own: a command with parameters runs through sp_executesql, which undoes its SET when it ends.
         await ExecuteAsync(opponent, transaction, "SET DEADLOCK_PRIORITY HIGH;");
-        await using (SqlCommand lockName = opponent.CreateCommand())
-        {
-            lockName.Transaction = transaction;
-            lockName.CommandText = "EXEC sp_getapplock @Resource = @lock, @LockMode = 'Exclusive', @LockOwner = 'Transaction';";
-            lockName.Parameters.AddWithValue("@lock",
-                ResourceSqlRepository.NameLockResource(new ResourceLocation(containerName, "n")));
-            await lockName.ExecuteNonQueryAsync();
-        }
+        await LockNameAsync(opponent, transaction, new ResourceLocation(containerName, "b"));
 
-        // Act: once the upload waits for the lock, the opponent reads its row with an update lock, closing the cycle.
-        Task<ResourceInfo> upload = container.UploadAsync("n", BinaryData.FromString("x"));
+        // Act: once the delete holds "a" and waits for "b", the opponent asks for "a", closing the cycle.
+        Task<IReadOnlyCollection<(ResourceLocation, string)>> delete = provider.GetRequiredService<IResourceRepository>()
+            .DeleteExpiredVersionsAsync([(new ResourceLocation(containerName, "a"), a.VersionId),
+                (new ResourceLocation(containerName, "b"), b.VersionId)], DateTimeOffset.UtcNow);
         await using (SqlCommand waiting = opponent.CreateCommand())
         {
             waiting.Transaction = transaction;
@@ -127,18 +124,27 @@ public class RetryPolicyIntegrationTests(SqlServerFixture fixture)
             var deadline = DateTime.UtcNow.AddSeconds(30);
             while ((int)(await waiting.ExecuteScalarAsync())! == 0)
             {
-                Assert.True(DateTime.UtcNow < deadline, "The upload never waited for the name's lock.");
+                Assert.True(DateTime.UtcNow < deadline, "The delete never waited for the second name's lock.");
                 await Task.Delay(50);
             }
         }
-        await ExecuteAsync(opponent, transaction, $"SELECT COUNT(*) FROM [Resources] WITH (UPDLOCK, ROWLOCK) " +
-            $"WHERE [ContainerName] = '{containerName}' AND [Name] = 'n';");
+        await LockNameAsync(opponent, transaction, new ResourceLocation(containerName, "a"));
         await transaction.CommitAsync();
-        ResourceInfo stored = await upload;
+        IReadOnlyCollection<(ResourceLocation, string)> deleted = await delete;
 
-        // Assert: the upload's lock lost the deadlock, and the retry stored it.
+        // Assert: the delete's lock lost the deadlock, and the retry deleted both.
         Assert.Contains(ResourceSqlRepository.NameLockNotGrantedError.ToString(), retries);
-        Assert.Equal(stored.VersionId, Assert.Single(await container.GetResourceVersionsAsync("n")).VersionId);
+        Assert.Equal(2, deleted.Count);
+    }
+
+    private static async Task LockNameAsync(SqlConnection connection, SqlTransaction transaction, ResourceLocation name)
+    {
+        await using SqlCommand command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText =
+            "EXEC sp_getapplock @Resource = @lock, @LockMode = 'Exclusive', @LockOwner = 'Transaction';";
+        command.Parameters.AddWithValue("@lock", ResourceSqlRepository.NameLockResource(name));
+        await command.ExecuteNonQueryAsync();
     }
 
     /// <summary>Adds the error number of each retry counted in <c>resourcefull.sqlserver.retries</c> to <paramref name="retries"/>.</summary>

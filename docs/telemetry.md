@@ -46,6 +46,7 @@ own. Each carries `resourcefull.provider`, and all but `resourcefull.client.expi
 | `resourcefull.client.expire.failures` | {version} | expired versions a sweep failed to delete; they stay for the next sweep |
 | `resourcefull.client.policy.last_known_uses` | {use} | times a container's last known [policy](container-policies.md) was used because the policy provider failed, at most once per container each `cacheFor` |
 | `resourcefull.client.cleanup_handler.failures` | {failure} | calls to your [cleanup handler](expiry.md#auditing-whats-deleted) that threw, with `resourcefull.cleanup_reason`: `expired` or `pruned`. A handler failure also counts as a failed prune or expired version, since the version stays |
+| `resourcefull.sqlserver.abandoned_uploads` <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span> | {upload} | staged versions of uploads that stopped partway, which the [expiry](expiry.md) sweep deleted an hour after they last stored anything |
 | `resourcefull.sqlserver.retries` | {retry} | SQL Server calls retried after a transient failure, such as a deadlock or a dropped connection, with `db.response.status_code`: the SQL Server error number, such as `1205` for a deadlock |
 
 What to alert on:
@@ -78,18 +79,18 @@ metrics. It also has:
 
 | Operation | Methods | Extra span tags |
 |---|---|---|
-| `upload` | `UploadAsync`, both overloads | `resourcefull.conditional`; a `resourcefull prune` child span for pruning older versions |
-| `restore` | `RestoreVersionAsync` | a `resourcefull prune` child span |
+| `upload` | `UploadAsync`, both overloads | `resourcefull.conditional`; a `resourcefull prune` child span for pruning older versions; with SQL Server <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span>, `resourcefull.batches`: the batches of about a MiB its content was stored in |
+| `restore` | `RestoreVersionAsync` | a `resourcefull prune` child span; with SQL Server <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span>, `resourcefull.batches` when it stores the version's content again, as for a version stored before 3.0 without a hash |
 | `download` | `DownloadStreamingAsync`, `DownloadContentAsync` | for a range, `resourcefull.range`, as HTTP writes it: `100-199`, or `100-` to the end |
 | `get_info` | `GetResourceInfoAsync` | |
 | `exists` | `ExistsAsync` | |
 | `get_usage` | `GetUsageAsync` | |
 | `get_container_policy` | `GetPolicyAsync` | |
-| `copy` | `CopyResourceAsync` | `resourcefull.destination_container`; a `resourcefull prune` child span |
+| `copy` | `CopyResourceAsync` | `resourcefull.destination_container`; a `resourcefull prune` child span; with SQL Server <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span>, `resourcefull.batches` when it stores the content again, as for a version stored before 3.0 without a hash |
 | `move` | `MoveResourceAsync`, `RenameResourceAsync` | `resourcefull.destination_container` |
 | `set_expiry` | `SetExpiryAsync` | |
 | `export` | `ExportContainerAsync` | `resourcefull.resources`, `resourcefull.versions`: what it wrote; `resourcefull.pages`: the pages of 1,000 names it read |
-| `import` | `ImportContainerAsync` | `resourcefull.resources`, `resourcefull.versions`: what it stored |
+| `import` | `ImportContainerAsync` | `resourcefull.resources`, `resourcefull.versions`: what it stored; with SQL Server <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span>, `resourcefull.batches`: the batches of about a MiB every version's content was stored in |
 | `prune_container` | `PruneContainerAsync` | `resourcefull.pruned`: how many versions were past the limit |
 | `expire` | `DeleteExpiredAsync`, and each sweep of [`UseExpiry`](expiry.md), when it finds expired versions, read-only containers' included | `resourcefull.expired`: how many versions it deleted; `resourcefull.batches`: how many batches of up to 100 it deleted them in; `resourcefull.batch_fallbacks`, when a batch failed and its versions were deleted one at a time instead: how many. Each failed batch's exception is recorded too, as on a failed operation, but the span isn't marked failed: the sweep carried on |
 | `list` | `GetResourcesAsync` | |

@@ -92,6 +92,10 @@ To support it:
   make the next version current for a name whose current one goes. Its default calls `DeleteExpiredVersionAsync` for
   each version; and if a batch fails, the sweep tries each of its versions that way, so one version that keeps failing
   doesn't hold up the rest.
+- **Delete what stopped uploads left** <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span>, if your provider stores content before the version is visible, as SQL
+  Server's does. The sweep calls `DeleteAbandonedUploadsAsync(staleBefore)` first, every time, so make it cheap when
+  there's nothing to delete. Delete only what an upload last added to before `staleBefore`, and return how many uploads'
+  leftovers you deleted. Its default does nothing, for a provider that leaves nothing behind.
 
 ## Container usage
 

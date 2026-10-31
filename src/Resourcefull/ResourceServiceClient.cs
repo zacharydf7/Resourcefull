@@ -2,6 +2,7 @@ using System.IO.Compression;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using System.Runtime.CompilerServices;
+using System.Runtime.ExceptionServices;
 
 [assembly: InternalsVisibleTo("Resourcefull.Tests.Unit")]
 
@@ -130,9 +131,28 @@ internal class ResourceServiceClient(IResourceRepository resourceRepository, IOp
     public async Task<int> DeleteExpiredAsync(CancellationToken cancellationToken = default)
     {
         DateTimeOffset now = (timeProvider ?? TimeProvider.System).GetUtcNow();
+        // What uploads that stopped partway left behind, which nothing else deletes; a provider that leaves nothing
+        // behind answers at once. The provider counts them, so a sweep that finds nothing expired still shows them. A
+        // failure here mustn't hold up the expired versions, so it's reported after them.
+        int abandoned = 0;
+        Exception? abandonedFailure = null;
+        try
+        {
+            abandoned = await resourceRepository.DeleteAbandonedUploadsAsync(now - AbandonedUploadAge, cancellationToken);
+        }
+        catch (Exception exception)
+            when (exception is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+        {
+            abandonedFailure = exception;
+        }
+
         // Most sweeps find nothing expired, and record nothing. One that does is an operation, even when every version it
         // finds is in a read-only container, which keeps them.
-        if ((await resourceRepository.GetExpiredAsync(now, 1, null, cancellationToken)).Count == 0) return 0;
+        if ((await resourceRepository.GetExpiredAsync(now, 1, null, cancellationToken)).Count == 0)
+        {
+            if (abandonedFailure is not null) ExceptionDispatchInfo.Throw(abandonedFailure);
+            return 0;
+        }
 
         return await _telemetry.RunAsync("expire", null, null, async activity =>
         {
@@ -267,13 +287,22 @@ internal class ResourceServiceClient(IResourceRepository resourceRepository, IOp
             }
 
             activity?.SetTag("resourcefull.expired", deleted);
+            if (abandoned > 0) activity?.SetTag("resourcefull.abandoned_uploads", abandoned);
             activity?.SetTag("resourcefull.batches", batches);
             if (fallbacks > 0) activity?.SetTag("resourcefull.batch_fallbacks", fallbacks);
+            if (abandonedFailure is not null) failures.Add(abandonedFailure);
             if (failed > 0)
                 throw new AggregateException($"{failed} expired versions weren't deleted, and stay for the next sweep; {deleted} were. The first {failures.Count} failures follow.", failures);
+            if (abandonedFailure is not null) ExceptionDispatchInfo.Throw(abandonedFailure);
             return deleted;
         });
     }
+
+    /// <summary>
+    /// How long after an upload last stored anything the sweep takes it as abandoned: a provider that stages content,
+    /// as SQL Server's does, marks an upload as running every 10 minutes while its content keeps arriving.
+    /// </summary>
+    internal static readonly TimeSpan AbandonedUploadAge = TimeSpan.FromHours(1);
 
     /// <summary>How many expired versions one query lists, so a cleanup holds a bounded batch at a time.</summary>
     private const int ExpiredPerBatch = 100;

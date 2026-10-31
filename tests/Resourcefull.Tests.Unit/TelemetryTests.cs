@@ -283,6 +283,59 @@ public sealed class TelemetryTests : IDisposable
     }
 
     [Fact]
+    public async Task DeleteExpiredAsync_ShouldDeleteUploadsAbandonedAnHourAgoAndRecordHowMany_WhenCalled()
+    {
+        // Arrange: a provider that found two uploads abandoned, and an expired version, so the sweep records a span.
+        var repository = new Mock<IResourceRepository>();
+        repository.Setup(r => r.DeleteAbandonedUploadsAsync(It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(2);
+        repository.Setup(r => r.GetExpiredAsync(It.IsAny<DateTimeOffset>(), It.IsAny<int>(), null,
+            It.IsAny<CancellationToken>())).ReturnsAsync([new ResourceInfo
+            {
+                ContainerName = "c", Name = "a", VersionId = "v1", ExpiresAt = DateTimeOffset.UnixEpoch
+            }]);
+        var service = new ResourceServiceClient(repository.Object, Options.Create(new ResourcefullOptions()));
+        using Activity root = TestSource.StartActivity("test")!;
+        DateTimeOffset before = DateTimeOffset.UtcNow;
+
+        // Act
+        await service.DeleteExpiredAsync();
+
+        // Assert
+        repository.Verify(r => r.DeleteAbandonedUploadsAsync(
+            It.Is<DateTimeOffset>(t => t >= before.AddHours(-1) && t <= DateTimeOffset.UtcNow.AddHours(-1)),
+            It.IsAny<CancellationToken>()), Times.Once);
+        Activity expire = Assert.Single(SpansIn(root), s => s.OperationName == "resourcefull expire");
+        Assert.Equal(2, expire.GetTagItem("resourcefull.abandoned_uploads"));
+    }
+
+    [Fact]
+    public async Task DeleteExpiredAsync_ShouldDeleteExpiredVersionsAndReport_WhenDeletingAbandonedUploadsFails()
+    {
+        // Arrange
+        var repository = new Mock<IResourceRepository>();
+        repository.Setup(r => r.DeleteAbandonedUploadsAsync(It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("The sweep failed."));
+        repository.Setup(r => r.GetExpiredAsync(It.IsAny<DateTimeOffset>(), It.IsAny<int>(), null,
+            It.IsAny<CancellationToken>())).ReturnsAsync([new ResourceInfo
+            {
+                ContainerName = "c", Name = "a", VersionId = "v1", ExpiresAt = DateTimeOffset.UnixEpoch
+            }]);
+        repository.Setup(r => r.DeleteExpiredVersionsAsync(It.IsAny<IReadOnlyList<(ResourceLocation, string)>>(),
+            It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([(new ResourceLocation("c", "a"), "v1")]);
+        var service = new ResourceServiceClient(repository.Object, Options.Create(new ResourcefullOptions()));
+
+        // Act
+        Task act() => service.DeleteExpiredAsync();
+
+        // Assert
+        Assert.Equal("The sweep failed.", (await Assert.ThrowsAsync<InvalidOperationException>(act)).Message);
+        repository.Verify(r => r.DeleteExpiredVersionsAsync(It.IsAny<IReadOnlyList<(ResourceLocation, string)>>(),
+            It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
     public async Task DeleteExpiredAsync_ShouldRecordTheFailedBatchWithoutFailingOrNamingTheResource_WhenItFallsBack()
     {
         // Arrange: a provider whose batch delete fails, naming the resource, but whose single delete works.

@@ -5,8 +5,10 @@ size.
 
 ## How content is stored
 
-Content is stored in chunks of up to 40,200 bytes. An upload inserts them in one transaction, so a version isn't
-visible until all of its content is stored, and the name is locked only at the end, to make the new version current. A
+Content is stored in chunks of up to 40,200 bytes. An upload stores its version staged, then inserts the chunks about a
+MiB at a time, each batch committing on its own, so no transaction is held while the content arrives. A staged version
+isn't visible to any read until all of its content is stored, and the name is locked only at the end, to make the new
+version current. See [Uploads, connections and the log](sql-server-operations.md#uploads-connections-and-the-log). A
 download reads a few chunks at a time as its stream is read, so memory use stays flat whatever the file size.
 
 ## Performance

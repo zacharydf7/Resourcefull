@@ -90,21 +90,21 @@
     "ContentBytes": 1048576
   },
   "expire-16-due-1MiB": {
-    "RoundTrips": 14,
-    "LogicalReads": 2821,
-    "LogBytes": 18348441,
-    "AllocatedBytes": 1470312,
-    "RetainedBytes": 704,
-    "Seconds": 0.1566,
+    "RoundTrips": 15,
+    "LogicalReads": 2812,
+    "LogBytes": 18346803,
+    "AllocatedBytes": 1644304,
+    "RetainedBytes": 16472,
+    "Seconds": 0.143,
     "ContentBytes": 0
   },
   "expire-nothing-due": {
-    "RoundTrips": 1,
-    "LogicalReads": 2,
+    "RoundTrips": 2,
+    "LogicalReads": 5,
     "LogBytes": 0,
-    "AllocatedBytes": 135648,
+    "AllocatedBytes": 254784,
     "RetainedBytes": 0,
-    "Seconds": 0.0019,
+    "Seconds": 0.0032,
     "ContentBytes": 0
   },
   "export-16MiB": {
@@ -126,12 +126,12 @@
     "ContentBytes": 0
   },
   "import-16MiB": {
-    "RoundTrips": 45,
-    "LogicalReads": 3440,
-    "LogBytes": 18378752,
-    "AllocatedBytes": 6692216,
+    "RoundTrips": 49,
+    "LogicalReads": 3472,
+    "LogBytes": 18436096,
+    "AllocatedBytes": 7639320,
     "RetainedBytes": 64,
-    "Seconds": 0.1559,
+    "Seconds": 0.1687,
     "ContentBytes": 16777222
   },
   "list-100": {
@@ -145,11 +145,11 @@
   },
   "list-page-100-of-500": {
     "RoundTrips": 1,
-    "LogicalReads": 7,
+    "LogicalReads": 12,
     "LogBytes": 0,
-    "AllocatedBytes": 304280,
+    "AllocatedBytes": 304368,
     "RetainedBytes": 0,
-    "Seconds": 0.0021,
+    "Seconds": 0.0023,
     "ContentBytes": 0
   },
   "move-16MiB": {
@@ -163,11 +163,11 @@
   },
   "overwrite-16MiB": {
     "RoundTrips": 29,
-    "LogicalReads": 5515,
-    "LogBytes": 36677222,
-    "AllocatedBytes": 2549392,
-    "RetainedBytes": 928,
-    "Seconds": 0.2176,
+    "LogicalReads": 5523,
+    "LogBytes": 36728832,
+    "AllocatedBytes": 2905344,
+    "RetainedBytes": 64,
+    "Seconds": 0.2104,
     "ContentBytes": 16777216
   },
   "restore-16MiB": {
@@ -180,66 +180,66 @@
     "ContentBytes": 16777216
   },
   "upload-16MiB": {
-    "RoundTrips": 23,
-    "LogicalReads": 3390,
-    "LogBytes": 18343526,
-    "AllocatedBytes": 2272184,
+    "RoundTrips": 24,
+    "LogicalReads": 3395,
+    "LogBytes": 18391040,
+    "AllocatedBytes": 2638000,
     "RetainedBytes": 64,
-    "Seconds": 0.1321,
+    "Seconds": 0.1379,
     "ContentBytes": 16777216
   },
   "upload-16MiB-traced": {
-    "RoundTrips": 23,
-    "LogicalReads": 3809,
-    "LogBytes": 18345164,
-    "AllocatedBytes": 2273584,
+    "RoundTrips": 24,
+    "LogicalReads": 3817,
+    "LogBytes": 18390220,
+    "AllocatedBytes": 2641080,
     "RetainedBytes": 64,
-    "Seconds": 0.1378,
+    "Seconds": 0.1442,
     "ContentBytes": 16777216
   },
   "upload-16MiB-with-limits": {
-    "RoundTrips": 24,
-    "LogicalReads": 3808,
-    "LogBytes": 18338611,
-    "AllocatedBytes": 2389504,
-    "RetainedBytes": 1112,
-    "Seconds": 0.139,
+    "RoundTrips": 25,
+    "LogicalReads": 3817,
+    "LogBytes": 18391859,
+    "AllocatedBytes": 2754848,
+    "RetainedBytes": 64,
+    "Seconds": 0.1429,
     "ContentBytes": 16777216
   },
   "upload-1MiB": {
-    "RoundTrips": 8,
-    "LogicalReads": 236,
-    "LogBytes": 1149337,
-    "AllocatedBytes": 1545136,
+    "RoundTrips": 9,
+    "LogicalReads": 244,
+    "LogBytes": 1155072,
+    "AllocatedBytes": 1749960,
     "RetainedBytes": 64,
-    "Seconds": 0.014,
+    "Seconds": 0.0185,
     "ContentBytes": 1048576
   },
   "upload-64MiB": {
-    "RoundTrips": 69,
-    "LogicalReads": 13491,
-    "LogBytes": 73373286,
-    "AllocatedBytes": 4540816,
+    "RoundTrips": 70,
+    "LogicalReads": 13499,
+    "LogBytes": 73526476,
+    "AllocatedBytes": 5400728,
     "RetainedBytes": 64,
-    "Seconds": 0.5084,
+    "Seconds": 0.5341,
     "ContentBytes": 67108864
   },
   "upload-8-at-once-4MiB": {
-    "RoundTrips": 88,
-    "LogicalReads": 7388,
-    "LogBytes": 36829593,
-    "AllocatedBytes": 13531648,
-    "RetainedBytes": 64,
-    "Seconds": 0.1832,
+    "RoundTrips": 96,
+    "LogicalReads": 7457,
+    "LogBytes": 36891033,
+    "AllocatedBytes": 15435800,
+    "RetainedBytes": 9128,
+    "Seconds": 0.1786,
     "ContentBytes": 33554432
   },
   "upload-same-name-8-at-once-1MiB": {
-    "RoundTrips": 71,
-    "LogicalReads": 1978,
-    "LogBytes": 9264332,
-    "AllocatedBytes": 12556808,
-    "RetainedBytes": 34888,
-    "Seconds": 0.0761,
+    "RoundTrips": 72,
+    "LogicalReads": 2093,
+    "LogBytes": 9309388,
+    "AllocatedBytes": 14091640,
+    "RetainedBytes": 15328,
+    "Seconds": 0.071,
     "ContentBytes": 8388608
   },
   "versions-20": {

@@ -39,8 +39,8 @@ exactly one succeeds (see [Updating only if unchanged](../concurrency.md#updatin
 other headers to store, or `CreateOnly`; when the request has preconditions, they replace the options' `Conditions`
 and `CreateOnly`.
 
-A request body can't seek, so with SQL Server a transient failure partway through an upload isn't retried, and the
-client has to send it again.
+With SQL Server <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span>, a transient failure partway through an upload is retried, even though a request body can't
+be read twice: the content goes in about a MiB at a time, and a batch that fails is sent again from what it holds.
 
 ## From an HTML form
 

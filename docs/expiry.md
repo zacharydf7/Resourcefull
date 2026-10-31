@@ -33,8 +33,11 @@ await container.UploadAsync("exports/report.zip", stream, new ResourceUploadOpti
 - **Read-only containers don't expire.** A [read-only](container-policies.md) container keeps its expired versions,
   unreported, until it's writable again, and its expiries can't be changed. Freezing a container keeps everything
   in it. Each sweep still goes past the expired versions it keeps, a seek on that index for each batch of 100.
+- **It also deletes what stopped uploads left behind** <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span>, with SQL Server: the
+  [staged content](providers/sql-server-operations.md#uploads-connections-and-the-log) of an upload whose process
+  died partway, an hour after that upload last stored anything.
 - **Without `UseExpiry`,** expiries are stored, and `IResourceServiceClient.DeleteExpiredAsync()` deletes what has
-  expired whenever you call it, such as from a scheduled job.
+  expired, and what stopped uploads left behind, whenever you call it, such as from a scheduled job.
 
 ## Changing an expiry
 
@@ -94,7 +97,8 @@ back.
 ## Telemetry
 
 Each sweep that finds expired versions records an `expire` operation, with `resourcefull.expired` counting the ones
-it deleted, and a sweep that finds none records nothing. A read-only container's expired versions count as found, so
+it deleted, and `resourcefull.abandoned_uploads` the stopped uploads whose leftovers it deleted, and a sweep that
+finds no expired versions records nothing. A read-only container's expired versions count as found, so
 while one keeps some, every sweep records an operation, deleting none of those. `SetExpiryAsync` records `set_expiry`.
 Counters add up the versions sweeps delete (`resourcefull.client.expired`) and fail to delete
 (`resourcefull.client.expire.failures`), and the cleanup handler's failures; see

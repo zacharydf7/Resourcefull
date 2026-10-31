@@ -23,6 +23,7 @@ working, and the database changes only by adding to it. Coming from 1.x or 2.x? 
 | 3.1 | none | | |
 | 3.2 <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span> | `AddCopiedFrom` | adds three nullable columns recording the version a copy or restore came from | nothing |
 | | `AddExpiresAt` | adds the nullable `ExpiresAt` column, and an index of the versions that expire | nothing |
+| | `Resourcefull_AddStagedAt` | adds the nullable `StagedAt` column, set while an upload stores a version's content, and an index of the versions being stored | nothing |
 
 Every 3.x migration only adds columns or indexes, and runs while the application is up.
 

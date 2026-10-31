@@ -91,6 +91,16 @@
 
 ### Changed
 
+- **Uploads to SQL Server hold nothing while their content arrives.** An upload stores its version staged, hidden
+  from every read, then its content a MiB at a time, each batch committing on its own on a connection it gives back,
+  and makes the version current in a short transaction at the end. So a slow client no longer holds a connection,
+  locks and the transaction log for as long as it takes, and a transient failure partway sends the batch again rather
+  than failing the upload, even from a stream that can't seek, such as a request body. A canceled or failed upload
+  deletes what it stored; the expiry sweep deletes what an upload whose process died left behind, an hour after it
+  last stored anything. Each upload costs about one round trip more. The `Resourcefull_AddStagedAt` migration adds a
+  nullable column and an index. Providers get `DeleteAbandonedUploadsAsync`, whose default does nothing. The upload
+  span gains `resourcefull.batches`, and the `expire` span `resourcefull.abandoned_uploads`. See
+  [Uploads, connections and the log](docs/providers/sql-server-operations.md#uploads-connections-and-the-log).
 - **`UseVersioning` with fewer than one version** throws `ArgumentOutOfRangeException`, as `UseExpiry` and
   `UseContainerPolicies` do for a value out of range, rather than `InvalidOperationException`.
 - **The core package has three new dependencies,** for features new in this release:

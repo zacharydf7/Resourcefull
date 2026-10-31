@@ -22,6 +22,16 @@ internal static class SqlTelemetry
     private static readonly Counter<long> Retries = Meter.CreateCounter<long>("resourcefull.sqlserver.retries", unit: "{retry}",
         description: "Database calls retried after a transient failure, such as a deadlock or a dropped connection.");
 
+    private static readonly Counter<long> AbandonedUploads = Meter.CreateCounter<long>(
+        "resourcefull.sqlserver.abandoned_uploads", unit: "{upload}",
+        description: "Staged versions of uploads that stopped before finishing, deleted by the expiry sweep.");
+
+    /// <summary>Counts the staged versions of abandoned uploads a sweep deleted.</summary>
+    public static void CountAbandonedUploads(int deleted)
+    {
+        if (deleted > 0) AbandonedUploads.Add(deleted, new TagList { { "resourcefull.provider", "sqlserver" } });
+    }
+
     /// <summary>Counts a retry, tagged with the failure's type and, for a SQL Server error, its number.</summary>
     public static void CountRetry(Exception exception)
     {

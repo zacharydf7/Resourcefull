@@ -94,8 +94,9 @@ counts retries in `resourcefull.sqlserver.retries`. Give it error 50001 to retry
 `sql.EnableRetryOnFailure(5, TimeSpan.FromSeconds(10), [50001])`, or a write that loses a deadlock over its name's lock
 fails instead of being retried.
 
-An upload is retried as a whole, from its first byte. That's possible only when its stream can seek; an upload from a
-stream that can't, such as an HTTP request body, fails instead once its content has started, and stores nothing.
+An upload <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span> is retried a step at a time: its content goes in about a MiB at a time, and a batch that fails is sent
+again from what it holds, so even a stream that can't seek, such as an HTTP request body, carries on. Before 3.2 an
+upload was retried as a whole, which a stream that can't seek couldn't be.
 Copies, restores and imports <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span> are retried too: copies and restores run within the database, and an import
 reads the version's file from the export again. The exception is copying or restoring a version stored before 3.0
 that has no hash yet, which reads it through the application; [record the hashes](sql-server-upgrades.md#recording-hashes-for-older-versions) to retry those too.

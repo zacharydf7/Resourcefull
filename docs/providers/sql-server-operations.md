@@ -37,21 +37,34 @@ turned on, those versions are kept in the database itself instead.
 
 ## Uploads, connections and the log
 
-An upload is one transaction: it holds a database connection, and a transaction the log can't truncate past, for as
-long as the client takes to send the file. Downloads don't: they open a connection for each page of content and give
-it back.
+<div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 3.2</span></div>
 
-That matters when uploads are slow:
+An upload holds no transaction, lock or connection while its content arrives, however slowly the client sends it:
 
-- **Connections run out.** The connection pool holds 100 connections by default. About 100 slow uploads at once take
-  them all, and every other database call waits. Raise `Max Pool Size` in the connection string if you expect that
-  many, and keep Kestrel's minimum upload rate on (`MinRequestBodyDataRate`, 240 bytes a second by default), so a
-  stalled client is disconnected rather than holding a connection.
-- **The log can't truncate** past the oldest open upload, so a very slow upload of a large file holds the log's growth
-  until it ends.
-- **For uploads from slow clients**, save the request to a temporary file first, then upload the file, as the
-  [import example](../backup-and-move.md#importing) does. The transaction then lasts only as long as reading from
-  disk.
+1. **It starts** by storing the new version, marked as staged, which hides it from every read, listing and usage
+   total.
+2. **The content goes in a batch at a time,** about a MiB each, on a connection taken from the pool for that batch
+   and given back. Each batch commits as it's stored, so the log can truncate past it.
+3. **It finishes** with a short transaction that takes the name's lock, checks the upload's conditions and limits, and
+   makes the version current.
+
+Downloads work the same way: a connection for each page of content, given back after it.
+
+What that means for slow clients:
+
+- **Connections don't run out.** A thousand slow uploads hold no more connections between batches than they're
+  storing at that moment. Keep Kestrel's minimum upload rate on (`MinRequestBodyDataRate`, 240 bytes a second by
+  default) anyway, so a stalled client is disconnected rather than kept waiting.
+- **The log isn't held back.** Each batch's log can be truncated, or backed up under the full recovery model, while the
+  rest of the upload is still arriving. The upload writes as much to the log in all as it did before.
+- **A stopped upload leaves its batches behind** when its process dies before it can delete them. The
+  [expiry](../expiry.md) sweep deletes a staged version an hour after its upload last stored anything. An upload
+  marks itself running every 10 minutes as its content arrives, so it's safe as long as a chunk, about 40 KB, arrives
+  every 50 minutes: far slower than Kestrel's minimum rate lets a request body go. Without `UseExpiry`, call
+  `DeleteExpiredAsync` on a schedule, or such batches stay until you do. `resourcefull.sqlserver.abandoned_uploads`
+  counts what the sweep deletes.
+
+Before 3.2, an upload was one transaction, holding a connection and the log for as long as the client took.
 
 ## Timeouts
 
