@@ -65,28 +65,40 @@ MaxResourceSize = 1_048_576    // a number of bytes works too
 
 ## Defaults from configuration
 
-`ResourceContainerPolicy` binds from configuration, with sizes written as text:
+`UseConfiguration` <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span> reads the defaults, and how
+long policies are cached, from a section of your configuration, with sizes written as text:
 
 ```json
 {
-  "Storage": {
-    "DefaultPolicy": {
-      "MaxResourceSize": "100 MB",
-      "MaxContainerSize": "5 GB",
-      "MaxResourceCount": 10000,
-      "AllowedContentTypes": [ "image/*", "application/pdf" ]
+  "Resourcefull": {
+    "ContainerPolicies": {
+      "Defaults": {
+        "MaxResourceSize": "100 MB",
+        "MaxContainerSize": "5 GB",
+        "MaxResourceCount": 10000,
+        "AllowedContentTypes": [ "image/*", "application/pdf" ]
+      },
+      "CacheFor": "00:00:05",
+      "KeepLastKnownFor": "00:05:00"
     }
   }
 }
 ```
 
 ```csharp
-var defaults = builder.Configuration.GetSection("Storage:DefaultPolicy").Get<ResourceContainerPolicy>();
-builder.Services.AddResourcefull(options => options.UseSqlServer(connectionString).UseContainerPolicies(defaults));
+builder.Services.AddResourcefull(options => options
+    .UseSqlServer(connectionString)
+    .UseConfiguration(builder.Configuration.GetSection("Resourcefull")));
 ```
 
+The `ContainerPolicies` section turns policies on, and anything left out keeps its default. A key that isn't one of
+these settings, such as a misspelled `MaxResourceSise`, stops the application at startup with the key's name, rather
+than being ignored. The same section can hold the other settings; see
+[Settings from configuration](getting-started.md#settings-from-configuration).
+
 A size is a number followed by `B`, `KB`, `MB`, `GB` or `TB` (or `KiB` and so on, which mean the same), such as
-`"1.5 GB"`; a number alone is bytes.
+`"1.5 GB"`; a number alone is bytes. `ResourceContainerPolicy` also binds on its own, with
+`GetSection(...).Get<ResourceContainerPolicy>()`, for a policy you keep somewhere else in your configuration.
 
 ## A policy for each container
 
@@ -116,14 +128,24 @@ public sealed class PlanPolicyProvider(AppDbContext db) : IResourcePolicyProvide
   `TimeSpan.Zero` to fail at once; it helps only when longer than `cacheFor`. The cost: a change made just before the
   outage, such as making a container read-only, may not apply until the provider answers again.
 
-## Usage
+## Usage and limits
 
-`GetUsageAsync` reports what a container holds, to show users their storage or to check it against their plan:
+`GetUsageAsync` reports what a container holds, and `GetPolicyAsync`
+<span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span> the limits its writes are checked against, so
+you can show users their storage against their plan:
 
 ```csharp
 ResourceContainerUsage usage = await container.GetUsageAsync(cancellationToken);
 // usage.StoredSize, such as "1536 MB", usage.ResourceCount and usage.VersionCount
+ResourceContainerPolicy policy = await container.GetPolicyAsync(cancellationToken);
+// policy.MaxContainerSize, such as "5 GB", or null for no limit
+
+string shown = policy.MaxContainerSize is { } max ? $"{usage.StoredSize} of {max}" : $"{usage.StoredSize}";
 ```
+
+`GetPolicyAsync` gives the policy as a write sees it: your defaults, with each limit the policy provider sets for
+the container in place of the default. It's cached, and stands in for the provider while it fails, as for writes.
+Without container policies, it's a policy with no limits.
 
 With SQL Server it's one query over the container's version rows, without reading content. The size and count
 limits read it once per write they check, so for containers with very many versions, expect each limited upload to
@@ -144,7 +166,7 @@ becomes:
 ## Telemetry
 
 A refused write's span has `error.type` and `resourcefull.policy_rule`, such as `max_container_size`. A call to your
-policy provider records a `resourcefull get_policy` child span, only when the cache misses, and `GetUsageAsync` records
-a `get_usage` operation. When the provider fails and the last known policy is used, its span records the failure and
+policy provider records a `resourcefull get_policy` child span, only when the cache misses, and `GetUsageAsync` and
+`GetPolicyAsync` record `get_usage` and `get_container_policy` operations. When the provider fails and the last known policy is used, its span records the failure and
 `resourcefull.policy_last_known`, and `resourcefull.client.policy.last_known_uses` counts it.
 See [Telemetry](telemetry.md).

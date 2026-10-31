@@ -43,6 +43,44 @@ With several instances, provision from a deployment step instead: the first prov
 that briefly disconnects every other session. [SQL Server](providers/sql-server.md) covers both. `UseVersioning` is
 optional; see [Versioning](versioning.md), and give every application that shares the database the same setting.
 
+### Settings from configuration
+
+<div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 3.2</span></div>
+
+`UseConfiguration` reads Resourcefull's settings from a section of your configuration, such as appsettings.json, so
+they can differ between environments without a rebuild:
+
+```json
+{
+  "Resourcefull": {
+    "Versioning": { "MaxVersions": 10 },
+    "Expiry": { "Interval": "00:01:00" },
+    "Telemetry": { "RecordResourceNames": false },
+    "ContainerPolicies": { "Defaults": { "MaxResourceSize": "100 MB" } }
+  }
+}
+```
+
+```csharp
+builder.Services.AddResourcefull(options => options
+    .UseSqlServer(builder.Configuration.GetConnectionString("Resources")!)
+    .UseConfiguration(builder.Configuration.GetSection("Resourcefull")));
+```
+
+- **Each section turns its feature on:** `Versioning` as [`UseVersioning`](versioning.md) does, `Expiry` as
+  [`UseExpiry`](expiry.md), `Telemetry` as [`UseTelemetry`](telemetry.md), and `ContainerPolicies` as
+  [`UseContainerPolicies`](container-policies.md#defaults-from-configuration). An empty section, such as
+  `"Versioning": {}`, turns it on with its defaults. Leave a section out to leave the feature off.
+- **Times** are written as hours, minutes and seconds, such as `00:01:00` for a minute, and **sizes** as text, such as
+  `100 MB`.
+- **A key that isn't a setting, or a value it can't use,** stops the application at startup with an error naming it:
+  a misspelled key such as `MaxVersion`, `"Versioning": false` where a section belongs, or `"MaxVersions": 0`. To
+  leave a feature off, leave its section out.
+- **Code wins** when it comes after: `.UseConfiguration(section).UseVersioning(maxVersions: 3)` keeps 3 versions
+  whatever the section says.
+- **The storage provider, the policy provider and the cleanup handler** are set in code, since each is a type of
+  yours rather than a setting.
+
 ## Store and read a file
 
 Inject `IResourceServiceClient`. It manages **containers**; a container client works with the **resources** in one

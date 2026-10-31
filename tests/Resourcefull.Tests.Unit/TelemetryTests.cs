@@ -425,6 +425,32 @@ public sealed class TelemetryTests : IDisposable
     }
 
     [Fact]
+    public async Task GetPolicyAsync_ShouldRecordAGetContainerPolicyOperationAskingTheProvider_WhenCalled()
+    {
+        // Arrange
+        using ServiceProvider provider = new ServiceCollection()
+            .AddResourcefull(o => o.UseInMemory().UsePolicyProvider<NoPolicies>()).BuildServiceProvider();
+        IResourceContainerClient container =
+            await provider.GetRequiredService<IResourceServiceClient>().CreateResourceContainerAsync("c");
+        using Activity root = TestSource.StartActivity("test")!;
+
+        // Act
+        await container.GetPolicyAsync();
+
+        // Assert
+        Activity span = Assert.Single(SpansIn(root), s => s.OperationName == "resourcefull get_container_policy");
+        Assert.Equal("c", span.GetTagItem("resourcefull.container"));
+        Assert.Single(SpansIn(root),
+            s => s.OperationName == "resourcefull get_policy" && s.ParentSpanId == span.SpanId);
+    }
+
+    private sealed class NoPolicies : IResourcePolicyProvider
+    {
+        public ValueTask<ResourceContainerPolicy?> GetPolicyAsync(string containerName,
+            CancellationToken cancellationToken) => ValueTask.FromResult<ResourceContainerPolicy?>(null);
+    }
+
+    [Fact]
     public async Task DownloadContentAsync_ShouldRecordOneDownload_WhenCalled()
     {
         // Arrange: it reads through the streaming download, which mustn't record a second one.

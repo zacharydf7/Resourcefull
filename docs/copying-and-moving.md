@@ -3,14 +3,17 @@
 <div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 3.2</span></div>
 
 `CopyResourceAsync` copies a version, the current one unless you name another, to a name in the same or another
-container. `MoveResourceAsync` moves a resource, every version of it, and renaming is a move within the container:
+container. `MoveResourceAsync` moves a resource, every version of it, and `RenameResourceAsync` is a move within the
+container:
 
 ```csharp
 ResourceInfo? copy = await container.CopyResourceAsync("report.pdf", "archive", "2026/report.pdf");
-ResourceInfo? renamed = await container.MoveResourceAsync("draft.txt", container.ResourceContainerInfo.Name, "final.txt");
+ResourceInfo? moved = await container.MoveResourceAsync("draft.txt", "published", "final.txt");
+ResourceInfo? renamed = await container.RenameResourceAsync("draft.txt", "final.txt");
 ```
 
-Both return `null` when the source doesn't exist.
+All three return `null` when the source doesn't exist. A rename is a move to `container.Name`, so everything below
+about moves applies to it too.
 
 - **A copy is a new version** at the destination. It has its own `VersionId` and `LastModified`, and the source's
   content, hash, type and metadata. It's stored like an upload: without [versioning](versioning.md), an existing name

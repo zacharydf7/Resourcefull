@@ -197,6 +197,25 @@ public abstract partial class ResourcefullContractTests
     }
 
     [SkippableFact]
+    public async Task RenameResourceAsync_ShouldMoveEveryVersionToTheNewName_WhenCalled()
+    {
+        // Arrange
+        using ServiceProvider provider = BuildServiceProvider(o => o.UseVersioning());
+        IResourceContainerClient container = await NewContainerAsync(provider);
+        await container.UploadAsync("draft.txt", BinaryData.FromString("first"));
+        ResourceInfo current = await container.UploadAsync("draft.txt", BinaryData.FromString("second"));
+
+        // Act
+        ResourceInfo? renamed = await container.RenameResourceAsync("draft.txt", "final.txt");
+
+        // Assert
+        Assert.Equal(("final.txt", current.VersionId), (renamed!.Name, renamed.VersionId));
+        Assert.Equal(container.ResourceContainerInfo.Name, renamed.ContainerName);
+        Assert.False(await container.ExistsAsync("draft.txt"));
+        Assert.Equal(2, (await container.GetResourceVersionsAsync("final.txt")).Count);
+    }
+
+    [SkippableFact]
     public async Task MoveResourceAsync_ShouldChangeNothing_WhenTheDestinationExistsOrItsContainerIsMissingOrConditionsFail()
     {
         // Arrange

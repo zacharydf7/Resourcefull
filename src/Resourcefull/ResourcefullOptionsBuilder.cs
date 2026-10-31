@@ -1,4 +1,6 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+﻿using System.Globalization;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 
@@ -190,5 +192,138 @@ public class ResourcefullOptionsBuilder
         Services.RemoveAll<IResourceCleanupHandler>();
         Services.AddScoped<IResourceCleanupHandler, THandler>();
         return this;
+    }
+
+    /// <summary>
+    /// Applies the settings in <paramref name="section"/>, such as a section of appsettings.json, as the matching
+    /// methods would: each of its sections that's present turns that feature on, and a value left out keeps its
+    /// default. Calls made after this one override it.
+    /// <list type="bullet">
+    /// <item><c>Versioning</c>: <see cref="UseVersioning"/>, with <c>MaxVersions</c>.</item>
+    /// <item><c>Expiry</c>: <see cref="UseExpiry"/>, with <c>Interval</c>, such as <c>00:01:00</c>.</item>
+    /// <item><c>Telemetry</c>: <see cref="UseTelemetry"/>, with <c>RecordResourceNames</c>.</item>
+    /// <item>
+    /// <c>ContainerPolicies</c>: <see cref="UseContainerPolicies"/>, with <c>CacheFor</c>, <c>KeepLastKnownFor</c> and
+    /// <c>Defaults</c>, which takes the properties of <see cref="ResourceContainerPolicy"/>. Sizes are written as
+    /// <see cref="ResourceSize.Parse(string, IFormatProvider?)"/> reads them, such as <c>100 MB</c>.
+    /// </item>
+    /// </list>
+    /// The storage provider, the policy provider and the cleanup handler are types rather than settings, so they're
+    /// set in code.
+    /// <para>Coming in 3.2.</para>
+    /// </summary>
+    /// <param name="section">The settings, such as <c>builder.Configuration.GetSection("Resourcefull")</c>.</param>
+    /// <exception cref="InvalidOperationException">
+    /// <paramref name="section"/> has a key that isn't one of these settings, so a misspelled one isn't ignored, or a
+    /// value it can't use: one that doesn't parse, is out of range, or isn't a section or list where one belongs.
+    /// </exception>
+    public ResourcefullOptionsBuilder UseConfiguration(IConfiguration section)
+    {
+        ArgumentNullException.ThrowIfNull(section);
+        ThrowIfUnknownKeys(section, "Versioning", "Expiry", "Telemetry", "ContainerPolicies");
+
+        if (Present(section, "Versioning", "MaxVersions") is { } versioning)
+        {
+            int? maxVersions = Read<int>(versioning, "MaxVersions");
+            Apply(versioning, () => UseVersioning(maxVersions));
+        }
+        if (Present(section, "Expiry", "Interval") is { } expiry)
+        {
+            TimeSpan? interval = Read<TimeSpan>(expiry, "Interval");
+            Apply(expiry, () => UseExpiry(interval));
+        }
+        if (Present(section, "Telemetry", "RecordResourceNames") is { } telemetry
+            && Read<bool>(telemetry, "RecordResourceNames") is { } recordResourceNames)
+        {
+            UseTelemetry(options => options.RecordResourceNames = recordResourceNames);
+        }
+        if (Present(section, "ContainerPolicies", "Defaults", "CacheFor", "KeepLastKnownFor") is { } policies)
+        {
+            IConfigurationSection? defaults = Present(policies, "Defaults",
+                nameof(ResourceContainerPolicy.MaxResourceSize), nameof(ResourceContainerPolicy.MaxContainerSize),
+                nameof(ResourceContainerPolicy.MaxResourceCount), nameof(ResourceContainerPolicy.AllowedContentTypes),
+                nameof(ResourceContainerPolicy.ReadOnly));
+            var policy = defaults is null ? null : new ResourceContainerPolicy
+            {
+                MaxResourceSize = Read<ResourceSize>(defaults, nameof(ResourceContainerPolicy.MaxResourceSize)),
+                MaxContainerSize = Read<ResourceSize>(defaults, nameof(ResourceContainerPolicy.MaxContainerSize)),
+                MaxResourceCount = Read<long>(defaults, nameof(ResourceContainerPolicy.MaxResourceCount)),
+                AllowedContentTypes = ReadList(defaults, nameof(ResourceContainerPolicy.AllowedContentTypes)),
+                ReadOnly = Read<bool>(defaults, nameof(ResourceContainerPolicy.ReadOnly))
+            };
+            TimeSpan? cacheFor = Read<TimeSpan>(policies, "CacheFor");
+            TimeSpan? keepLastKnownFor = Read<TimeSpan>(policies, "KeepLastKnownFor");
+            Apply(policies, () => UseContainerPolicies(policy, cacheFor, keepLastKnownFor));
+        }
+        return this;
+    }
+
+    /// <summary>
+    /// The section <paramref name="name"/> of <paramref name="parent"/>, if it's there, once its keys are checked. It's
+    /// found by its key, since an empty one, such as <c>{}</c> in JSON, has neither a value nor children.
+    /// </summary>
+    private static IConfigurationSection? Present(IConfiguration parent, string name, params string[] keys)
+    {
+        if (Child(parent, name) is not { } section) return null;
+        if (!string.IsNullOrEmpty(section.Value))
+        {
+            throw new InvalidOperationException(
+                $"The setting {section.Path} must be a section, not \"{section.Value}\".");
+        }
+        ThrowIfUnknownKeys(section, keys);
+        return section;
+    }
+
+    // Configuration keys don't depend on case.
+    private static IConfigurationSection? Child(IConfiguration parent, string name) =>
+        parent.GetChildren()
+            .FirstOrDefault(child => string.Equals(child.Key, name, StringComparison.OrdinalIgnoreCase));
+
+    private static void ThrowIfUnknownKeys(IConfiguration section, params string[] keys)
+    {
+        foreach (IConfigurationSection child in section.GetChildren())
+        {
+            if (!keys.Contains(child.Key, StringComparer.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    $"{child.Path} isn't a Resourcefull setting. The settings there are {string.Join(", ", keys)}.");
+            }
+        }
+    }
+
+    private static T? Read<T>(IConfigurationSection section, string key) where T : struct, IParsable<T>
+    {
+        string? text = section[key];
+        if (string.IsNullOrEmpty(text)) return null;
+        if (T.TryParse(text, CultureInfo.InvariantCulture, out T value)) return value;
+        throw new InvalidOperationException(
+            $"The setting {ConfigurationPath.Combine(section.Path, key)}, \"{text}\", isn't a valid {typeof(T).Name}.");
+    }
+
+    /// <summary>
+    /// A list of text, such as a JSON array of strings; an empty one, such as <c>[]</c>, is an empty list.
+    /// </summary>
+    private static string[]? ReadList(IConfigurationSection section, string key)
+    {
+        if (Child(section, key) is not { } list) return null;
+        string? notAList = !string.IsNullOrEmpty(list.Value) ? list.Value
+            : list.GetChildren().Any(item => item.Value is null) ? "a section" : null;
+        if (notAList is not null)
+            throw new InvalidOperationException($"The setting {list.Path} must be a list of text, not {notAList}.");
+        return [.. list.GetChildren().Select(item => item.Value!)];
+    }
+
+    /// <summary>Calls a <c>Use…</c> method with a section's values, naming the section if it refuses one.</summary>
+    private static void Apply(IConfigurationSection section, Action use)
+    {
+        try
+        {
+            use();
+        }
+        catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
+        {
+            throw new InvalidOperationException($"The settings in {section.Path} aren't valid: {exception.Message}",
+                exception);
+        }
     }
 }

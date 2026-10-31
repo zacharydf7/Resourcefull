@@ -84,8 +84,9 @@ metrics. It also has:
 | `get_info` | `GetResourceInfoAsync` | |
 | `exists` | `ExistsAsync` | |
 | `get_usage` | `GetUsageAsync` | |
+| `get_container_policy` | `GetPolicyAsync` | |
 | `copy` | `CopyResourceAsync` | `resourcefull.destination_container`; a `resourcefull prune` child span |
-| `move` | `MoveResourceAsync` | `resourcefull.destination_container` |
+| `move` | `MoveResourceAsync`, `RenameResourceAsync` | `resourcefull.destination_container` |
 | `set_expiry` | `SetExpiryAsync` | |
 | `export` | `ExportContainerAsync` | `resourcefull.resources`, `resourcefull.versions`: what it wrote; `resourcefull.pages`: the pages of 1,000 names it read |
 | `import` | `ImportContainerAsync` | `resourcefull.resources`, `resourcefull.versions`: what it stored |
@@ -106,7 +107,7 @@ metrics. It also has:
 
 `GetResourceContainerClient` doesn't contact storage, so it records nothing. With
 [container policies](container-policies.md), every operation that checks one (`upload`, `restore`, `copy`, `move`,
-`delete`, `delete_container` and `prune_container`) records a `resourcefull get_policy` child span when it asks the policy provider, and
+`delete`, `delete_container`, `prune_container` and `get_container_policy`) records a `resourcefull get_policy` child span when it asks the policy provider, and
 `resourcefull.policy_rule` when the policy refuses it. When the provider fails and the container's last known policy is
 used instead, the `get_policy` span records the failure and `resourcefull.policy_last_known`.
 

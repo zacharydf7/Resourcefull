@@ -597,6 +597,11 @@ internal partial class ResourceContainerClient(IResourceRepository resourceRepos
     public Task<ResourceContainerUsage> GetUsageAsync(CancellationToken cancellationToken = default)
         => _telemetry.RunAsync("get_usage", ContainerName, null, () => resourceRepository.GetContainerUsageAsync(ContainerName, cancellationToken));
 
+    public Task<ResourceContainerPolicy> GetPolicyAsync(CancellationToken cancellationToken = default)
+        => _telemetry.RunAsync("get_container_policy", ContainerName, null, async () => policies is null
+            ? new ResourceContainerPolicy()
+            : await policies.GetAsync(ContainerName, _telemetry, cancellationToken));
+
     public Task<bool> ExistsAsync(string resourceName, string? versionId = null)
         => ExistsAsync(resourceName, versionId, CancellationToken.None);
 

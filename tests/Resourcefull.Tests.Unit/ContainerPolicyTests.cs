@@ -138,6 +138,57 @@ public class ContainerPolicyTests
             ValueTask.FromResult<ResourceContainerPolicy?>(new ResourceContainerPolicy { ReadOnly = true });
     }
 
+    private sealed class LargerLimitsProvider : IResourcePolicyProvider
+    {
+        public ValueTask<ResourceContainerPolicy?> GetPolicyAsync(string containerName,
+            CancellationToken cancellationToken) =>
+            ValueTask.FromResult<ResourceContainerPolicy?>(new ResourceContainerPolicy
+            {
+                MaxResourceSize = ResourceSize.Gigabytes(1), MaxContainerSize = ResourceSize.Gigabytes(5)
+            });
+    }
+
+    [Fact]
+    public async Task GetPolicyAsync_ShouldGiveTheProvidersLimitsInPlaceOfTheDefaults_WhenBothSetSome()
+    {
+        // Arrange: defaults for the size and types, and a provider that sets the size and the container's size.
+        using ServiceProvider provider = new ServiceCollection()
+            .AddResourcefull(o => o.UseInMemory()
+                .UseContainerPolicies(new ResourceContainerPolicy
+                {
+                    MaxResourceSize = ResourceSize.Megabytes(100), AllowedContentTypes = ["application/pdf"]
+                })
+                .UsePolicyProvider<LargerLimitsProvider>())
+            .BuildServiceProvider();
+        IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>()
+            .CreateResourceContainerAsync("c");
+
+        // Act
+        ResourceContainerPolicy policy = await container.GetPolicyAsync();
+
+        // Assert
+        Assert.Equal((ResourceSize.Gigabytes(1), ResourceSize.Gigabytes(5)),
+            (policy.MaxResourceSize, policy.MaxContainerSize));
+        Assert.Equal(["application/pdf"], policy.AllowedContentTypes!);
+        Assert.Null(policy.MaxResourceCount);
+    }
+
+    [Fact]
+    public async Task GetPolicyAsync_ShouldGiveNoLimits_WhenContainerPoliciesAreOff()
+    {
+        // Arrange
+        using ServiceProvider provider =
+            new ServiceCollection().AddResourcefull(o => o.UseInMemory()).BuildServiceProvider();
+        IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>()
+            .CreateResourceContainerAsync("c");
+
+        // Act
+        ResourceContainerPolicy policy = await container.GetPolicyAsync();
+
+        // Assert
+        Assert.Equivalent(new ResourceContainerPolicy(), policy);
+    }
+
     [Fact]
     public async Task UsePolicyProvider_ShouldTurnOnPolicies_WhenUseContainerPoliciesIsNotCalled()
     {

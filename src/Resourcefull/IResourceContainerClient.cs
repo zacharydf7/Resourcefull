@@ -26,6 +26,13 @@ public interface IResourceContainerClient : IDisposable
     public ResourceContainerInfo ResourceContainerInfo { get; }
 
     /// <summary>
+    /// The name of the container this client targets: <see cref="ResourceContainerInfo"/>'s
+    /// <see cref="ResourceContainerInfo.Name"/>.
+    /// <para>Coming in 3.2.</para>
+    /// </summary>
+    public string Name => ResourceContainerInfo.Name;
+
+    /// <summary>
     /// Uploads a resource to the container.
     /// </summary>
     /// <param name="resourceName">The name of the uploaded resource.</param>
@@ -369,6 +376,23 @@ public interface IResourceContainerClient : IDisposable
         => throw new NotSupportedException($"{GetType().Name} doesn't move resources.");
 
     /// <summary>
+    /// Renames a resource, every version of it, within this container: a
+    /// <see cref="MoveResourceAsync(string, string, string, ResourceMoveOptions?, CancellationToken)"/> to
+    /// <paramref name="newName"/> in this container, with the same results and exceptions.
+    /// <para>Coming in 3.2.</para>
+    /// </summary>
+    /// <param name="resourceName">The resource to rename.</param>
+    /// <param name="newName">Its new name, which must not exist.</param>
+    /// <param name="options">What the resource's current version must be like; none when null.</param>
+    /// <param name="cancellationToken">Cancels the rename; a canceled rename changes nothing.</param>
+    /// <returns>
+    /// The renamed resource's current version, or <see langword="null"/> if the resource doesn't exist.
+    /// </returns>
+    public Task<ResourceInfo?> RenameResourceAsync(string resourceName, string newName,
+        ResourceMoveOptions? options = null, CancellationToken cancellationToken = default)
+        => MoveResourceAsync(resourceName, Name, newName, options, cancellationToken);
+
+    /// <summary>
     /// Sets when a version expires, or with <see langword="null"/> makes it permanent, such as to extend a share. Only
     /// the expiry changes: the version's content, <see cref="ResourceInfo.LastModified"/> and ETag stay as they are.
     /// <para>Coming in 3.2.</para>
@@ -401,4 +425,20 @@ public interface IResourceContainerClient : IDisposable
     /// </exception>
     public Task<ResourceContainerUsage> GetUsageAsync(CancellationToken cancellationToken = default)
         => throw new NotSupportedException($"{GetType().Name} doesn't report usage.");
+
+    /// <summary>
+    /// Gets the policy this container's writes are checked against: the defaults from
+    /// <see cref="ResourcefullOptionsBuilder.UseContainerPolicies"/>, with what the policy provider gives for this
+    /// container in place of each limit it sets. With <see cref="GetUsageAsync"/>, use it to show a user their limits,
+    /// such as "4.2 GB of 5 GB". It's cached, and stands in for the provider while it fails, as for writes.
+    /// <para>Coming in 3.2.</para>
+    /// </summary>
+    /// <param name="cancellationToken">Cancels the lookup.</param>
+    /// <returns>The container's policy; one with no limits without container policies.</returns>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
+    /// <exception cref="NotSupportedException">
+    /// This default implementation, kept so implementations written for 3.1 still compile, doesn't report the policy.
+    /// </exception>
+    public Task<ResourceContainerPolicy> GetPolicyAsync(CancellationToken cancellationToken = default)
+        => throw new NotSupportedException($"{GetType().Name} doesn't report its policy.");
 }

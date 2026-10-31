@@ -137,7 +137,11 @@ internal sealed class ContainerPolicies(ContainerPolicySettings settings, IResou
     private static string NoRoomMessage(string containerName, ResourceContainerUsage usage, ResourceSize maxContainerSize) =>
         $"The container {containerName} has no room for the content: it holds {usage.StoredSize} of its {maxContainerSize}.";
 
-    private async ValueTask<ResourceContainerPolicy> GetAsync(string containerName, ClientTelemetry telemetry,
+    /// <summary>
+    /// The container's effective policy: the defaults, with the provider's policy for the container in place of each
+    /// limit it sets.
+    /// </summary>
+    public async ValueTask<ResourceContainerPolicy> GetAsync(string containerName, ClientTelemetry telemetry,
         CancellationToken cancellationToken)
     {
         if (settings.Cache.TryGetValue(containerName, out ResourceContainerPolicy? cached)) return cached!;

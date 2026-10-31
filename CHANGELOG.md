@@ -36,7 +36,9 @@
   create-only or conditional, as an upload can. A copy or restore records
   its source in the new `ResourceInfo.CopiedFrom`. Providers get `CopyResourceAsync`, with a default implementation,
   and `MoveResourceAsync`, which throws `NotSupportedException` until implemented. The `AddCopiedFrom` migration adds
-  three nullable columns. `RestoreVersionAsync` restores through `CopyResourceAsync`, so with SQL Server a restore
+  three nullable columns. `RenameResourceAsync` renames within the container, and `IResourceContainerClient.Name`
+  gives the container's name; both have default implementations. `RestoreVersionAsync` restores through
+  `CopyResourceAsync`, so with SQL Server a restore
   runs within the database and is retried after a transient failure (for a version stored before 3.0, once the hash
   backfill has recorded its hash). See [Copying and moving](docs/copying-and-moving.md).
 - **Container policies.** `UseContainerPolicies` sets limits for every container, and `UsePolicyProvider` gives any
@@ -45,8 +47,13 @@
   `ResourceSize` values, such as `ResourceSize.Megabytes(100)`, or `"100 MB"` in configuration. A refused write throws
   `ResourcePolicyViolationException` and stores nothing, and `AddResourcefullExceptionHandler` turns it into 413, 409, 403
   or 415. When the policy provider fails, a container's last known policy stands in for up to 5 minutes
-  (`keepLastKnownFor`). `GetUsageAsync` reports what a container holds. Providers get `GetContainerUsageAsync` with a
+  (`keepLastKnownFor`). `GetUsageAsync` reports what a container holds, and `GetPolicyAsync` the limits its writes
+  are checked against. Providers get `GetContainerUsageAsync` with a
   default implementation, so providers written for 3.1 keep working. See [Container policies](docs/container-policies.md).
+- **Settings from configuration.** `UseConfiguration(section)` reads versioning, expiry, telemetry and container
+  policy settings from configuration, such as appsettings.json. Each section present turns its feature on, and a key
+  that isn't a setting stops the application at startup. See
+  [Settings from configuration](docs/getting-started.md#settings-from-configuration).
 - **Range downloads.** A `DownloadStreamingAsync` overload takes a `ResourceRange` and reads only those bytes from
   storage, for resuming downloads and seeking in media; every download's result now has `TotalLength`, and `Range`
   for a range. `Results.Resource(container, name)` in `Resourcefull.AspNetCore` looks the resource up itself, the
