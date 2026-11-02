@@ -10,7 +10,8 @@ namespace Resourcefull;
 
 internal class ResourceServiceClient(IResourceRepository resourceRepository, IOptions<ResourcefullOptions> options, IUriProvider? uriProvider = null,
     ILogger<ResourceContainerClient>? containerLogger = null, ContainerPolicies? policies = null,
-    IResourceCleanupHandler? cleanupHandler = null, TimeProvider? timeProvider = null, ExpirySettings? expiry = null) : IResourceServiceClient
+    IResourceCleanupHandler? cleanupHandler = null, TimeProvider? timeProvider = null, ExpirySettings? expiry = null,
+    IResourceUploadInspector? uploadInspector = null) : IResourceServiceClient
 {
     private readonly ResourcefullOptions _options = options.Value;
     private readonly ClientTelemetry _telemetry = new(Telemetry.ProviderName(resourceRepository), options.Value);
@@ -72,11 +73,12 @@ internal class ResourceServiceClient(IResourceRepository resourceRepository, IOp
 
         await resourceRepository.AddResourceContainerAsync(containerInfo, cancellationToken);
         return new ResourceContainerClient(resourceRepository, uriProvider, _options, containerInfo, containerLogger, policies, cleanupHandler,
-            timeProvider, expiry);
+            timeProvider, expiry, uploadInspector);
     }
 
     private ResourceContainerClient NewContainerClient(ResourceContainerInfo containerInfo)
-        => new(resourceRepository, uriProvider, _options, WithUri(containerInfo), containerLogger, policies, cleanupHandler, timeProvider, expiry);
+        => new(resourceRepository, uriProvider, _options, WithUri(containerInfo), containerLogger, policies, cleanupHandler, timeProvider, expiry,
+            uploadInspector);
 
     // URIs come from the URI provider whenever a container is returned, not from storage, so a changed provider or base
     // URL applies to containers created before the change as well.
@@ -363,7 +365,7 @@ internal class ResourceServiceClient(IResourceRepository resourceRepository, IOp
                 bool marked = await TrySetMetadataAsync(resourceContainerName,
                     new Dictionary<string, string>(metadata) { [ImportMarkerKey] = ImportMarkerValue }, cancellationToken);
                 imported = await ContainerArchive.ImportAsync(zip, manifest, resourceContainerName, resourceRepository, policies,
-                    _telemetry, uriProvider, cancellationToken);
+                    _telemetry, uriProvider, uploadInspector, cancellationToken);
                 if (marked) await resourceRepository.SetResourceContainerMetadataAsync(resourceContainerName, metadata, cancellationToken);
             }
             catch (Exception failure)

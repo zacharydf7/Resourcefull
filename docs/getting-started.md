@@ -78,8 +78,8 @@ builder.Services.AddResourcefull(options => options
   leave a feature off, leave its section out.
 - **Code wins** when it comes after: `.UseConfiguration(section).UseVersioning(maxVersions: 3)` keeps 3 versions
   whatever the section says.
-- **The storage provider, the policy provider and the cleanup handler** are set in code, since each is a type of
-  yours rather than a setting.
+- **The storage provider, the policy provider, the cleanup handler and the upload inspector** are set in code, since
+  each is a type of yours rather than a setting.
 
 ## Store and read a file
 

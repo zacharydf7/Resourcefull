@@ -23,6 +23,8 @@ Resourcefull reports an expected absence with a return value and everything else
 | A feature the storage provider doesn't support, such as a provider written for an earlier release | `NotSupportedException` |
 | An upload whose declared length differs from its content | `ResourceContentLengthMismatchException` (nothing is stored) |
 | A write that breaks its container's [policy](container-policies.md) <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span> | `ResourcePolicyViolationException` (nothing changes) |
+| An upload or imported version your [upload inspector](upload-inspection.md) refuses <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span> | `ResourceContentRefusedException`, with the inspector's reason (nothing is stored) |
+| An upload inspector that throws <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span> | the inspector's exception (nothing is stored) |
 | Restoring a version while versioning is off | `InvalidOperationException` |
 | `UseVersioning` with fewer than one version | `ArgumentOutOfRangeException` |
 | Configuring no provider, or two | `InvalidOperationException` from `AddResourcefull` |
@@ -55,6 +57,7 @@ All of them derive from `ResourcefullException`, so one `catch` handles any of t
 | `ResourcePreconditionFailedException` | The name's current version didn't meet the upload's or delete's conditions. | 412 Precondition Failed |
 | `ResourcePolicyViolationException` <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span> | The write broke its container's policy; `Rule` says which rule, and `Limit` its limit. | 413 for the size limits, 409 for `MaxResourceCount`, 403 for `ReadOnly`, 415 for `AllowedContentTypes` |
 | `ResourceRangeNotSatisfiableException` <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span> | The download range starts past the end of the content; `ContentLength` says how long it is. | 416 Range Not Satisfiable |
+| `ResourceContentRefusedException` <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span> | The [upload inspector](upload-inspection.md) refused the content; `Reason` says why. | 422 Unprocessable Content |
 
 `ResourceNameException` derives from `ArgumentException` rather than `ResourcefullException`, so existing
 `catch (ArgumentException)` code still catches it; it maps to 400 Bad Request. Its `Name` <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span> is the name that

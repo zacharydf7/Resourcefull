@@ -2,6 +2,7 @@ using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.DependencyInjection;
 using Resourcefull.SqlServer;
 using Resourcefull.SqlServer.Utilities;
+using Resourcefull.Tests.Contract;
 
 namespace Resourcefull.Tests.Integration;
 
@@ -100,6 +101,58 @@ public class StagedUploadIntegrationTests(SqlServerFixture fixture)
     }
 
     [SkippableFact]
+    public async Task UploadAsync_ShouldLockNothing_WhenTheInspectorHasReadEverythingButNotYetAnswered()
+    {
+        fixture.SkipIfUnavailable();
+
+        // Arrange: an inspector that reads the whole upload, then waits to answer.
+        var read = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var answer = new TaskCompletionSource<ResourceInspectionResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using ServiceProvider provider = BuildInspectedServiceProvider(async (upload, cancellationToken) =>
+        {
+            await upload.Content.CopyToAsync(Stream.Null, cancellationToken);
+            read.SetResult();
+            return await answer.Task;
+        });
+        IResourceContainerClient container = await NewContainerAsync(provider);
+        Task<ResourceInfo> upload = container.UploadAsync("video.mp4", new MemoryStream(Payload));
+        // Bounded, and a failed upload throws its own exception rather than leaving this to wait.
+        await await Task.WhenAny(read.Task, upload).WaitAsync(TimeSpan.FromSeconds(30));
+
+        // Act
+        int chunksSeenWithLocks = await CountChunksWithLocksAsync();
+        ResourceInfo? whileDeciding = await container.GetResourceInfoAsync("video.mp4");
+        answer.SetResult(ResourceInspectionResult.Accepted);
+        ResourceInfo stored = await upload;
+
+        // Assert
+        Assert.True(chunksSeenWithLocks >= ResourceSqlRepository.ChunksPerUploadBatch);
+        Assert.Null(whileDeciding);
+        Assert.Equal(Payload.Length, stored.ContentLength);
+    }
+
+    [SkippableFact]
+    public async Task UploadAsync_ShouldLeaveNothingBehind_WhenTheInspectorRefusesTheContentAtItsEnd()
+    {
+        fixture.SkipIfUnavailable();
+
+        // Arrange
+        using ServiceProvider provider = BuildInspectedServiceProvider(async (upload, cancellationToken) =>
+        {
+            await upload.Content.CopyToAsync(Stream.Null, cancellationToken);
+            return ResourceInspectionResult.Refused("It looks like malware.");
+        });
+        IResourceContainerClient container = await NewContainerAsync(provider);
+
+        // Act
+        Task act() => container.UploadAsync("video.mp4", new MemoryStream(Payload));
+
+        // Assert
+        await Assert.ThrowsAsync<ResourceContentRefusedException>(act);
+        Assert.Equal(0, await StoredRowsAsync(container.Name));
+    }
+
+    [SkippableFact]
     public async Task UploadAsync_ShouldLeaveNothingBehind_WhenCanceledPartway()
     {
         fixture.SkipIfUnavailable();
@@ -122,6 +175,10 @@ public class StagedUploadIntegrationTests(SqlServerFixture fixture)
         Assert.True(whilePaused > ResourceSqlRepository.ChunksPerUploadBatch);
         Assert.Equal(0, await StoredRowsAsync(container.Name));
     }
+
+    private ServiceProvider BuildInspectedServiceProvider(
+        Func<ResourceUploadInspection, CancellationToken, Task<ResourceInspectionResult>> answer) =>
+        fixture.BuildServiceProvider(o => DelegatingUploadInspector.Register(o, answer));
 
     private static async Task<IResourceContainerClient> NewContainerAsync(ServiceProvider provider) =>
         await provider.GetRequiredService<IResourceServiceClient>().CreateResourceContainerAsync($"c-{Guid.NewGuid():N}");

@@ -14,6 +14,8 @@
     href: names.md
   - name: Uploading files
     href: uploading.md
+  - name: Inspecting uploads
+    href: upload-inspection.md
   - name: Downloading files
     href: downloading.md
   - name: Listing resources

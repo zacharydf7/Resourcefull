@@ -6,7 +6,8 @@ namespace Resourcefull;
 
 internal partial class ResourceContainerClient(IResourceRepository resourceRepository, IUriProvider? uriProvider,
     ResourcefullOptions options, ResourceContainerInfo containerInfo, ILogger? logger, ContainerPolicies? policies = null,
-    IResourceCleanupHandler? cleanupHandler = null, TimeProvider? timeProvider = null, ExpirySettings? expiry = null)
+    IResourceCleanupHandler? cleanupHandler = null, TimeProvider? timeProvider = null, ExpirySettings? expiry = null,
+    IResourceUploadInspector? uploadInspector = null)
     : IResourceContainerClient
 {
     private readonly ILogger _logger = logger ?? NullLogger.Instance;
@@ -56,9 +57,14 @@ internal partial class ResourceContainerClient(IResourceRepository resourceRepos
             ExpiresAt = uploadOptions.ExpiresAt
         };
 
+        await using InspectedContentStream? inspected = uploadInspector is null
+            ? null
+            : InspectedContentStream.Start(uploadInspector, resourceInfo, resourceInfo.ContentLength, content, _telemetry, "upload",
+                cancellationToken);
         try
         {
-            return await SaveNewResourceVersionAsync("upload", content, resourceInfo, createOnly, conditions, cancellationToken);
+            return await SaveNewResourceVersionAsync("upload", inspected ?? content, resourceInfo, createOnly, conditions,
+                cancellationToken);
         }
         catch (ResourceContentLengthMismatchException exception)
         {
@@ -148,9 +154,27 @@ internal partial class ResourceContainerClient(IResourceRepository resourceRepos
             ? await resourceRepository.AddResourceAsync(ContainerName, resourceInfo, stream, createOnly, cancellationToken)
             : await resourceRepository.AddResourceAsync(ContainerName, resourceInfo, stream,
                 new ResourceWriteCondition { CreateOnly = createOnly, Conditions = conditions }, cancellationToken);
+        if (stream is InspectedContentStream inspected) await DeleteIfRefusedAsync(inspected, resourceInfo, cancellationToken);
 
         _telemetry.RecordUploaded(operation, written.ContentLength);
         return await CompleteNewVersionAsync(resourceInfo, written);
+    }
+
+    /// <summary>
+    /// If the upload inspector refuses the content or fails, deletes the version the provider made current before the
+    /// inspector answered, as a provider that doesn't read the content to its end does.
+    /// </summary>
+    private async Task DeleteIfRefusedAsync(InspectedContentStream inspected, ResourceInfo version, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await inspected.ThrowIfStoredUnansweredAsync(cancellationToken);
+        }
+        catch
+        {
+            await resourceRepository.DeleteResourceAsync(ContainerName, version.Name, version.VersionId, CancellationToken.None);
+            throw;
+        }
     }
 
     /// <summary>

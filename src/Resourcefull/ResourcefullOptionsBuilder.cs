@@ -195,6 +195,20 @@ public class ResourcefullOptionsBuilder
     }
 
     /// <summary>
+    /// Uses <typeparamref name="TInspector"/> to look at the content of every upload and import before it's stored,
+    /// and refuse it if it must, replacing any upload inspector set before. It's registered as a scoped service, so it
+    /// can depend on other services, such as the application's malware scanner.
+    /// <para>Coming in 3.2.</para>
+    /// </summary>
+    /// <typeparam name="TInspector">The <see cref="IResourceUploadInspector"/> implementation.</typeparam>
+    public ResourcefullOptionsBuilder UseUploadInspector<TInspector>() where TInspector : class, IResourceUploadInspector
+    {
+        Services.RemoveAll<IResourceUploadInspector>();
+        Services.AddScoped<IResourceUploadInspector, TInspector>();
+        return this;
+    }
+
+    /// <summary>
     /// Applies the settings in <paramref name="section"/>, such as a section of appsettings.json, as the matching
     /// methods would: each of its sections that's present turns that feature on, and a value left out keeps its
     /// default. Calls made after this one override it.
@@ -208,8 +222,8 @@ public class ResourcefullOptionsBuilder
     /// <see cref="ResourceSize.Parse(string, IFormatProvider?)"/> reads them, such as <c>100 MB</c>.
     /// </item>
     /// </list>
-    /// The storage provider, the policy provider and the cleanup handler are types rather than settings, so they're
-    /// set in code.
+    /// The storage provider, the policy provider, the cleanup handler and the upload inspector are types rather than
+    /// settings, so they're set in code.
     /// <para>Coming in 3.2.</para>
     /// </summary>
     /// <param name="section">The settings, such as <c>builder.Configuration.GetSection("Resourcefull")</c>.</param>

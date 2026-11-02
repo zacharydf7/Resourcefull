@@ -164,6 +164,37 @@ public sealed class TelemetryTests : IDisposable
         Assert.DoesNotContain(_measurements, m => m.Instrument == "resourcefull.client.uploaded");
     }
 
+    [Theory]
+    [InlineData("accepted")]
+    [InlineData("refused")]
+    [InlineData("failed")]
+    public async Task UploadAsync_ShouldRecordTheInspectionUnderTheUpload_WhenTheInspectorAnswers(string outcome)
+    {
+        // Arrange
+        using ServiceProvider provider = UploadInspectionTests.InspectedServices((_, _) => outcome switch
+        {
+            "accepted" => Task.FromResult(ResourceInspectionResult.Accepted),
+            "refused" => Task.FromResult(ResourceInspectionResult.Refused("No.")),
+            _ => throw new InvalidOperationException("The scanner is unavailable.")
+        });
+        IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>().CreateResourceContainerAsync("c");
+        using Activity root = TestSource.StartActivity("test")!;
+
+        // Act
+        await Record.ExceptionAsync(() => container.UploadAsync("r", BinaryData.FromString("x")));
+
+        // Assert
+        Activity upload = Assert.Single(SpansIn(root), s => s.OperationName == "resourcefull upload");
+        Activity inspect = Assert.Single(SpansIn(root), s => s.OperationName == "resourcefull inspect");
+        Assert.Equal(upload.SpanId, inspect.ParentSpanId);
+        Assert.Equal(outcome, inspect.GetTagItem("resourcefull.inspection_outcome"));
+        Assert.Equal(outcome == "failed" ? ActivityStatusCode.Error : ActivityStatusCode.Unset, inspect.Status);
+        string? errorType = outcome == "failed" ? typeof(InvalidOperationException).FullName : null;
+        Assert.Contains(_measurements, m => m.Instrument == "resourcefull.client.inspection.duration"
+            && Equals(m.Tags["resourcefull.inspection_outcome"], outcome) && Equals(m.Tags["resourcefull.operation"], "upload")
+            && Equals(m.Tags["resourcefull.provider"], "inmemory") && Equals(m.Tags.GetValueOrDefault("error.type"), errorType));
+    }
+
     [Fact]
     public async Task DownloadStreamingAsync_ShouldCountTheBytesAsTheyAreRead_WhenTheStreamIsRead()
     {

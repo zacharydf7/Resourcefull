@@ -30,6 +30,7 @@ memory for tests, or in a storage provider of your own.
 Coming in 3.2, and documented on the site already:
 
 - **Container policies:** size limits, quotas, allowed file types and read-only containers, per container.
+- **Upload inspection:** scan uploads for malware, or check their type, before they're stored.
 - **Copy, move and rename,** within a container or between containers, keeping where each copy came from.
 - **Expiring files:** uploads that delete themselves, with a hook to audit every deletion.
 - **Signed links:** let anyone download one file, without signing in, until a time you choose.

@@ -43,7 +43,9 @@ public interface IResourceRepository
     /// <param name="resourceInfo">The version to store; <see cref="ResourceInfo.ContentLength"/>, when set, is the length the caller declared.</param>
     /// <param name="stream">
     /// The content, read from its current position to its end. A provider that retries may seek back to that position
-    /// when the stream can seek, and must not otherwise move it.
+    /// when the stream can seek, and must not otherwise move it. The provider must read until a read returns nothing
+    /// before it makes the version current, and store nothing if that read throws: that read waits for an
+    /// <see cref="IResourceUploadInspector"/>'s answer, and throws if it refuses the content.
     /// </param>
     /// <param name="createOnly">Store only if no version of the name exists.</param>
     /// <param name="cancellationToken">Cancels the write; a canceled write stores nothing.</param>
@@ -356,7 +358,7 @@ public interface IResourceRepository
     /// </summary>
     /// <param name="resourceContainerName">The container to store it in.</param>
     /// <param name="version">The version as it was.</param>
-    /// <param name="content">Its content.</param>
+    /// <param name="content">Its content, read to its end before the version is stored, as for an upload.</param>
     /// <param name="cancellationToken">Cancels the write; a canceled write stores nothing.</param>
     /// <returns>What was stored.</returns>
     /// <exception cref="ResourceConflictException">The name already has a version with that ID.</exception>

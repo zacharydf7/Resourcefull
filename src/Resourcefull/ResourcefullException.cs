@@ -153,6 +153,25 @@ public sealed class ResourceContentLengthMismatchException : ResourcefullExcepti
 }
 
 /// <summary>
+/// Thrown when the <see cref="IResourceUploadInspector"/> refuses an upload's content. Nothing is stored. Maps naturally
+/// to an HTTP 422.
+/// <para>Coming in 3.2.</para>
+/// </summary>
+public sealed class ResourceContentRefusedException : ResourcefullException
+{
+    /// <summary>Creates the exception with a message and the inspector's reason.</summary>
+    /// <param name="message">The message that describes the error.</param>
+    /// <param name="reason">Why the inspector refused the content.</param>
+    public ResourceContentRefusedException(string message, string reason) : base(message)
+    {
+        Reason = reason;
+    }
+
+    /// <summary>Why the inspector refused the content, as it gave it.</summary>
+    public string Reason { get; }
+}
+
+/// <summary>
 /// Thrown when an operation targets a resource container that does not exist — for example
 /// uploading a resource into a container that was never created or has since been deleted.
 /// Maps naturally to an HTTP 404.

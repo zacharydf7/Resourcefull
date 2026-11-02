@@ -69,6 +69,10 @@ internal static class Telemetry
         "resourcefull.client.policy.last_known_uses", unit: "{use}",
         description: "Times a container's last known policy was used because the policy provider failed.");
 
+    public static readonly Histogram<double> InspectionDuration = Meter.CreateHistogram<double>(
+        "resourcefull.client.inspection.duration", unit: "s",
+        description: "How long the upload inspector took to answer, from the start of the upload or imported version.");
+
     public static readonly Counter<long> CleanupHandlerFailures = Meter.CreateCounter<long>(
         "resourcefull.client.cleanup_handler.failures", unit: "{failure}",
         description: "Calls to the cleanup handler that threw; the version they reported stays.");
@@ -222,6 +226,22 @@ internal sealed class ClientTelemetry(string provider, ResourcefullOptions optio
                 cleanup.Reason == ResourceCleanupReason.Expired ? "expired" : "pruned");
             throw;
         }
+    }
+
+    /// <summary>
+    /// Records the upload inspector's <paramref name="outcome"/> (<c>accepted</c>, <c>refused</c>, <c>failed</c> or
+    /// <c>canceled</c>) on its span, and how long it took.
+    /// </summary>
+    public void RecordInspection(Activity? activity, string operation, string outcome, Exception? failure, long start)
+    {
+        activity?.SetTag("resourcefull.inspection_outcome", outcome);
+        if (!Telemetry.InspectionDuration.Enabled) return;
+        var tags = new TagList
+        {
+            { "resourcefull.operation", operation }, { "resourcefull.provider", Provider }, { "resourcefull.inspection_outcome", outcome }
+        };
+        if (failure is not null) tags.Add("error.type", failure.GetType().FullName);
+        Telemetry.InspectionDuration.Record(Stopwatch.GetElapsedTime(start).TotalSeconds, tags);
     }
 
     public void RecordUploaded(string operation, long bytes)

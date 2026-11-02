@@ -50,6 +50,13 @@
   (`keepLastKnownFor`). `GetUsageAsync` reports what a container holds, and `GetPolicyAsync` the limits its writes
   are checked against. Providers get `GetContainerUsageAsync` with a
   default implementation, so providers written for 3.1 keep working. See [Container policies](docs/container-policies.md).
+- **Inspecting uploads.** An `IResourceUploadInspector`, registered with `UseUploadInspector`, reads each upload's
+  and imported version's content while it's stored, so it can scan it for malware or check that it's the type it
+  claims, and refuse it. No version becomes current until it answers; a refusal fails the upload with
+  `ResourceContentRefusedException`, which `AddResourcefullExceptionHandler` turns into 422. The content is read
+  once and never held whole, and with SQL Server nothing is locked while the inspector decides. Providers must read
+  the content to its end before making a version current, which both built-in providers do. See
+  [Inspecting uploads](docs/upload-inspection.md), with examples for ClamAV and Windows AMSI.
 - **Exceptions say what they're about.** `ResourcefullException` has `ContainerName` and `ResourceName`, set by
   Resourcefull's providers and filled in by the clients for a provider that doesn't. A container conflict has no
   `ResourceName`, so it can be told from a resource conflict without reading the message. `ResourceNameException`

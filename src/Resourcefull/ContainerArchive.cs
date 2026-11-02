@@ -185,7 +185,7 @@ internal static class ContainerArchive
     /// <summary>Stores every version an export describes in <paramref name="containerName"/>, which must exist and be empty.</summary>
     public static async Task<ResourceImportResult> ImportAsync(ZipArchive zip, Manifest manifest, string containerName,
         IResourceRepository repository, ContainerPolicies? policies, ClientTelemetry telemetry, IUriProvider? uriProvider,
-        CancellationToken cancellationToken)
+        IResourceUploadInspector? inspector, CancellationToken cancellationToken)
     {
         // The container is new, so its usage is what the import has stored so far: counted here, so a policy's limits
         // don't add up the container again before each version.
@@ -214,7 +214,8 @@ internal static class ContainerArchive
                     Uri = uriProvider?.GetAbsoluteUri(new ResourcefullContext(containerName, resource.Name, version.VersionId))
                 };
 
-                // Able to go back to its start, so a provider that retries a transient failure can read it again.
+                // Able to go back to its start, so a provider that retries a transient failure can read it again, unless
+                // an upload inspector reads it too: the content is then read once.
                 await using Stream content = new RewindableEntryStream(entry, await entry.OpenAsync(cancellationToken),
                     version.ContentLength);
                 var usage = new ResourceContainerUsage(contentSize, resourceCount, versionCount);
@@ -222,7 +223,14 @@ internal static class ContainerArchive
                     version.ContentType, version.ContentLength, telemetry, cancellationToken, usage) is { } limit
                     ? new LimitedContentStream(content, limit)
                     : content;
-                WrittenContent stored = await repository.ImportVersionAsync(containerName, info, checkedContent, cancellationToken);
+                await using InspectedContentStream? inspected = inspector is null
+                    ? null
+                    : InspectedContentStream.Start(inspector, info, version.ContentLength, checkedContent, telemetry, "import",
+                        cancellationToken);
+                WrittenContent stored = await repository.ImportVersionAsync(containerName, info, inspected ?? checkedContent,
+                    cancellationToken);
+                // A refusal fails the import, which deletes the container, so a version stored before the answer goes too.
+                if (inspected is not null) await inspected.ThrowIfStoredUnansweredAsync(cancellationToken);
                 if (stored.ContentHash != version.ContentHash)
                 {
                     throw new InvalidDataException(

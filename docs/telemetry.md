@@ -25,6 +25,7 @@ database call as a child of the operation's span. With .NET Aspire, add them to 
 | `resourcefull.client.operation.duration` | histogram | s | each operation, from call to result |
 | `resourcefull.client.uploaded` | counter | By | content bytes stored by uploads, restores and imports |
 | `resourcefull.client.downloaded` | counter | By | content bytes read from download streams, counted as they're read |
+| `resourcefull.client.inspection.duration` <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span> | histogram | s | how long your [upload inspector](upload-inspection.md) took to answer, from the start of the upload or imported version, with `resourcefull.inspection_outcome`: `accepted`, `refused`, `failed` or `canceled` |
 
 Every measurement in this table carries these tags:
 
@@ -55,6 +56,8 @@ What to alert on:
   sweep; a steady count means storage is growing, or expired files are staying, until you fix the cause.
 - **A jump in retries.** A few are normal on a busy database. Many at once mean the database is struggling, and each
   retry makes the operation slower; the error numbers say whether it's deadlocks, timeouts or connections.
+- **Failed inspections,** with `resourcefull.inspection_outcome` `failed`. Your upload inspector is throwing, such as
+  when the malware scanner is down, and every upload it inspects fails.
 - **Any use of a last known policy.** Your policy provider is failing, and writes start failing too once
   `keepLastKnownFor` runs out.
 
@@ -79,7 +82,7 @@ metrics. It also has:
 
 | Operation | Methods | Extra span tags |
 |---|---|---|
-| `upload` | `UploadAsync`, both overloads | `resourcefull.conditional`; a `resourcefull prune` child span for pruning older versions; with SQL Server <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span>, `resourcefull.batches`: the batches of about a MiB its content was stored in |
+| `upload` | `UploadAsync`, both overloads | `resourcefull.conditional`; a `resourcefull prune` child span for pruning older versions; with an [upload inspector](upload-inspection.md) <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span>, a `resourcefull inspect` child span, with `resourcefull.inspection_outcome`; with SQL Server <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span>, `resourcefull.batches`: the batches of about a MiB its content was stored in |
 | `restore` | `RestoreVersionAsync` | a `resourcefull prune` child span; with SQL Server <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span>, `resourcefull.batches` when it stores the version's content again, as for a version stored before 3.0 without a hash |
 | `download` | `DownloadStreamingAsync`, `DownloadContentAsync` | for a range, `resourcefull.range`, as HTTP writes it: `100-199`, or `100-` to the end |
 | `get_info` | `GetResourceInfoAsync` | |
@@ -90,7 +93,7 @@ metrics. It also has:
 | `move` | `MoveResourceAsync`, `RenameResourceAsync` | `resourcefull.destination_container` |
 | `set_expiry` | `SetExpiryAsync` | |
 | `export` | `ExportContainerAsync` | `resourcefull.resources`, `resourcefull.versions`: what it wrote; `resourcefull.pages`: the pages of 1,000 names it read |
-| `import` | `ImportContainerAsync` | `resourcefull.resources`, `resourcefull.versions`: what it stored; with SQL Server <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span>, `resourcefull.batches`: the batches of about a MiB every version's content was stored in |
+| `import` | `ImportContainerAsync` | `resourcefull.resources`, `resourcefull.versions`: what it stored; with an [upload inspector](upload-inspection.md) <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span>, a `resourcefull inspect` child span for each version; with SQL Server <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span>, `resourcefull.batches`: the batches of about a MiB every version's content was stored in |
 | `prune_container` | `PruneContainerAsync` | `resourcefull.pruned`: how many versions were past the limit |
 | `expire` | `DeleteExpiredAsync`, and each sweep of [`UseExpiry`](expiry.md), when it finds expired versions, read-only containers' included | `resourcefull.expired`: how many versions it deleted; `resourcefull.batches`: how many batches of up to 100 it deleted them in; `resourcefull.batch_fallbacks`, when a batch failed and its versions were deleted one at a time instead: how many. Each failed batch's exception is recorded too, as on a failed operation, but the span isn't marked failed: the sweep carried on |
 | `list` | `GetResourcesAsync` | |

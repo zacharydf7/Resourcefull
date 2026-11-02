@@ -39,6 +39,10 @@ The XML documentation on each member states its contract in full. In short, a pr
 - **Measure what it stores.** Read the content through a `HashingStream`, store the length it measured, and return
   `HashingStream.Complete(declaredLength, lastModified)`, which also rejects a wrong declared length. Call it as the
   write makes the version current but before it commits, so a wrong length stores nothing.
+- **Read the content to its end before the version becomes current,** until a read returns nothing, and store
+  nothing if that read throws. That last read waits for an [upload inspector](../upload-inspection.md) <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span> to
+  answer, and throws if it refuses the content, so the version mustn't be current yet. An inspected upload's stream
+  can't seek, so a provider can't retry it by reading the content again.
 - **Stamp the time a version becomes current.** Pass `Complete` the time the write makes the version current, not the
   time before its content was read, and store it as the version's `LastModified`. Ignore the `LastModified` the caller
   passes. Take an optional `TimeProvider` in the constructor, so an application or a test can set the clock.
