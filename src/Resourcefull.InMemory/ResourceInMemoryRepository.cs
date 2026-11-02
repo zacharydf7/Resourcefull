@@ -201,6 +201,26 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : I
             return true;
         }, cancellationToken);
 
+    public Task<bool> SetResourceMetadataAsync(ResourceLocation resource, string? versionId, IDictionary<string, string> metadata,
+        CancellationToken cancellationToken = default) =>
+        UnderLockAsync(() =>
+        {
+            if (Resolve(VersionsOf(resource.ContainerName, resource.ResourceName), versionId) is not { } version)
+                return false;
+            version.ResourceInfo.Metadata = new Dictionary<string, string>(metadata);
+            return true;
+        }, cancellationToken);
+
+    public Task<bool> SetContentTypeAsync(ResourceLocation resource, string? versionId, string? contentType,
+        CancellationToken cancellationToken = default) =>
+        UnderLockAsync(() =>
+        {
+            if (Resolve(VersionsOf(resource.ContainerName, resource.ResourceName), versionId) is not { } version)
+                return false;
+            version.ResourceInfo.ContentType = contentType;
+            return true;
+        }, cancellationToken);
+
     public Task<List<ResourceInfo>> GetAllResourceInfoAsync(string resourceContainerName, CancellationToken cancellationToken = default) =>
         UnderLockAsync<List<ResourceInfo>>(() => _containers.GetValueOrDefault(resourceContainerName) is { } container
             ? [.. container.Resources.Values.Select(versions => ToResourceInfo(versions.MaxBy(r => r.Sequence)!, isLatest: true))]

@@ -666,6 +666,27 @@ internal partial class ResourceContainerClient(IResourceRepository resourceRepos
             return await resourceRepository.SetExpiryAsync(new ResourceLocation(ContainerName, resourceName), versionId, expiresAt, cancellationToken);
         });
 
+    public Task<bool> SetResourceMetadataAsync(string resourceName, string? versionId, IDictionary<string, string> metadata,
+        CancellationToken cancellationToken = default)
+        => _telemetry.RunAsync("set_metadata", ContainerName, resourceName, async () =>
+        {
+            ResourceNames.ThrowIfInvalidResourceName(resourceName);
+            ArgumentNullException.ThrowIfNull(metadata);
+            if (policies is not null) await policies.ThrowIfReadOnlyAsync(ContainerName, _telemetry, cancellationToken);
+            return await resourceRepository.SetResourceMetadataAsync(new ResourceLocation(ContainerName, resourceName), versionId,
+                metadata, cancellationToken);
+        });
+
+    public Task<bool> SetContentTypeAsync(string resourceName, string? versionId, string? contentType,
+        CancellationToken cancellationToken = default)
+        => _telemetry.RunAsync("set_content_type", ContainerName, resourceName, async () =>
+        {
+            ResourceNames.ThrowIfInvalidResourceName(resourceName);
+            if (policies is not null) await policies.CheckContentTypeAsync(ContainerName, contentType, _telemetry, cancellationToken);
+            return await resourceRepository.SetContentTypeAsync(new ResourceLocation(ContainerName, resourceName), versionId,
+                contentType, cancellationToken);
+        });
+
     public Task<ResourceContainerUsage> GetUsageAsync(CancellationToken cancellationToken = default)
         => _telemetry.RunAsync("get_usage", ContainerName, null, () => resourceRepository.GetContainerUsageAsync(ContainerName, cancellationToken));
 

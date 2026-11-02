@@ -2,7 +2,7 @@
 
 Every resource lives in a **container**: a named group, such as `invoices` or `user-42`. Two resources can share a
 name as long as they're in different containers. A container can carry metadata, a dictionary of strings you set when
-you create it.
+you create it and can replace later with `SetResourceContainerMetadataAsync` <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span>.
 
 ```csharp
 IResourceContainerClient invoices = await resources.CreateResourceContainerAsync("invoices",
@@ -17,6 +17,7 @@ IResourceContainerClient invoices = await resources.CreateResourceContainerAsync
 | `GetResourceContainerInfoAsync` | returns its name, URI and metadata | returns `null` |
 | `ContainerExistsAsync` | `true` | `false` |
 | `DeleteResourceContainerIfExistsAsync` | deletes it and every resource in it, returns `true` | returns `false` |
+| `SetResourceContainerMetadataAsync` <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span> | replaces its metadata, returns `true` | returns `false` |
 
 Reads from a missing container return `null` or an empty list. An upload into one throws
 `ResourceContainerNotFoundException`, even when the container was deleted a moment before the upload ran.
@@ -26,4 +27,6 @@ fails partway, the versions it reached are gone, every other version is still wh
 a current version. The container still exists, so call the delete again to finish.
 
 Metadata dictionaries are copied in both directions: changing one you passed in or got back doesn't change what's
-stored.
+stored. `SetResourceContainerMetadataAsync` replaces the whole dictionary, including the `resourcefull.import` entry
+that marks an [unfinished import](backup-and-move.md), so carry it over if it's there; an import still running
+replaces the metadata again when it finishes.

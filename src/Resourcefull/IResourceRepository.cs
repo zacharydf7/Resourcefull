@@ -448,6 +448,36 @@ public interface IResourceRepository
         => throw new NotSupportedException($"{GetType().Name} doesn't support expiry.");
 
     /// <summary>
+    /// Replaces one version's <see cref="ResourceInfo.Metadata"/> with a copy of <paramref name="metadata"/>, changing
+    /// nothing else about it.
+    /// <para>Coming in 3.2.</para>
+    /// </summary>
+    /// <param name="resource">The resource.</param>
+    /// <param name="versionId">The version; <see langword="null"/> for the current one.</param>
+    /// <param name="metadata">The version's new metadata.</param>
+    /// <param name="cancellationToken">Cancels the change.</param>
+    /// <returns><see langword="true"/> if the version exists; otherwise <see langword="false"/>.</returns>
+    /// <exception cref="NotSupportedException">The provider doesn't change a version's metadata, as by default.</exception>
+    Task<bool> SetResourceMetadataAsync(ResourceLocation resource, string? versionId, IDictionary<string, string> metadata,
+        CancellationToken cancellationToken = default)
+        => throw new NotSupportedException($"{GetType().Name} doesn't change a version's metadata.");
+
+    /// <summary>
+    /// Sets one version's <see cref="ResourceInfo.ContentType"/>, or clears it with <see langword="null"/>, changing
+    /// nothing else about it.
+    /// <para>Coming in 3.2.</para>
+    /// </summary>
+    /// <param name="resource">The resource.</param>
+    /// <param name="versionId">The version; <see langword="null"/> for the current one.</param>
+    /// <param name="contentType">The version's new content type.</param>
+    /// <param name="cancellationToken">Cancels the change.</param>
+    /// <returns><see langword="true"/> if the version exists; otherwise <see langword="false"/>.</returns>
+    /// <exception cref="NotSupportedException">The provider doesn't change a version's content type, as by default.</exception>
+    Task<bool> SetContentTypeAsync(ResourceLocation resource, string? versionId, string? contentType,
+        CancellationToken cancellationToken = default)
+        => throw new NotSupportedException($"{GetType().Name} doesn't change a version's content type.");
+
+    /// <summary>
     /// Gets what a container holds: the total <see cref="ResourceInfo.ContentLength"/> of every version, and how many
     /// resources and versions there are. Container policies read it before each write they limit, so a provider should
     /// answer it without reading content. The default implementation lists every resource's versions, one name at a

@@ -46,12 +46,18 @@ public abstract partial class ResourcefullContractTests
             await Record.ExceptionAsync(() => frozen.UploadAsync("other.txt", BinaryData.FromString("x"))),
             await Record.ExceptionAsync(() => frozen.RestoreVersionAsync("notes.txt", stored.VersionId)),
             await Record.ExceptionAsync(() => frozen.DeleteResourceIfExistsAsync("notes.txt")),
+            await Record.ExceptionAsync(() => frozen.SetResourceMetadataAsync("notes.txt", null, new Dictionary<string, string> { ["k"] = "v" })),
+            await Record.ExceptionAsync(() => frozen.SetContentTypeAsync("notes.txt", null, "text/plain")),
+            await Record.ExceptionAsync(() => service.SetResourceContainerMetadataAsync(name, new Dictionary<string, string> { ["k"] = "v" })),
             await Record.ExceptionAsync(() => service.DeleteResourceContainerIfExistsAsync(name))
         };
 
         // Assert
         Assert.All(refused, e => Assert.Equal(ResourcePolicyRule.ReadOnly, Assert.IsType<ResourcePolicyViolationException>(e).Rule));
-        Assert.Equal("kept", (await frozen.DownloadContentAsync("notes.txt"))!.Content.ToString());
+        ResourceContent kept = (await frozen.DownloadContentAsync("notes.txt"))!;
+        Assert.Equal(("kept", null), (kept.Content.ToString(), kept.ResourceInfo.ContentType));
+        Assert.Empty(kept.ResourceInfo.Metadata);
+        Assert.Empty((await service.GetResourceContainerInfoAsync(name))!.Metadata);
         Assert.Single(await frozen.GetResourceVersionsAsync("notes.txt"));
         Assert.False(await frozen.ExistsAsync("other.txt"));
     }

@@ -37,7 +37,9 @@ app.MapMethods("/files/{container}/{**name}", ["GET", "HEAD"], async (string con
   user's browser may keep a copy, but checks with your application before reusing it, which the `ETag` makes cheap,
   and shared caches such as CDNs and proxies don't keep it, so one user's file is never served to another. For public
   files whose URL names a version, so their content never changes, set `CacheControl` to something like
-  `public, max-age=31536000, immutable`;
+  `public, max-age=31536000, immutable`. Either way, a copy a browser already holds keeps its old type if you later
+  [change the content type](../uploading.md#changing-metadata-and-content-type) <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span>, since the ETag doesn't
+  change;
 - **`X-Content-Type-Options: nosniff`** <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span>, so
   browsers take the type as given rather than guessing from the content.
 

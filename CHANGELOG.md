@@ -57,6 +57,13 @@
   once and never held whole, and with SQL Server nothing is locked while the inspector decides. Providers must read
   the content to its end before making a version current, which both built-in providers do. See
   [Inspecting uploads](docs/upload-inspection.md), with examples for ClamAV and Windows AMSI.
+- **Changing metadata and content type.** `SetResourceMetadataAsync` and `SetContentTypeAsync` change a version's
+  metadata or content type in place, without uploading it again: it keeps its ID, content, `LastModified` and ETag,
+  and no new version is made. A new content type is checked against `AllowedContentTypes`, and a read-only container
+  refuses both. `IResourceServiceClient.SetResourceContainerMetadataAsync` replaces a container's metadata, which
+  could only be set when the container was created. Providers get `SetResourceMetadataAsync` and
+  `SetContentTypeAsync`, whose defaults throw `NotSupportedException`. See
+  [Changing metadata and content type](docs/uploading.md#changing-metadata-and-content-type).
 - **Exceptions say what they're about.** `ResourcefullException` has `ContainerName` and `ResourceName`, set by
   Resourcefull's providers and filled in by the clients for a provider that doesn't. A container conflict has no
   `ResourceName`, so it can be told from a resource conflict without reading the message. `ResourceNameException`

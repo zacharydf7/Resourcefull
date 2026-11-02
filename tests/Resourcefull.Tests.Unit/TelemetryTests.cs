@@ -292,6 +292,30 @@ public sealed class TelemetryTests : IDisposable
     }
 
     [Fact]
+    public async Task PropertyChanges_ShouldRecordTheirSpansAndAskThePolicyProvider_WhenCalled()
+    {
+        // Arrange: no caching, so each change asks the policy provider.
+        using ServiceProvider provider = new ServiceCollection().AddResourcefull(o => o.UseInMemory()
+            .UseContainerPolicies(cacheFor: TimeSpan.Zero).UsePolicyProvider<NoPolicies>()).BuildServiceProvider();
+        IResourceServiceClient service = provider.GetRequiredService<IResourceServiceClient>();
+        IResourceContainerClient container = await service.CreateResourceContainerAsync("c");
+        await container.UploadAsync("a", BinaryData.FromString("x"));
+        using Activity root = TestSource.StartActivity("test")!;
+
+        // Act
+        await container.SetResourceMetadataAsync("a", null, new Dictionary<string, string>());
+        await container.SetContentTypeAsync("a", null, "text/plain");
+        await service.SetResourceContainerMetadataAsync("c", new Dictionary<string, string>());
+
+        // Assert
+        foreach (string operation in new[] { "set_metadata", "set_content_type", "set_container_metadata" })
+        {
+            Activity span = Assert.Single(SpansIn(root), s => s.OperationName == $"resourcefull {operation}");
+            Assert.Contains(SpansIn(root), s => s.OperationName == "resourcefull get_policy" && s.ParentSpanId == span.SpanId);
+        }
+    }
+
+    [Fact]
     public async Task DeleteExpiredAsync_ShouldRecordHowManyVersionsItDeleted_WhenCalled()
     {
         // Arrange

@@ -28,6 +28,33 @@ ResourceInfo stored = await container.UploadAsync("report.pdf", stream, new Reso
   against the content, but an [upload inspector](upload-inspection.md) <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span> can, and can scan the file for
   malware before it's stored.
 
+## Changing metadata and content type
+
+<div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 3.2</span></div>
+
+A version's metadata and content type can change after it's stored, without uploading it again:
+
+```csharp
+await container.SetResourceMetadataAsync("report.pdf", versionId: null,
+    new Dictionary<string, string> { ["author"] = "finance", ["reviewed"] = "yes" });
+
+await container.SetContentTypeAsync("report.pdf", versionId: null, "application/pdf");
+```
+
+- **The version changes in place.** No new version is made, even with [versioning](versioning.md), and the version
+  keeps its ID, content, `LastModified` and ETag. Pass a version ID to change an older version, or `null` for the
+  current one. Each returns `false` when there's no such version.
+- **Metadata is replaced whole.** To add or change one entry, read the version's metadata, change it and set it. Two
+  callers doing that to the same version at once can each overwrite the other's change, and conditions can't stop
+  that, since the version's ID and content hash stay the same.
+- **Copies already downloaded keep the old type.** A browser or cache that holds the version asks whether its copy is
+  still current, and since the ETag and `LastModified` haven't changed, it's told yes. A wrong type is best fixed by
+  uploading again when files are served to browsers that cache them.
+- **A new content type is checked** against the container's [`AllowedContentTypes`](container-policies.md), as an
+  upload's is. An [upload inspector](upload-inspection.md) doesn't see the change, so if yours checks that a file is
+  the type it claims, check the new type yourself before setting it.
+- **A [read-only](container-policies.md) container refuses both.**
+
 ## Content length and hashes
 
 Every version records its length and its SHA-256 hash, both measured from the bytes as they're stored. `ContentHash`

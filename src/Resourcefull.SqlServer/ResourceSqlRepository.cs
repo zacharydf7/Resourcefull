@@ -1250,6 +1250,21 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
             await Version(dbContext.Resources, resource.ContainerName, resource.ResourceName, versionId)
                 .ExecuteUpdateAsync(s => s.SetProperty(r => r.ExpiresAt, expiresAt), ct) > 0, cancellationToken);
 
+    public Task<bool> SetResourceMetadataAsync(ResourceLocation resource, string? versionId, IDictionary<string, string> metadata,
+        CancellationToken cancellationToken = default)
+    {
+        IDictionary<string, string> copy = new Dictionary<string, string>(metadata);
+        return WriteNameAsync(resource.ContainerName, resource.ResourceName, async (dbContext, ct) =>
+            await Version(dbContext.Resources, resource.ContainerName, resource.ResourceName, versionId)
+                .ExecuteUpdateAsync(s => s.SetProperty(r => r.Metadata, copy), ct) > 0, cancellationToken);
+    }
+
+    public Task<bool> SetContentTypeAsync(ResourceLocation resource, string? versionId, string? contentType,
+        CancellationToken cancellationToken = default) =>
+        WriteNameAsync(resource.ContainerName, resource.ResourceName, async (dbContext, ct) =>
+            await Version(dbContext.Resources, resource.ContainerName, resource.ResourceName, versionId)
+                .ExecuteUpdateAsync(s => s.SetProperty(r => r.ContentType, contentType), ct) > 0, cancellationToken);
+
     public async Task AddResourceContainerAsync(ResourceContainerInfo resourceContainerInfo, CancellationToken cancellationToken = default)
     {
         bool created = false;

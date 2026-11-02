@@ -34,6 +34,15 @@ internal sealed class ContainerPolicies(ContainerPolicySettings settings, IResou
     public async Task ThrowIfReadOnlyAsync(string containerName, ClientTelemetry telemetry, CancellationToken cancellationToken)
         => ThrowIfReadOnly(containerName, await GetAsync(containerName, telemetry, cancellationToken));
 
+    /// <summary>Checks a change to a stored version's content type: the container must be writable and allow the type.</summary>
+    public async Task CheckContentTypeAsync(string containerName, string? contentType, ClientTelemetry telemetry,
+        CancellationToken cancellationToken)
+    {
+        ResourceContainerPolicy policy = await GetAsync(containerName, telemetry, cancellationToken);
+        ThrowIfReadOnly(containerName, policy);
+        ThrowIfTypeNotAllowed(containerName, policy, contentType);
+    }
+
     public async Task<bool> IsReadOnlyAsync(string containerName, ClientTelemetry telemetry, CancellationToken cancellationToken)
         => (await GetAsync(containerName, telemetry, cancellationToken)).ReadOnly == true;
 

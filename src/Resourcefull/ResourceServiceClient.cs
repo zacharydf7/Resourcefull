@@ -130,6 +130,16 @@ internal class ResourceServiceClient(IResourceRepository resourceRepository, IOp
             return await NewContainerClient(new ResourceContainerInfo { Name = resourceContainerName }).PruneAllAsync(activity, cancellationToken);
         });
 
+    public Task<bool> SetResourceContainerMetadataAsync(string resourceContainerName, IDictionary<string, string> metadata,
+        CancellationToken cancellationToken = default)
+        => _telemetry.RunAsync("set_container_metadata", resourceContainerName, null, async () =>
+        {
+            ResourceNames.ThrowIfInvalidContainerName(resourceContainerName);
+            ArgumentNullException.ThrowIfNull(metadata);
+            if (policies is not null) await policies.ThrowIfReadOnlyAsync(resourceContainerName, _telemetry, cancellationToken);
+            return await resourceRepository.SetResourceContainerMetadataAsync(resourceContainerName, metadata, cancellationToken);
+        });
+
     public async Task<int> DeleteExpiredAsync(CancellationToken cancellationToken = default)
     {
         DateTimeOffset now = (timeProvider ?? TimeProvider.System).GetUtcNow();

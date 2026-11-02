@@ -209,4 +209,27 @@ public interface IResourceServiceClient
     /// </exception>
     public Task<int> PruneContainerAsync(string resourceContainerName, CancellationToken cancellationToken = default)
         => throw new NotSupportedException($"{GetType().Name} doesn't prune containers.");
+
+    /// <summary>
+    /// Replaces a container's metadata, which otherwise is set only when the container is created. The whole dictionary
+    /// is replaced, including the <c>resourcefull.import</c> entry that marks an unfinished import; to change one entry,
+    /// read the container's metadata, change it and set it. An import running at the same time replaces the metadata
+    /// again when it finishes.
+    /// <para>Coming in 3.2.</para>
+    /// </summary>
+    /// <param name="resourceContainerName">The container.</param>
+    /// <param name="metadata">The container's new metadata, which is copied.</param>
+    /// <param name="cancellationToken">Cancels the change.</param>
+    /// <returns><see langword="true"/> if the container exists; otherwise <see langword="false"/>.</returns>
+    /// <exception cref="ResourcePolicyViolationException">The container is read-only.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="metadata"/> is null.</exception>
+    /// <exception cref="ArgumentException"><paramref name="resourceContainerName"/> breaks the name rules.</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
+    /// <exception cref="NotSupportedException">
+    /// The provider doesn't change container metadata, or this is the default implementation, kept so implementations
+    /// written for 3.1 still compile.
+    /// </exception>
+    public Task<bool> SetResourceContainerMetadataAsync(string resourceContainerName, IDictionary<string, string> metadata,
+        CancellationToken cancellationToken = default)
+        => throw new NotSupportedException($"{GetType().Name} doesn't change container metadata.");
 }

@@ -97,6 +97,22 @@ To support it:
   there's nothing to delete. Delete only what an upload last added to before `staleBefore`, and return how many uploads'
   leftovers you deleted. Its default does nothing, for a provider that leaves nothing behind.
 
+## Changing metadata and content type
+
+<div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 3.2</span></div>
+
+`SetResourceMetadataAsync` and `SetContentTypeAsync` were added in 3.2, for
+[changing a version in place](../uploading.md#changing-metadata-and-content-type). Each changes one version, or the
+current version when the version ID is `null`, and returns `false` when there's no such version. Change nothing else
+about the version: its ID, content, hash and `LastModified` stay the same, and no new version is made. Store a copy of
+the metadata you're given, so the caller can't change it afterward, and serialize the change with other writes to the
+name, as for `SetExpiryAsync`. Their defaults throw `NotSupportedException`, so the clients' methods report that the
+provider doesn't support them.
+
+The service client's `SetResourceContainerMetadataAsync` calls the provider member of the same name, described under
+[Importing versions](#importing-versions), so with a provider that doesn't implement it, the service client's method
+throws `NotSupportedException`.
+
 ## Container usage
 
 <div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 3.2</span></div>

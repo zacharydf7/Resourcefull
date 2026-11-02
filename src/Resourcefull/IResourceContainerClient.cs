@@ -418,6 +418,62 @@ public interface IResourceContainerClient : IDisposable
         => throw new NotSupportedException($"{GetType().Name} doesn't support expiry.");
 
     /// <summary>
+    /// Replaces a version's metadata, without uploading it again. Only the metadata changes: the version keeps its ID,
+    /// content, content type, <see cref="ResourceInfo.LastModified"/> and ETag, and no new version is made.
+    /// <para>Coming in 3.2.</para>
+    /// </summary>
+    /// <remarks>
+    /// The whole dictionary is replaced. To add or change one entry, read the version's metadata, change it and set it:
+    /// two callers doing that for the same version at once can each overwrite the other's change, and
+    /// <see cref="ResourceConditions"/> can't prevent it, since the version's ID and content hash don't change.
+    /// </remarks>
+    /// <param name="resourceName">The resource.</param>
+    /// <param name="versionId">The version; <see langword="null"/> for the current one.</param>
+    /// <param name="metadata">The version's new metadata, which is copied.</param>
+    /// <param name="cancellationToken">Cancels the change.</param>
+    /// <returns><see langword="true"/> if the version exists; otherwise <see langword="false"/>.</returns>
+    /// <exception cref="ResourcePolicyViolationException">The container is read-only.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="metadata"/> is null.</exception>
+    /// <exception cref="ArgumentException"><paramref name="resourceName"/> breaks the name rules.</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
+    /// <exception cref="NotSupportedException">
+    /// The provider doesn't change a version's metadata, or this is the default implementation, kept so implementations
+    /// written for 3.1 still compile.
+    /// </exception>
+    public Task<bool> SetResourceMetadataAsync(string resourceName, string? versionId, IDictionary<string, string> metadata,
+        CancellationToken cancellationToken = default)
+        => throw new NotSupportedException($"{GetType().Name} doesn't change a version's metadata.");
+
+    /// <summary>
+    /// Changes the content type a version is stored and served with, without uploading it again, such as to correct one
+    /// declared wrongly. Only the type changes: the version keeps its ID, content, metadata,
+    /// <see cref="ResourceInfo.LastModified"/> and ETag, and no new version is made. The type is checked against the
+    /// container's <see cref="ResourceContainerPolicy.AllowedContentTypes"/>, as an upload's is, but an
+    /// <see cref="IResourceUploadInspector"/> doesn't see the change.
+    /// <para>Coming in 3.2.</para>
+    /// </summary>
+    /// <remarks>
+    /// Browsers and caches that already hold the version keep the old type: its ETag and
+    /// <see cref="ResourceInfo.LastModified"/> don't change, so a request that revalidates their copy is told it's
+    /// still current.
+    /// </remarks>
+    /// <param name="resourceName">The resource.</param>
+    /// <param name="versionId">The version; <see langword="null"/> for the current one.</param>
+    /// <param name="contentType">The new type, such as <c>application/pdf</c>; <see langword="null"/> for none.</param>
+    /// <param name="cancellationToken">Cancels the change.</param>
+    /// <returns><see langword="true"/> if the version exists; otherwise <see langword="false"/>.</returns>
+    /// <exception cref="ResourcePolicyViolationException">The container is read-only, or doesn't allow the type.</exception>
+    /// <exception cref="ArgumentException"><paramref name="resourceName"/> breaks the name rules.</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
+    /// <exception cref="NotSupportedException">
+    /// The provider doesn't change a version's content type, or this is the default implementation, kept so
+    /// implementations written for 3.1 still compile.
+    /// </exception>
+    public Task<bool> SetContentTypeAsync(string resourceName, string? versionId, string? contentType,
+        CancellationToken cancellationToken = default)
+        => throw new NotSupportedException($"{GetType().Name} doesn't change a version's content type.");
+
+    /// <summary>
     /// Gets what the container holds: the size of every version, and how many resources and versions there are. Use it
     /// to show a user their storage, or against <see cref="ResourceContainerPolicy.MaxContainerSize"/>.
     /// <para>Coming in 3.2.</para>

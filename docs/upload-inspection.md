@@ -82,6 +82,9 @@ committed, and no lock is held while the upload waits for the answer.
 - **Imports:** every version `ImportContainerAsync` stores, since an export file can come from anywhere. A refusal
   fails the import, which deletes what it had imported.
 - **Not copies, moves or restores.** Their content is already stored, and was inspected when it was uploaded.
+- **Not metadata or content type changes.** `SetContentTypeAsync` changes a stored version's type without reading its
+  content, so check the new type yourself if your inspector checks that files are the type they claim. Metadata set
+  later with `SetResourceMetadataAsync` isn't checked either.
 
 Only one inspector is registered at a time: `UseUploadInspector` replaces any registered before. To run more than one
 check, such as a type check and a malware scan, run both in one inspector, and keep in mind that `Content` can only be
