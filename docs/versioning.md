@@ -90,7 +90,7 @@ transient failure is retried rather than ending the restore. (A version stored b
 application, and can't be retried once its content has started, until the [hash backfill](providers/sql-server-upgrades.md#recording-hashes-for-older-versions)
 records its hash.) Its `CopiedFrom` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> names the version it restored, so
 a history view can show it. `RestoreVersionAsync` throws
-`InvalidOperationException` when versioning is off.
+`ResourceVersioningDisabledException` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>, an `InvalidOperationException`, when versioning is off.
 
 ## Deleting
 

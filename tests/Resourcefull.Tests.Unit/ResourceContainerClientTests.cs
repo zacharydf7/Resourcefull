@@ -654,13 +654,13 @@ public class ResourceContainerClientTests
     }
 
     [Fact]
-    public async Task RestoreVersionAsync_ShouldThrowInvalidOperation_WhenVersioningDisabled()
+    public async Task RestoreVersionAsync_ShouldThrowVersioningDisabled_WhenVersioningDisabled()
     {
         // Arrange & Act
         var client = NewClient(new Mock<ResourceRepository>().Object);
 
         // Assert
-        await Assert.ThrowsAsync<InvalidOperationException>(
+        await Assert.ThrowsAsync<ResourceVersioningDisabledException>(
             () => client.RestoreVersionAsync("name", "v1"));
     }
 

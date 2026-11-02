@@ -88,7 +88,7 @@ public interface IResourceContainerClient
     /// <param name="versionId">The version ID to restore.</param>
     /// <param name="cancellationToken">Cancels the restore. A canceled restore creates no version.</param>
     /// <returns>The <see cref="ResourceInfo"/> for the newly created version, or <see langword="null"/> if the resource or version does not exist.</returns>
-    /// <exception cref="InvalidOperationException">Versioning is not enabled.</exception>
+    /// <exception cref="ResourceVersioningDisabledException">Versioning is not enabled.</exception>
     /// <exception cref="ArgumentException"><paramref name="resourceName"/> is null, empty, longer than 256 characters, or starts or ends with whitespace (<see cref="ArgumentNullException"/> when null); or <paramref name="versionId"/> is null or empty.</exception>
     /// <exception cref="ResourcePolicyViolationException">The container's policy refuses the restored version; nothing was stored.</exception>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>

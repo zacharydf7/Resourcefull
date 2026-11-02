@@ -113,6 +113,9 @@
   token passed by position after a version ID needs naming. `UploadAsync`'s `uploadOptions` parameter is now
   `options`. `GetResourcesAsync`, which read a whole container into memory, is removed, and with it the `list` span;
   use `ListResourcesAsync`. See [Upgrading to 4.0](docs/upgrading-to-4.md#one-method-per-operation).
+- **Restoring a version while versioning is off** throws `ResourceVersioningDisabledException`, which derives from
+  `InvalidOperationException`, so code that catches that still catches it. A failed `restore` span's `error.type` is
+  `Resourcefull.ResourceVersioningDisabledException` now, rather than `System.InvalidOperationException`.
 - **Providers derive from the `ResourceRepository` base class,** which replaces the `IResourceRepository` interface.
   Its members take a `ResourceLocation` rather than a container name and a resource name, return `IReadOnlyList<T>`
   rather than `List<T>`, and take metadata as `IReadOnlyDictionary<string, string>`. A write is given a

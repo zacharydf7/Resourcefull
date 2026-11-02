@@ -92,6 +92,19 @@ public sealed class ResourceNameException : ArgumentException
 }
 
 /// <summary>
+/// Thrown when an operation needs versioning and it's off, such as restoring a version. It's a mistake in the
+/// application, which shouldn't offer the operation without versioning. It derives from
+/// <see cref="InvalidOperationException"/>, so code that catches that still catches it.
+/// <para>Coming in 4.0.</para>
+/// </summary>
+public sealed class ResourceVersioningDisabledException : InvalidOperationException
+{
+    /// <summary>Creates the exception with a message.</summary>
+    /// <param name="message">The message that describes the error.</param>
+    public ResourceVersioningDisabledException(string message) : base(message) { }
+}
+
+/// <summary>
 /// Thrown when a range download starts past the end of the content. Nothing is read. Maps naturally to an HTTP 416,
 /// with <see cref="ContentLength"/> in its <c>Content-Range</c> header.
 /// <para>Coming in 4.0.</para>

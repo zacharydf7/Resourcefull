@@ -97,7 +97,7 @@ internal partial class ResourceContainerClient(ResourceRepository resourceReposi
     {
         if (!options.IsVersioningEnabled)
         {
-            throw new InvalidOperationException(
+            throw new ResourceVersioningDisabledException(
                 $"The resource {resourceName} in the container {ContainerName} can't be restored: versioning is off.");
         }
         ResourceNames.ThrowIfInvalidResourceName(resourceName);
