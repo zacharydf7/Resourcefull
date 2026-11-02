@@ -275,7 +275,7 @@ internal static class ContainerArchive
             // JSON's null is allowed in a list whatever its element type says.
             if (resource is null)
                 throw new InvalidDataException("The export's manifest lists a null resource: the export was damaged or changed.");
-            if (!ResourceNames.IsValidResourceName(resource.Name) || !names.Add(resource.Name))
+            if (!ResourceNames.IsValidStoredResourceName(resource.Name) || !names.Add(resource.Name))
                 throw new InvalidDataException($"The export names a resource \"{resource.Name}\" twice, or with a name that breaks the name rules.");
 
             var versionIds = new HashSet<string>(StringComparer.Ordinal);

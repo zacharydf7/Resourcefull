@@ -97,7 +97,10 @@ public sealed class ResourceHttpResult : IResult, IActionResult
         return safe.Length > 0 || name.Length == 0 ? safe.ToString() : "download";
     }
 
-    /// <summary>Whether the character is one of Unicode's bidirectional controls, which change text direction.</summary>
+    /// <summary>
+    /// Whether the character is one of Unicode's bidirectional controls, which change text direction. The same list is
+    /// in ResourceNames, which refuses them in new names.
+    /// </summary>
     private static bool IsDirectionControl(int value) =>
         value is 0x061C or 0x200E or 0x200F or (>= 0x202A and <= 0x202E) or (>= 0x2066 and <= 0x2069);
 

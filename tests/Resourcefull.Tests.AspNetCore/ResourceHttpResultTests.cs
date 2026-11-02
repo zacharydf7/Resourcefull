@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Headers;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.DependencyInjection;
 using Resourcefull.AspNetCore;
 
 namespace Resourcefull.Tests.AspNetCore;
@@ -59,8 +60,10 @@ public class ResourceHttpResultTests
     [InlineData("a\u200Db.png", "a\u200Db.png")]
     public async Task Resource_ShouldDropOnlyControlAndDirectionCharactersFromTheFileName_WhenTheNameHasUnusualCharacters(string name, string fileName)
     {
-        // Arrange
-        await using TestApp app = await StartWithAsync(name, "x");
+        // Arrange: stored through the provider, as an earlier release could have; uploads refuse most of these names now.
+        await using TestApp app = await TestApp.StartAsync();
+        await app.Services.GetRequiredService<ResourceRepository>().AddResourceAsync(
+            new NewResourceVersion(new ResourceLocation(TestApp.Container, name), Guid.NewGuid().ToString()), new MemoryStream("x"u8.ToArray()));
 
         // Act
         HttpResponseMessage response = await app.Client.GetAsync("/files/" + Uri.EscapeDataString(name));

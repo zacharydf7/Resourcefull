@@ -121,6 +121,10 @@
   rest. `ResourcefullOptions.IsVersioningEnabled` is gone. `RestoreVersionAsync` works with versioning off, as long
   as the version exists. The `upload` and `copy` spans gain `resourcefull.write_mode`. `UploadFromRequestAsync` still
   replaces, as a `PUT` does. See [Upgrading to 4.0](docs/upgrading-to-4.md#uploads-say-whether-they-replace).
+- **Stricter names.** Uploads, copies, moves and renames, and creating or importing a container, refuse new names with
+  control characters, Unicode's bidirectional controls or unpaired surrogates, and `ResourceNames.IsValidContainerName`
+  and `IsValidResourceName` now return `false` for them. Names already stored stay readable and deletable, resources
+  with them can be renamed, and exports of them can be imported. See [Names](docs/names.md).
 - **The stored `Uri` columns are dropped.** The `Resourcefull_DropStoredUri` migration drops `Uri` from `Resources`
   and `ResourceContainers`; `Uri` comes from your URI provider on every read, as it has since 3.0. 3.x applications
   still read and write the columns, so they fail against an upgraded database: stop them before migrating, and roll

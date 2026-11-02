@@ -63,7 +63,8 @@ public sealed class ResourceConflictException : ResourcefullException
 
 /// <summary>
 /// Thrown when a container or resource name breaks the name rules: empty, only whitespace, too long, or with whitespace
-/// at either end. A <see langword="null"/> name throws <see cref="ArgumentNullException"/> instead. It derives from
+/// at either end; or, for a name a write creates, with a control character, a bidirectional control or an unpaired
+/// surrogate. A <see langword="null"/> name throws <see cref="ArgumentNullException"/> instead. It derives from
 /// <see cref="ArgumentException"/>, so code that catches that still catches it, and its
 /// <see cref="ArgumentException.ParamName"/> names the argument. Maps naturally to an HTTP 400.
 /// </summary>

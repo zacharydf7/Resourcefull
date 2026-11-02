@@ -41,6 +41,31 @@ Check these, even where your code compiles:
   `Mode = ResourceWriteMode.Create` there doesn't make it create-only. Where your 3.x code set `CreateOnly` for it,
   have the client send `If-None-Match: *`, or have the endpoint require that header.
 
+### Names are stricter
+
+Names a write creates can't have control characters, Unicode's bidirectional controls or unpaired surrogates; see
+[Names](names.md). An upload, copy, move or rename to a name with one of them, or creating or importing a container
+with one, throws `ResourceNameException`.
+
+Names already stored that break these rules keep working for reads and deletes, resources with them can be renamed,
+and an export of them can be imported. `ResourceNames.IsValidContainerName` and `IsValidResourceName` now return
+`false` for these names, so you can use them to find any already stored:
+
+```csharp
+foreach (ResourceContainerInfo container in await resources.GetResourceContainersAsync())
+{
+    if (!ResourceNames.IsValidContainerName(container.Name)) Console.WriteLine($"Container: {container.Name}");
+    await foreach (ResourceInfo resource in resources.GetResourceContainerClient(container.Name).ListResourcesAsync())
+    {
+        if (!ResourceNames.IsValidResourceName(resource.Name)) Console.WriteLine($"{container.Name}: {resource.Name}");
+    }
+}
+```
+
+Containers can't be renamed, so for a container whose name breaks the new rules, move its resources to a new container, then
+delete it. `CreateResourceContainerIfNotExistsAsync` still finds such a container, and checks the name only when it
+creates one.
+
 ### One method per operation
 
 Each operation of `IResourceContainerClient` and `IResourceServiceClient` is now one method: its required parameters,

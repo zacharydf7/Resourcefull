@@ -28,7 +28,7 @@ internal partial class ResourceContainerClient(ResourceRepository resourceReposi
     private async Task<ResourceInfo> UploadCoreAsync(string resourceName, Stream content, ResourceUploadOptions? uploadOptions, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(content);
-        ResourceNames.ThrowIfInvalidResourceName(resourceName);
+        ResourceNames.ThrowIfInvalidNewResourceName(resourceName);
 
         uploadOptions ??= new ResourceUploadOptions();
         ResourceConditions? conditions = uploadOptions.Conditions is { IsEmpty: false } set ? set : null;
@@ -497,7 +497,7 @@ internal partial class ResourceContainerClient(ResourceRepository resourceReposi
     {
         ResourceNames.ThrowIfInvalidResourceName(resourceName);
         ResourceNames.ThrowIfInvalidContainerName(destinationContainer);
-        ResourceNames.ThrowIfInvalidResourceName(destinationName);
+        ResourceNames.ThrowIfInvalidNewResourceName(destinationName);
         ResourceConditions? conditions = copyOptions.DestinationConditions is { IsEmpty: false } set ? set : null;
         // "options" is CopyResourceAsync's parameter; nameof(options) here is the client's own options.
         bool createOnly = IsCreate(copyOptions.Mode, conditions, nameof(ResourceCopyOptions.DestinationConditions), "options");
@@ -550,7 +550,7 @@ internal partial class ResourceContainerClient(ResourceRepository resourceReposi
     {
         ResourceNames.ThrowIfInvalidResourceName(resourceName);
         ResourceNames.ThrowIfInvalidContainerName(destinationContainer);
-        ResourceNames.ThrowIfInvalidResourceName(destinationName);
+        ResourceNames.ThrowIfInvalidNewResourceName(destinationName);
         if (destinationContainer == ContainerName && destinationName == resourceName)
             throw new ArgumentException("A resource can't be moved to where it already is.", nameof(destinationName));
 

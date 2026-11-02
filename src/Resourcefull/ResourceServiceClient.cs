@@ -26,7 +26,7 @@ internal class ResourceServiceClient(ResourceRepository resourceRepository, IOpt
         CancellationToken cancellationToken = default)
         => _telemetry.RunAsync("create_container", resourceContainerName, null, async () =>
         {
-            ResourceNames.ThrowIfInvalidContainerName(resourceContainerName);
+            ResourceNames.ThrowIfInvalidNewContainerName(resourceContainerName);
             return await CreateContainerCoreAsync(resourceContainerName, metadata, cancellationToken);
         });
 
@@ -42,6 +42,8 @@ internal class ResourceServiceClient(ResourceRepository resourceRepository, IOpt
         // The usual case is a container that already exists; finding it with a read avoids a failed insert each time.
         if (await resourceRepository.GetResourceContainerInfoAsync(resourceContainerName, cancellationToken) is { } existing)
             return NewContainerClient(existing);
+
+        ResourceNames.ThrowIfInvalidNewContainerName(resourceContainerName);
 
         try
         {
@@ -341,7 +343,7 @@ internal class ResourceServiceClient(ResourceRepository resourceRepository, IOpt
         CancellationToken cancellationToken = default)
         => _telemetry.RunAsync("import", resourceContainerName, null, async activity =>
         {
-            ResourceNames.ThrowIfInvalidContainerName(resourceContainerName);
+            ResourceNames.ThrowIfInvalidNewContainerName(resourceContainerName);
             ArgumentNullException.ThrowIfNull(source);
             if (!source.CanSeek)
                 throw new ArgumentException("An import reads the zip's directory at its end, so it needs a stream that can seek, such as a file.", nameof(source));

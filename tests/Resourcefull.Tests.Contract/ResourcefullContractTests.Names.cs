@@ -6,6 +6,88 @@ namespace Resourcefull.Tests.Contract;
 public abstract partial class ResourcefullContractTests
 {
     [SkippableFact]
+    public async Task Writes_ShouldRefuseTheName_WhenANewNameHasAForbiddenCharacter()
+    {
+        // Arrange: the names are here rather than theory data, which xUnit serializes, replacing an unpaired surrogate.
+        using ServiceProvider provider = BuildServiceProvider();
+        IResourceContainerClient container = await NewContainerAsync(provider);
+        await container.UploadAsync("source", BinaryData.FromString("x"));
+
+        // Act & Assert: every write that could create the name refuses it, and stores nothing.
+        foreach (string name in new[] { "line\nbreak", "invoice\u202Efdp.exe", "lone\uD800" })
+        {
+            await Assert.ThrowsAsync<ResourceNameException>(() => container.UploadAsync(name, BinaryData.FromString("x")));
+            await Assert.ThrowsAsync<ResourceNameException>(() => container.CopyResourceAsync("source", container.Name, name));
+            await Assert.ThrowsAsync<ResourceNameException>(() => container.RenameResourceAsync("source", name));
+            await Assert.ThrowsAsync<ResourceNameException>(() => ServiceOf(provider).CreateResourceContainerAsync(name));
+        }
+        Assert.Equal(["source"], (await container.ListResourcesAsync().ToListAsync()).Select(r => r.Name));
+    }
+
+    [SkippableFact]
+    public async Task ExistingName_ShouldStayReadableRenamableAndDeletable_WhenItBreaksTheRulesForNewNames()
+    {
+        // Arrange: names an earlier release could have stored, put straight into the provider.
+        using ServiceProvider provider = BuildServiceProvider();
+        IResourceContainerClient container = await NewContainerAsync(provider);
+        ResourceRepository repository = provider.GetRequiredService<ResourceRepository>();
+        const string spoofed = "invoice\u202Efdp.exe", tabbed = "tab\tname";
+        foreach (string name in new[] { spoofed, tabbed })
+        {
+            await repository.AddResourceAsync(new NewResourceVersion(new ResourceLocation(container.Name, name), Guid.NewGuid().ToString()),
+                new MemoryStream([1]));
+        }
+
+        // Act
+        ResourceContent? content = await container.DownloadContentAsync(spoofed);
+        ResourceInfo? renamed = await container.RenameResourceAsync(spoofed, "invoice.pdf");
+        bool deleted = await container.DeleteResourceIfExistsAsync(tabbed);
+
+        // Assert
+        Assert.Equal([1], content!.Content.ToArray());
+        Assert.Equal("invoice.pdf", renamed!.Name);
+        Assert.True(deleted);
+        Assert.Equal(["invoice.pdf"], (await container.ListResourcesAsync().ToListAsync()).Select(r => r.Name));
+    }
+
+    [SkippableFact]
+    public async Task ImportContainerAsync_ShouldRestoreAnOlderName_WhenItBreaksTheRulesForNewNames()
+    {
+        // Arrange: an export of a name an earlier release could have stored, and a container name that's fine.
+        using ServiceProvider provider = BuildServiceProvider();
+        IResourceContainerClient container = await NewContainerAsync(provider);
+        await provider.GetRequiredService<ResourceRepository>().AddResourceAsync(
+            new NewResourceVersion(new ResourceLocation(container.Name, "tab\tname"), Guid.NewGuid().ToString()), new MemoryStream([1]));
+        using var export = new MemoryStream();
+        await ServiceOf(provider).ExportContainerAsync(container.Name, export);
+        export.Position = 0;
+        string restored = NewContainerName();
+
+        // Act
+        await ServiceOf(provider).ImportContainerAsync(restored, export);
+
+        // Assert: a backup restores the name as it was.
+        ResourceContent? content = await ServiceOf(provider).GetResourceContainerClient(restored).DownloadContentAsync("tab\tname");
+        Assert.Equal([1], content!.Content.ToArray());
+    }
+
+    [SkippableFact]
+    public async Task CreateResourceContainerIfNotExistsAsync_ShouldReturnTheContainer_WhenItsOlderNameBreaksTheRulesForNewNames()
+    {
+        // Arrange: a container an earlier release could have created, put straight into the provider.
+        using ServiceProvider provider = BuildServiceProvider();
+        string name = NewContainerName() + "\tolder";
+        await provider.GetRequiredService<ResourceRepository>().AddResourceContainerAsync(name, new Dictionary<string, string>());
+
+        // Act
+        IResourceContainerClient container = await ServiceOf(provider).CreateResourceContainerIfNotExistsAsync(name);
+
+        // Assert
+        Assert.Equal(name, container.Name);
+        await Assert.ThrowsAsync<ResourceNameException>(() => ServiceOf(provider).CreateResourceContainerIfNotExistsAsync(NewContainerName() + "\tnew"));
+    }
+
+    [SkippableFact]
     public async Task CreateResourceContainerAsync_ShouldCreateBoth_WhenNamesDifferOnlyInCase()
     {
         // Arrange
