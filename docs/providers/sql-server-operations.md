@@ -35,6 +35,42 @@ largest deletes at once.
 delete removes until no reader needs it. With [Accelerated Database Recovery](https://learn.microsoft.com/sql/relational-databases/accelerated-database-recovery-concepts)
 turned on, those versions are kept in the database itself instead.
 
+## Encryption
+
+Files are stored as ordinary database data, so SQL Server's own encryption can protect them along with the rest of the
+database.
+
+- **On disk: Transparent Data Encryption (TDE).** TDE encrypts the database's data and log files, and its backups, so
+  someone who copies a file or a backup can't read it without the key. It needs no change to Resourcefull or your
+  code. Azure SQL Database and Azure SQL Managed Instance turn it on for new databases. On your own SQL Server, it's
+  in Enterprise edition, and in Standard edition from SQL Server 2019. See Microsoft's
+  [TDE overview](https://learn.microsoft.com/sql/relational-databases/security/encryption/transparent-data-encryption).
+  **Back up the certificate that protects the key, with its private key,** and keep it apart from the database
+  backups: without it, no backup of the database can be restored on another server, including one that replaces a
+  server you've lost. On Azure SQL, Azure manages the key for you unless you choose to bring your own.
+- **Backups only.** If you don't use TDE, you can still encrypt each backup file with `BACKUP ... WITH ENCRYPTION`, in
+  Standard edition and above. It uses a certificate too, which needs backing up the same way.
+- **On the network.** `Microsoft.Data.SqlClient`, which Resourcefull uses, encrypts the connection and checks the
+  server's certificate by default. Keep it that way in production: don't add `TrustServerCertificate=True` or
+  `Encrypt=False` to the connection string, except against a development server. If the connection fails with a
+  certificate error, give the server a certificate your application trusts, rather than turning the check off; see
+  Microsoft's [Configure SQL Server for encrypted connections](https://learn.microsoft.com/sql/database-engine/configure-windows/configure-sql-server-encryption).
+- **Always Encrypted isn't supported.** It encrypts chosen columns so that even the database server can't read
+  them, but Resourcefull's tables aren't set up for it. To get the same protection, encrypt files yourself, as
+  described below.
+
+To keep the files unreadable even to someone with access to the database, encrypt them yourself before uploading and
+decrypt them after downloading. Resourcefull then stores only encrypted bytes, which changes some things:
+
+- `ContentLength` and `ContentHash` describe the encrypted bytes, not the original file.
+- A [range download](../downloading.md#downloading-part-of-a-resource) returns encrypted bytes, which are only useful
+  if your encryption lets you decrypt part of a file.
+- A [shared link](../sharing-links.md), or a download endpoint that streams straight from storage, hands out the
+  encrypted bytes, so serve these files through your own endpoint that decrypts them.
+- An [upload inspector](../upload-inspection.md) sees only encrypted bytes, so it can't scan the file or check its
+  type: do both before encrypting it.
+- Keeping the keys safe, and able to decrypt every file you've stored, is up to you.
+
 ## Uploads, connections and the log
 
 <div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 3.2</span></div>

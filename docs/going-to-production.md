@@ -18,6 +18,9 @@ a feature such as shared links or expiry.
   [Backups and recovery](backups-and-recovery.md).
 - [ ] **Room to grow:** the transaction log and `tempdb` sized for your largest uploads and deletes. See
   [Running SQL Server](providers/sql-server-operations.md#sizing).
+- [ ] **Encryption on disk, if your files need it:** Transparent Data Encryption, so a copied data file or backup can't
+  be read, and on your own SQL Server its certificate backed up apart from the database, or those backups can't be
+  restored elsewhere. See [Encryption](providers/sql-server-operations.md#encryption).
 
 ## The application
 
