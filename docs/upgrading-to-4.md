@@ -3,7 +3,8 @@
 <div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 4.0</span></div>
 
 4.0 is a major release: besides its new features, it changes the API in ways that need changes to your code. This page
-lists each change and how to move your code across. 4.0 isn't released yet, so the list grows as its changes are made.
+lists each change and how to move your code across, and the database change that needs every 3.x instance stopped.
+4.0 isn't released yet, so the list grows as its changes are made.
 For upgrades within a major version, and for rolling an upgrade out, see [Upgrading](upgrading.md).
 
 ## Upgrading your code
@@ -36,9 +37,9 @@ Check these, even where your code compiles:
   [container policy](container-policies.md) can set its own `MaxVersions` for a container.
 - **`RestoreVersionAsync` works with versioning off,** where the version still exists, rather than throwing
   `InvalidOperationException`.
-- **`UploadFromRequestAsync` replaces, as a `PUT` does,** and ignores `Mode`, so setting `Mode = ResourceWriteMode.Create`
-  there doesn't make it create-only. Where your 3.x code set `CreateOnly` for it, have the client send
-  `If-None-Match: *`, or have the endpoint require that header.
+- **`UploadFromRequestAsync` replaces, as a `PUT` does,** and ignores `Mode`, so setting
+  `Mode = ResourceWriteMode.Create` there doesn't make it create-only. Where your 3.x code set `CreateOnly` for it,
+  have the client send `If-None-Match: *`, or have the endpoint require that header.
 
 ### One method per operation
 
@@ -127,3 +128,19 @@ Conditional uploads and deletes are now part of the abstract members, rather tha
 `NotSupportedException`, so every provider decides conditions itself. See [The contract](providers/writing-a-provider.md#the-contract).
 
 A provider package for 4.0 can depend on `[4.0.0, 5.0.0)`. See [Writing a provider](providers/writing-a-provider.md).
+
+## Upgrading the database
+
+4.0's migrations add the columns its new features use, and drop the `Uri` columns of `Resources` and
+`ResourceContainers`. Their values have gone unused since 3.0, as every `Uri` comes from your
+[URI provider](uri-providers.md) when it's read, but 3.x still reads and writes the columns, and fails against a 4.0
+database without them. So upgrading from 3.x needs a short outage, rather than the rolling upgrade a minor
+release allows:
+
+1. **Back up the database** (see [Backups and recovery](backups-and-recovery.md)).
+2. **Stop every instance of the 3.x application**, workers and scheduled jobs included.
+3. **Upgrade the database,** with `MigrateResourcefullDatabaseAsync` or the scripts in the package; see
+   [Upgrading the database](providers/sql-server-upgrades.md).
+4. **Deploy the 4.0 application.**
+
+To go back to 3.x, restore the backup: redeploying 3.x alone doesn't work against the upgraded database.

@@ -11,7 +11,6 @@ internal class ResourceModel
     public string? ContentType { get; set; }
     public long? ContentLength { get; set; }
     public string? ContentHash { get; set; }
-    public string? Uri { get; set; }
     public IDictionary<string, string> Metadata { get; set; } = new Dictionary<string, string>();
     public string? CopiedFromContainerName { get; set; }
     public string? CopiedFromName { get; set; }

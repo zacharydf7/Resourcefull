@@ -4,8 +4,8 @@ using Microsoft.Extensions.DependencyInjection;
 namespace Resourcefull.Tests.Integration;
 
 /// <summary>
-/// The SQL Server provider on what early releases stored or read: versions with no recorded length or hash, for its
-/// usage query and for copies, and the stored URI that 2.x reads, for moves.
+/// The SQL Server provider on what early releases stored: versions with no recorded length or hash, for its
+/// usage query and for copies.
 /// </summary>
 [Collection(SqlServerCollection.Name)]
 public class ContainerUsageIntegrationTests(SqlServerFixture fixture)
@@ -64,34 +64,6 @@ public class ContainerUsageIntegrationTests(SqlServerFixture fixture)
         // Assert
         Assert.All(new[] { copy, move }, e => Assert.Equal(ResourcePolicyRule.MaxResourceSize, Assert.IsType<ResourcePolicyViolationException>(e).Rule));
         Assert.True(await source.ExistsAsync("a"));
-    }
-
-    [SkippableFact]
-    public async Task MoveResourceAsync_ShouldClearTheStoredUri_WhenMoved()
-    {
-        fixture.SkipIfUnavailable();
-
-        // Arrange: a URI provider, so the version is stored with a URI, which 2.x reads, naming its old place.
-        using ServiceProvider provider = fixture.BuildServiceProvider(o => o.SetUriProvider<NamedUris>());
-        string containerName = $"c-{Guid.NewGuid():N}";
-        IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>().CreateResourceContainerAsync(containerName);
-        ResourceInfo stored = await container.UploadAsync("a", BinaryData.FromString("x"));
-
-        // Act
-        ResourceInfo? moved = await container.MoveResourceAsync("a", containerName, "b");
-
-        // Assert
-        await using SqlConnection connection = await fixture.OpenConnectionAsync();
-        await using SqlCommand command = connection.CreateCommand();
-        command.CommandText = "SELECT [Uri] FROM [Resources] WHERE [VersionId] = @v";
-        command.Parameters.AddWithValue("@v", stored.VersionId);
-        Assert.Equal(DBNull.Value, await command.ExecuteScalarAsync());
-        Assert.Equal("https://files/b", moved!.Uri);
-    }
-
-    private sealed class NamedUris : IUriProvider
-    {
-        public string? GetAbsoluteUri(ResourcefullContext context) => $"https://files/{context.ResourceName}";
     }
 
     /// <summary>Gives containers whose names start with <c>small-</c> a limit of 100,000 bytes a resource.</summary>

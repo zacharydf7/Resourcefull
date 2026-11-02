@@ -481,13 +481,11 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
                     throw ResourceExists(destination.ContainerName, destination.ResourceName);
 
                 // Only the versions' container and name change: their chunks hang off their IDs, so no content is copied.
-                // The stored URI, which only 2.x reads, would name the old place, so it's cleared rather than left wrong.
                 await attempt.Resources
                     .Where(r => r.ContainerName == source.ContainerName && r.Name == source.ResourceName)
                     .ExecuteUpdateAsync(s => s
                         .SetProperty(r => r.ContainerName, destination.ContainerName)
-                        .SetProperty(r => r.Name, destination.ResourceName)
-                        .SetProperty(r => r.Uri, (string?)null), ct);
+                        .SetProperty(r => r.Name, destination.ResourceName), ct);
                 return moved = true;
             }, cancellationToken);
         }

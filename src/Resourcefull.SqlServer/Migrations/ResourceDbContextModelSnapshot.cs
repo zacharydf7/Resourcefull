@@ -50,9 +50,6 @@ namespace Resourcefull.SqlServer.Migrations
                         .IsRequired()
                         .HasColumnType("varchar(MAX)");
 
-                    b.Property<string>("Uri")
-                        .HasColumnType("nvarchar(max)");
-
                     b.HasKey("Name");
 
                     b.ToTable("ResourceContainers");
@@ -119,9 +116,6 @@ namespace Resourcefull.SqlServer.Migrations
 
                     b.Property<DateTimeOffset?>("StagedAt")
                         .HasColumnType("datetimeoffset");
-
-                    b.Property<string>("Uri")
-                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("VersionId")
                         .IsRequired()

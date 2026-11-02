@@ -133,7 +133,10 @@ see [Timeouts](#timeouts).
 
 **After a deployment, requests fail with error 207, "Invalid column name …", and the health check is Unhealthy.** The
 application was deployed before the database was upgraded. Run the upgrade
-([Upgrading the database](sql-server-upgrades.md)); the readiness check keeps traffic away until then.
+([Upgrading the database](sql-server-upgrades.md)); the readiness check keeps traffic away until then. If the column
+is `Uri` and the instance runs 3.x, it's the other way around: the database was upgraded to 4.0 <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>, which 3.x
+can't run against. Stop the instance and deploy 4.0, or restore the backup taken before the upgrade (see
+[Upgrading to 4.0](../upgrading-to-4.md#upgrading-the-database)).
 
 **The health check reports Degraded after a deployment.** The database was upgraded by a newer release than this
 instance; that's expected while a rolling deployment finishes. If it lasts, an old instance is still running.

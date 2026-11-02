@@ -121,6 +121,10 @@
   rest. `ResourcefullOptions.IsVersioningEnabled` is gone. `RestoreVersionAsync` works with versioning off, as long
   as the version exists. The `upload` and `copy` spans gain `resourcefull.write_mode`. `UploadFromRequestAsync` still
   replaces, as a `PUT` does. See [Upgrading to 4.0](docs/upgrading-to-4.md#uploads-say-whether-they-replace).
+- **The stored `Uri` columns are dropped.** The `Resourcefull_DropStoredUri` migration drops `Uri` from `Resources`
+  and `ResourceContainers`; `Uri` comes from your URI provider on every read, as it has since 3.0. 3.x applications
+  still read and write the columns, so they fail against an upgraded database: stop them before migrating, and roll
+  back by restoring a backup. See [Upgrading to 4.0](docs/upgrading-to-4.md#upgrading-the-database).
 - **Providers derive from the `ResourceRepository` base class,** which replaces the `IResourceRepository` interface.
   Its members take a `ResourceLocation` rather than a container name and a resource name, return `IReadOnlyList<T>`
   rather than `List<T>`, and take metadata as `IReadOnlyDictionary<string, string>`. A write is given a

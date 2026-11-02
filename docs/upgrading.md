@@ -5,8 +5,8 @@ major version, such as 3.x, upgrades are designed to be quiet: code written for 
 working, and the database changes only by adding to it. Coming from 1.x or 2.x? See [Upgrading to 3.0](upgrading-to-3.md).
 
 4.0 <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> is a major release. Besides its new features, it changes the API in ways that need changes to
-your code: see [Upgrading to 4.0](upgrading-to-4.md). So far, its database changes only add, as the table below
-shows.
+your code, and makes one database change that a 3.x application can't run against: see
+[Upgrading to 4.0](upgrading-to-4.md).
 
 ## Upgrading from 3.0 or later
 
@@ -28,24 +28,28 @@ shows.
 | 4.0 <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | `AddCopiedFrom` | adds three nullable columns recording the version a copy or restore came from | nothing |
 | | `AddExpiresAt` | adds the nullable `ExpiresAt` column, and an index of the versions that expire | nothing |
 | | `Resourcefull_AddStagedAt` | adds the nullable `StagedAt` column, set while an upload stores a version's content, and an index of the versions being stored | nothing |
+| | `Resourcefull_DropStoredUri` | drops the `Uri` columns of `Resources` and `ResourceContainers`, whose values have gone unused since 3.0 | stop every 3.x instance: 3.x still reads and writes the columns, so it fails without them |
 
-Every migration since 3.0 only adds columns or indexes, and runs while the application is up.
+Every migration from 3.0 on only adds columns or indexes, and runs while the application is up, except
+`Resourcefull_DropStoredUri` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>.
 
 ## Upgrading a running application
 
-With several instances, upgrade without downtime by changing the database first:
+With several instances, upgrade without downtime by changing the database first. Upgrading from 3.x to 4.0 <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>
+is the exception: see [Upgrading to 4.0](upgrading-to-4.md#upgrading-the-database).
 
-1. **Upgrade the database** while the old release runs. The old release keeps working against it: since 3.0, the
-   database only gains columns and indexes an older release ignores. Its [health check](health-checks.md) reports
-   Degraded meanwhile, meaning "a newer release upgraded the database", which is expected.
+1. **Upgrade the database** while the old release runs. The old release keeps working against it: within a major
+   version, the database only gains columns and indexes an older release ignores. Its
+   [health check](health-checks.md) reports Degraded meanwhile, meaning "a newer release upgraded the database", which
+   is expected.
 2. **Roll out the new release,** instance by instance. Each reports Healthy once it's running.
 
 ## Rolling back
 
-- **The application only:** redeploy the earlier release. It works against the upgraded database, as during a
-  rollout. Features of the newer release stop: for example, a 3.1 application ignores the expiry times 4.0 stored, so
-  expired files stay until a 4.0 application deletes them again. Nothing is lost; the newer release picks up where it
-  left off.
+- **The application only,** within a major version: redeploy the earlier release. It works against the upgraded
+  database, as during a rollout. Features of the newer release stop, but nothing is lost; the newer release picks up
+  where it left off. A 3.x application doesn't work against a 4.0 database <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>, so going back from 4.0 to
+  3.x means restoring the database too.
 - **The database too:** restore a backup from before the upgrade (see [Backups and recovery](backups-and-recovery.md)).
   Anything stored since is lost, so roll back the application only, unless the upgrade itself went wrong.
 
@@ -57,8 +61,8 @@ With several instances, upgrade without downtime by changing the database first:
 - **Custom providers** are covered too: the provider API changes incompatibly only in a major release, and members
   added in a minor release come with default implementations. See [Writing a provider](providers/writing-a-provider.md).
 - **The database** within one major version only gains what the table above lists, so any 3.x application works
-  against any 3.x database at least as new as itself. So far, 4.0's migrations only add too, so a 3.x application
-  also works against a 4.0 database; 4.0's upgrade guide will say if that changes.
+  against any 3.x database at least as new as itself. A 3.x application doesn't work against a 4.0 database <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>;
+  see [Upgrading to 4.0](upgrading-to-4.md#upgrading-the-database).
 - **Deprecation:** an API that's going away is first marked `[Obsolete]`, with a message naming what to use
   instead, and keeps working for at least one more minor release and at least six months. It's removed only in a
   major release, listed in that release's upgrade guide. The compiler's warning is the notice, so build with
