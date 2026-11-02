@@ -18,7 +18,9 @@ own EF Core migrations.
 
 A database of its own is the better default. Provisioning turns on [`READ_COMMITTED_SNAPSHOT`](#read_committed_snapshot),
 a setting of the whole database, and file content makes the database large, which affects how you back it up (see
-[Backups and recovery](../backups-and-recovery.md)).
+[Backups and recovery](../backups-and-recovery.md)). Your application's database has one advantage: a single backup
+holds your rows and the files they point at, as they were at the same moment. Either way, Resourcefull's writes don't
+join your transactions; [Files and your own data](../files-and-your-data.md) shows how to keep the two in step.
 
 Keep the connection string out of source control, in user secrets, environment variables or a secrets store. Anything
 `Microsoft.Data.SqlClient` accepts works.

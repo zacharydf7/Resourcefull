@@ -33,6 +33,9 @@ backup, or a file no row mentions.
 - **With two databases:** restore both to the same moment, which the full recovery model allows, and expect to tidy
   up a few files or rows from the minutes around it.
 
+[Files and your own data](files-and-your-data.md) shows an order of writes that keeps your rows and the files in
+step while the application runs, and how to find files no row points at.
+
 ## Try a restore
 
 Restore a backup to a spare server every so often, point a copy of the application at it, and open a few files. A
