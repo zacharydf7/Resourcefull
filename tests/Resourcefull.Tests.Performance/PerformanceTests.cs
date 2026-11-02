@@ -245,7 +245,8 @@ public sealed class PerformanceTests(SqlServerFixture fixture, ITestOutputHelper
     public async Task GetResourceVersionsAsync_ShouldStayWithinItsBaseline_WhenTheResourceHasTwentyVersions()
     {
         IResourceContainerClient container = await NewContainerAsync(ownDatabase: "versions");
-        for (int i = 0; i < 20; i++) await container.UploadAsync("r", new GeneratedStream(1024));
+        for (int i = 0; i < 20; i++)
+            await container.UploadAsync("r", new GeneratedStream(1024), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace });
 
         await MeasureAsync("versions-20", 0, run: _ => container.GetResourceVersionsAsync("r"));
     }
@@ -267,7 +268,8 @@ public sealed class PerformanceTests(SqlServerFixture fixture, ITestOutputHelper
         for (int i = 0; i <= Repetitions; i++)
         {
             for (int version = 0; version < 20; version++)
-                await container.UploadAsync($"r{i}", new GeneratedStream(Mebibyte));
+                await container.UploadAsync($"r{i}", new GeneratedStream(Mebibyte),
+                    new ResourceUploadOptions { Mode = ResourceWriteMode.Replace });
         }
 
         await MeasureAsync("delete-20-versions-1MiB", 0,
@@ -420,7 +422,8 @@ public sealed class PerformanceTests(SqlServerFixture fixture, ITestOutputHelper
 
         await MeasureAsync($"upload-same-name-{ConcurrentClients}-at-once-1MiB", ConcurrentClients * length,
             run: iteration => Task.WhenAll(Enumerable.Range(0, ConcurrentClients).Select(_ =>
-                container.UploadAsync($"r{iteration}", new GeneratedStream(length)))));
+                container.UploadAsync($"r{iteration}", new GeneratedStream(length),
+                    new ResourceUploadOptions { Mode = ResourceWriteMode.Replace }))));
     }
 
     public void Dispose()
