@@ -1,7 +1,3 @@
-// The compiler doesn't expand <inheritdoc cref>, so it reports the parameters each CancellationToken overload
-// inherits as undocumented.
-#pragma warning disable CS1573
-
 namespace Resourcefull;
 
 /// <summary>
@@ -9,8 +5,8 @@ namespace Resourcefull;
 /// for the resources in one container.
 /// </summary>
 /// <remarks>
-/// Every operation that contacts the store has an overload that takes a <see cref="CancellationToken"/> as
-/// its last parameter. A canceled operation throws <see cref="OperationCanceledException"/> and never
+/// Every operation that contacts the store takes an optional <see cref="CancellationToken"/> as its last
+/// parameter. A canceled operation throws <see cref="OperationCanceledException"/> and never
 /// returns a result.
 /// </remarks>
 public interface IResourceServiceClient
@@ -19,7 +15,7 @@ public interface IResourceServiceClient
     /// Returns a client for a container without contacting the store. The container need not exist
     /// yet; operations report absence at the time they run. Since nothing is read, the client's
     /// <see cref="IResourceContainerClient.ResourceContainerInfo"/> carries the name and the URI provider's URI but no
-    /// metadata; use <see cref="GetResourceContainerInfoAsync(string)"/> for the stored metadata.
+    /// metadata; use <see cref="GetResourceContainerInfoAsync(string, CancellationToken)"/> for the stored metadata.
     /// </summary>
     /// <param name="resourceContainerName">The name of the resource container.</param>
     /// <exception cref="ArgumentException"><paramref name="resourceContainerName"/> is null, empty, longer than 128 characters, or starts or ends with whitespace (<see cref="ArgumentNullException"/> when null).</exception>
@@ -30,65 +26,53 @@ public interface IResourceServiceClient
     /// </summary>
     /// <param name="resourceContainerName">The name of the container to create.</param>
     /// <param name="metadata">Optional metadata to store with the container.</param>
+    /// <param name="cancellationToken">Cancels the operation. A canceled create leaves no container.</param>
     /// <returns>A client for the newly created container.</returns>
     /// <exception cref="ResourceConflictException">A container with the same name already exists.</exception>
     /// <exception cref="ArgumentException"><paramref name="resourceContainerName"/> is null, empty, longer than 128 characters, or starts or ends with whitespace (<see cref="ArgumentNullException"/> when null).</exception>
-    public Task<IResourceContainerClient> CreateResourceContainerAsync(string resourceContainerName, IDictionary<string, string>? metadata = null);
-
-    /// <inheritdoc cref="CreateResourceContainerAsync(string, IDictionary{string, string}?)"/>
-    /// <param name="cancellationToken">Cancels the operation. A canceled create leaves no container.</param>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
-    public Task<IResourceContainerClient> CreateResourceContainerAsync(string resourceContainerName, IDictionary<string, string>? metadata, CancellationToken cancellationToken);
+    public Task<IResourceContainerClient> CreateResourceContainerAsync(string resourceContainerName, IDictionary<string, string>? metadata = null,
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Creates a resource container if it does not already exist, returning a client for it either way.
     /// </summary>
     /// <param name="resourceContainerName">The name of the container.</param>
     /// <param name="metadata">Optional metadata applied only when the container is created.</param>
+    /// <param name="cancellationToken">Cancels the operation.</param>
     /// <returns>A client for the container.</returns>
     /// <exception cref="ArgumentException"><paramref name="resourceContainerName"/> is null, empty, longer than 128 characters, or starts or ends with whitespace (<see cref="ArgumentNullException"/> when null).</exception>
-    public Task<IResourceContainerClient> CreateResourceContainerIfNotExistsAsync(string resourceContainerName, IDictionary<string, string>? metadata = null);
-
-    /// <inheritdoc cref="CreateResourceContainerIfNotExistsAsync(string, IDictionary{string, string}?)"/>
-    /// <param name="cancellationToken">Cancels the operation.</param>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
-    public Task<IResourceContainerClient> CreateResourceContainerIfNotExistsAsync(string resourceContainerName, IDictionary<string, string>? metadata, CancellationToken cancellationToken);
+    public Task<IResourceContainerClient> CreateResourceContainerIfNotExistsAsync(string resourceContainerName, IDictionary<string, string>? metadata = null,
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Retrieves the attributes of a container.
     /// </summary>
     /// <param name="resourceContainerName">The name of the container.</param>
+    /// <param name="cancellationToken">Cancels the lookup.</param>
     /// <returns>The <see cref="ResourceContainerInfo"/>, or <see langword="null"/> if the container does not exist.</returns>
     /// <exception cref="ArgumentException"><paramref name="resourceContainerName"/> is null, empty, longer than 128 characters, or starts or ends with whitespace (<see cref="ArgumentNullException"/> when null).</exception>
-    public Task<ResourceContainerInfo?> GetResourceContainerInfoAsync(string resourceContainerName);
-
-    /// <inheritdoc cref="GetResourceContainerInfoAsync(string)"/>
-    /// <param name="cancellationToken">Cancels the lookup.</param>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
-    public Task<ResourceContainerInfo?> GetResourceContainerInfoAsync(string resourceContainerName, CancellationToken cancellationToken);
+    public Task<ResourceContainerInfo?> GetResourceContainerInfoAsync(string resourceContainerName,
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Lists the attributes of all resource containers.
     /// </summary>
-    /// <returns>A (possibly empty) list of container attributes.</returns>
-    public Task<IReadOnlyList<ResourceContainerInfo>> GetResourceContainersAsync();
-
-    /// <inheritdoc cref="GetResourceContainersAsync()"/>
     /// <param name="cancellationToken">Cancels the listing.</param>
+    /// <returns>A (possibly empty) list of container attributes.</returns>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
-    public Task<IReadOnlyList<ResourceContainerInfo>> GetResourceContainersAsync(CancellationToken cancellationToken);
+    public Task<IReadOnlyList<ResourceContainerInfo>> GetResourceContainersAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Checks whether a container exists.
     /// </summary>
     /// <param name="resourceContainerName">The name of the container.</param>
-    /// <exception cref="ArgumentException"><paramref name="resourceContainerName"/> is null, empty, longer than 128 characters, or starts or ends with whitespace (<see cref="ArgumentNullException"/> when null).</exception>
-    public Task<bool> ContainerExistsAsync(string resourceContainerName);
-
-    /// <inheritdoc cref="ContainerExistsAsync(string)"/>
     /// <param name="cancellationToken">Cancels the check.</param>
+    /// <exception cref="ArgumentException"><paramref name="resourceContainerName"/> is null, empty, longer than 128 characters, or starts or ends with whitespace (<see cref="ArgumentNullException"/> when null).</exception>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
-    public Task<bool> ContainerExistsAsync(string resourceContainerName, CancellationToken cancellationToken);
+    public Task<bool> ContainerExistsAsync(string resourceContainerName, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Deletes a container (and everything in it) if it exists. A large container may be deleted in several steps: if
@@ -96,15 +80,13 @@ public interface IResourceServiceClient
     /// has its current version, and the container still exists, so calling it again finishes the job.
     /// </summary>
     /// <param name="resourceContainerName">The name of the container to delete.</param>
+    /// <param name="cancellationToken">Cancels the delete.</param>
     /// <returns><see langword="true"/> if a container was deleted; otherwise <see langword="false"/>.</returns>
     /// <exception cref="ArgumentException"><paramref name="resourceContainerName"/> is null, empty, longer than 128 characters, or starts or ends with whitespace (<see cref="ArgumentNullException"/> when null).</exception>
     /// <exception cref="ResourcePolicyViolationException">The container is read-only; nothing was deleted.</exception>
-    public Task<bool> DeleteResourceContainerIfExistsAsync(string resourceContainerName);
-
-    /// <inheritdoc cref="DeleteResourceContainerIfExistsAsync(string)"/>
-    /// <param name="cancellationToken">Cancels the delete.</param>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
-    public Task<bool> DeleteResourceContainerIfExistsAsync(string resourceContainerName, CancellationToken cancellationToken);
+    public Task<bool> DeleteResourceContainerIfExistsAsync(string resourceContainerName,
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Writes a container to <paramref name="destination"/> as a zip, to back it up or to move it to another store:

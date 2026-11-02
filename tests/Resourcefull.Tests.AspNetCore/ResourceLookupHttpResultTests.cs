@@ -255,7 +255,7 @@ public class ResourceLookupHttpResultTests
         // Arrange: a suffix range opens the whole version first, to learn its length; by the time its range opens,
         // the version is gone. Unlike the current version, a version asked for isn't replaced by another.
         var container = new Mock<IResourceContainerClient>(MockBehavior.Strict);
-        container.Setup(c => c.DownloadStreamingAsync("n", "v1", It.IsAny<CancellationToken>()))
+        container.Setup(c => c.DownloadStreamingAsync("n", "v1", null, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ResourceDownloadResult(new ResourceInfo { ContainerName = "c", Name = "n", VersionId = "v1" },
                 new MemoryStream(System.Text.Encoding.ASCII.GetBytes("0123456789"))) { TotalLength = 10 });
         container.Setup(c => c.DownloadStreamingAsync("n", "v1", new ResourceRange(7, 3), It.IsAny<CancellationToken>()))
@@ -269,7 +269,7 @@ public class ResourceLookupHttpResultTests
         await TypedResults.Resource(container.Object, "n", "v1").ExecuteAsync(context);
 
         // Assert
-        container.Verify(c => c.DownloadStreamingAsync("n", "v1", It.IsAny<CancellationToken>()), Times.Once);
+        container.Verify(c => c.DownloadStreamingAsync("n", "v1", null, It.IsAny<CancellationToken>()), Times.Once);
         Assert.Equal(StatusCodes.Status404NotFound, context.Response.StatusCode);
         Assert.Empty(((MemoryStream)context.Response.Body).ToArray());
     }
@@ -302,7 +302,7 @@ public class ResourceLookupHttpResultTests
                 Range = range
             };
         var container = new Mock<IResourceContainerClient>(MockBehavior.Strict);
-        container.SetupSequence(c => c.DownloadStreamingAsync("n", null, It.IsAny<CancellationToken>()))
+        container.SetupSequence(c => c.DownloadStreamingAsync("n", null, null, It.IsAny<CancellationToken>()))
             .ReturnsAsync(Download("v1", "0123456789"))
             .ReturnsAsync(Download("v2", "abcdefghij"));
         container.Setup(c => c.DownloadStreamingAsync("n", "v1", new ResourceRange(7, 3), It.IsAny<CancellationToken>()))

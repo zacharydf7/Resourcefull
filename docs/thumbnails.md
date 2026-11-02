@@ -31,13 +31,13 @@ try
 {
     // Read the size from the image's header first: a small file can claim to be huge, and decoding it would use that
     // much memory.
-    await using (ResourceDownloadResult header = (await photos.DownloadStreamingAsync(name, photo.VersionId, cancellationToken))!)
+    await using (ResourceDownloadResult header = (await photos.DownloadStreamingAsync(name, photo.VersionId, cancellationToken: cancellationToken))!)
     {
         ImageInfo info = await Image.IdentifyAsync(header.Stream, cancellationToken);
         if ((long)info.Width * info.Height > 50_000_000) return photo;   // over 50 megapixels, about 200 MB decoded
     }
 
-    await using ResourceDownloadResult download = (await photos.DownloadStreamingAsync(name, photo.VersionId, cancellationToken))!;
+    await using ResourceDownloadResult download = (await photos.DownloadStreamingAsync(name, photo.VersionId, cancellationToken: cancellationToken))!;
     using Image image = await Image.LoadAsync(download.Stream, cancellationToken);
     image.Mutate(x => x.Resize(new ResizeOptions { Size = new Size(320, 320), Mode = ResizeMode.Max }));
 

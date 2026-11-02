@@ -108,7 +108,7 @@ public abstract partial class ResourcefullContractTests
 
         // Assert
         Assert.True(deleted);
-        Assert.Empty(await container.GetResourcesAsync());
+        Assert.Empty(await container.ListResourcesAsync().ToListAsync());
         Assert.Null(await container.DownloadContentAsync("doc"));
     }
 
@@ -136,7 +136,7 @@ public abstract partial class ResourcefullContractTests
         Assert.True(deleted);
         Assert.False(await service.ContainerExistsAsync(name));
         await service.CreateResourceContainerAsync(name);
-        Assert.Empty(await container.GetResourcesAsync());
+        Assert.Empty(await container.ListResourcesAsync().ToListAsync());
     }
 
     private sealed class PathUriProvider : IUriProvider

@@ -152,7 +152,7 @@
         foreach (var container in _resourceContainers)
         {
             var containerClient = ResourceServiceClient.GetResourceContainerClient(container.Name);
-            _resources.AddRange(await containerClient.GetResourcesAsync());
+            _resources.AddRange(await containerClient.ListResourcesAsync().ToListAsync());
         }
         _resourceVersionsMap.Clear();
         _openVersionHistories.Clear();
@@ -233,7 +233,7 @@
     public async Task<List<ResourceInfo>> GetResourcesFromContainer(string containerName)
     {
         var containerClient = ResourceServiceClient.GetResourceContainerClient(containerName);
-        return (await containerClient.GetResourcesAsync()).ToList();
+        return await containerClient.ListResourcesAsync().ToListAsync();
     }
 
     public async Task DeleteContainer(string containerName)

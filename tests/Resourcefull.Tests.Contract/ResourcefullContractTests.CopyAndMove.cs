@@ -272,7 +272,7 @@ public abstract partial class ResourcefullContractTests
         await Assert.ThrowsAsync<ResourceContainerNotFoundException>(noContainer);
         await Assert.ThrowsAsync<ResourcePreconditionFailedException>(stale);
         await Assert.ThrowsAsync<ArgumentException>(itself);
-        Assert.Equal(["a", "b"], (await container.GetResourcesAsync()).Select(r => r.Name).Order());
+        Assert.Equal(["a", "b"], (await container.ListResourcesAsync().ToListAsync()).Select(r => r.Name).Order());
         Assert.Null(await container.MoveResourceAsync("missing", name, "c"));
     }
 
@@ -360,6 +360,6 @@ public abstract partial class ResourcefullContractTests
         Assert.Equal(ResourcePolicyRule.AllowedContentTypes, Assert.IsType<ResourcePolicyViolationException>(wrongType).Rule);
         Assert.Equal(ResourcePolicyRule.MaxContainerSize, Assert.IsType<ResourcePolicyViolationException>(tooLarge).Rule);
         Assert.Equal(ResourcePolicyRule.ReadOnly, Assert.IsType<ResourcePolicyViolationException>(readOnly).Rule);
-        Assert.Equal(["notes.txt", "photo.png"], (await source.GetResourcesAsync()).Select(r => r.Name).Order());
+        Assert.Equal(["notes.txt", "photo.png"], (await source.ListResourcesAsync().ToListAsync()).Select(r => r.Name).Order());
     }
 }

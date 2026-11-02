@@ -14,7 +14,7 @@ public static class ResourcefullResults
         /// Sends a download with its headers, answering conditional and <c>HEAD</c> requests. See
         /// <see cref="ResourceHttpResult"/>.
         /// </summary>
-        /// <param name="download">What <see cref="IResourceContainerClient.DownloadStreamingAsync(string, string?, CancellationToken)"/> returned.</param>
+        /// <param name="download">What <see cref="IResourceContainerClient.DownloadStreamingAsync"/> returned.</param>
         /// <param name="options">How to present it; <see langword="null"/> offers it as a download under its name.</param>
         /// <returns>The result, which disposes the download stream once it's sent.</returns>
         public static IResult Resource(ResourceDownloadResult download, ResourceResultOptions? options = null) =>

@@ -70,17 +70,4 @@ public class ResourceRangeTests
         Assert.Equal(1_000, stream.Length);
         Assert.Equal(1_000, stream.Position);
     }
-
-    [Fact]
-    public async Task DownloadStreamingAsync_ShouldThrowNotSupported_WhenAClientWrittenFor31IsGivenARange()
-    {
-        // Arrange
-        IResourceContainerClient client = new Mock<IResourceContainerClient> { CallBase = true }.Object;
-
-        // Act
-        Task act() => client.DownloadStreamingAsync("r", null, new ResourceRange(0, 10), CancellationToken.None);
-
-        // Assert
-        await Assert.ThrowsAsync<NotSupportedException>(act);
-    }
 }

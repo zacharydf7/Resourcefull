@@ -115,7 +115,7 @@ files.MapPut("/{**name}", async (string name, ClaimsPrincipal user, HttpRequest 
     if (!contentTypes.TryGetContentType(name, out string? contentType))
         return Results.StatusCode(StatusCodes.Status415UnsupportedMediaType);
     IResourceContainerClient container =
-        await resources.CreateResourceContainerIfNotExistsAsync(ContainerOf(user), null, cancellationToken);
+        await resources.CreateResourceContainerIfNotExistsAsync(ContainerOf(user), cancellationToken: cancellationToken);
     var upload = new ResourceUploadOptions { Headers = new ResourceHeaders(contentType, request.ContentLength) };
     return await container.UploadFromRequestAsync(name, request, upload, cancellationToken);
 });
@@ -127,7 +127,7 @@ files.MapMethods("/{**name}", ["GET", "HEAD"], (string name, ClaimsPrincipal use
 
 files.MapDelete("/{**name}", async (string name, ClaimsPrincipal user, IResourceServiceClient resources,
     CancellationToken cancellationToken) =>
-    await FilesOf(user, resources).DeleteResourceIfExistsAsync(name, null, cancellationToken)
+    await FilesOf(user, resources).DeleteResourceIfExistsAsync(name, cancellationToken: cancellationToken)
         ? Results.NoContent()
         : Results.NotFound());
 

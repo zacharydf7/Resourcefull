@@ -33,7 +33,7 @@ public class StagedUploadIntegrationTests(SqlServerFixture fixture)
         // Act: read every way a version shows, and the chunk table with locks that wait for any write in progress.
         ResourceInfo? info = await container.GetResourceInfoAsync("video.mp4");
         IReadOnlyList<ResourceInfo> versions = await container.GetResourceVersionsAsync("video.mp4");
-        IReadOnlyList<ResourceInfo> listed = await container.GetResourcesAsync();
+        IReadOnlyList<ResourceInfo> listed = await container.ListResourcesAsync().ToListAsync();
         ResourceContainerUsage usage = await container.GetUsageAsync();
         int chunksSeenWithLocks = await CountChunksWithLocksAsync();
         content.Resume();

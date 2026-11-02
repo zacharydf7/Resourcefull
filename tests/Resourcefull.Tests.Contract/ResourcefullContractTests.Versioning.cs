@@ -166,7 +166,7 @@ public abstract partial class ResourcefullContractTests
         // Assert
         Assert.True(deleted);
         Assert.Empty(await container.GetResourceVersionsAsync("doc"));
-        Assert.Empty(await container.GetResourcesAsync());
+        Assert.Empty(await container.ListResourcesAsync().ToListAsync());
         Assert.False(await container.DeleteResourceIfExistsAsync("doc"));
     }
 
@@ -222,12 +222,12 @@ public abstract partial class ResourcefullContractTests
 
         // Act
         IReadOnlyList<ResourceInfo> versions = await container.GetResourceVersionsAsync("n");
-        ResourceInfo listed = Assert.Single(await container.GetResourcesAsync());
+        ResourceInfo listed = Assert.Single(await container.ListResourcesAsync().ToListAsync());
         ResourceInfo paged = Assert.Single((await container.GetResourcePageAsync()).Resources);
         string content = (await container.DownloadContentAsync("n"))!.Content.ToString();
         await container.DeleteResourceIfExistsAsync("n", third.VersionId);
         ResourceInfo? promoted = await container.GetResourceInfoAsync("n");
-        ResourceInfo listedAfter = Assert.Single(await container.GetResourcesAsync());
+        ResourceInfo listedAfter = Assert.Single(await container.ListResourcesAsync().ToListAsync());
 
         // Assert: the order they were stored in, not their LastModified, in every read.
         Assert.Equal([third.VersionId, second.VersionId, first.VersionId], versions.Select(v => v.VersionId));

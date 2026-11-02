@@ -58,7 +58,7 @@ public class CancellationIntegrationTests(SqlServerFixture fixture)
         var service = scope.ServiceProvider.GetRequiredService<IResourceServiceClient>();
         var container = await service.CreateResourceContainerAsync($"c-{Guid.NewGuid():N}");
         await container.UploadAsync("doc", new MemoryStream(new byte[200_000]));
-        ResourceDownloadResult? download = await container.DownloadStreamingAsync("doc", null, CancellationToken.None);
+        ResourceDownloadResult? download = await container.DownloadStreamingAsync("doc", cancellationToken: CancellationToken.None);
         using var cts = new CancellationTokenSource();
         cts.Cancel();
 

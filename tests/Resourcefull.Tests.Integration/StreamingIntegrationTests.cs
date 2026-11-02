@@ -21,7 +21,7 @@ public class StreamingIntegrationTests(SqlServerFixture fixture)
         // Arrange
         using ServiceProvider provider = fixture.BuildServiceProvider();
         IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>().CreateResourceContainerAsync($"c-{Guid.NewGuid():N}");
-        await container.GetResourcesAsync();
+        await container.ListResourcesAsync().ToListAsync();
         long baseline = GC.GetTotalMemory(forceFullCollection: true);
         var upload = new GeneratedStream(LargePayload, sampleMemory: true);
         var download = new VerifyingStream(sampleMemory: true);

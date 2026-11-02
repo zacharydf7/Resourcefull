@@ -38,7 +38,7 @@ public abstract partial class ResourcefullContractTests
         // Assert
         Assert.Single(outcomes, o => o is null);
         Assert.All(outcomes.Where(o => o is not null), o => Assert.IsType<ResourceConflictException>(o));
-        Assert.Single(await container.GetResourcesAsync());
+        Assert.Single(await container.ListResourcesAsync().ToListAsync());
     }
 
     [SkippableFact]
@@ -55,7 +55,7 @@ public abstract partial class ResourcefullContractTests
         // Assert
         Assert.All(outcomes, Assert.Null);
         Assert.True(Assert.Single(await container.GetResourceVersionsAsync("report.txt")).IsLatest);
-        Assert.Single(await container.GetResourcesAsync());
+        Assert.Single(await container.ListResourcesAsync().ToListAsync());
     }
 
     [SkippableFact]
@@ -73,7 +73,7 @@ public abstract partial class ResourcefullContractTests
         IReadOnlyList<ResourceInfo> versions = await container.GetResourceVersionsAsync("report.txt");
         Assert.Equal(Writers, versions.Count);
         Assert.Single(versions, v => v.IsLatest);
-        Assert.Single(await container.GetResourcesAsync());
+        Assert.Single(await container.ListResourcesAsync().ToListAsync());
     }
 
     [SkippableFact]

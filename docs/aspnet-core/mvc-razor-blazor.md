@@ -57,7 +57,7 @@ render after it:
 public async Task<IActionResult> OnGetAsync(string name, CancellationToken cancellationToken)
 {
     ResourceDownloadResult? download = await _resources.GetResourceContainerClient("files")
-        .DownloadStreamingAsync(name, null, cancellationToken);
+        .DownloadStreamingAsync(name, cancellationToken: cancellationToken);
     if (download is null) return NotFound();
     await Results.Resource(download).ExecuteAsync(HttpContext);
     return new EmptyResult();

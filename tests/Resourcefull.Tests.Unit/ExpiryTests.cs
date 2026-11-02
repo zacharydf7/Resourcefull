@@ -73,7 +73,7 @@ public class ExpiryTests
 
         // Assert
         Assert.Equal(101, deleted);
-        Assert.Empty(await container.GetResourcesAsync());
+        Assert.Empty(await container.ListResourcesAsync().ToListAsync());
     }
 
     /// <summary>Makes the container named <c>frozen</c> read-only once <see cref="Frozen"/> is set.</summary>
@@ -108,7 +108,7 @@ public class ExpiryTests
             // Assert
             Assert.Equal(1, deleted);
             Assert.False(await other.ExistsAsync("r"));
-            Assert.Equal(101, (await frozen.GetResourcesAsync()).Count);
+            Assert.Equal(101, (await frozen.ListResourcesAsync().ToListAsync()).Count);
         }
         finally
         {
@@ -168,7 +168,7 @@ public class ExpiryTests
         // Assert
         Assert.Equal(10, sweep.InnerExceptions.Count);
         Assert.StartsWith("12 expired versions weren't deleted", sweep.Message);
-        Assert.Equal(12, (await container.GetResourcesAsync()).Count);
+        Assert.Equal(12, (await container.ListResourcesAsync().ToListAsync()).Count);
     }
 
     [Fact]

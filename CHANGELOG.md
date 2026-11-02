@@ -105,6 +105,14 @@
 
 ### Changed
 
+- **One method per operation.** Each operation of `IResourceContainerClient` and `IResourceServiceClient` from before
+  3.1 is now one method, with its optional parameters and then an optional `CancellationToken` last, rather than a pair
+  of overloads where only one took a token. A token can now be named without passing `null` for the parameters
+  before it: `UploadAsync("a", data, cancellationToken: token)`. `DownloadStreamingAsync`
+  takes its range, and `DeleteResourceIfExistsAsync` its conditions, as optional parameters before the token, so a
+  token passed by position after a version ID needs naming. `UploadAsync`'s `uploadOptions` parameter is now
+  `options`. `GetResourcesAsync`, which read a whole container into memory, is removed, and with it the `list` span;
+  use `ListResourcesAsync`. See [Upgrading to 4.0](docs/upgrading-to-4.md#one-method-per-operation).
 - **Providers derive from the `ResourceRepository` base class,** which replaces the `IResourceRepository` interface.
   Its members take a `ResourceLocation` rather than a container name and a resource name, return `IReadOnlyList<T>`
   rather than `List<T>`, and take metadata as `IReadOnlyDictionary<string, string>`. A write is given a

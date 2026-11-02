@@ -111,17 +111,4 @@ public class ResourceConditionsTests
         // Assert
         Assert.True(deleted);
     }
-
-    [Fact]
-    public async Task DeleteResourceIfExistsAsync_ShouldThrowNotSupported_WhenAClientWrittenFor30IsGivenConditions()
-    {
-        // Arrange
-        IResourceContainerClient client = new Mock<IResourceContainerClient> { CallBase = true }.Object;
-
-        // Act
-        Task act() => client.DeleteResourceIfExistsAsync("r", null, new ResourceConditions { IfMatchVersionId = "v1" }, CancellationToken.None);
-
-        // Assert
-        await Assert.ThrowsAsync<NotSupportedException>(act);
-    }
 }

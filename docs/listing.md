@@ -1,8 +1,7 @@
 # Listing resources
 
-`GetResourcesAsync` returns every current resource in a container in one list, which suits small containers. For
-large ones, or to list only the names under a prefix, enumerate `ListResourcesAsync`, which fetches a page at a time
-as you go:
+Enumerate `ListResourcesAsync` to list the current version of every resource in a container, or of those whose names
+start with a prefix. It fetches a page at a time as you go, so it suits containers of any size:
 
 ```csharp
 await foreach (ResourceInfo invoice in invoices.ListResourcesAsync(new ResourceListOptions { Prefix = "2026/10/" }))
@@ -10,6 +9,10 @@ await foreach (ResourceInfo invoice in invoices.ListResourcesAsync(new ResourceL
     Console.WriteLine(invoice.Name);
 }
 ```
+
+For a small container, `await invoices.ListResourcesAsync().ToListAsync()` gives you them all in one list.
+<span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> In 3.1, `GetResourcesAsync` does that; 4.0 removes it, because it reads the whole container into memory
+at once.
 
 An API that pages for its own callers fetches one page per request and hands back the continuation token:
 

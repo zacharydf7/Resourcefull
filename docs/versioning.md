@@ -22,7 +22,7 @@ IEnumerable<ResourceInfo> history = versions.Where(v => !v.IsLatest); // then ne
 ResourceDownloadResult? older = await container.DownloadStreamingAsync("contract.docx", history.First().VersionId);
 ```
 
-`GetResourcesAsync` lists only the current version of each name.
+`ListResourcesAsync` lists only the current version of each name.
 
 A `VersionId` is an opaque string: compare it for equality, and don't parse it or sort by it. Storage decides the
 order versions were stored in, so servers with skewed clocks can't make an older upload current. `LastModified` is

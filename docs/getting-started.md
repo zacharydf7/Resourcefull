@@ -92,7 +92,7 @@ public class Invoices(IResourceServiceClient resources)
     public async Task<ResourceInfo> SaveAsync(string fileName, Stream content, CancellationToken cancellationToken)
     {
         IResourceContainerClient invoices =
-            await resources.CreateResourceContainerIfNotExistsAsync("invoices", null, cancellationToken);
+            await resources.CreateResourceContainerIfNotExistsAsync("invoices", cancellationToken: cancellationToken);
 
         return await invoices.UploadAsync(fileName, content, new ResourceUploadOptions
         {
@@ -102,7 +102,7 @@ public class Invoices(IResourceServiceClient resources)
     }
 
     public async Task<ResourceDownloadResult?> OpenAsync(string fileName, CancellationToken cancellationToken)
-        => await resources.GetResourceContainerClient("invoices").DownloadStreamingAsync(fileName, null, cancellationToken);
+        => await resources.GetResourceContainerClient("invoices").DownloadStreamingAsync(fileName, cancellationToken: cancellationToken);
 }
 ```
 
@@ -118,7 +118,7 @@ List, inspect and delete with the same client:
 ```csharp
 IResourceContainerClient invoices = resources.GetResourceContainerClient("invoices");
 
-IReadOnlyList<ResourceInfo> all = await invoices.GetResourcesAsync();
+await foreach (ResourceInfo invoice in invoices.ListResourcesAsync()) Console.WriteLine(invoice.Name);
 ResourceInfo? info = await invoices.GetResourceInfoAsync("2026-10.pdf");
 bool deleted = await invoices.DeleteResourceIfExistsAsync("2026-10.pdf");
 ```

@@ -98,7 +98,7 @@ public abstract partial class ResourcefullContractTests
         await ServiceOf(provider).DeleteExpiredAsync();
 
         // Assert
-        Assert.Equal(["later", "permanent"], (await container.GetResourcesAsync()).Select(r => r.Name).Order());
+        Assert.Equal(["later", "permanent"], (await container.ListResourcesAsync().ToListAsync()).Select(r => r.Name).Order());
         Assert.Equal(later.ExpiresAt, (await container.GetResourceInfoAsync("later"))!.ExpiresAt);
         Assert.Null((await container.GetResourceInfoAsync("permanent"))!.ExpiresAt);
     }
@@ -143,7 +143,7 @@ public abstract partial class ResourcefullContractTests
 
         // Assert
         Assert.Equal([true, true, true, false], found);
-        Assert.Equal(["cleared", "extended"], (await container.GetResourcesAsync()).Select(r => r.Name).Order());
+        Assert.Equal(["cleared", "extended"], (await container.ListResourcesAsync().ToListAsync()).Select(r => r.Name).Order());
         Assert.Equal(Future, (await container.GetResourceInfoAsync("extended"))!.ExpiresAt);
         Assert.Equal(extended.LastModified, (await container.GetResourceInfoAsync("extended"))!.LastModified);
     }

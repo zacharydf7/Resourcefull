@@ -55,7 +55,7 @@ public abstract partial class ResourcefullContractTests
         // Assert
         Assert.Equal(1_001, exported.ResourceCount);
         IResourceContainerClient restored = service.GetResourceContainerClient(restoredName);
-        Assert.Equal(1_001, (await restored.GetResourcesAsync()).Count);
+        Assert.Equal(1_001, (await restored.ListResourcesAsync().ToListAsync()).Count);
         Assert.Equal("1000", (await restored.DownloadContentAsync("r1000"))!.Content.ToString());
     }
 
@@ -141,7 +141,7 @@ public abstract partial class ResourcefullContractTests
 
         // Assert
         await Assert.ThrowsAsync<ResourceConflictException>(act);
-        Assert.Equal(["kept"], (await existing.GetResourcesAsync()).Select(r => r.Name));
+        Assert.Equal(["kept"], (await existing.ListResourcesAsync().ToListAsync()).Select(r => r.Name));
     }
 
     [SkippableTheory]

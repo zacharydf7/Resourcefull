@@ -127,7 +127,7 @@ public sealed class ResourceLookupHttpResult : IResult, IActionResult
             }
         }
 
-        return await Container.DownloadStreamingAsync(ResourceName, versionId, cancellationToken);
+        return await Container.DownloadStreamingAsync(ResourceName, versionId, cancellationToken: cancellationToken);
     }
 
     /// <summary>

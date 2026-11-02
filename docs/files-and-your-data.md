@@ -68,7 +68,7 @@ invoice.PdfName = stored.Name;
 invoice.PdfVersionId = stored.VersionId;
 await db.SaveChangesAsync(cancellationToken);
 
-await invoices.DeleteResourceIfExistsAsync(oldName, null, cancellationToken);
+await invoices.DeleteResourceIfExistsAsync(oldName, cancellationToken: cancellationToken);
 ```
 
 At every step, the row points at a file that exists. If the application stops partway, either the new file or the
@@ -81,7 +81,7 @@ Delete the row first, then the file:
 ```csharp
 db.Invoices.Remove(invoice);
 await db.SaveChangesAsync(cancellationToken);
-await invoices.DeleteResourceIfExistsAsync(invoice.PdfName, null, cancellationToken);
+await invoices.DeleteResourceIfExistsAsync(invoice.PdfName, cancellationToken: cancellationToken);
 ```
 
 The other way around, a failure after the file's delete would leave the row pointing at nothing.
@@ -98,7 +98,7 @@ await foreach (ResourceInfo file in invoices.ListResourcesAsync(cancellationToke
 {
     if (file.LastModified > cutoff) continue;
     bool pointedAt = await db.Invoices.AnyAsync(i => i.PdfName == file.Name, cancellationToken);
-    if (!pointedAt) await invoices.DeleteResourceIfExistsAsync(file.Name, file.VersionId, cancellationToken);
+    if (!pointedAt) await invoices.DeleteResourceIfExistsAsync(file.Name, file.VersionId, cancellationToken: cancellationToken);
 }
 ```
 

@@ -34,7 +34,7 @@ public class ConcurrencyIntegrationTests(SqlServerFixture fixture)
 
             var artifactName = $"artifact-{Guid.NewGuid():N}";
             await container.UploadAsync(artifactName, new MemoryStream(payload));
-            IReadOnlyList<ResourceInfo> listed = await container.GetResourcesAsync();
+            IReadOnlyList<ResourceInfo> listed = await container.ListResourcesAsync().ToListAsync();
             ResourceContent? downloaded = await container.DownloadContentAsync(artifactName);
             bool deleted = await service.DeleteResourceContainerIfExistsAsync(containerName);
             return new Workflow(containerName, artifactName, listed, downloaded?.Content.ToArray(), deleted);

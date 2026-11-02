@@ -17,12 +17,10 @@ internal partial class ResourceContainerClient(ResourceRepository resourceReposi
 
     private string ContainerName => ResourceContainerInfo.Name;
 
-    public Task<ResourceInfo> UploadAsync(string resourceName, Stream content, ResourceUploadOptions? uploadOptions = null)
-        => UploadAsync(resourceName, content, uploadOptions, CancellationToken.None);
-
-    public Task<ResourceInfo> UploadAsync(string resourceName, Stream content, ResourceUploadOptions? uploadOptions, CancellationToken cancellationToken)
-        => _telemetry.RunAsync("upload", ContainerName, resourceName, () => UploadCoreAsync(resourceName, content, uploadOptions, cancellationToken),
-            "resourcefull.conditional", uploadOptions?.Conditions is { IsEmpty: false });
+    public Task<ResourceInfo> UploadAsync(string resourceName, Stream content, ResourceUploadOptions? options = null,
+        CancellationToken cancellationToken = default)
+        => _telemetry.RunAsync("upload", ContainerName, resourceName, () => UploadCoreAsync(resourceName, content, options, cancellationToken),
+            "resourcefull.conditional", options?.Conditions is { IsEmpty: false });
 
     private async Task<ResourceInfo> UploadCoreAsync(string resourceName, Stream content, ResourceUploadOptions? uploadOptions, CancellationToken cancellationToken)
     {
@@ -84,19 +82,15 @@ internal partial class ResourceContainerClient(ResourceRepository resourceReposi
         }
     }
 
-    public Task<ResourceInfo> UploadAsync(string resourceName, BinaryData content, ResourceUploadOptions? uploadOptions = null)
-        => UploadAsync(resourceName, content, uploadOptions, CancellationToken.None);
-
-    public Task<ResourceInfo> UploadAsync(string resourceName, BinaryData content, ResourceUploadOptions? uploadOptions, CancellationToken cancellationToken)
+    public Task<ResourceInfo> UploadAsync(string resourceName, BinaryData content, ResourceUploadOptions? options = null,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(content);
-        return UploadAsync(resourceName, content.ToStream(), uploadOptions, cancellationToken);
+        return UploadAsync(resourceName, content.ToStream(), options, cancellationToken);
     }
 
-    public Task<ResourceInfo?> RestoreVersionAsync(string resourceName, string versionId)
-        => RestoreVersionAsync(resourceName, versionId, CancellationToken.None);
-
-    public Task<ResourceInfo?> RestoreVersionAsync(string resourceName, string versionId, CancellationToken cancellationToken)
+    public Task<ResourceInfo?> RestoreVersionAsync(string resourceName, string versionId,
+        CancellationToken cancellationToken = default)
         => _telemetry.RunAsync("restore", ContainerName, resourceName, () => RestoreCoreAsync(resourceName, versionId, cancellationToken));
 
     private async Task<ResourceInfo?> RestoreCoreAsync(string resourceName, string versionId, CancellationToken cancellationToken)
@@ -348,16 +342,10 @@ internal partial class ResourceContainerClient(ResourceRepository resourceReposi
         }
     }
 
-    public Task<ResourceDownloadResult?> DownloadStreamingAsync(string resourceName, string? versionId = null)
-        => DownloadStreamingAsync(resourceName, versionId, CancellationToken.None);
-
-    public Task<ResourceDownloadResult?> DownloadStreamingAsync(string resourceName, string? versionId, CancellationToken cancellationToken)
-        => _telemetry.RunAsync("download", ContainerName, resourceName, () => OpenAsync(resourceName, versionId, null, cancellationToken));
-
-    public Task<ResourceDownloadResult?> DownloadStreamingAsync(string resourceName, string? versionId, ResourceRange range,
-        CancellationToken cancellationToken)
+    public Task<ResourceDownloadResult?> DownloadStreamingAsync(string resourceName, string? versionId = null, ResourceRange? range = null,
+        CancellationToken cancellationToken = default)
         => _telemetry.RunAsync("download", ContainerName, resourceName, () => OpenAsync(resourceName, versionId, range, cancellationToken),
-            "resourcefull.range", $"{range.Offset}-{range.Offset + range.Length - 1}");
+            range is null ? null : "resourcefull.range", range is { } part ? $"{part.Offset}-{part.Offset + part.Length - 1}" : null);
 
     private async Task<ResourceDownloadResult?> OpenAsync(string resourceName, string? versionId, ResourceRange? range,
         CancellationToken cancellationToken)
@@ -398,10 +386,8 @@ internal partial class ResourceContainerClient(ResourceRepository resourceReposi
         };
     }
 
-    public Task<ResourceContent?> DownloadContentAsync(string resourceName, string? versionId = null)
-        => DownloadContentAsync(resourceName, versionId, CancellationToken.None);
-
-    public Task<ResourceContent?> DownloadContentAsync(string resourceName, string? versionId, CancellationToken cancellationToken)
+    public Task<ResourceContent?> DownloadContentAsync(string resourceName, string? versionId = null,
+        CancellationToken cancellationToken = default)
         => _telemetry.RunAsync("download", ContainerName, resourceName, async () =>
         {
             ResourceDownloadResult? result = await OpenAsync(resourceName, versionId, null, cancellationToken);
@@ -413,23 +399,14 @@ internal partial class ResourceContainerClient(ResourceRepository resourceReposi
             return new ResourceContent(result.ResourceInfo, BinaryData.FromBytes(memoryStream.ToArray()));
         });
 
-    public Task<ResourceInfo?> GetResourceInfoAsync(string resourceName, string? versionId = null)
-        => GetResourceInfoAsync(resourceName, versionId, CancellationToken.None);
-
-    public Task<ResourceInfo?> GetResourceInfoAsync(string resourceName, string? versionId, CancellationToken cancellationToken)
+    public Task<ResourceInfo?> GetResourceInfoAsync(string resourceName, string? versionId = null,
+        CancellationToken cancellationToken = default)
         => _telemetry.RunAsync("get_info", ContainerName, resourceName, async () =>
         {
             ResourceNames.ThrowIfInvalidResourceName(resourceName);
             ResourceInfo? resourceInfo = await resourceRepository.GetResourceInfoAsync(At(resourceName), versionId, cancellationToken);
             return resourceInfo is null ? null : WithUri(resourceInfo);
         });
-
-    public Task<IReadOnlyList<ResourceInfo>> GetResourcesAsync()
-        => GetResourcesAsync(CancellationToken.None);
-
-    public Task<IReadOnlyList<ResourceInfo>> GetResourcesAsync(CancellationToken cancellationToken)
-        => _telemetry.RunAsync<IReadOnlyList<ResourceInfo>>("list", ContainerName, null,
-            async () => WithUris(await resourceRepository.GetAllResourceInfoAsync(ContainerName, cancellationToken)));
 
     public Task<ResourcePage> GetResourcePageAsync(ResourceListOptions? options = null, string? continuationToken = null,
         CancellationToken cancellationToken = default)
@@ -456,10 +433,8 @@ internal partial class ResourceContainerClient(ResourceRepository resourceReposi
         return new ResourcePage(WithUris(resources), next);
     }
 
-    public Task<IReadOnlyList<ResourceInfo>> GetResourceVersionsAsync(string resourceName)
-        => GetResourceVersionsAsync(resourceName, CancellationToken.None);
-
-    public Task<IReadOnlyList<ResourceInfo>> GetResourceVersionsAsync(string resourceName, CancellationToken cancellationToken)
+    public Task<IReadOnlyList<ResourceInfo>> GetResourceVersionsAsync(string resourceName,
+        CancellationToken cancellationToken = default)
         => _telemetry.RunAsync<IReadOnlyList<ResourceInfo>>("list_versions", ContainerName, resourceName, async () =>
         {
             ResourceNames.ThrowIfInvalidResourceName(resourceName);
@@ -477,14 +452,8 @@ internal partial class ResourceContainerClient(ResourceRepository resourceReposi
 
     private ResourceLocation At(string resourceName) => new(ContainerName, resourceName);
 
-    public Task<bool> DeleteResourceIfExistsAsync(string resourceName, string? versionId = null)
-        => DeleteResourceIfExistsAsync(resourceName, versionId, CancellationToken.None);
-
-    public Task<bool> DeleteResourceIfExistsAsync(string resourceName, string? versionId, CancellationToken cancellationToken)
-        => DeleteResourceIfExistsAsync(resourceName, versionId, null, cancellationToken);
-
-    public Task<bool> DeleteResourceIfExistsAsync(string resourceName, string? versionId, ResourceConditions? conditions,
-        CancellationToken cancellationToken)
+    public Task<bool> DeleteResourceIfExistsAsync(string resourceName, string? versionId = null, ResourceConditions? conditions = null,
+        CancellationToken cancellationToken = default)
         => _telemetry.RunAsync("delete", ContainerName, resourceName, async () =>
         {
             ResourceNames.ThrowIfInvalidResourceName(resourceName);
@@ -690,10 +659,8 @@ internal partial class ResourceContainerClient(ResourceRepository resourceReposi
             ? new ResourceContainerPolicy()
             : await policies.GetAsync(ContainerName, _telemetry, cancellationToken));
 
-    public Task<bool> ExistsAsync(string resourceName, string? versionId = null)
-        => ExistsAsync(resourceName, versionId, CancellationToken.None);
-
-    public Task<bool> ExistsAsync(string resourceName, string? versionId, CancellationToken cancellationToken)
+    public Task<bool> ExistsAsync(string resourceName, string? versionId = null,
+        CancellationToken cancellationToken = default)
         => _telemetry.RunAsync("exists", ContainerName, resourceName, async () =>
         {
             ResourceNames.ThrowIfInvalidResourceName(resourceName);

@@ -35,7 +35,7 @@ public abstract partial class ResourcefullContractTests
         await container.UploadAsync("Report.txt", BinaryData.FromString("upper"));
 
         // Assert
-        Assert.Equal(2, (await container.GetResourcesAsync()).Count);
+        Assert.Equal(2, (await container.ListResourcesAsync().ToListAsync()).Count);
         Assert.Equal("lower", (await container.DownloadContentAsync("report.txt"))!.Content.ToString());
         Assert.Equal("upper", (await container.DownloadContentAsync("Report.txt"))!.Content.ToString());
         Assert.Null(await container.GetResourceInfoAsync("REPORT.TXT"));
@@ -74,7 +74,7 @@ public abstract partial class ResourcefullContractTests
 
         // Assert
         Assert.Equal(names.Order(StringComparer.Ordinal),
-            (await container.GetResourcesAsync()).Select(r => r.Name).Order(StringComparer.Ordinal));
+            (await container.ListResourcesAsync().ToListAsync()).Select(r => r.Name).Order(StringComparer.Ordinal));
         foreach (string name in names)
             Assert.Equal(name, (await container.DownloadContentAsync(name))!.Content.ToString());
     }
@@ -160,6 +160,6 @@ public abstract partial class ResourcefullContractTests
 
         // Assert
         await Assert.ThrowsAnyAsync<ArgumentException>(act);
-        Assert.Empty(await container.GetResourcesAsync());
+        Assert.Empty(await container.ListResourcesAsync().ToListAsync());
     }
 }

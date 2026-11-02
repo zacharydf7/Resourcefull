@@ -240,6 +240,24 @@ public sealed class TelemetryTests : IDisposable
         Assert.Equal(5, _measurements.Where(m => m.Instrument == "resourcefull.client.downloaded").Sum(m => m.Value));
     }
 
+    [Fact]
+    public async Task DownloadStreamingAsync_ShouldNotTagARange_WhenGivenNone()
+    {
+        // Arrange
+        using ServiceProvider provider = NewServices();
+        IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>().CreateResourceContainerAsync("c");
+        await container.UploadAsync("report.txt", BinaryData.FromString("hello world"));
+        using Activity root = TestSource.StartActivity("test")!;
+
+        // Act
+        ResourceDownloadResult download = (await container.DownloadStreamingAsync("report.txt"))!;
+        await download.Stream.DisposeAsync();
+
+        // Assert
+        Activity span = Assert.Single(SpansIn(root), s => s.OperationName == "resourcefull download");
+        Assert.Null(span.GetTagItem("resourcefull.range"));
+    }
+
     private sealed class TextOnlyProvider : IResourcePolicyProvider
     {
         public ValueTask<ResourceContainerPolicy?> GetPolicyAsync(string containerName, CancellationToken cancellationToken) =>

@@ -135,7 +135,7 @@ public class ResourceContainerClientTests
             .ReturnsAsync(() => StoredVersion("v2"));
         repository.Setup(r => r.GetResourceStreamAsync(new ResourceLocation(Container, "report.pdf"), "v2", It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => new MemoryStream());
-        repository.Setup(r => r.GetAllResourceInfoAsync(Container, It.IsAny<CancellationToken>()))
+        repository.Setup(r => r.GetResourcePageAsync(Container, null, null, It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => [StoredVersion("v2")]);
         repository.Setup(r => r.GetResourceVersionsAsync(new ResourceLocation(Container, "report.pdf"), It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => [StoredVersion("v2"), StoredVersion("v1")]);
@@ -153,7 +153,7 @@ public class ResourceContainerClientTests
         Assert.Equal(current, (await client.GetResourceInfoAsync("report.pdf"))!.Uri);
         Assert.Equal(current, (await client.DownloadStreamingAsync("report.pdf"))!.ResourceInfo.Uri);
         Assert.Equal(current, (await client.DownloadContentAsync("report.pdf"))!.ResourceInfo.Uri);
-        Assert.Equal([current], (await client.GetResourcesAsync()).Select(r => r.Uri));
+        Assert.Equal([current], (await ((IResourceContainerClient)client).ListResourcesAsync().ToListAsync()).Select(r => r.Uri));
         Assert.Equal([current, $"https://new.test/{Container}/report.pdf/v1"],
             (await client.GetResourceVersionsAsync("report.pdf")).Select(r => r.Uri));
     }
@@ -565,26 +565,6 @@ public class ResourceContainerClientTests
     }
 
     [Fact]
-    public async Task GetResourcesAsync_ShouldReturnAllResources_WhenRepositoryHoldsResources()
-    {
-        // Arrange
-        var repository = NewRepository();
-        repository.Setup(r => r.GetAllResourceInfoAsync(Container, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(
-            [
-                new() { ContainerName = Container, Name = "a", VersionId = "a1" },
-                new() { ContainerName = Container, Name = "b", VersionId = "b1" }
-            ]);
-        var client = NewClient(repository.Object);
-
-        // Act
-        IReadOnlyList<ResourceInfo> resources = await client.GetResourcesAsync();
-
-        // Assert
-        Assert.Equal(2, resources.Count);
-    }
-
-    [Fact]
     public async Task GetResourceVersionsAsync_ShouldReturnAllVersions_WhenMultipleVersionsExist()
     {
         // Arrange
@@ -808,7 +788,7 @@ public class ResourceContainerClientTests
 
         // Act
         ResourceDownloadResult? result =
-            await client.DownloadStreamingAsync("name", null, cts.Token);
+            await client.DownloadStreamingAsync("name", cancellationToken: cts.Token);
 
         // Assert
         Assert.NotNull(result);
@@ -874,22 +854,6 @@ public class ResourceContainerClientTests
     }
 
     [Fact]
-    public async Task GetResourcesAsync_ShouldPassTheToken_WhenCalledWithOne()
-    {
-        // Arrange
-        using var cts = new CancellationTokenSource();
-        var repository = NewRepository();
-        repository.Setup(r => r.GetAllResourceInfoAsync(Container, cts.Token)).ReturnsAsync([]);
-        var client = NewClient(repository.Object);
-
-        // Act
-        await client.GetResourcesAsync(cts.Token);
-
-        // Assert
-        repository.Verify(r => r.GetAllResourceInfoAsync(Container, cts.Token), Times.Once);
-    }
-
-    [Fact]
     public async Task GetResourceVersionsAsync_ShouldPassTheToken_WhenCalledWithOne()
     {
         // Arrange
@@ -914,7 +878,7 @@ public class ResourceContainerClientTests
         var client = NewClient(repository.Object);
 
         // Act
-        await client.DeleteResourceIfExistsAsync("name", "v1", cts.Token);
+        await client.DeleteResourceIfExistsAsync("name", "v1", cancellationToken: cts.Token);
 
         // Assert
         repository.Verify(r => r.DeleteResourceAsync(new ResourceLocation(Container, "name"), "v1", It.IsAny<ResourceConditions?>(), cts.Token),

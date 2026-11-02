@@ -8,6 +8,36 @@ For upgrades within a major version, and for rolling an upgrade out, see [Upgrad
 
 ## Upgrading your code
 
+### One method per operation
+
+Each operation of `IResourceContainerClient` and `IResourceServiceClient` is now one method: its required parameters,
+then its optional ones, then an optional `CancellationToken` last. In 3.x, the methods from before 3.1 came in pairs,
+and only the one that required every parameter took a token. Most calls compile unchanged, and a token can now be
+named instead of passing `null` for what comes before it. A call like this one, which passes a token after a version
+ID, has to name it:
+
+```csharp
+// Before
+ResourceDownloadResult? download = await container.DownloadStreamingAsync(name, null, cancellationToken);
+
+// 4.0
+ResourceDownloadResult? download = await container.DownloadStreamingAsync(name, cancellationToken: cancellationToken);
+```
+
+These need changes:
+
+- **A token passed after a version ID** to `DownloadStreamingAsync` or `DeleteResourceIfExistsAsync`, as in the
+  example above. The parameter after the version ID is now the range or the conditions, so name the token.
+- **`GetResourcesAsync`** is gone, because it read a whole container into memory at once. Enumerate
+  `ListResourcesAsync`, or for a small container, use `await container.ListResourcesAsync().ToListAsync()`. See
+  [Listing resources](listing.md).
+- **`UploadAsync`'s `uploadOptions` parameter** is named `options`, as on the other methods, so a call that names it
+  changes.
+- **Mocks and test doubles.** A Moq setup or verification can't leave out optional arguments, so it passes the token
+  too: `Setup(c => c.ExistsAsync("a", null, It.IsAny<CancellationToken>()))`. A class that implements either
+  interface implements one method per operation, and handles the range and the conditions itself: the overloads
+  that took them no longer have default implementations.
+
 ### `ResourceInfo` can't be changed
 
 `ResourceInfo` is now a record whose properties are set only when it's created, and its `Metadata` is an

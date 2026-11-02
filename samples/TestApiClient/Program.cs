@@ -59,7 +59,7 @@ app.MapGet("/api/containers/{containerName}", async (string containerName, IReso
     }
 
     IResourceContainerClient containerClient = resourceServiceClient.GetResourceContainerClient(containerName);
-    IReadOnlyList<ResourceInfo> containerResourceInfo = await containerClient.GetResourcesAsync();
+    IReadOnlyList<ResourceInfo> containerResourceInfo = await containerClient.ListResourcesAsync().ToListAsync();
 
     return Results.Ok(new { containerInfo.Name, containerInfo.Metadata, containerResourceInfo });
 });

@@ -56,12 +56,12 @@ internal sealed class TestApp : IAsyncDisposable
         app.UseExceptionHandler();
         app.MapMethods("/files/{**name}", ["GET", "HEAD"], async (string name, IResourceServiceClient resources, CancellationToken cancellationToken) =>
         {
-            ResourceDownloadResult? download = await resources.GetResourceContainerClient(Container).DownloadStreamingAsync(name, null, cancellationToken);
+            ResourceDownloadResult? download = await resources.GetResourceContainerClient(Container).DownloadStreamingAsync(name, cancellationToken: cancellationToken);
             return download is null ? Results.NotFound() : Results.Resource(download);
         });
         app.MapGet("/inline/{**name}", async (string name, IResourceServiceClient resources, CancellationToken cancellationToken) =>
         {
-            ResourceDownloadResult? download = await resources.GetResourceContainerClient(Container).DownloadStreamingAsync(name, null, cancellationToken);
+            ResourceDownloadResult? download = await resources.GetResourceContainerClient(Container).DownloadStreamingAsync(name, cancellationToken: cancellationToken);
             return download is null ? Results.NotFound() : TypedResults.Resource(download, new ResourceResultOptions { Inline = true, FileName = "shown.txt" });
         });
         app.MapMethods("/ranged/{**name}", ["GET", "HEAD"], (string name, string? versionId, IResourceServiceClient resources) =>

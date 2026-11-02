@@ -35,7 +35,7 @@ name read from a file or a form often carries a trailing newline or space. See [
 
 ## A resource "disappeared" after upgrading
 
-Names are case-sensitive since 3.0. Look it up in the case it was stored in; `GetResourcesAsync` lists the stored
+Names are case-sensitive since 3.0. Look it up in the case it was stored in; `ListResourcesAsync` lists the stored
 names.
 
 ## `InvalidOperationException`: "…its content can't be read again to retry"

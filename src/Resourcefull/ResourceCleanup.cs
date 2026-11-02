@@ -14,7 +14,7 @@ namespace Resourcefull;
 /// proof of a deletion, though: a version can be reported more than once, by each instance or prune that finds it, or
 /// by a later sweep when its delete failed, and occasionally isn't deleted after all, when its expiry was extended or
 /// something else deleted it first. Record reports by version ID, and check
-/// <see cref="IResourceContainerClient.ExistsAsync(string, string?)"/> if you need to know a version is gone.
+/// <see cref="IResourceContainerClient.ExistsAsync"/> if you need to know a version is gone.
 /// </remarks>
 public interface IResourceCleanupHandler
 {

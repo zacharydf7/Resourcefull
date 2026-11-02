@@ -16,7 +16,7 @@ app.MapMethods("/files/{container}/{**name}", ["GET", "HEAD"], async (string con
     IResourceServiceClient resources, CancellationToken cancellationToken) =>
 {
     ResourceDownloadResult? download = await resources.GetResourceContainerClient(container)
-        .DownloadStreamingAsync(name, null, cancellationToken);
+        .DownloadStreamingAsync(name, cancellationToken: cancellationToken);
     return download is null ? Results.NotFound() : Results.Resource(download);
 });
 ```

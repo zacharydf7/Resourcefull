@@ -134,15 +134,6 @@
     "Seconds": 0.1687,
     "ContentBytes": 16777222
   },
-  "list-100": {
-    "RoundTrips": 1,
-    "LogicalReads": 9,
-    "LogBytes": 0,
-    "AllocatedBytes": 295872,
-    "RetainedBytes": 40,
-    "Seconds": 0.0032,
-    "ContentBytes": 0
-  },
   "list-page-100-of-500": {
     "RoundTrips": 1,
     "LogicalReads": 8,

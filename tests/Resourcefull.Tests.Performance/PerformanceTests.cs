@@ -229,15 +229,6 @@ public sealed class PerformanceTests(SqlServerFixture fixture, ITestOutputHelper
     }
 
     [SkippableFact]
-    public async Task GetResourcesAsync_ShouldStayWithinItsBaseline_WhenTheContainerHoldsAHundredResources()
-    {
-        IResourceContainerClient container = await NewContainerAsync(ownDatabase: "list");
-        for (int i = 0; i < 100; i++) await container.UploadAsync($"r{i}", new GeneratedStream(1024));
-
-        await MeasureAsync("list-100", 0, run: _ => container.GetResourcesAsync());
-    }
-
-    [SkippableFact]
     public async Task GetResourcePageAsync_ShouldStayWithinItsBaseline_WhenReadingAPageFromTheMiddleOfFiveHundredResources()
     {
         // A page should cost what its own rows cost, wherever it starts, rather than reading the container up to it.
