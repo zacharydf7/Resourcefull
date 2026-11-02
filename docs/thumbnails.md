@@ -1,6 +1,6 @@
 # Thumbnails and previews
 
-<div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 3.2</span></div>
+<div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 4.0</span></div>
 
 Pages that list photos or documents usually show a small preview of each, not the full file. Resourcefull doesn't make
 previews itself, because that takes an image library, and which one to use, under which license, is each

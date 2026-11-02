@@ -39,7 +39,7 @@ exactly one succeeds (see [Updating only if unchanged](../concurrency.md#updatin
 other headers to store, or `CreateOnly`; when the request has preconditions, they replace the options' `Conditions`
 and `CreateOnly`.
 
-With SQL Server <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span>, a transient failure partway through an upload is retried, even though a request body can't
+With SQL Server <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>, a transient failure partway through an upload is retried, even though a request body can't
 be read twice: the content goes in about a MiB at a time, and a batch that fails is sent again from what it holds.
 
 ## From an HTML form

@@ -3,9 +3,9 @@
 What each release brought, in a few lines, and what's planned next. For every change, including the small ones, see
 the [changelog](../CHANGELOG.md).
 
-## Coming in 3.2
+## Coming in 4.0
 
-<div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 3.2</span></div>
+<div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 4.0</span></div>
 
 The biggest release so far, documented here already:
 
@@ -18,10 +18,18 @@ The biggest release so far, documented here already:
 - **[Backups and moves](backup-and-move.md):** export a container, every version of every file, to a zip, and import
   it into another store.
 - **[Range downloads](downloading.md#downloading-part-of-a-resource)**, so videos can seek and downloads can resume.
+- **[Inspecting uploads](upload-inspection.md)** before they're stored, to scan them for malware or check their type.
+- **[Changing metadata and content type](uploading.md#changing-metadata-and-content-type)** without uploading again,
+  and changing a container's metadata.
+- **[Slow uploads that hold nothing up](providers/sql-server-operations.md#uploads-connections-and-the-log):** with SQL
+  Server, an upload's content goes in about a MiB at a time, each batch committed on its own, so a slow client ties up
+  no lock or connection while it sends.
 - **[Health checks](health-checks.md) and [telemetry](telemetry.md)** for every operation, through OpenTelemetry.
 - **Safer downloads by default:** files aren't kept by shared caches, and only safe types display in the browser.
 - **Fixes:** with expiry turned on, a download in progress finishes even when the file is replaced; creating or deleting
   a container on SQL Server no longer reports failure after succeeding.
+
+4.0 also brings the API changes under [What's next](#whats-next), which is why it's a major release.
 
 ## 3.1, October 2026
 
@@ -60,18 +68,17 @@ comment saying you need it helps decide what comes first.
   [S3-compatible provider](https://github.com/zacharydf7/Resourcefull/issues/110), a
   [file-system provider](https://github.com/zacharydf7/Resourcefull/issues/51) and a
   [SQLite provider](https://github.com/zacharydf7/Resourcefull/issues/118).
-- **Bigger uploads:** [resumable uploads](https://github.com/zacharydf7/Resourcefull/issues/112),
-  [signed upload links](https://github.com/zacharydf7/Resourcefull/issues/113), and
-  [staged uploads](https://github.com/zacharydf7/Resourcefull/issues/84) that keep large files from holding a database
-  transaction open.
-- **Managing files:** [changing metadata without re-uploading](https://github.com/zacharydf7/Resourcefull/issues/99),
-  [finding files by metadata](https://github.com/zacharydf7/Resourcefull/issues/57),
-  [soft delete](https://github.com/zacharydf7/Resourcefull/issues/56), and
+- **Bigger uploads:** [resumable uploads](https://github.com/zacharydf7/Resourcefull/issues/112) and
+  [signed upload links](https://github.com/zacharydf7/Resourcefull/issues/113).
+- **Managing files:** [finding files by metadata](https://github.com/zacharydf7/Resourcefull/issues/57),
+  [soft delete, retention and legal holds](https://github.com/zacharydf7/Resourcefull/issues/56), and
   [storing identical content once](https://github.com/zacharydf7/Resourcefull/issues/58).
 - **Seeing your storage:** a [dashboard page](https://github.com/zacharydf7/Resourcefull/issues/129) for containers,
   usage and limits.
-- **4.0,** further out: a simpler API with
-  [one method per operation](https://github.com/zacharydf7/Resourcefull/issues/125) and
-  [more predictable writes](https://github.com/zacharydf7/Resourcefull/issues/126).
+- **A simpler API, also in 4.0:** [one method per operation](https://github.com/zacharydf7/Resourcefull/issues/125),
+  [more predictable writes](https://github.com/zacharydf7/Resourcefull/issues/126), a
+  [base class for providers](https://github.com/zacharydf7/Resourcefull/issues/127), and
+  [stricter names](https://github.com/zacharydf7/Resourcefull/issues/128). They break code written for 3.x, so
+  they come in a major release.
 
 Something missing? [Open an issue](https://github.com/zacharydf7/Resourcefull/issues/new/choose).

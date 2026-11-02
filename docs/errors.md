@@ -13,18 +13,18 @@ Resourcefull reports an expected absence with a return value and everything else
 | Creating a container that exists | `ResourceConflictException` |
 | Uploading into a container that doesn't exist | `ResourceContainerNotFoundException` |
 | An upload or delete whose `ResourceConditions` the current version doesn't meet, including a delete with conditions of a name that doesn't exist | `ResourcePreconditionFailedException` (nothing changes) |
-| Moving a resource onto a name that exists, or importing into a container that exists <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span> | `ResourceConflictException` |
-| A download range that starts past the end of the content <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span> | `ResourceRangeNotSatisfiableException`, with the content's length |
-| A download range with a negative offset or length <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span> | `ArgumentOutOfRangeException` |
+| Moving a resource onto a name that exists, or importing into a container that exists <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | `ResourceConflictException` |
+| A download range that starts past the end of the content <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | `ResourceRangeNotSatisfiableException`, with the content's length |
+| A download range with a negative offset or length <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | `ArgumentOutOfRangeException` |
 | A version deleted while it's being downloaded, with SQL Server | `IOException` from the download stream, rather than a stream that ends early |
-| Importing a file that isn't an export, describes something that can't be imported, or whose content was changed <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span> | `InvalidDataException` (nothing is left behind) |
-| Importing from a stream that can't seek <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span> | `ArgumentException` |
-| An import that fails, and then fails to delete what it imported <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span> | `AggregateException`, holding both failures |
+| Importing a file that isn't an export, describes something that can't be imported, or whose content was changed <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | `InvalidDataException` (nothing is left behind) |
+| Importing from a stream that can't seek <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | `ArgumentException` |
+| An import that fails, and then fails to delete what it imported <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | `AggregateException`, holding both failures |
 | A feature the storage provider doesn't support, such as a provider written for an earlier release | `NotSupportedException` |
 | An upload whose declared length differs from its content | `ResourceContentLengthMismatchException` (nothing is stored) |
-| A write that breaks its container's [policy](container-policies.md) <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span> | `ResourcePolicyViolationException` (nothing changes) |
-| An upload or imported version your [upload inspector](upload-inspection.md) refuses <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span> | `ResourceContentRefusedException`, with the inspector's reason (nothing is stored) |
-| An upload inspector that throws <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span> | the inspector's exception (nothing is stored) |
+| A write that breaks its container's [policy](container-policies.md) <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | `ResourcePolicyViolationException` (nothing changes) |
+| An upload or imported version your [upload inspector](upload-inspection.md) refuses <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | `ResourceContentRefusedException`, with the inspector's reason (nothing is stored) |
+| An upload inspector that throws <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | the inspector's exception (nothing is stored) |
 | Restoring a version while versioning is off | `InvalidOperationException` |
 | `UseVersioning` with fewer than one version | `ArgumentOutOfRangeException` |
 | Configuring no provider, or two | `InvalidOperationException` from `AddResourcefull` |
@@ -34,7 +34,7 @@ Resourcefull reports an expected absence with a return value and everything else
 ## Reading from a container that doesn't exist
 
 Writing into a container that doesn't exist throws `ResourceContainerNotFoundException`, but reading from it and
-deleting from it treat it as an empty container: listings are empty, `GetUsageAsync` <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span> reports
+deleting from it treat it as an empty container: listings are empty, `GetUsageAsync` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> reports
 zero, downloads and `GetResourceInfoAsync` return `null`, and `ExistsAsync` and `…IfExistsAsync` deletes return
 `false`. So a misspelled container name looks like an empty container rather than an error. Where that
 matters, such as a container name that comes from a request, check the service client's `ContainerExistsAsync`
@@ -55,17 +55,17 @@ All of them derive from `ResourcefullException`, so one `catch` handles any of t
 | `ResourceContainerNotFoundException` | The container was never created, or was deleted before the write. | 404 Not Found |
 | `ResourceContentLengthMismatchException` | The upload's declared length didn't match its content. | 400 Bad Request |
 | `ResourcePreconditionFailedException` | The name's current version didn't meet the upload's or delete's conditions. | 412 Precondition Failed |
-| `ResourcePolicyViolationException` <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span> | The write broke its container's policy; `Rule` says which rule, and `Limit` its limit. | 413 for the size limits, 409 for `MaxResourceCount`, 403 for `ReadOnly`, 415 for `AllowedContentTypes` |
-| `ResourceRangeNotSatisfiableException` <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span> | The download range starts past the end of the content; `ContentLength` says how long it is. | 416 Range Not Satisfiable |
-| `ResourceContentRefusedException` <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span> | The [upload inspector](upload-inspection.md) refused the content; `Reason` says why. | 422 Unprocessable Content |
+| `ResourcePolicyViolationException` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | The write broke its container's policy; `Rule` says which rule, and `Limit` its limit. | 413 for the size limits, 409 for `MaxResourceCount`, 403 for `ReadOnly`, 415 for `AllowedContentTypes` |
+| `ResourceRangeNotSatisfiableException` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | The download range starts past the end of the content; `ContentLength` says how long it is. | 416 Range Not Satisfiable |
+| `ResourceContentRefusedException` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | The [upload inspector](upload-inspection.md) refused the content; `Reason` says why. | 422 Unprocessable Content |
 
 `ResourceNameException` derives from `ArgumentException` rather than `ResourcefullException`, so existing
-`catch (ArgumentException)` code still catches it; it maps to 400 Bad Request. Its `Name` <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span> is the name that
+`catch (ArgumentException)` code still catches it; it maps to 400 Bad Request. Its `Name` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> is the name that
 broke the rules.
 
 ### What an exception is about
 
-`ContainerName` and `ResourceName` <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span> say what a `ResourcefullException` is about, so you don't have to read its
+`ContainerName` and `ResourceName` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> say what a `ResourcefullException` is about, so you don't have to read its
 message:
 
 - **A resource:** both are set. For a copy or move whose destination is the problem, such as a destination name that

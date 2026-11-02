@@ -1,6 +1,6 @@
 # Container policies
 
-<div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 3.2</span></div>
+<div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 4.0</span></div>
 
 Container policies limit what can be written to a container: how large a file can be, how much a container can hold,
 how many files it can have, which types of file it accepts, and whether it can change at all. Set defaults for every
@@ -27,8 +27,8 @@ Without `UseContainerPolicies` or `UsePolicyProvider`, nothing is checked and no
 | `MaxResourceSize` | upload, restore, copy and move in | is refused before any content is read, if its declared length is over the limit; otherwise it stops as soon as its content passes the limit |
 | `MaxContainerSize` | upload, restore, copy and move in | is refused before any content is read, if its declared length won't fit in what's left; otherwise it stops as soon as its content passes what's left |
 | `MaxResourceCount` | upload, copy or move in of a new name | is refused when the container already holds that many resources; a new version of an existing name never is |
-| `AllowedContentTypes` | upload, copy and move in, changing a content type <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span> | is refused before any content is read when its type isn't in the list, declares no type, or isn't a single valid type (such as `image/png, text/html`). `image/*` includes SVG images, which can run scripts when shown, so list exact types for files you display |
-| `ReadOnly` | upload, restore, copy and move in or out, delete, deleting the container, changing an expiry, metadata <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span> or content type <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span>, changing the container's metadata <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span> | is refused before anything changes; and [expiry](expiry.md) leaves its expired versions until it's writable again |
+| `AllowedContentTypes` | upload, copy and move in, changing a content type <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | is refused before any content is read when its type isn't in the list, declares no type, or isn't a single valid type (such as `image/png, text/html`). `image/*` includes SVG images, which can run scripts when shown, so list exact types for files you display |
+| `ReadOnly` | upload, restore, copy and move in or out, delete, deleting the container, changing an expiry, metadata <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> or content type <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>, changing the container's metadata <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | is refused before anything changes; and [expiry](expiry.md) leaves its expired versions until it's writable again |
 
 A refused write throws `ResourcePolicyViolationException`, whose `Rule` says which rule it broke, and stores nothing.
 A restore, copy or move is checked for every version it brings, by its stored length (measured from its content,
@@ -65,7 +65,7 @@ MaxResourceSize = 1_048_576    // a number of bytes works too
 
 ## Defaults from configuration
 
-`UseConfiguration` <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span> reads the defaults, and how
+`UseConfiguration` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> reads the defaults, and how
 long policies are cached, from a section of your configuration, with sizes written as text:
 
 ```json
@@ -132,7 +132,7 @@ public sealed class PlanPolicyProvider(AppDbContext db) : IResourcePolicyProvide
 ## Usage and limits
 
 `GetUsageAsync` reports what a container holds, and `GetPolicyAsync`
-<span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span> the limits its writes are checked against, so
+<span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> the limits its writes are checked against, so
 you can show users their storage against their plan:
 
 ```csharp

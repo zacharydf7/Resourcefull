@@ -28,7 +28,7 @@ public interface IResourceContainerClient : IDisposable
     /// <summary>
     /// The name of the container this client targets: <see cref="ResourceContainerInfo"/>'s
     /// <see cref="ResourceContainerInfo.Name"/>.
-    /// <para>Coming in 3.2.</para>
+    /// <para>Coming in 4.0.</para>
     /// </summary>
     public string Name => ResourceContainerInfo.Name;
 
@@ -121,7 +121,7 @@ public interface IResourceContainerClient : IDisposable
     /// <summary>
     /// Downloads part of a resource as a stream, such as to resume a download or to seek in a video. Only the range's
     /// bytes are read from storage, where the provider supports it.
-    /// <para>Coming in 3.2.</para>
+    /// <para>Coming in 4.0.</para>
     /// </summary>
     /// <param name="resourceName">The name of the resource to download.</param>
     /// <param name="versionId">
@@ -320,7 +320,7 @@ public interface IResourceContainerClient : IDisposable
     /// The copy has a new version ID and <see cref="ResourceInfo.LastModified"/>, the source's content, hash, type and
     /// metadata, and <see cref="ResourceInfo.CopiedFrom"/> naming the version copied. It's stored and pruned like an
     /// upload, and checked against the destination container's policy.
-    /// <para>Coming in 3.2.</para>
+    /// <para>Coming in 4.0.</para>
     /// </summary>
     /// <param name="resourceName">The resource to copy.</param>
     /// <param name="destinationContainer">The container to copy it to: this container's name to copy within it.</param>
@@ -352,7 +352,7 @@ public interface IResourceContainerClient : IDisposable
     /// Moves a resource, every version of it, to a name in this or another container, all at once; renaming is a move
     /// within the container. Each version keeps its ID, <see cref="ResourceInfo.LastModified"/>, content and
     /// attributes, and the old name is gone afterwards. It's checked against both containers' policies.
-    /// <para>Coming in 3.2.</para>
+    /// <para>Coming in 4.0.</para>
     /// </summary>
     /// <param name="resourceName">The resource to move.</param>
     /// <param name="destinationContainer">The container to move it to: this container's name to rename it.</param>
@@ -384,7 +384,7 @@ public interface IResourceContainerClient : IDisposable
     /// Renames a resource, every version of it, within this container: a
     /// <see cref="MoveResourceAsync(string, string, string, ResourceMoveOptions?, CancellationToken)"/> to
     /// <paramref name="newName"/> in this container, with the same results and exceptions.
-    /// <para>Coming in 3.2.</para>
+    /// <para>Coming in 4.0.</para>
     /// </summary>
     /// <param name="resourceName">The resource to rename.</param>
     /// <param name="newName">Its new name, which must not exist.</param>
@@ -400,7 +400,7 @@ public interface IResourceContainerClient : IDisposable
     /// <summary>
     /// Sets when a version expires, or with <see langword="null"/> makes it permanent, such as to extend a share. Only
     /// the expiry changes: the version's content, <see cref="ResourceInfo.LastModified"/> and ETag stay as they are.
-    /// <para>Coming in 3.2.</para>
+    /// <para>Coming in 4.0.</para>
     /// </summary>
     /// <param name="resourceName">The resource.</param>
     /// <param name="versionId">The version.</param>
@@ -420,7 +420,7 @@ public interface IResourceContainerClient : IDisposable
     /// <summary>
     /// Replaces a version's metadata, without uploading it again. Only the metadata changes: the version keeps its ID,
     /// content, content type, <see cref="ResourceInfo.LastModified"/> and ETag, and no new version is made.
-    /// <para>Coming in 3.2.</para>
+    /// <para>Coming in 4.0.</para>
     /// </summary>
     /// <remarks>
     /// The whole dictionary is replaced. To add or change one entry, read the version's metadata, change it and set it:
@@ -450,7 +450,7 @@ public interface IResourceContainerClient : IDisposable
     /// <see cref="ResourceInfo.LastModified"/> and ETag, and no new version is made. The type is checked against the
     /// container's <see cref="ResourceContainerPolicy.AllowedContentTypes"/>, as an upload's is, but an
     /// <see cref="IResourceUploadInspector"/> doesn't see the change.
-    /// <para>Coming in 3.2.</para>
+    /// <para>Coming in 4.0.</para>
     /// </summary>
     /// <remarks>
     /// Browsers and caches that already hold the version keep the old type: its ETag and
@@ -476,7 +476,7 @@ public interface IResourceContainerClient : IDisposable
     /// <summary>
     /// Gets what the container holds: the size of every version, and how many resources and versions there are. Use it
     /// to show a user their storage, or against <see cref="ResourceContainerPolicy.MaxContainerSize"/>.
-    /// <para>Coming in 3.2.</para>
+    /// <para>Coming in 4.0.</para>
     /// </summary>
     /// <param name="cancellationToken">Cancels the lookup.</param>
     /// <returns>The container's usage; nothing stored when the container doesn't exist.</returns>
@@ -492,7 +492,7 @@ public interface IResourceContainerClient : IDisposable
     /// <see cref="ResourcefullOptionsBuilder.UseContainerPolicies"/>, with what the policy provider gives for this
     /// container in place of each limit it sets. With <see cref="GetUsageAsync"/>, use it to show a user their limits,
     /// such as "4.2 GB of 5 GB". It's cached, and stands in for the provider while it fails, as for writes.
-    /// <para>Coming in 3.2.</para>
+    /// <para>Coming in 4.0.</para>
     /// </summary>
     /// <param name="cancellationToken">Cancels the lookup.</param>
     /// <returns>The container's policy; one with no limits without container policies.</returns>

@@ -25,12 +25,12 @@ ResourceInfo stored = await container.UploadAsync("report.pdf", stream, new Reso
   `Overwrite` is ignored. Set `CreateOnly` to store the upload only if the name doesn't exist yet, with or without
   versioning.
 - **Content type and metadata** are stored as given and returned on every read. Resourcefull doesn't check the type
-  against the content, but an [upload inspector](upload-inspection.md) <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span> can, and can scan the file for
+  against the content, but an [upload inspector](upload-inspection.md) <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> can, and can scan the file for
   malware before it's stored.
 
 ## Changing metadata and content type
 
-<div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 3.2</span></div>
+<div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 4.0</span></div>
 
 A version's metadata and content type can change after it's stored, without uploading it again:
 

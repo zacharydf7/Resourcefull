@@ -28,7 +28,7 @@ internal sealed class ResourcefullHealthCheck(IResourceRepository repository, Re
 
 /// <summary>
 /// Adds Resourcefull's health check.
-/// <para>Coming in 3.2.</para>
+/// <para>Coming in 4.0.</para>
 /// </summary>
 public static class ResourcefullHealthChecksBuilderExtensions
 {

@@ -1,6 +1,6 @@
 # Sharing files with links
 
-<div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 3.2</span></div>
+<div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 4.0</span></div>
 
 Sometimes you need to give someone a file who can't sign in to your application: a customer downloading an invoice
 from an email, a partner fetching a report, a colleague you send a link to in chat. A **signed link** is a URL that lets

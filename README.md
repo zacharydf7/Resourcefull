@@ -27,7 +27,7 @@ memory for tests, or in a storage provider of your own.
 - **Made for ASP.NET Core:** serve downloads with ETags and conditional requests, accept uploads with preconditions,
   and turn exceptions into the right status codes.
 
-Coming in 3.2, and documented on the site already:
+Coming in 4.0, and documented on the site already:
 
 - **Container policies:** size limits, quotas, allowed file types and read-only containers, per container.
 - **Upload inspection:** scan uploads for malware, or check their type, before they're stored.

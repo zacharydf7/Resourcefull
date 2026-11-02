@@ -23,7 +23,7 @@ Resourcefull fits and where something else serves you better.
 Resourcefull stores files in your database, with the SQL Server provider, and gives them the features the other
 approaches leave to you: [versions](versioning.md), content hashes, [quotas and allowed file types](container-policies.md),
 [expiry](expiry.md), [signed links](sharing-links.md) and [ASP.NET Core endpoints](aspnet-core/index.md) that answer
-with the right headers. Quotas, file types, expiry and signed links are new in 3.2 <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span>.
+with the right headers. Quotas, file types, expiry and signed links are new in 4.0 <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>.
 
 It suits you when:
 
@@ -63,5 +63,5 @@ Something else serves you better when:
 
 Your code talks to `IResourceServiceClient`, not to SQL Server, so moving the bytes elsewhere later means changing the
 provider, not the code that uses it. A [provider of your own](providers/writing-a-provider.md) can store them anywhere,
-and [exporting and importing](backup-and-move.md) <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span>
+and [exporting and importing](backup-and-move.md) <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>
 moves containers between stores.

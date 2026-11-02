@@ -380,7 +380,7 @@ public abstract partial class ResourcefullContractTests
     }
 
     /// <summary>
-    /// A format 1 export as 3.2 writes it: a copy, a name with two versions that share their content, a content type,
+    /// A format 1 export as 4.0 writes it: a copy, a name with two versions that share their content, a content type,
     /// metadata with mixed-case keys, and an expiry. Exports already written have to stay readable, so this text must
     /// never change; a new format gets a test of its own.
     /// </summary>

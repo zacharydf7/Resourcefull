@@ -260,7 +260,7 @@ article .alert {
 
 /* ---- Version labels ---- */
 
-/* "Coming in 3.2" marks what's on main but not yet released; at release it becomes "Added in 3.2" (rf-added). */
+/* "Coming in 4.0" marks what's on main but not yet released; at release it becomes "Added in 4.0" (rf-added). */
 .rf-version {
   margin: -0.5rem 0 1rem;
 }
@@ -302,8 +302,10 @@ article .alert {
 .toc a[href$="sharing-links-in-production.html"]::after,
 .toc a[href$="backup-and-move.html"]::after,
 .toc a[href$="copying-and-moving.html"]::after,
+.toc a[href$="upload-inspection.html"]::after,
+.toc a[href$="thumbnails.html"]::after,
 .toc a[href$="aspire.html"]::after {
-  content: "3.2";
+  content: "4.0";
   margin-left: .45em;
   padding: 0 .45em;
   border-radius: 999px;

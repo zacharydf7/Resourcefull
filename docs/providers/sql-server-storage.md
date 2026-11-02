@@ -14,11 +14,11 @@ download reads a few chunks at a time as its stream is read, so memory use stays
 ## Performance
 
 - **Content takes about its own size in the database.** SQL Server stores large values on 8 KB pages that hold 8,040
-  bytes each, and a chunk fills five of them exactly. Files stored before 3.2, in 64 KB chunks, take about 13% more
+  bytes each, and a chunk fills five of them exactly. Files stored before 4.0, in 64 KB chunks, take about 13% more
   space, since each of those chunks also needs a page of its own pointing to its content. They stay readable as they
   are; uploading one again stores it in the smaller chunks, while a copy keeps its source's chunks.
 - **Memory doesn't grow with file size.** An upload or a download holds about 1 MiB of content at a time (27 chunks),
-  in buffers it reuses, whatever the file's size; a download of a file stored before 3.2, in larger chunks, holds about
+  in buffers it reuses, whatever the file's size; a download of a file stored before 4.0, in larger chunks, holds about
   1.7 MiB. Eight uploads at once hold about 8 MiB of content between them.
 - **About one round trip per MiB.** An upload inserts 27 chunks per round trip and a download reads 27 per query, plus
   a few round trips per operation to find the version, lock the name and make the version current. Reading a

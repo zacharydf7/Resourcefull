@@ -12,7 +12,7 @@ namespace Resourcefull.AspNetCore;
 /// resource or version that's gone, gets 404. Every response carries <c>Referrer-Policy: no-referrer</c> and
 /// <c>Cache-Control: private</c> (with <c>no-cache</c> on the file itself), so the link isn't passed on in the
 /// <c>Referer</c> header of pages the file links to, nor kept by shared caches.
-/// <para>Coming in 3.2.</para>
+/// <para>Coming in 4.0.</para>
 /// </summary>
 public sealed class SharedResourceHttpResult : IResult, IActionResult
 {

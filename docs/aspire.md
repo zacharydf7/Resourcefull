@@ -1,6 +1,6 @@
 # Aspire
 
-<div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 3.2</span></div>
+<div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 4.0</span></div>
 
 [.NET Aspire](https://learn.microsoft.com/dotnet/aspire/get-started/aspire-overview) runs your application and the
 services it needs together during development, and wires up telemetry and health checks. Resourcefull needs no

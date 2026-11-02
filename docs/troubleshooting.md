@@ -40,8 +40,8 @@ names.
 
 ## `InvalidOperationException`: "…its content can't be read again to retry"
 
-Before 3.2, a transient SQL Server failure interrupted an upload whose stream can't seek, such as an HTTP request
-body, so it couldn't be retried. Nothing was stored; upload again. From 3.2 <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span>, such an upload sends the batch that
+Before 4.0, a transient SQL Server failure interrupted an upload whose stream can't seek, such as an HTTP request
+body, so it couldn't be retried. Nothing was stored; upload again. From 4.0 <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>, such an upload sends the batch that
 failed again and carries on, so this doesn't happen.
 
 ## `IOException` while reading a download

@@ -58,7 +58,7 @@ internal sealed class ResourcefullSqlServerHealthCheck(IDbContextFactory<Resourc
 
 /// <summary>
 /// Adds Resourcefull's SQL Server health check.
-/// <para>Coming in 3.2.</para>
+/// <para>Coming in 4.0.</para>
 /// </summary>
 public static class ResourcefullSqlServerHealthChecksBuilderExtensions
 {

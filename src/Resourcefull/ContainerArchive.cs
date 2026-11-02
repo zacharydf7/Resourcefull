@@ -7,7 +7,7 @@ namespace Resourcefull;
 
 /// <summary>
 /// What <see cref="IResourceServiceClient.ExportContainerAsync"/> wrote.
-/// <para>Coming in 3.2.</para>
+/// <para>Coming in 4.0.</para>
 /// </summary>
 /// <param name="ResourceCount">How many resources (names) it exported.</param>
 /// <param name="VersionCount">How many versions it exported, current and older.</param>
@@ -16,7 +16,7 @@ public sealed record ResourceExportResult(long ResourceCount, long VersionCount,
 
 /// <summary>
 /// What <see cref="IResourceServiceClient.ImportContainerAsync"/> stored.
-/// <para>Coming in 3.2.</para>
+/// <para>Coming in 4.0.</para>
 /// </summary>
 /// <param name="ResourceCount">How many resources (names) it imported.</param>
 /// <param name="VersionCount">How many versions it imported, current and older.</param>

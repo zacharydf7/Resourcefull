@@ -11,7 +11,7 @@ namespace Resourcefull.AspNetCore;
 /// unless an <c>If-Range</c> doesn't hold, which gets the whole content. A range that starts past the end gets 416 Range
 /// Not Satisfiable, and a request for several ranges gets the whole content. Every response has
 /// <c>Accept-Ranges: bytes</c>, and a resource that doesn't exist gets 404.
-/// <para>Coming in 3.2.</para>
+/// <para>Coming in 4.0.</para>
 /// </summary>
 public sealed class ResourceLookupHttpResult : IResult, IActionResult
 {

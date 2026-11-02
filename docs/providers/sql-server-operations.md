@@ -73,7 +73,7 @@ decrypt them after downloading. Resourcefull then stores only encrypted bytes, w
 
 ## Uploads, connections and the log
 
-<div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 3.2</span></div>
+<div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 4.0</span></div>
 
 An upload holds no transaction, lock or connection while its content arrives, however slowly the client sends it:
 
@@ -100,7 +100,7 @@ What that means for slow clients:
   `DeleteExpiredAsync` on a schedule, or such batches stay until you do. `resourcefull.sqlserver.abandoned_uploads`
   counts what the sweep deletes.
 
-Before 3.2, an upload was one transaction, holding a connection and the log for as long as the client took.
+Before 4.0, an upload was one transaction, holding a connection and the log for as long as the client took.
 
 ## Timeouts
 

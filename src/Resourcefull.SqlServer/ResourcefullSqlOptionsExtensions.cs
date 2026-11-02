@@ -28,7 +28,7 @@ public static class ResourcefullSqlOptionsExtensions
     /// retries, for example. Replacing the retry policy, such as with <c>EnableRetryOnFailure</c>, also stops
     /// Resourcefull counting retries in <c>resourcefull.sqlserver.retries</c>; give it error 50001 to retry, which a
     /// write whose lock on its resource name lost a deadlock raises.
-    /// <para>Coming in 3.2.</para>
+    /// <para>Coming in 4.0.</para>
     /// </summary>
     /// <param name="builder">The builder passed to <c>AddResourcefull</c>.</param>
     /// <param name="connectionString">The connection string of the database that holds Resourcefull's tables.</param>

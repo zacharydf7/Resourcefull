@@ -1,6 +1,6 @@
 # Backing up and moving containers
 
-<div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 3.2</span></div>
+<div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 4.0</span></div>
 
 You can write a whole container, every file and every version, to a single zip file, and turn that file back into a
 container later, in the same store or another one. Use it to:
@@ -45,7 +45,7 @@ The export is an ordinary zip, so you can open it with any zip tool to see what'
 - **`content/`** holds the files' contents, each once. Versions with the same content, such as a file uploaded twice
   or a copy, share one entry, so copies don't make the export bigger.
 
-The manifest records its format, and Resourcefull's tests import an export exactly as 3.2 writes it, so a later
+The manifest records its format, and Resourcefull's tests import an export exactly as 4.0 writes it, so a later
 release can't change the format by accident.
 
 ## Exporting

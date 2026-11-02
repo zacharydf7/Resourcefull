@@ -8,7 +8,7 @@ few differences this page covers. Everything here leaves out authorization to st
 
 Controller actions can return the same results as minimal APIs, `Results.Resource` and `UploadFromRequestAsync`'s,
 because MVC runs any `IResult` an action returns. The `Results.Resource(container, name)` form, which answers range
-requests, is new in 3.2 <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span>; with 3.1, download first and pass the
+requests, is new in 4.0 <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>; with 3.1, download first and pass the
 download, as in [Serving downloads](serving-downloads.md):
 
 ```csharp
@@ -38,7 +38,7 @@ For a form upload in an MVC view, take an `IFormFile` and keep `[ValidateAntiFor
 ## Razor Pages
 
 A Razor page's handler can't return an `IResult`: ASP.NET Core refuses it at run time, with "Unsupported handler method
-return type". From 3.2 <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span>, the results `TypedResults.Resource` and `TypedResults.SharedResource` return are
+return type". From 4.0 <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>, the results `TypedResults.Resource` and `TypedResults.SharedResource` return are
 action results too, so a handler returns them as it would `File(...)`, conditional requests included, and ranges when
 the result looks the resource up, as here:
 

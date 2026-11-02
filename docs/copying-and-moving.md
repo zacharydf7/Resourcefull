@@ -1,6 +1,6 @@
 # Copying and moving
 
-<div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 3.2</span></div>
+<div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 4.0</span></div>
 
 `CopyResourceAsync` copies a version, the current one unless you name another, to a name in the same or another
 container. `MoveResourceAsync` moves a resource, every version of it, and `RenameResourceAsync` is a move within the

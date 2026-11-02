@@ -135,7 +135,7 @@ public interface IResourceRepository
     /// <paramref name="afterName"/>: a name deleted while the page is read is left out rather than ending the listing.
     /// A provider should answer it in one query; the default implementation, kept so providers written for 3.1 still
     /// compile and work, lists the names with <see cref="GetResourcePageAsync"/> and then each name's versions.
-    /// <para>Coming in 3.2.</para>
+    /// <para>Coming in 4.0.</para>
     /// </summary>
     /// <param name="resourceContainerName">The container to list.</param>
     /// <param name="afterName">
@@ -296,7 +296,7 @@ public interface IResourceRepository
     /// Replaces a container's <see cref="ResourceContainerInfo.Metadata"/> with a copy of <paramref name="metadata"/>.
     /// An import uses it to mark the container it's filling as unfinished, and to clear the mark once it's done. The
     /// default implementation throws <see cref="NotSupportedException"/>, and imports then go unmarked.
-    /// <para>Coming in 3.2.</para>
+    /// <para>Coming in 4.0.</para>
     /// </summary>
     /// <param name="resourceContainerName">The container.</param>
     /// <param name="metadata">Its new metadata.</param>
@@ -401,7 +401,7 @@ public interface IResourceRepository
     /// before it makes the version visible, as SQL Server's does: anything such an upload last added to before
     /// <paramref name="staleBefore"/>. The expiry sweep calls it. The default implementation, for a provider that leaves
     /// nothing behind, does nothing.
-    /// <para>Coming in 3.2.</para>
+    /// <para>Coming in 4.0.</para>
     /// </summary>
     /// <param name="staleBefore">
     /// Leave alone what an upload added to at or after this time: it may still be running.
@@ -417,7 +417,7 @@ public interface IResourceRepository
     /// gone, or no longer expired, is left out. A sweep deletes each page of expired versions it lists through it. A
     /// provider should answer it in a few round trips; the default implementation, kept so providers written before it
     /// still compile and work, calls <see cref="DeleteExpiredVersionAsync"/> for each.
-    /// <para>Coming in 3.2.</para>
+    /// <para>Coming in 4.0.</para>
     /// </summary>
     /// <param name="versions">The versions to delete if they're still expired.</param>
     /// <param name="now">The time to decide expiry by.</param>
@@ -450,7 +450,7 @@ public interface IResourceRepository
     /// <summary>
     /// Replaces one version's <see cref="ResourceInfo.Metadata"/> with a copy of <paramref name="metadata"/>, changing
     /// nothing else about it.
-    /// <para>Coming in 3.2.</para>
+    /// <para>Coming in 4.0.</para>
     /// </summary>
     /// <param name="resource">The resource.</param>
     /// <param name="versionId">The version; <see langword="null"/> for the current one.</param>
@@ -465,7 +465,7 @@ public interface IResourceRepository
     /// <summary>
     /// Sets one version's <see cref="ResourceInfo.ContentType"/>, or clears it with <see langword="null"/>, changing
     /// nothing else about it.
-    /// <para>Coming in 3.2.</para>
+    /// <para>Coming in 4.0.</para>
     /// </summary>
     /// <param name="resource">The resource.</param>
     /// <param name="versionId">The version; <see langword="null"/> for the current one.</param>

@@ -24,7 +24,7 @@ public record ResourceDownloadResult(ResourceInfo ResourceInfo, Stream Stream) :
 
     /// <summary>
     /// Disposes <see cref="Stream"/>.
-    /// <para>Coming in 3.2.</para>
+    /// <para>Coming in 4.0.</para>
     /// </summary>
     public void Dispose()
     {
@@ -34,7 +34,7 @@ public record ResourceDownloadResult(ResourceInfo ResourceInfo, Stream Stream) :
 
     /// <summary>
     /// Disposes <see cref="Stream"/>.
-    /// <para>Coming in 3.2.</para>
+    /// <para>Coming in 4.0.</para>
     /// </summary>
     public async ValueTask DisposeAsync()
     {

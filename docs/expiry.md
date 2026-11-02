@@ -1,6 +1,6 @@
 # Expiring resources
 
-<div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 3.2</span></div>
+<div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 4.0</span></div>
 
 Uploads can delete themselves: exports, previews, temporary shares. Give an upload an expiry, and turn on the
 background service that deletes what has expired:
@@ -33,7 +33,7 @@ await container.UploadAsync("exports/report.zip", stream, new ResourceUploadOpti
 - **Read-only containers don't expire.** A [read-only](container-policies.md) container keeps its expired versions,
   unreported, until it's writable again, and its expiries can't be changed. Freezing a container keeps everything
   in it. Each sweep still goes past the expired versions it keeps, a seek on that index for each batch of 100.
-- **It also deletes what stopped uploads left behind** <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span>, with SQL Server: the
+- **It also deletes what stopped uploads left behind** <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>, with SQL Server: the
   [staged content](providers/sql-server-operations.md#uploads-connections-and-the-log) of an upload whose process
   died partway, an hour after that upload last stored anything.
 - **Without `UseExpiry`,** expiries are stored, and `IResourceServiceClient.DeleteExpiredAsync()` deletes what has

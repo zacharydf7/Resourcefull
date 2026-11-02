@@ -8,7 +8,7 @@ namespace Resourcefull;
 /// check that it really is the type it claims to be. Register one with
 /// <see cref="ResourcefullOptionsBuilder.UseUploadInspector{TInspector}"/>; it's a scoped service, so it can depend on
 /// the application's own services.
-/// <para>Coming in 3.2.</para>
+/// <para>Coming in 4.0.</para>
 /// </summary>
 /// <remarks>
 /// <para>
@@ -36,7 +36,7 @@ public interface IResourceUploadInspector
 
 /// <summary>
 /// An upload for an <see cref="IResourceUploadInspector"/> to inspect.
-/// <para>Coming in 3.2.</para>
+/// <para>Coming in 4.0.</para>
 /// </summary>
 /// <param name="ContainerName">The container it's going into.</param>
 /// <param name="ResourceName">The resource's name.</param>
@@ -53,7 +53,7 @@ public sealed record ResourceUploadInspection(string ContainerName, string Resou
 
 /// <summary>
 /// An <see cref="IResourceUploadInspector"/>'s answer: the content may be stored, or it's refused, with the reason.
-/// <para>Coming in 3.2.</para>
+/// <para>Coming in 4.0.</para>
 /// </summary>
 public sealed class ResourceInspectionResult
 {

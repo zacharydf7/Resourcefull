@@ -40,7 +40,7 @@ The XML documentation on each member states its contract in full. In short, a pr
   `HashingStream.Complete(declaredLength, lastModified)`, which also rejects a wrong declared length. Call it as the
   write makes the version current but before it commits, so a wrong length stores nothing.
 - **Read the content to its end before the version becomes current,** until a read returns nothing, and store
-  nothing if that read throws. That last read waits for an [upload inspector](../upload-inspection.md) <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span> to
+  nothing if that read throws. That last read waits for an [upload inspector](../upload-inspection.md) <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> to
   answer, and throws if it refuses the content, so the version mustn't be current yet. An inspected upload's stream
   can't seek, so a provider can't retry it by reading the content again.
 - **Stamp the time a version becomes current.** Pass `Complete` the time the write makes the version current, not the
@@ -48,7 +48,7 @@ The XML documentation on each member states its contract in full. In short, a pr
   passes. Take an optional `TimeProvider` in the constructor, so an application or a test can set the clock.
 - **Store the content hash** from `WrittenContent` with the version, and return it as `ResourceInfo.ContentHash` on
   every read.
-- **Store `ExpiresAt` and `CopiedFrom`** <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span> from the `ResourceInfo` that `AddResourceAsync` and `CopyResourceAsync`
+- **Store `ExpiresAt` and `CopiedFrom`** <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> from the `ResourceInfo` that `AddResourceAsync` and `CopyResourceAsync`
   are given, and return them on every read. Nothing checks that a provider does: one that ignores them still accepts
   uploads with an expiry, and those versions never expire. See [Members added since 3.0](newer-members.md#expiry).
 - **Return content as a read-only, forward-only stream:** `CanSeek` and `CanWrite` are `false`, `Length` is the
