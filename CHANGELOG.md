@@ -156,6 +156,9 @@
 - **A write on SQL Server whose wait for its name's write lock lost a deadlock or timed out** failed with "Could not
   lock the resource name for writing" instead of being retried, as any other deadlock is. It now raises error 50001,
   which the retry policy retries.
+- **A download's file name leaves out control characters and the characters that change text direction,** which a
+  resource name can hold. A right-to-left override (U+202E) could make a download of `invoice` + U+202E + `fdp.exe`
+  show as `invoiceexe.pdf`, and a name with a line break failed with an error instead of downloading.
 
 ## [3.1.0] - 2026-10-29
 

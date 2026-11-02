@@ -1,3 +1,4 @@
+using System.Text;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Headers;
 using Microsoft.AspNetCore.Mvc;
@@ -73,12 +74,32 @@ public sealed class ResourceHttpResult : IResult, IActionResult
         response.ContentLength = content.Length;
         bool inline = options.Inline && Displays(options.InlineContentTypes, resource.ContentType);
         var disposition = new ContentDispositionHeaderValue(inline ? "inline" : "attachment");
-        disposition.SetHttpFileName(options.FileName ?? resource.Name[(resource.Name.LastIndexOf('/') + 1)..]);
+        disposition.SetHttpFileName(SafeFileName(options.FileName ?? resource.Name[(resource.Name.LastIndexOf('/') + 1)..]));
         response.GetTypedHeaders().ContentDisposition = disposition;
 
         if (HttpMethods.IsHead(httpContext.Request.Method)) return;
         await content.CopyToAsync(response.Body, httpContext.RequestAborted);
     }
+
+    /// <summary>
+    /// The name a download is saved as, without the control characters and the characters that change text direction,
+    /// which a resource name can hold: a right-to-left override (U+202E) between <c>invoice</c> and <c>fdp.exe</c> would show
+    /// the name as <c>invoiceexe.pdf</c>, and a line break can't go in a header. Joiners, which some scripts and emoji
+    /// need, stay. An unpaired surrogate becomes U+FFFD, and a name with nothing left is saved as <c>download</c>.
+    /// </summary>
+    private static string SafeFileName(string name)
+    {
+        var safe = new StringBuilder(name.Length);
+        foreach (Rune rune in name.EnumerateRunes())
+        {
+            if (!Rune.IsControl(rune) && !IsDirectionControl(rune.Value)) safe.Append(rune);
+        }
+        return safe.Length > 0 || name.Length == 0 ? safe.ToString() : "download";
+    }
+
+    /// <summary>Whether the character is one of Unicode's bidirectional controls, which change text direction.</summary>
+    private static bool IsDirectionControl(int value) =>
+        value is 0x061C or 0x200E or 0x200F or (>= 0x202A and <= 0x202E) or (>= 0x2066 and <= 0x2069);
 
     /// <summary>
     /// Whether <paramref name="contentType"/> is one of the types allowed to display: the same type, ignoring case and

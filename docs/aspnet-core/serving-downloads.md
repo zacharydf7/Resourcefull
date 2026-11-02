@@ -27,8 +27,11 @@ app.MapMethods("/files/{container}/{**name}", ["GET", "HEAD"], async (string con
 - **`Content-Type`**, or `application/octet-stream` when none was stored;
 - **a strong `ETag`** from the content hash, and **`Last-Modified`**;
 - **`Content-Disposition: attachment`**, with the part of the name after its last `/` as the file name, encoded
-  correctly whatever characters it contains. Pass `new ResourceResultOptions { Inline = true }` to let browsers
-  display the file, and `FileName` to offer another name. Only types that are safe to display are shown inline
+  correctly whatever characters it contains. Control characters and the characters that change text direction are
+  left out of it and of a `FileName` you give <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span>, so a
+  right-to-left override can't make `report.exe` look like a document, and a line break can't break the header. Pass
+  `new ResourceResultOptions { Inline = true }` to let browsers display the file, and `FileName` to offer another
+  name. Only types that are safe to display are shown inline
   <span class="rf-badge rf-upcoming" title="Coming in 3.2">3.2</span>: common image formats (PNG, JPEG, GIF, WebP,
   AVIF and BMP; not SVG), PDF, audio, video and plain text (`ResourceResultOptions.DefaultInlineContentTypes`). Anything else
   is still offered as a download, because a file uploaded as `text/html` or `image/svg+xml` and shown inline would run

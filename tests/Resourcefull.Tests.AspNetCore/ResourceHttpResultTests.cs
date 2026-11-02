@@ -52,6 +52,24 @@ public class ResourceHttpResultTests
         Assert.Equal("report.txt", response.Content.Headers.ContentDisposition.FileName);
     }
 
+    [Theory]
+    [InlineData("invoice\u202Efdp.exe", "invoicefdp.exe")]
+    [InlineData("two\nlines.txt", "twolines.txt")]
+    [InlineData("\u202E", "download")]
+    [InlineData("a\u200Db.png", "a\u200Db.png")]
+    public async Task Resource_ShouldDropOnlyControlAndDirectionCharactersFromTheFileName_WhenTheNameHasUnusualCharacters(string name, string fileName)
+    {
+        // Arrange
+        await using TestApp app = await StartWithAsync(name, "x");
+
+        // Act
+        HttpResponseMessage response = await app.Client.GetAsync("/files/" + Uri.EscapeDataString(name));
+
+        // Assert
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(fileName, response.Content.Headers.ContentDisposition!.FileNameStar);
+    }
+
     [Fact]
     public async Task Resource_ShouldEncodeTheFileName_WhenTheNameIsNotAscii()
     {

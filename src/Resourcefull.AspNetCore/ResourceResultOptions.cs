@@ -41,7 +41,8 @@ public sealed class ResourceResultOptions
 
     /// <summary>
     /// The file name to offer. By default it's the part of the resource's name after its last <c>/</c>, so
-    /// <c>2026/10/report.pdf</c> downloads as <c>report.pdf</c>.
+    /// <c>2026/10/report.pdf</c> downloads as <c>report.pdf</c>. Control characters and the characters that change text
+    /// direction are left out of it, as they are from the default.
     /// </summary>
     public string? FileName { get; init; }
 }
