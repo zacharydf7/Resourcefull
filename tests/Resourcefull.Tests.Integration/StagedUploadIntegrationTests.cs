@@ -57,7 +57,7 @@ public class StagedUploadIntegrationTests(SqlServerFixture fixture)
         // Arrange: an upload paused with a batch stored.
         using ServiceProvider provider = fixture.BuildServiceProvider();
         IResourceContainerClient container = await NewContainerAsync(provider);
-        IResourceRepository repository = provider.GetRequiredService<IResourceRepository>();
+        ResourceRepository repository = provider.GetRequiredService<ResourceRepository>();
         using var cts = new CancellationTokenSource();
         var content = new PausingStream(Payload, PauseAt);
         Task<ResourceInfo> upload = container.UploadAsync("video.mp4", content, null, cts.Token);

@@ -23,7 +23,7 @@ public sealed class ResourceConditions
 }
 
 /// <summary>
-/// What an <see cref="IResourceRepository.AddResourceAsync(string, ResourceInfo, Stream, ResourceWriteCondition, CancellationToken)"/>
+/// What an <see cref="ResourceRepository.AddResourceAsync"/>
 /// write requires of the name before it stores a version.
 /// </summary>
 public sealed class ResourceWriteCondition

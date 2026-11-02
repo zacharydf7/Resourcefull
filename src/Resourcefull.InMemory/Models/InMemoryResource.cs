@@ -6,7 +6,7 @@ namespace Resourcefull.InMemory.Models;
 
 internal class InMemoryResource
 {
-    public required ResourceInfo ResourceInfo { get; init; }
+    public required ResourceInfo ResourceInfo { get; set; }
 
     /// <summary>The stored bytes. Never changed after the version is stored, so readers can share it.</summary>
     public required byte[] Content { get; init; }

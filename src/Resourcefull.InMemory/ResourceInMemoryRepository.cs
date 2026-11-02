@@ -2,7 +2,7 @@ using Resourcefull.InMemory.Models;
 
 namespace Resourcefull.InMemory;
 
-internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : IResourceRepository
+internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : ResourceRepository
 {
     private readonly TimeProvider _clock = timeProvider ?? TimeProvider.System;
 
@@ -13,24 +13,22 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : I
     private readonly Dictionary<string, InMemoryResourceContainer> _containers = new(StringComparer.Ordinal);
     private long _lastSequence;
 
-    public Task<WrittenContent> AddResourceAsync(string resourceContainerName, ResourceInfo resourceInfo, Stream stream, bool createOnly = false, CancellationToken cancellationToken = default) =>
-        AddResourceAsync(resourceContainerName, resourceInfo, stream, new ResourceWriteCondition { CreateOnly = createOnly }, cancellationToken);
+    public override Task<WrittenContent> AddResourceAsync(NewResourceVersion version, Stream content,
+        ResourceWriteCondition? condition = null, CancellationToken cancellationToken = default) =>
+        AddVersionAsync(version, content, condition ?? new ResourceWriteCondition(), null, cancellationToken);
 
-    public Task<WrittenContent> AddResourceAsync(string resourceContainerName, ResourceInfo resourceInfo, Stream stream,
-        ResourceWriteCondition condition, CancellationToken cancellationToken = default) =>
-        AddVersionAsync(resourceContainerName, resourceInfo, stream, condition, null, cancellationToken);
-
-    public Task<WrittenContent> ImportVersionAsync(string resourceContainerName, ResourceInfo version, Stream content,
+    public override Task<WrittenContent> ImportVersionAsync(NewResourceVersion version, Stream content,
         CancellationToken cancellationToken = default) =>
-        AddVersionAsync(resourceContainerName, version, content, new ResourceWriteCondition(), version.LastModified, cancellationToken);
+        AddVersionAsync(version, content, new ResourceWriteCondition(), version.LastModified, cancellationToken);
 
     /// <summary>
     /// Stores a new version as the name's current one: an upload, stamped with the time it becomes current, or an
     /// import, stamped with <paramref name="lastModified"/>, the time it was first stored.
     /// </summary>
-    private async Task<WrittenContent> AddVersionAsync(string resourceContainerName, ResourceInfo resourceInfo, Stream stream,
+    private async Task<WrittenContent> AddVersionAsync(NewResourceVersion version, Stream stream,
         ResourceWriteCondition condition, DateTimeOffset? lastModified, CancellationToken cancellationToken)
     {
+        (string resourceContainerName, string resourceName) = version.Location;
         bool createOnly = condition.CreateOnly;
         ResourceConditions? conditions = condition.Conditions;
 
@@ -41,8 +39,8 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : I
             await UnderLockAsync(() =>
             {
                 if (_containers.ContainsKey(resourceContainerName))
-                    ThrowIfNotMet(conditions, resourceContainerName, resourceInfo.Name,
-                        VersionsOf(resourceContainerName, resourceInfo.Name).MaxBy(r => r.Sequence));
+                    ThrowIfNotMet(conditions, resourceContainerName, resourceName,
+                        VersionsOf(resourceContainerName, resourceName).MaxBy(r => r.Sequence));
                 return true;
             }, cancellationToken);
         }
@@ -59,43 +57,43 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : I
             InMemoryResourceContainer container = _containers.GetValueOrDefault(resourceContainerName)
                 ?? throw ContainerMissing(resourceContainerName);
 
-            if (createOnly && container.Resources.ContainsKey(resourceInfo.Name))
-                throw ResourceExists(resourceContainerName, resourceInfo.Name);
+            if (createOnly && container.Resources.ContainsKey(resourceName))
+                throw ResourceExists(resourceContainerName, resourceName);
 
-            container.Resources.TryGetValue(resourceInfo.Name, out List<InMemoryResource>? versions);
-            if (versions != null && versions.Any(v => v.ResourceInfo.VersionId == resourceInfo.VersionId))
+            container.Resources.TryGetValue(resourceName, out List<InMemoryResource>? versions);
+            if (versions != null && versions.Any(v => v.ResourceInfo.VersionId == version.VersionId))
             {
-                throw new ResourceConflictException($"The resource {resourceInfo.Name} in the container " +
-                    $"{resourceContainerName} already has a version {resourceInfo.VersionId}.")
+                throw new ResourceConflictException($"The resource {resourceName} in the container " +
+                    $"{resourceContainerName} already has a version {version.VersionId}.")
                 {
-                    ContainerName = resourceContainerName, ResourceName = resourceInfo.Name
+                    ContainerName = resourceContainerName, ResourceName = resourceName
                 };
             }
             if (conditions is not null)
-                ThrowIfNotMet(conditions, resourceContainerName, resourceInfo.Name, versions?.MaxBy(r => r.Sequence));
+                ThrowIfNotMet(conditions, resourceContainerName, resourceName, versions?.MaxBy(r => r.Sequence));
 
             // Stamped as the version becomes current, not before its content was read. A wrong declared length throws
             // here, before anything is stored.
-            WrittenContent written = content.Complete(resourceInfo.ContentLength, lastModified ?? _clock.GetUtcNow());
-            AddVersion(container, resourceInfo, bytes, written);
+            WrittenContent written = content.Complete(version.DeclaredLength, lastModified ?? _clock.GetUtcNow());
+            AddVersion(container, version, bytes, written);
             return written;
         }, cancellationToken);
     }
 
-    public Task<WrittenContent?> CopyResourceAsync(ResourceLocation source, string? sourceVersionId, ResourceInfo destination,
-        ResourceWriteCondition condition, CancellationToken cancellationToken = default) =>
+    public override Task<WrittenContent?> CopyResourceAsync(ResourceLocation source, string? sourceVersionId,
+        NewResourceVersion destination, ResourceWriteCondition? condition = null, CancellationToken cancellationToken = default) =>
         UnderLockAsync(() =>
         {
             if (Resolve(VersionsOf(source.ContainerName, source.ResourceName), sourceVersionId) is not { } from) return null;
 
-            InMemoryResourceContainer container = _containers.GetValueOrDefault(destination.ContainerName)
-                ?? throw ContainerMissing(destination.ContainerName);
-            container.Resources.TryGetValue(destination.Name, out List<InMemoryResource>? versions);
-            if (condition.CreateOnly && versions is not null)
-                throw ResourceExists(destination.ContainerName, destination.Name);
-            if (condition.Conditions is { } conditions)
-                ThrowIfNotMet(conditions, destination.ContainerName, destination.Name,
-                    versions?.MaxBy(r => r.Sequence));
+            (string containerName, string resourceName) = destination.Location;
+            InMemoryResourceContainer container = _containers.GetValueOrDefault(containerName)
+                ?? throw ContainerMissing(containerName);
+            container.Resources.TryGetValue(resourceName, out List<InMemoryResource>? versions);
+            if (condition?.CreateOnly == true && versions is not null)
+                throw ResourceExists(containerName, resourceName);
+            if (condition?.Conditions is { } conditions)
+                ThrowIfNotMet(conditions, containerName, resourceName, versions?.MaxBy(r => r.Sequence));
 
             // Stored content is never changed, so the copy can share it.
             var written = new WrittenContent(from.Content.Length, from.ResourceInfo.ContentHash!, _clock.GetUtcNow());
@@ -103,8 +101,8 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : I
             return (WrittenContent?)written;
         }, cancellationToken);
 
-    public Task<bool> MoveResourceAsync(ResourceLocation source, ResourceLocation destination, ResourceConditions? sourceConditions,
-        CancellationToken cancellationToken = default) =>
+    public override Task<bool> MoveResourceAsync(ResourceLocation source, ResourceLocation destination,
+        ResourceConditions? sourceConditions, CancellationToken cancellationToken = default) =>
         UnderLockAsync(() =>
         {
             if (_containers.GetValueOrDefault(source.ContainerName) is not { } from
@@ -124,18 +122,21 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : I
             from.Resources.Remove(source.ResourceName);
             foreach (InMemoryResource version in versions)
             {
-                version.ResourceInfo.ContainerName = destination.ContainerName;
-                version.ResourceInfo.Name = destination.ResourceName;
+                version.ResourceInfo = version.ResourceInfo with
+                {
+                    ContainerName = destination.ContainerName, Name = destination.ResourceName
+                };
             }
             to.Resources[destination.ResourceName] = versions;
             return true;
         }, cancellationToken);
 
     /// <summary>Stores a new version as the name's current one; called under the lock.</summary>
-    private void AddVersion(InMemoryResourceContainer container, ResourceInfo resourceInfo, byte[] content, WrittenContent written)
+    private void AddVersion(InMemoryResourceContainer container, NewResourceVersion version, byte[] content, WrittenContent written)
     {
-        if (!container.Resources.TryGetValue(resourceInfo.Name, out List<InMemoryResource>? versions))
-            container.Resources[resourceInfo.Name] = versions = [];
+        string resourceName = version.Location.ResourceName;
+        if (!container.Resources.TryGetValue(resourceName, out List<InMemoryResource>? versions))
+            container.Resources[resourceName] = versions = [];
 
         versions.Add(new InMemoryResource
         {
@@ -144,37 +145,36 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : I
             ResourceInfo = new ResourceInfo
             {
                 ContainerName = container.Name,
-                Name = resourceInfo.Name,
-                VersionId = resourceInfo.VersionId,
+                Name = resourceName,
+                VersionId = version.VersionId,
                 LastModified = written.LastModified,
-                ContentType = resourceInfo.ContentType,
+                ContentType = version.ContentType,
                 ContentLength = written.ContentLength,
                 ContentHash = written.ContentHash,
-                Metadata = new Dictionary<string, string>(resourceInfo.Metadata),
-                Uri = resourceInfo.Uri,
-                CopiedFrom = resourceInfo.CopiedFrom,
-                ExpiresAt = resourceInfo.ExpiresAt
+                Metadata = new Dictionary<string, string>(version.Metadata),
+                CopiedFrom = version.CopiedFrom,
+                ExpiresAt = version.ExpiresAt
             }
         });
     }
 
-    public Task<List<ResourceInfo>> GetExpiredAsync(DateTimeOffset now, int maxVersions, ResourceInfo? after = null,
-        CancellationToken cancellationToken = default) =>
-        UnderLockAsync<List<ResourceInfo>>(() =>
+    public override Task<IReadOnlyList<ResourceInfo>> GetExpiredAsync(DateTimeOffset now, int maxVersions,
+        (DateTimeOffset ExpiresAt, string VersionId)? after = null, CancellationToken cancellationToken = default) =>
+        UnderLockAsync<IReadOnlyList<ResourceInfo>>(() =>
         [
             .. _containers.Values
                 .SelectMany(container => container.Resources.Values)
                 .SelectMany(versions => versions
                     .Where(v => v.ResourceInfo.ExpiresAt <= now)
                     .Select(v => ToResourceInfo(v, isLatest: v == versions.MaxBy(r => r.Sequence))))
-                .Where(v => after is null || v.ExpiresAt > after.ExpiresAt
-                    || (v.ExpiresAt == after.ExpiresAt && string.CompareOrdinal(v.VersionId, after.VersionId) > 0))
+                .Where(v => after is not { } last || v.ExpiresAt > last.ExpiresAt
+                    || (v.ExpiresAt == last.ExpiresAt && string.CompareOrdinal(v.VersionId, last.VersionId) > 0))
                 .OrderBy(v => v.ExpiresAt)
                 .ThenBy(v => v.VersionId, StringComparer.Ordinal)
                 .Take(maxVersions)
         ], cancellationToken);
 
-    public Task<bool> DeleteExpiredVersionAsync(ResourceLocation resource, string versionId, DateTimeOffset now,
+    public override Task<bool> DeleteExpiredVersionAsync(ResourceLocation resource, string versionId, DateTimeOffset now,
         CancellationToken cancellationToken = default) =>
         UnderLockAsync(() =>
         {
@@ -191,44 +191,40 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : I
             return true;
         }, cancellationToken);
 
-    public Task<bool> SetExpiryAsync(ResourceLocation resource, string versionId, DateTimeOffset? expiresAt,
+    public override Task<bool> SetExpiryAsync(ResourceLocation resource, string versionId, DateTimeOffset? expiresAt,
         CancellationToken cancellationToken = default) =>
+        ChangeAsync(resource, versionId, info => info with { ExpiresAt = expiresAt }, cancellationToken);
+
+    public override Task<bool> SetResourceMetadataAsync(ResourceLocation resource, string? versionId,
+        IReadOnlyDictionary<string, string> metadata, CancellationToken cancellationToken = default) =>
+        ChangeAsync(resource, versionId, info => info with { Metadata = new Dictionary<string, string>(metadata) },
+            cancellationToken);
+
+    public override Task<bool> SetContentTypeAsync(ResourceLocation resource, string? versionId, string? contentType,
+        CancellationToken cancellationToken = default) =>
+        ChangeAsync(resource, versionId, info => info with { ContentType = contentType }, cancellationToken);
+
+    /// <summary>Replaces one version's <see cref="ResourceInfo"/> with what <paramref name="change"/> returns for it.</summary>
+    /// <returns><see langword="false"/> if the version doesn't exist.</returns>
+    private Task<bool> ChangeAsync(ResourceLocation resource, string? versionId, Func<ResourceInfo, ResourceInfo> change,
+        CancellationToken cancellationToken) =>
         UnderLockAsync(() =>
         {
             if (Resolve(VersionsOf(resource.ContainerName, resource.ResourceName), versionId) is not { } version)
                 return false;
-            version.ResourceInfo.ExpiresAt = expiresAt;
+            version.ResourceInfo = change(version.ResourceInfo);
             return true;
         }, cancellationToken);
 
-    public Task<bool> SetResourceMetadataAsync(ResourceLocation resource, string? versionId, IDictionary<string, string> metadata,
+    public override Task<IReadOnlyList<ResourceInfo>> GetAllResourceInfoAsync(string resourceContainerName,
         CancellationToken cancellationToken = default) =>
-        UnderLockAsync(() =>
-        {
-            if (Resolve(VersionsOf(resource.ContainerName, resource.ResourceName), versionId) is not { } version)
-                return false;
-            version.ResourceInfo.Metadata = new Dictionary<string, string>(metadata);
-            return true;
-        }, cancellationToken);
-
-    public Task<bool> SetContentTypeAsync(ResourceLocation resource, string? versionId, string? contentType,
-        CancellationToken cancellationToken = default) =>
-        UnderLockAsync(() =>
-        {
-            if (Resolve(VersionsOf(resource.ContainerName, resource.ResourceName), versionId) is not { } version)
-                return false;
-            version.ResourceInfo.ContentType = contentType;
-            return true;
-        }, cancellationToken);
-
-    public Task<List<ResourceInfo>> GetAllResourceInfoAsync(string resourceContainerName, CancellationToken cancellationToken = default) =>
-        UnderLockAsync<List<ResourceInfo>>(() => _containers.GetValueOrDefault(resourceContainerName) is { } container
+        UnderLockAsync<IReadOnlyList<ResourceInfo>>(() => _containers.GetValueOrDefault(resourceContainerName) is { } container
             ? [.. container.Resources.Values.Select(versions => ToResourceInfo(versions.MaxBy(r => r.Sequence)!, isLatest: true))]
             : [], cancellationToken);
 
-    public Task<List<ResourceInfo>> GetResourcePageAsync(string resourceContainerName, string? prefix, string? afterName,
-        int pageSize, CancellationToken cancellationToken = default) =>
-        UnderLockAsync<List<ResourceInfo>>(() => _containers.GetValueOrDefault(resourceContainerName) is { } container
+    public override Task<IReadOnlyList<ResourceInfo>> GetResourcePageAsync(string resourceContainerName, string? prefix,
+        string? afterName, int pageSize, CancellationToken cancellationToken = default) =>
+        UnderLockAsync<IReadOnlyList<ResourceInfo>>(() => _containers.GetValueOrDefault(resourceContainerName) is { } container
             ? [.. container.Resources
                 .Where(pair => (prefix is null || pair.Key.StartsWith(prefix, StringComparison.Ordinal))
                     && (afterName is null || string.CompareOrdinal(pair.Key, afterName) > 0))
@@ -237,37 +233,41 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : I
                 .Select(pair => ToResourceInfo(pair.Value.MaxBy(r => r.Sequence)!, isLatest: true))]
             : [], cancellationToken);
 
-    public Task<List<ResourceInfo>> GetResourceVersionsAsync(string resourceContainerName, string resourceName, CancellationToken cancellationToken = default) =>
-        UnderLockAsync<List<ResourceInfo>>(() => [.. VersionsOf(resourceContainerName, resourceName)
+    public override Task<IReadOnlyList<ResourceInfo>> GetResourceVersionsAsync(ResourceLocation resource,
+        CancellationToken cancellationToken = default) =>
+        UnderLockAsync<IReadOnlyList<ResourceInfo>>(() => [.. VersionsOf(resource.ContainerName, resource.ResourceName)
             .OrderByDescending(r => r.Sequence)
             .Select((r, index) => ToResourceInfo(r, isLatest: index == 0))], cancellationToken);
 
-    public Task<ResourceInfo?> GetResourceInfoAsync(string resourceContainerName, string resourceName, string? versionId = null, CancellationToken cancellationToken = default) =>
+    public override Task<ResourceInfo?> GetResourceInfoAsync(ResourceLocation resource, string? versionId = null,
+        CancellationToken cancellationToken = default) =>
         UnderLockAsync(() =>
         {
-            List<InMemoryResource> versions = VersionsOf(resourceContainerName, resourceName);
-            InMemoryResource? resource = Resolve(versions, versionId);
-            return resource is null ? null : ToResourceInfo(resource, isLatest: resource == versions.MaxBy(r => r.Sequence));
+            List<InMemoryResource> versions = VersionsOf(resource.ContainerName, resource.ResourceName);
+            InMemoryResource? found = Resolve(versions, versionId);
+            return found is null ? null : ToResourceInfo(found, isLatest: found == versions.MaxBy(r => r.Sequence));
         }, cancellationToken);
 
-    public Task<Stream?> GetResourceStreamAsync(string resourceContainerName, string resourceName, string? versionId = null, CancellationToken cancellationToken = default) =>
-        GetResourceStreamAsync(resourceContainerName, resourceName, versionId, 0, null, cancellationToken);
+    public override Task<Stream?> GetResourceStreamAsync(ResourceLocation resource, string? versionId = null,
+        CancellationToken cancellationToken = default) =>
+        GetResourceStreamAsync(resource, versionId, 0, null, cancellationToken);
 
-    public Task<Stream?> GetResourceStreamAsync(string resourceContainerName, string resourceName, string? versionId, long offset,
+    public override Task<Stream?> GetResourceStreamAsync(ResourceLocation resource, string? versionId, long offset,
         long? length, CancellationToken cancellationToken = default) =>
-        UnderLockAsync<Stream?>(() => Resolve(VersionsOf(resourceContainerName, resourceName), versionId) is { } resource
-            ? new InMemoryResourceStream(resource.Content, offset)
+        UnderLockAsync<Stream?>(() => Resolve(VersionsOf(resource.ContainerName, resource.ResourceName), versionId) is { } found
+            ? new InMemoryResourceStream(found.Content, offset)
             : null, cancellationToken);
 
-    public Task<bool> DeleteResourceAsync(string resourceContainerName, string resourceName, string? versionId = null, CancellationToken cancellationToken = default) =>
-        DeleteResourceAsync(resourceContainerName, resourceName, versionId, new ResourceConditions(), cancellationToken);
-
-    public Task<bool> DeleteResourceAsync(string resourceContainerName, string resourceName, string? versionId,
-        ResourceConditions conditions, CancellationToken cancellationToken = default) =>
+    public override Task<bool> DeleteResourceAsync(ResourceLocation resource, string? versionId = null,
+        ResourceConditions? conditions = null, CancellationToken cancellationToken = default) =>
         UnderLockAsync(() =>
         {
-            ThrowIfNotMet(conditions, resourceContainerName, resourceName,
-                VersionsOf(resourceContainerName, resourceName).MaxBy(r => r.Sequence));
+            (string resourceContainerName, string resourceName) = resource;
+            if (conditions is not null)
+            {
+                ThrowIfNotMet(conditions, resourceContainerName, resourceName,
+                    VersionsOf(resourceContainerName, resourceName).MaxBy(r => r.Sequence));
+            }
 
             if (_containers.GetValueOrDefault(resourceContainerName) is not { } container
                 || !container.Resources.TryGetValue(resourceName, out List<InMemoryResource>? versions))
@@ -285,8 +285,8 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : I
             return true;
         }, cancellationToken);
 
-    public Task<bool> SetResourceContainerMetadataAsync(string resourceContainerName, IDictionary<string, string> metadata,
-        CancellationToken cancellationToken = default) =>
+    public override Task<bool> SetResourceContainerMetadataAsync(string resourceContainerName,
+        IReadOnlyDictionary<string, string> metadata, CancellationToken cancellationToken = default) =>
         UnderLockAsync(() =>
         {
             if (!_containers.TryGetValue(resourceContainerName, out InMemoryResourceContainer? container)) return false;
@@ -295,37 +295,42 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : I
             return true;
         }, cancellationToken);
 
-    public Task AddResourceContainerAsync(ResourceContainerInfo resourceContainerInfo, CancellationToken cancellationToken = default) =>
+    public override Task AddResourceContainerAsync(string resourceContainerName, IReadOnlyDictionary<string, string> metadata,
+        CancellationToken cancellationToken = default) =>
         UnderLockAsync(() =>
         {
             var container = new InMemoryResourceContainer
             {
-                Name = resourceContainerInfo.Name,
-                Uri = resourceContainerInfo.Uri,
-                Metadata = new Dictionary<string, string>(resourceContainerInfo.Metadata)
+                Name = resourceContainerName,
+                Metadata = new Dictionary<string, string>(metadata)
             };
-            if (!_containers.TryAdd(resourceContainerInfo.Name, container))
+            if (!_containers.TryAdd(resourceContainerName, container))
             {
-                throw new ResourceConflictException($"The container {resourceContainerInfo.Name} already exists.")
+                throw new ResourceConflictException($"The container {resourceContainerName} already exists.")
                 {
-                    ContainerName = resourceContainerInfo.Name
+                    ContainerName = resourceContainerName
                 };
             }
             return true;
         }, cancellationToken);
 
-    public Task<List<ResourceContainerInfo>> GetAllResourceContainerInfoAsync(CancellationToken cancellationToken = default) =>
-        UnderLockAsync<List<ResourceContainerInfo>>(() => [.. _containers.Values.Select(ToContainerInfo)], cancellationToken);
+    public override Task<IReadOnlyList<ResourceContainerInfo>> GetAllResourceContainerInfoAsync(
+        CancellationToken cancellationToken = default) =>
+        UnderLockAsync<IReadOnlyList<ResourceContainerInfo>>(() => [.. _containers.Values.Select(ToContainerInfo)],
+            cancellationToken);
 
-    public Task<ResourceContainerInfo?> GetResourceContainerInfoAsync(string resourceContainerName, CancellationToken cancellationToken = default) =>
+    public override Task<ResourceContainerInfo?> GetResourceContainerInfoAsync(string resourceContainerName,
+        CancellationToken cancellationToken = default) =>
         UnderLockAsync(() => _containers.GetValueOrDefault(resourceContainerName) is { } container
             ? ToContainerInfo(container)
             : null, cancellationToken);
 
-    public Task<bool> DeleteResourceContainerAsync(string resourceContainerName, CancellationToken cancellationToken = default) =>
+    public override Task<bool> DeleteResourceContainerAsync(string resourceContainerName,
+        CancellationToken cancellationToken = default) =>
         UnderLockAsync(() => _containers.Remove(resourceContainerName), cancellationToken);
 
-    public Task<ResourceContainerUsage> GetContainerUsageAsync(string resourceContainerName, CancellationToken cancellationToken = default) =>
+    public override Task<ResourceContainerUsage> GetContainerUsageAsync(string resourceContainerName,
+        CancellationToken cancellationToken = default) =>
         UnderLockAsync(() => _containers.GetValueOrDefault(resourceContainerName) is { } container
             ? new ResourceContainerUsage(container.Resources.Values.Sum(versions => versions.Sum(v => (long)v.Content.Length)),
                 container.Resources.Count, container.Resources.Values.Sum(versions => (long)versions.Count))
@@ -385,23 +390,13 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : I
     private static ResourceContainerInfo ToContainerInfo(InMemoryResourceContainer container) => new()
     {
         Name = container.Name,
-        Uri = container.Uri,
         Metadata = new Dictionary<string, string>(container.Metadata)
     };
 
-    private static ResourceInfo ToResourceInfo(InMemoryResource resource, bool isLatest) => new()
+    // A copy of the stored metadata, so a caller can't change what's stored through it.
+    private static ResourceInfo ToResourceInfo(InMemoryResource resource, bool isLatest) => resource.ResourceInfo with
     {
-        ContainerName = resource.ResourceInfo.ContainerName,
-        Name = resource.ResourceInfo.Name,
-        VersionId = resource.ResourceInfo.VersionId,
-        LastModified = resource.ResourceInfo.LastModified,
         IsLatest = isLatest,
-        ContentType = resource.ResourceInfo.ContentType,
-        ContentLength = resource.ResourceInfo.ContentLength,
-        ContentHash = resource.ResourceInfo.ContentHash,
-        Metadata = new Dictionary<string, string>(resource.ResourceInfo.Metadata),
-        Uri = resource.ResourceInfo.Uri,
-        CopiedFrom = resource.ResourceInfo.CopiedFrom,
-        ExpiresAt = resource.ResourceInfo.ExpiresAt
+        Metadata = new Dictionary<string, string>(resource.ResourceInfo.Metadata)
     };
 }

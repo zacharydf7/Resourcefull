@@ -33,7 +33,7 @@ public class ResourcefullSqlOptionsExtensionsTests
         Assert.True(resourcefullOptionsBuilder.ProviderConfigured, "Failure: Provider should be configured.");
         await using ServiceProvider provider = services.BuildServiceProvider();
         using IServiceScope scope = provider.CreateScope();
-        Assert.IsType<ResourceSqlRepository>(scope.ServiceProvider.GetRequiredService<IResourceRepository>());
+        Assert.IsType<ResourceSqlRepository>(scope.ServiceProvider.GetRequiredService<ResourceRepository>());
         Assert.NotNull(scope.ServiceProvider.GetRequiredService<ContentHashBackfill>());
     }
 

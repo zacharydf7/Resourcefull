@@ -341,7 +341,7 @@ public sealed class TelemetryTests : IDisposable
     public async Task DeleteExpiredAsync_ShouldDeleteUploadsAbandonedAnHourAgoAndRecordHowMany_WhenCalled()
     {
         // Arrange: a provider that found two uploads abandoned, and an expired version, so the sweep records a span.
-        var repository = new Mock<IResourceRepository>();
+        var repository = new Mock<ResourceRepository>();
         repository.Setup(r => r.DeleteAbandonedUploadsAsync(It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(2);
         repository.Setup(r => r.GetExpiredAsync(It.IsAny<DateTimeOffset>(), It.IsAny<int>(), null,
@@ -369,7 +369,7 @@ public sealed class TelemetryTests : IDisposable
     {
         // Arrange: an expired version that can't be deleted, in a batch or alone, and an abandoned-upload sweep that
         // fails.
-        var repository = new Mock<IResourceRepository>();
+        var repository = new Mock<ResourceRepository>();
         repository.Setup(r => r.DeleteAbandonedUploadsAsync(It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("The sweep failed."));
         repository.Setup(r => r.GetExpiredAsync(It.IsAny<DateTimeOffset>(), It.IsAny<int>(), null,
@@ -399,7 +399,7 @@ public sealed class TelemetryTests : IDisposable
     public async Task DeleteExpiredAsync_ShouldDeleteExpiredVersionsAndReport_WhenDeletingAbandonedUploadsFails()
     {
         // Arrange
-        var repository = new Mock<IResourceRepository>();
+        var repository = new Mock<ResourceRepository>();
         repository.Setup(r => r.DeleteAbandonedUploadsAsync(It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("The sweep failed."));
         repository.Setup(r => r.GetExpiredAsync(It.IsAny<DateTimeOffset>(), It.IsAny<int>(), null,
@@ -425,7 +425,7 @@ public sealed class TelemetryTests : IDisposable
     public async Task DeleteExpiredAsync_ShouldRecordTheFailedBatchWithoutFailingOrNamingTheResource_WhenItFallsBack()
     {
         // Arrange: a provider whose batch delete fails, naming the resource, but whose single delete works.
-        var repository = new Mock<IResourceRepository>();
+        var repository = new Mock<ResourceRepository>();
         var expired = new ResourceInfo
         {
             ContainerName = "c", Name = "secret.txt", VersionId = "v1", ExpiresAt = DateTimeOffset.UnixEpoch
@@ -461,7 +461,7 @@ public sealed class TelemetryTests : IDisposable
         await container.UploadAsync("a", BinaryData.FromString("1"));
         await container.UploadAsync("a", BinaryData.FromString("2"));
         await container.UploadAsync("a", BinaryData.FromString("3"));
-        var keepingOne = new ResourceServiceClient(provider.GetRequiredService<IResourceRepository>(),
+        var keepingOne = new ResourceServiceClient(provider.GetRequiredService<ResourceRepository>(),
             Microsoft.Extensions.Options.Options.Create(new ResourcefullOptions { IsVersioningEnabled = true, MaxVersions = 1 }));
         using Activity root = TestSource.StartActivity("test")!;
 
@@ -490,7 +490,7 @@ public sealed class TelemetryTests : IDisposable
         {
             for (int i = 0; i < 3; i++) await container.UploadAsync(name, BinaryData.FromString($"{i}"));
         }
-        var keepingOne = new ResourceServiceClient(provider.GetRequiredService<IResourceRepository>(),
+        var keepingOne = new ResourceServiceClient(provider.GetRequiredService<ResourceRepository>(),
             Microsoft.Extensions.Options.Options.Create(new ResourcefullOptions { IsVersioningEnabled = true, MaxVersions = 1 }),
             cleanupHandler: new RefusingCleanupHandler());
         using Activity root = TestSource.StartActivity("test")!;

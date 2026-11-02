@@ -36,7 +36,7 @@ public class UploadRetryIntegrationTests(SqlServerFixture fixture)
         var content = new ArmingStream(new NonSeekableStream(Payload), PartwayThroughTheSecondBatch, failure.Arm);
 
         // Act
-        WrittenContent written = await repository.AddResourceAsync(c, Version(c), content);
+        WrittenContent written = await repository.AddResourceAsync(Version(c), content);
 
         // Assert
         Assert.True(failure.Failed);
@@ -56,12 +56,12 @@ public class UploadRetryIntegrationTests(SqlServerFixture fixture)
         failure.Arm();
 
         // Act
-        WrittenContent written = await repository.AddResourceAsync(c, Version(c), new NonSeekableStream(Payload));
+        WrittenContent written = await repository.AddResourceAsync(Version(c), new NonSeekableStream(Payload));
 
         // Assert
         Assert.True(failure.Failed);
         Assert.Equal(PayloadHash, written.ContentHash);
-        Assert.True(Assert.Single(await repository.GetResourceVersionsAsync(c, "n")).IsLatest);
+        Assert.True(Assert.Single(await repository.GetResourceVersionsAsync(new ResourceLocation(c, "n"))).IsLatest);
         Assert.Equal(Payload, await ReadAsync(repository, c));
     }
 
@@ -74,13 +74,12 @@ public class UploadRetryIntegrationTests(SqlServerFixture fixture)
         // the server, so its retry finds that version, which isn't its own.
         var failure = new FailOnceInterceptor(failAtSave: 1);
         (ResourceSqlRepository repository, string c) = await NewRepositoryAsync(failure, arm: false);
-        await repository.AddResourceAsync(c, Version(c), new MemoryStream(Payload));
+        await repository.AddResourceAsync(Version(c), new MemoryStream(Payload));
         failure.Arm();
-        ResourceInfo imported = Version(c);
-        imported.LastModified = DateTimeOffset.UnixEpoch;
+        NewResourceVersion imported = Version(c) with { LastModified = DateTimeOffset.UnixEpoch };
 
         // Act
-        Task act() => repository.ImportVersionAsync(c, imported, new MemoryStream("other"u8.ToArray()));
+        Task act() => repository.ImportVersionAsync(imported, new MemoryStream("other"u8.ToArray()));
 
         // Assert
         await Assert.ThrowsAsync<ResourceConflictException>(act);
@@ -98,11 +97,11 @@ public class UploadRetryIntegrationTests(SqlServerFixture fixture)
         var content = new FailOnceStream(new NonSeekableStream(Payload), PartwayThroughTheSecondBatch);
 
         // Act
-        Task act() => repository.AddResourceAsync(c, Version(c), content);
+        Task act() => repository.AddResourceAsync(Version(c), content);
 
         // Assert
         await Assert.ThrowsAsync<SimulatedTransientException>(act);
-        Assert.Empty(await repository.GetResourceVersionsAsync(c, "n"));
+        Assert.Empty(await repository.GetResourceVersionsAsync(new ResourceLocation(c, "n")));
         Assert.Equal(0, await StoredRowsAsync(c));
     }
 
@@ -128,12 +127,12 @@ public class UploadRetryIntegrationTests(SqlServerFixture fixture)
         (ResourceSqlRepository repository, string c) = await NewRepositoryAsync(failure);
 
         // Act
-        WrittenContent written = await repository.AddResourceAsync(c, Version(c), new NonSeekableStream(Payload), createOnly: true);
+        WrittenContent written = await repository.AddResourceAsync(Version(c), new NonSeekableStream(Payload), new ResourceWriteCondition { CreateOnly = true });
 
         // Assert
         Assert.True(failure.Failed);
         Assert.Equal(PayloadHash, written.ContentHash);
-        ResourceInfo stored = Assert.Single(await repository.GetResourceVersionsAsync(c, "n"));
+        ResourceInfo stored = Assert.Single(await repository.GetResourceVersionsAsync(new ResourceLocation(c, "n")));
         Assert.True(stored.IsLatest);
         Assert.Equal(Payload, await ReadAsync(repository, c));
     }
@@ -148,12 +147,12 @@ public class UploadRetryIntegrationTests(SqlServerFixture fixture)
         (ResourceSqlRepository repository, string c) = await NewRepositoryAsync(failure);
 
         // Act
-        WrittenContent written = await repository.AddResourceAsync(c, Version(c), new NonSeekableStream(Payload));
+        WrittenContent written = await repository.AddResourceAsync(Version(c), new NonSeekableStream(Payload));
 
         // Assert
         Assert.True(failure.Failed);
         Assert.Equal(PayloadHash, written.ContentHash);
-        Assert.Single(await repository.GetResourceVersionsAsync(c, "n"));
+        Assert.Single(await repository.GetResourceVersionsAsync(new ResourceLocation(c, "n")));
         Assert.Equal(Payload, await ReadAsync(repository, c));
     }
 
@@ -165,16 +164,16 @@ public class UploadRetryIntegrationTests(SqlServerFixture fixture)
         // Arrange: the retry finds the version it matched gone, so its conditions no longer hold.
         var failure = new FailOnceInterceptor(failAfterCommit: true);
         (ResourceSqlRepository repository, string c) = await NewRepositoryAsync(failure, arm: false);
-        await repository.AddResourceAsync(c, Version(c), new MemoryStream(Payload));
+        await repository.AddResourceAsync(Version(c), new MemoryStream(Payload));
         failure.Arm();
 
         // Act
-        bool deleted = await repository.DeleteResourceAsync(c, "n", null, new ResourceConditions { IfMatchVersionId = "v1" });
+        bool deleted = await repository.DeleteResourceAsync(new ResourceLocation(c, "n"), null, new ResourceConditions { IfMatchVersionId = "v1" });
 
         // Assert
         Assert.True(failure.Failed);
         Assert.True(deleted);
-        Assert.Empty(await repository.GetResourceVersionsAsync(c, "n"));
+        Assert.Empty(await repository.GetResourceVersionsAsync(new ResourceLocation(c, "n")));
     }
 
     [SkippableFact]
@@ -188,7 +187,7 @@ public class UploadRetryIntegrationTests(SqlServerFixture fixture)
         string created = $"c-{Guid.NewGuid():N}";
 
         // Act
-        await repository.AddResourceContainerAsync(new ResourceContainerInfo { Name = created });
+        await repository.AddResourceContainerAsync(created, new Dictionary<string, string>());
 
         // Assert
         Assert.True(failure.Failed);
@@ -221,9 +220,9 @@ public class UploadRetryIntegrationTests(SqlServerFixture fixture)
         // Arrange
         var failure = new FailOnceInterceptor(failAfterCommit: true);
         (ResourceSqlRepository repository, string c) = await NewRepositoryAsync(failure, arm: false);
-        await repository.AddResourceAsync(c, Version(c), new MemoryStream(Payload));
+        await repository.AddResourceAsync(Version(c), new MemoryStream(Payload));
         failure.Arm();
-        var copy = new ResourceInfo { ContainerName = c, Name = "copy", VersionId = "v2" };
+        var copy = new NewResourceVersion(new ResourceLocation(c, "copy"), "v2");
 
         // Act
         WrittenContent? written = await repository.CopyResourceAsync(new ResourceLocation(c, "n"), "v1", copy, new ResourceWriteCondition());
@@ -231,7 +230,7 @@ public class UploadRetryIntegrationTests(SqlServerFixture fixture)
         // Assert
         Assert.True(failure.Failed);
         Assert.Equal(Payload.Length, written!.ContentLength);
-        Assert.Equal(["v2"], (await repository.GetResourceVersionsAsync(c, "copy")).Select(v => v.VersionId));
+        Assert.Equal(["v2"], (await repository.GetResourceVersionsAsync(new ResourceLocation(c, "copy"))).Select(v => v.VersionId));
     }
 
     [SkippableFact]
@@ -242,9 +241,9 @@ public class UploadRetryIntegrationTests(SqlServerFixture fixture)
         // Arrange: a restore copies an older version to its own name; the copy fails on its second save.
         var failure = new FailOnceInterceptor(failAtSave: 2);
         (ResourceSqlRepository repository, string c) = await NewRepositoryAsync(failure, arm: false);
-        await repository.AddResourceAsync(c, Version(c), new MemoryStream(Payload));
+        await repository.AddResourceAsync(Version(c), new MemoryStream(Payload));
         failure.Arm();
-        var restored = new ResourceInfo { ContainerName = c, Name = "n", VersionId = "v2", CopiedFrom = new ResourceOrigin(c, "n", "v1") };
+        var restored = new NewResourceVersion(new ResourceLocation(c, "n"), "v2") { CopiedFrom = new ResourceOrigin(c, "n", "v1") };
 
         // Act
         WrittenContent? written = await repository.CopyResourceAsync(new ResourceLocation(c, "n"), "v1", restored, new ResourceWriteCondition());
@@ -252,7 +251,7 @@ public class UploadRetryIntegrationTests(SqlServerFixture fixture)
         // Assert
         Assert.True(failure.Failed);
         Assert.Equal(Payload.Length, written!.ContentLength);
-        Assert.Equal(["v2", "v1"], (await repository.GetResourceVersionsAsync(c, "n")).Select(v => v.VersionId));
+        Assert.Equal(["v2", "v1"], (await repository.GetResourceVersionsAsync(new ResourceLocation(c, "n"))).Select(v => v.VersionId));
         Assert.Equal(Payload, await ReadAsync(repository, c));
     }
 
@@ -264,7 +263,7 @@ public class UploadRetryIntegrationTests(SqlServerFixture fixture)
         // Arrange
         var failure = new FailOnceInterceptor(failAfterCommit: true);
         (ResourceSqlRepository repository, string c) = await NewRepositoryAsync(failure, arm: false);
-        await repository.AddResourceAsync(c, Version(c), new MemoryStream(Payload));
+        await repository.AddResourceAsync(Version(c), new MemoryStream(Payload));
         failure.Arm();
 
         // Act
@@ -273,8 +272,8 @@ public class UploadRetryIntegrationTests(SqlServerFixture fixture)
         // Assert
         Assert.True(failure.Failed);
         Assert.True(moved);
-        Assert.Empty(await repository.GetResourceVersionsAsync(c, "n"));
-        Assert.Equal(["v1"], (await repository.GetResourceVersionsAsync(c, "moved")).Select(v => v.VersionId));
+        Assert.Empty(await repository.GetResourceVersionsAsync(new ResourceLocation(c, "n")));
+        Assert.Equal(["v1"], (await repository.GetResourceVersionsAsync(new ResourceLocation(c, "moved"))).Select(v => v.VersionId));
     }
 
     [SkippableFact]
@@ -285,7 +284,7 @@ public class UploadRetryIntegrationTests(SqlServerFixture fixture)
         // Arrange
         var failure = new FailOnceInterceptor(failAfterCommit: true);
         (ResourceSqlRepository repository, string c) = await NewRepositoryAsync(failure, arm: false);
-        await repository.AddResourceAsync(c, Version(c), new MemoryStream(Payload));
+        await repository.AddResourceAsync(Version(c), new MemoryStream(Payload));
         failure.Arm();
         var expiresAt = new DateTimeOffset(2099, 1, 1, 0, 0, 0, TimeSpan.Zero);
 
@@ -295,7 +294,7 @@ public class UploadRetryIntegrationTests(SqlServerFixture fixture)
         // Assert
         Assert.True(failure.Failed);
         Assert.True(changed);
-        Assert.Equal(expiresAt, (await repository.GetResourceInfoAsync(c, "n", "v1"))!.ExpiresAt);
+        Assert.Equal(expiresAt, (await repository.GetResourceInfoAsync(new ResourceLocation(c, "n"), "v1"))!.ExpiresAt);
     }
 
     [SkippableFact]
@@ -306,9 +305,8 @@ public class UploadRetryIntegrationTests(SqlServerFixture fixture)
         // Arrange
         var failure = new FailOnceInterceptor(failAfterCommit: true);
         (ResourceSqlRepository repository, string c) = await NewRepositoryAsync(failure, arm: false);
-        ResourceInfo version = Version(c);
-        version.ExpiresAt = new DateTimeOffset(2000, 1, 1, 0, 0, 0, TimeSpan.Zero);
-        await repository.AddResourceAsync(c, version, new MemoryStream(Payload));
+        NewResourceVersion version = Version(c) with { ExpiresAt = new DateTimeOffset(2000, 1, 1, 0, 0, 0, TimeSpan.Zero) };
+        await repository.AddResourceAsync(version, new MemoryStream(Payload));
         failure.Arm();
 
         // Act
@@ -317,7 +315,7 @@ public class UploadRetryIntegrationTests(SqlServerFixture fixture)
         // Assert
         Assert.True(failure.Failed);
         Assert.True(deleted);
-        Assert.Empty(await repository.GetResourceVersionsAsync(c, "n"));
+        Assert.Empty(await repository.GetResourceVersionsAsync(new ResourceLocation(c, "n")));
     }
 
     [SkippableFact]
@@ -333,9 +331,9 @@ public class UploadRetryIntegrationTests(SqlServerFixture fixture)
         List<(ResourceLocation, string)> versions = [];
         for (int i = 0; i < 5; i++)
         {
-            var version = new ResourceInfo { ContainerName = c, Name = $"n{i}", VersionId = $"v{i}", ExpiresAt = expiresAt };
-            await repository.AddResourceAsync(c, version, new MemoryStream(Payload));
-            versions.Add((new ResourceLocation(c, version.Name), version.VersionId));
+            var version = new NewResourceVersion(new ResourceLocation(c, $"n{i}"), $"v{i}") { ExpiresAt = expiresAt };
+            await repository.AddResourceAsync(version, new MemoryStream(Payload));
+            versions.Add((version.Location, version.VersionId));
         }
         failure.Arm();
 
@@ -346,7 +344,7 @@ public class UploadRetryIntegrationTests(SqlServerFixture fixture)
         // Assert
         Assert.True(failure.Failed);
         Assert.Equal(versions.OrderBy(v => v.Item2), deleted.OrderBy(v => v.Item2));
-        for (int i = 0; i < 5; i++) Assert.Empty(await repository.GetResourceVersionsAsync(c, $"n{i}"));
+        for (int i = 0; i < 5; i++) Assert.Empty(await repository.GetResourceVersionsAsync(new ResourceLocation(c, $"n{i}")));
     }
 
     private async Task<(ResourceSqlRepository, string)> NewRepositoryAsync(FailOnceInterceptor failure, bool arm = true)
@@ -364,15 +362,15 @@ public class UploadRetryIntegrationTests(SqlServerFixture fixture)
             .Options;
         var repository = new ResourceSqlRepository(new PooledDbContextFactory<ResourceDbContext>(options));
         string containerName = $"c-{Guid.NewGuid():N}";
-        await repository.AddResourceContainerAsync(new ResourceContainerInfo { Name = containerName });
+        await repository.AddResourceContainerAsync(containerName, new Dictionary<string, string>());
         return (repository, containerName);
     }
 
-    private static ResourceInfo Version(string containerName) => new() { ContainerName = containerName, Name = "n", VersionId = "v1" };
+    private static NewResourceVersion Version(string containerName) => new(new ResourceLocation(containerName, "n"), "v1");
 
     private static async Task<byte[]> ReadAsync(ResourceSqlRepository repository, string containerName)
     {
-        await using Stream stream = (await repository.GetResourceStreamAsync(containerName, "n"))!;
+        await using Stream stream = (await repository.GetResourceStreamAsync(new ResourceLocation(containerName, "n")))!;
         using var copy = new MemoryStream();
         await stream.CopyToAsync(copy);
         return copy.ToArray();
@@ -392,10 +390,10 @@ public class UploadRetryIntegrationTests(SqlServerFixture fixture)
             .Options;
         var repository = new ResourceSqlRepository(new PooledDbContextFactory<ResourceDbContext>(options));
         string containerName = $"c-{Guid.NewGuid():N}";
-        await repository.AddResourceContainerAsync(new ResourceContainerInfo { Name = containerName });
+        await repository.AddResourceContainerAsync(containerName, new Dictionary<string, string>());
         byte[] payload = RandomNumberGenerator.GetBytes(65_535 * 40 + 7);
-        await repository.AddResourceAsync(containerName, Version(containerName), new MemoryStream(payload));
-        await using Stream stream = (await repository.GetResourceStreamAsync(containerName, "n"))!;
+        await repository.AddResourceAsync(Version(containerName), new MemoryStream(payload));
+        await using Stream stream = (await repository.GetResourceStreamAsync(new ResourceLocation(containerName, "n")))!;
         using var copy = new MemoryStream();
         var first = new byte[1];
         await stream.ReadExactlyAsync(first);

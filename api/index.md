@@ -3,8 +3,8 @@
 Every public type and member of the four packages, generated from their XML documentation.
 
 - **`Resourcefull`**: the clients you use (`IResourceServiceClient`, `IResourceContainerClient`), their models and
-  exceptions, registration (`AddResourcefull`, `ResourcefullOptionsBuilder`), and the provider interface
-  (`IResourceRepository`, `HashingStream`, `WrittenContent`).
+  exceptions, registration (`AddResourcefull`, `ResourcefullOptionsBuilder`), and what a provider
+  builds on (`ResourceRepository`, `NewResourceVersion`, `HashingStream`, `WrittenContent`).
 - **`Resourcefull.InMemory`**: `UseInMemory`.
 - **`Resourcefull.SqlServer`**: `UseSqlServer`, `MigrateResourcefullDatabaseAsync` and `ContentHashBackfill`.
 - **`Resourcefull.AspNetCore`**: `Results.Resource`, `UploadFromRequestAsync`, `AddResourcefullExceptionHandler`, and

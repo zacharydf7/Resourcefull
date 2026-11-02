@@ -304,6 +304,7 @@ article .alert {
 .toc a[href$="copying-and-moving.html"]::after,
 .toc a[href$="upload-inspection.html"]::after,
 .toc a[href$="thumbnails.html"]::after,
+.toc a[href$="upgrading-to-4.html"]::after,
 .toc a[href$="aspire.html"]::after {
   content: "4.0";
   margin-left: .45em;

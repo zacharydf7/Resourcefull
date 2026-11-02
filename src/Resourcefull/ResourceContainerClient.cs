@@ -4,7 +4,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Resourcefull;
 
-internal partial class ResourceContainerClient(IResourceRepository resourceRepository, IUriProvider? uriProvider,
+internal partial class ResourceContainerClient(ResourceRepository resourceRepository, IUriProvider? uriProvider,
     ResourcefullOptions options, ResourceContainerInfo containerInfo, ILogger? logger, ContainerPolicies? policies = null,
     IResourceCleanupHandler? cleanupHandler = null, TimeProvider? timeProvider = null, ExpirySettings? expiry = null,
     IResourceUploadInspector? uploadInspector = null)
@@ -46,24 +46,21 @@ internal partial class ResourceContainerClient(IResourceRepository resourceRepos
             content = new LimitedContentStream(content, limit);
         }
 
-        var resourceInfo = new ResourceInfo
+        var version = new NewResourceVersion(At(resourceName), Guid.CreateVersion7().ToString())
         {
-            ContainerName = ContainerName,
-            Name = resourceName,
-            VersionId = Guid.CreateVersion7().ToString(),
             ContentType = uploadOptions.Headers?.ContentType,
-            ContentLength = uploadOptions.Headers?.ContentLength,
+            DeclaredLength = uploadOptions.Headers?.ContentLength,
             Metadata = new Dictionary<string, string>(uploadOptions.Metadata),
             ExpiresAt = uploadOptions.ExpiresAt
         };
 
         await using InspectedContentStream? inspected = uploadInspector is null
             ? null
-            : InspectedContentStream.Start(uploadInspector, resourceInfo, resourceInfo.ContentLength, content, _telemetry, "upload",
+            : InspectedContentStream.Start(uploadInspector, version, version.DeclaredLength, content, _telemetry, "upload",
                 cancellationToken);
         try
         {
-            return await SaveNewResourceVersionAsync("upload", inspected ?? content, resourceInfo, createOnly, conditions,
+            return await SaveNewResourceVersionAsync("upload", inspected ?? content, version, createOnly, conditions,
                 cancellationToken);
         }
         catch (ResourceContentLengthMismatchException exception)
@@ -113,58 +110,50 @@ internal partial class ResourceContainerClient(IResourceRepository resourceRepos
         if (string.IsNullOrEmpty(versionId))
             throw new ArgumentException($"{nameof(versionId)} can't be empty.", nameof(versionId));
 
-        ResourceInfo? resourceInfo = await resourceRepository.GetResourceInfoAsync(ContainerName, resourceName, versionId, cancellationToken);
+        ResourceInfo? resourceInfo = await resourceRepository.GetResourceInfoAsync(At(resourceName), versionId, cancellationToken);
         if (resourceInfo == null) return null;
         // As for a copy, the stored length stands in for a declared one: the content doesn't pass through here.
         if (policies is not null)
         {
-            if (!await WithStoredLengthAsync(resourceInfo, cancellationToken)) return null;
+            resourceInfo = await WithStoredLengthAsync(resourceInfo, cancellationToken);
+            if (resourceInfo is null) return null;
             await policies.CheckNewVersionAsync(ContainerName, resourceName, restore: true, null,
                 resourceInfo.ContentLength, _telemetry, cancellationToken);
         }
 
         // Copied within the store, as a copy is, so a provider that copies on the server can retry a transient failure
         // rather than end the restore, which it can't do for content streamed through here.
-        ResourceInfo restored = WithUri(new ResourceInfo
+        var restored = new NewResourceVersion(At(resourceName), Guid.CreateVersion7().ToString())
         {
-            ContainerName = resourceInfo.ContainerName,
-            Name = resourceInfo.Name,
-            VersionId = Guid.CreateVersion7().ToString(),
             ContentType = resourceInfo.ContentType,
             Metadata = resourceInfo.Metadata,
             CopiedFrom = new ResourceOrigin(ContainerName, resourceName, versionId)
-        });
-        WrittenContent? written = await resourceRepository.CopyResourceAsync(new ResourceLocation(ContainerName, resourceName),
-            versionId, restored, new ResourceWriteCondition(), cancellationToken);
+        };
+        WrittenContent? written = await resourceRepository.CopyResourceAsync(At(resourceName), versionId, restored, null,
+            cancellationToken);
         if (written is null) return null;
 
         _telemetry.RecordUploaded("restore", written.ContentLength);
         return await CompleteNewVersionAsync(restored, written);
     }
 
-    private async Task<ResourceInfo> SaveNewResourceVersionAsync(string operation, Stream stream, ResourceInfo resourceInfo,
+    private async Task<ResourceInfo> SaveNewResourceVersionAsync(string operation, Stream stream, NewResourceVersion version,
         bool createOnly, ResourceConditions? conditions, CancellationToken cancellationToken)
     {
-        // Stored too, for applications on 2.x, which read it from storage, while they share a database with this release
-        // during an upgrade.
-        WithUri(resourceInfo);
-
-        // Only a conditional upload takes the newer overload, so a provider written for 3.0 handles every other upload.
-        WrittenContent written = conditions is null
-            ? await resourceRepository.AddResourceAsync(ContainerName, resourceInfo, stream, createOnly, cancellationToken)
-            : await resourceRepository.AddResourceAsync(ContainerName, resourceInfo, stream,
-                new ResourceWriteCondition { CreateOnly = createOnly, Conditions = conditions }, cancellationToken);
-        if (stream is InspectedContentStream inspected) await DeleteIfRefusedAsync(inspected, resourceInfo, cancellationToken);
+        WrittenContent written = await resourceRepository.AddResourceAsync(version, stream,
+            new ResourceWriteCondition { CreateOnly = createOnly, Conditions = conditions }, cancellationToken);
+        if (stream is InspectedContentStream inspected) await DeleteIfRefusedAsync(inspected, version, cancellationToken);
 
         _telemetry.RecordUploaded(operation, written.ContentLength);
-        return await CompleteNewVersionAsync(resourceInfo, written);
+        return await CompleteNewVersionAsync(version, written);
     }
 
     /// <summary>
     /// If the upload inspector refuses the content or fails, deletes the version the provider made current before the
     /// inspector answered, as a provider that doesn't read the content to its end does.
     /// </summary>
-    private async Task DeleteIfRefusedAsync(InspectedContentStream inspected, ResourceInfo version, CancellationToken cancellationToken)
+    private async Task DeleteIfRefusedAsync(InspectedContentStream inspected, NewResourceVersion version,
+        CancellationToken cancellationToken)
     {
         try
         {
@@ -172,26 +161,36 @@ internal partial class ResourceContainerClient(IResourceRepository resourceRepos
         }
         catch
         {
-            await resourceRepository.DeleteResourceAsync(ContainerName, version.Name, version.VersionId, CancellationToken.None);
+            await resourceRepository.DeleteResourceAsync(version.Location, version.VersionId, null, CancellationToken.None);
             throw;
         }
     }
 
     /// <summary>
-    /// Fills in what was stored for a new version, and prunes its name's older versions in whichever container it's in.
+    /// Describes a new version as it was stored, and prunes its name's older versions in whichever container it's in.
     /// </summary>
-    private async Task<ResourceInfo> CompleteNewVersionAsync(ResourceInfo resourceInfo, WrittenContent written)
+    private async Task<ResourceInfo> CompleteNewVersionAsync(NewResourceVersion version, WrittenContent written)
     {
+        (string containerName, string resourceName) = version.Location;
         // Report what was stored rather than what was asked for.
-        resourceInfo.ContentLength = written.ContentLength;
-        resourceInfo.ContentHash = written.ContentHash;
-        resourceInfo.LastModified = written.LastModified;
-        resourceInfo.IsLatest = true;
+        ResourceInfo stored = WithUri(new ResourceInfo
+        {
+            ContainerName = containerName,
+            Name = resourceName,
+            VersionId = version.VersionId,
+            ContentType = version.ContentType,
+            Metadata = version.Metadata,
+            CopiedFrom = version.CopiedFrom,
+            ExpiresAt = version.ExpiresAt,
+            ContentLength = written.ContentLength,
+            ContentHash = written.ContentHash,
+            LastModified = written.LastModified,
+            IsLatest = true
+        });
 
         // The new version is stored, so the upload has succeeded.
-        await PruneAfterAsync(resourceInfo.ContainerName, resourceInfo.Name,
-            () => PruneAsync(resourceInfo.ContainerName, resourceInfo.Name, CancellationToken.None));
-        return resourceInfo;
+        await PruneAfterAsync(containerName, resourceName, () => PruneAsync(containerName, resourceName, CancellationToken.None));
+        return stored;
     }
 
     /// <summary>
@@ -232,7 +231,8 @@ internal partial class ResourceContainerClient(IResourceRepository resourceRepos
     private async Task<int> PruneAsync(string containerName, string resourceName, CancellationToken cancellationToken)
     {
         int keep = options.IsVersioningEnabled ? options.MaxVersions : 1;
-        List<ResourceInfo> versions = await resourceRepository.GetResourceVersionsAsync(containerName, resourceName, cancellationToken);
+        IReadOnlyList<ResourceInfo> versions = await resourceRepository.GetResourceVersionsAsync(
+            new ResourceLocation(containerName, resourceName), cancellationToken);
         DateTimeOffset now = (timeProvider ?? TimeProvider.System).GetUtcNow();
         foreach (ResourceInfo version in versions.Skip(keep))
         {
@@ -262,7 +262,7 @@ internal partial class ResourceContainerClient(IResourceRepository resourceRepos
         string? afterName = null;
         while (true)
         {
-            List<ResourceInfo> page = await resourceRepository.GetResourcePageAsync(ContainerName, null, afterName,
+            IReadOnlyList<ResourceInfo> page = await resourceRepository.GetResourcePageAsync(ContainerName, null, afterName,
                 ResourceListOptions.DefaultPageSize, cancellationToken);
             foreach (ResourceInfo resource in page)
             {
@@ -299,7 +299,8 @@ internal partial class ResourceContainerClient(IResourceRepository resourceRepos
         // Told first, so a handler that fails leaves the version for a later prune rather than deleted unreported.
         if (cleanupHandler is not null)
             await _telemetry.NotifyCleanupAsync(cleanupHandler, new ResourceCleanup(version, ResourceCleanupReason.Pruned, now), cancellationToken);
-        await resourceRepository.DeleteResourceAsync(version.ContainerName, version.Name, version.VersionId, cancellationToken);
+        await resourceRepository.DeleteResourceAsync(new ResourceLocation(version.ContainerName, version.Name), version.VersionId,
+            null, cancellationToken);
     }
 
     /// <summary>
@@ -308,16 +309,16 @@ internal partial class ResourceContainerClient(IResourceRepository resourceRepos
     /// would become current again, bringing back content the overwrite replaced. Empty when versioning is on, where an
     /// older version becoming current is what deleting the current one does, or when expiry is off and none wait.
     /// </summary>
-    internal async Task<List<ResourceInfo>> WaitingBehindAsync(string resourceName, string currentVersionId,
+    internal async Task<IReadOnlyList<ResourceInfo>> WaitingBehindAsync(string resourceName, string currentVersionId,
         CancellationToken cancellationToken)
     {
         if (options.IsVersioningEnabled || expiry is null) return [];
-        List<ResourceInfo> versions = await resourceRepository.GetResourceVersionsAsync(ContainerName, resourceName, cancellationToken);
-        return versions is [{ } current, .. var rest] && current.VersionId == currentVersionId ? rest : [];
+        IReadOnlyList<ResourceInfo> versions = await resourceRepository.GetResourceVersionsAsync(At(resourceName), cancellationToken);
+        return versions.Count > 0 && versions[0].VersionId == currentVersionId ? [.. versions.Skip(1)] : [];
     }
 
     /// <summary>Deletes the versions <see cref="WaitingBehindAsync"/> found, once the current one is deleted.</summary>
-    internal Task DeleteWaitingAsync(string resourceName, List<ResourceInfo> waiting) =>
+    internal Task DeleteWaitingAsync(string resourceName, IReadOnlyList<ResourceInfo> waiting) =>
         waiting.Count == 0
             ? Task.CompletedTask
             : PruneAfterAsync(ContainerName, resourceName, async () =>
@@ -365,15 +366,15 @@ internal partial class ResourceContainerClient(IResourceRepository resourceRepos
         if (range is { } requested && (requested.Offset < 0 || requested.Length < 0))
             throw new ArgumentOutOfRangeException(nameof(range), requested, "A range can't have a negative offset or length.");
 
-        ResourceInfo? resourceInfo = await resourceRepository.GetResourceInfoAsync(ContainerName, resourceName, versionId, cancellationToken);
-        if (resourceInfo == null) return null;
+        ResourceInfo? resolved = await resourceRepository.GetResourceInfoAsync(At(resourceName), versionId, cancellationToken);
+        if (resolved == null) return null;
         // Before the stream opens, so a URI provider that throws can't leave it undisposed.
-        WithUri(resourceInfo);
+        ResourceInfo resourceInfo = WithUri(resolved);
 
         // Read the version just resolved, not "current" again: an upload in between would pair this info with other content.
         Stream? stream = range is { } r
-            ? await resourceRepository.GetResourceStreamAsync(ContainerName, resourceName, resourceInfo.VersionId, r.Offset, r.Length, cancellationToken)
-            : await resourceRepository.GetResourceStreamAsync(ContainerName, resourceName, resourceInfo.VersionId, cancellationToken);
+            ? await resourceRepository.GetResourceStreamAsync(At(resourceName), resourceInfo.VersionId, r.Offset, r.Length, cancellationToken)
+            : await resourceRepository.GetResourceStreamAsync(At(resourceName), resourceInfo.VersionId, cancellationToken);
         if (stream == null) return null;
 
         long totalLength = stream.Length;
@@ -419,7 +420,7 @@ internal partial class ResourceContainerClient(IResourceRepository resourceRepos
         => _telemetry.RunAsync("get_info", ContainerName, resourceName, async () =>
         {
             ResourceNames.ThrowIfInvalidResourceName(resourceName);
-            ResourceInfo? resourceInfo = await resourceRepository.GetResourceInfoAsync(ContainerName, resourceName, versionId, cancellationToken);
+            ResourceInfo? resourceInfo = await resourceRepository.GetResourceInfoAsync(At(resourceName), versionId, cancellationToken);
             return resourceInfo is null ? null : WithUri(resourceInfo);
         });
 
@@ -444,12 +445,12 @@ internal partial class ResourceContainerClient(IResourceRepository resourceRepos
         string? afterName = continuationToken is null ? null : ResourcePageToken.Decode(continuationToken, prefix, nameof(continuationToken));
 
         // One more than a page, to tell whether another page follows without returning an empty last page.
-        List<ResourceInfo> resources = await resourceRepository.GetResourcePageAsync(ContainerName, prefix, afterName,
+        IReadOnlyList<ResourceInfo> resources = await resourceRepository.GetResourcePageAsync(ContainerName, prefix, afterName,
             options.PageSize + 1, cancellationToken);
         string? next = null;
         if (resources.Count > options.PageSize)
         {
-            resources.RemoveRange(options.PageSize, resources.Count - options.PageSize);
+            resources = [.. resources.Take(options.PageSize)];
             next = ResourcePageToken.Encode(prefix, resources[^1].Name);
         }
         return new ResourcePage(WithUris(resources), next);
@@ -462,22 +463,19 @@ internal partial class ResourceContainerClient(IResourceRepository resourceRepos
         => _telemetry.RunAsync<IReadOnlyList<ResourceInfo>>("list_versions", ContainerName, resourceName, async () =>
         {
             ResourceNames.ThrowIfInvalidResourceName(resourceName);
-            return WithUris(await resourceRepository.GetResourceVersionsAsync(ContainerName, resourceName, cancellationToken));
+            return WithUris(await resourceRepository.GetResourceVersionsAsync(At(resourceName), cancellationToken));
         });
 
     // URIs come from the URI provider whenever a version is returned, not from storage, so a changed provider or base URL
     // applies to versions stored before the change as well.
-    private ResourceInfo WithUri(ResourceInfo resourceInfo)
+    private ResourceInfo WithUri(ResourceInfo resourceInfo) => resourceInfo with
     {
-        resourceInfo.Uri = uriProvider?.GetAbsoluteUri(new ResourcefullContext(resourceInfo.ContainerName, resourceInfo.Name, resourceInfo.VersionId));
-        return resourceInfo;
-    }
+        Uri = uriProvider?.GetAbsoluteUri(new ResourcefullContext(resourceInfo.ContainerName, resourceInfo.Name, resourceInfo.VersionId))
+    };
 
-    private List<ResourceInfo> WithUris(List<ResourceInfo> resources)
-    {
-        foreach (ResourceInfo resourceInfo in resources) WithUri(resourceInfo);
-        return resources;
-    }
+    private IReadOnlyList<ResourceInfo> WithUris(IReadOnlyList<ResourceInfo> resources) => [.. resources.Select(WithUri)];
+
+    private ResourceLocation At(string resourceName) => new(ContainerName, resourceName);
 
     public Task<bool> DeleteResourceIfExistsAsync(string resourceName, string? versionId = null)
         => DeleteResourceIfExistsAsync(resourceName, versionId, CancellationToken.None);
@@ -491,11 +489,9 @@ internal partial class ResourceContainerClient(IResourceRepository resourceRepos
         {
             ResourceNames.ThrowIfInvalidResourceName(resourceName);
             if (policies is not null) await policies.ThrowIfReadOnlyAsync(ContainerName, _telemetry, cancellationToken);
-            List<ResourceInfo> waiting = versionId is null ? [] : await WaitingBehindAsync(resourceName, versionId, cancellationToken);
-            // Only a conditional delete takes the newer overload, so a provider written for 3.0 handles every other one.
-            bool deleted = conditions is null or { IsEmpty: true }
-                ? await resourceRepository.DeleteResourceAsync(ContainerName, resourceName, versionId, cancellationToken)
-                : await resourceRepository.DeleteResourceAsync(ContainerName, resourceName, versionId, conditions, cancellationToken);
+            IReadOnlyList<ResourceInfo> waiting = versionId is null ? [] : await WaitingBehindAsync(resourceName, versionId, cancellationToken);
+            bool deleted = await resourceRepository.DeleteResourceAsync(At(resourceName), versionId,
+                conditions is { IsEmpty: false } ? conditions : null, cancellationToken);
             if (deleted) await DeleteWaitingAsync(resourceName, waiting);
             return deleted;
         }, "resourcefull.conditional", conditions is { IsEmpty: false });
@@ -521,32 +517,29 @@ internal partial class ResourceContainerClient(IResourceRepository resourceRepos
         // As for an upload: without versioning, a copy that may not overwrite is a create-only write.
         bool createOnly = copyOptions.CreateOnly || (!options.IsVersioningEnabled && !copyOptions.Overwrite && conditions is null);
 
-        ResourceInfo? source = await resourceRepository.GetResourceInfoAsync(ContainerName, resourceName, copyOptions.VersionId, cancellationToken);
+        ResourceInfo? source = await resourceRepository.GetResourceInfoAsync(At(resourceName), copyOptions.VersionId, cancellationToken);
         if (source is null) return null;
         // The stored length stands in for a declared one: the content doesn't pass through here to be measured.
         if (policies is not null)
         {
-            if (!await WithStoredLengthAsync(source, cancellationToken)) return null;
+            source = await WithStoredLengthAsync(source, cancellationToken);
+            if (source is null) return null;
             await policies.CheckNewVersionAsync(destinationContainer, destinationName, restore: false, source.ContentType, source.ContentLength,
                 _telemetry, cancellationToken);
         }
 
-        ResourceInfo copy = WithUri(new ResourceInfo
+        var copy = new NewResourceVersion(new ResourceLocation(destinationContainer, destinationName), Guid.CreateVersion7().ToString())
         {
-            ContainerName = destinationContainer,
-            Name = destinationName,
-            VersionId = Guid.CreateVersion7().ToString(),
             ContentType = source.ContentType,
-            Metadata = new Dictionary<string, string>(source.Metadata),
+            Metadata = source.Metadata,
             CopiedFrom = new ResourceOrigin(ContainerName, resourceName, source.VersionId),
             ExpiresAt = copyOptions.ExpiresAt
-        });
+        };
         WrittenContent? written;
         try
         {
-            written = await resourceRepository.CopyResourceAsync(new ResourceLocation(ContainerName, resourceName),
-                source.VersionId, copy, new ResourceWriteCondition { CreateOnly = createOnly, Conditions = conditions },
-                cancellationToken);
+            written = await resourceRepository.CopyResourceAsync(At(resourceName), source.VersionId, copy,
+                new ResourceWriteCondition { CreateOnly = createOnly, Conditions = conditions }, cancellationToken);
         }
         catch (ResourcefullException exception) when (exception is ResourceConflictException
             or ResourceContainerNotFoundException or ResourcePreconditionFailedException)
@@ -583,11 +576,13 @@ internal partial class ResourceContainerClient(IResourceRepository resourceRepos
         // a few times at most, so a name rewritten constantly can't keep it going.
         for (int attempt = 1; ; attempt++)
         {
-            List<ResourceInfo> versions = await resourceRepository.GetResourceVersionsAsync(ContainerName, resourceName, cancellationToken);
-            if (versions.Count == 0) return null;
-            foreach (ResourceInfo version in versions)
+            IReadOnlyList<ResourceInfo> stored = await resourceRepository.GetResourceVersionsAsync(At(resourceName), cancellationToken);
+            if (stored.Count == 0) return null;
+            var versions = new List<ResourceInfo>(stored.Count);
+            foreach (ResourceInfo version in stored)
             {
-                if (!await WithStoredLengthAsync(version, cancellationToken)) return null;
+                if (await WithStoredLengthAsync(version, cancellationToken) is not { } measured) return null;
+                versions.Add(measured);
             }
 
             await policies.CheckMoveAsync(ContainerName, destinationContainer, versions, _telemetry, cancellationToken);
@@ -638,22 +633,22 @@ internal partial class ResourceContainerClient(IResourceRepository resourceRepos
                 return null;
             }
 
-            ResourceInfo? moved = await resourceRepository.GetResourceInfoAsync(destinationContainer, destinationName, null, cancellationToken);
+            ResourceInfo? moved = await resourceRepository.GetResourceInfoAsync(new ResourceLocation(destinationContainer, destinationName),
+                null, cancellationToken);
             return moved is null ? null : WithUri(moved);
         }
     }
 
     /// <summary>
-    /// Sets a version's <see cref="ResourceInfo.ContentLength"/> from its stored content when an early release recorded
-    /// none, for the size limits to check: a stream's length is the stored content's, known without reading it.
+    /// Fills in a version's <see cref="ResourceInfo.ContentLength"/> from its stored content when an early release
+    /// recorded none, for the size limits to check: a stream's length is the stored content's, known without reading it.
     /// </summary>
-    /// <returns><see langword="false"/> if the version no longer exists.</returns>
-    private async Task<bool> WithStoredLengthAsync(ResourceInfo version, CancellationToken cancellationToken)
+    /// <returns>The version with its length, or <see langword="null"/> if it no longer exists.</returns>
+    private async Task<ResourceInfo?> WithStoredLengthAsync(ResourceInfo version, CancellationToken cancellationToken)
     {
-        if (version.ContentLength is not null) return true;
-        await using Stream? content = await resourceRepository.GetResourceStreamAsync(ContainerName, version.Name, version.VersionId, cancellationToken);
-        version.ContentLength = content?.Length;
-        return content is not null;
+        if (version.ContentLength is not null) return version;
+        await using Stream? content = await resourceRepository.GetResourceStreamAsync(At(version.Name), version.VersionId, cancellationToken);
+        return content is null ? null : version with { ContentLength = content.Length };
     }
 
     public Task<bool> SetExpiryAsync(string resourceName, string versionId, DateTimeOffset? expiresAt, CancellationToken cancellationToken = default)
@@ -673,8 +668,8 @@ internal partial class ResourceContainerClient(IResourceRepository resourceRepos
             ResourceNames.ThrowIfInvalidResourceName(resourceName);
             ArgumentNullException.ThrowIfNull(metadata);
             if (policies is not null) await policies.ThrowIfReadOnlyAsync(ContainerName, _telemetry, cancellationToken);
-            return await resourceRepository.SetResourceMetadataAsync(new ResourceLocation(ContainerName, resourceName), versionId,
-                metadata, cancellationToken);
+            return await resourceRepository.SetResourceMetadataAsync(At(resourceName), versionId,
+                new Dictionary<string, string>(metadata), cancellationToken);
         });
 
     public Task<bool> SetContentTypeAsync(string resourceName, string? versionId, string? contentType,
@@ -702,12 +697,8 @@ internal partial class ResourceContainerClient(IResourceRepository resourceRepos
         => _telemetry.RunAsync("exists", ContainerName, resourceName, async () =>
         {
             ResourceNames.ThrowIfInvalidResourceName(resourceName);
-            return await resourceRepository.GetResourceInfoAsync(ContainerName, resourceName, versionId, cancellationToken) != null;
+            return await resourceRepository.GetResourceInfoAsync(At(resourceName), versionId, cancellationToken) != null;
         });
-
-    // Container clients now share the service client's scope, so there is
-    // nothing to dispose. IDisposable is retained for backwards compatibility.
-    public void Dispose() => GC.SuppressFinalize(this);
 
     [LoggerMessage(Level = LogLevel.Warning,
         Message = "Pruning older versions of {ContainerName}/{ResourceName} failed; they stay until a later write of the name prunes them, or they expire.")]

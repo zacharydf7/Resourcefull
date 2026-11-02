@@ -14,13 +14,13 @@ public abstract partial class ResourcefullContractTests
         var versionsOfB = new List<string>();
         for (int i = 0; i < 3; i++)
             versionsOfB.Add((await container.UploadAsync("b", BinaryData.FromString($"b{i}"))).VersionId);
-        IResourceRepository repository = provider.GetRequiredService<IResourceRepository>();
+        ResourceRepository repository = provider.GetRequiredService<ResourceRepository>();
         string containerName = container.ResourceContainerInfo.Name;
 
         // Act
-        List<ResourceInfo> first = await repository.GetVersionPageAsync(containerName, null, 2);
-        List<ResourceInfo> second = await repository.GetVersionPageAsync(containerName, "b", 2);
-        List<ResourceInfo> past = await repository.GetVersionPageAsync(containerName, "c", 2);
+        IReadOnlyList<ResourceInfo> first = await repository.GetVersionPageAsync(containerName, null, 2);
+        IReadOnlyList<ResourceInfo> second = await repository.GetVersionPageAsync(containerName, "b", 2);
+        IReadOnlyList<ResourceInfo> past = await repository.GetVersionPageAsync(containerName, "c", 2);
 
         // Assert: the names in order, and each name's versions current first, then newest to oldest.
         Assert.Equal(["a", "b", "b", "b"], first.Select(v => v.Name));

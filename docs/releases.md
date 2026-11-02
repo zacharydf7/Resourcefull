@@ -29,7 +29,8 @@ The biggest release so far, documented here already:
 - **Fixes:** with expiry turned on, a download in progress finishes even when the file is replaced; creating or deleting
   a container on SQL Server no longer reports failure after succeeding.
 
-4.0 also brings the API changes under [What's next](#whats-next), which is why it's a major release.
+4.0 also changes the API, which is why it's a major release: [Upgrading to 4.0](upgrading-to-4.md) lists what's
+changed so far, and [What's next](#whats-next) what's still to come.
 
 ## 3.1, October 2026
 
@@ -76,8 +77,7 @@ comment saying you need it helps decide what comes first.
 - **Seeing your storage:** a [dashboard page](https://github.com/zacharydf7/Resourcefull/issues/129) for containers,
   usage and limits.
 - **A simpler API, also in 4.0:** [one method per operation](https://github.com/zacharydf7/Resourcefull/issues/125),
-  [more predictable writes](https://github.com/zacharydf7/Resourcefull/issues/126), a
-  [base class for providers](https://github.com/zacharydf7/Resourcefull/issues/127), and
+  [more predictable writes](https://github.com/zacharydf7/Resourcefull/issues/126), and
   [stricter names](https://github.com/zacharydf7/Resourcefull/issues/128). They break code written for 3.x, so
   they come in a major release.
 

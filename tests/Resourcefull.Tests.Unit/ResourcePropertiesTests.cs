@@ -8,10 +8,10 @@ namespace Resourcefull.Tests.Unit;
 public class ResourcePropertiesTests
 {
     [Fact]
-    public async Task PropertyMembers_ShouldThrowNotSupported_WhenAProviderOrClientWrittenFor31IsAsked()
+    public async Task PropertyMembers_ShouldThrowNotSupported_WhenTheProviderOrClientDoesNotImplementThem()
     {
         // Arrange
-        IResourceRepository repository = new Mock<IResourceRepository> { CallBase = true }.Object;
+        ResourceRepository repository = new Mock<ResourceRepository> { CallBase = true }.Object;
         IResourceContainerClient container = new Mock<IResourceContainerClient> { CallBase = true }.Object;
         IResourceServiceClient service = new Mock<IResourceServiceClient> { CallBase = true }.Object;
         var location = new ResourceLocation("c", "a");

@@ -90,14 +90,14 @@
     href: providers/in-memory.md
   - name: Writing a provider
     href: providers/writing-a-provider.md
-  - name: Members added since 3.0
-    href: providers/newer-members.md
 - name: Reference
   items:
   - name: Errors
     href: errors.md
   - name: Upgrading
     href: upgrading.md
+  - name: Upgrading to 4.0
+    href: upgrading-to-4.md
   - name: Upgrading to 3.0
     href: upgrading-to-3.md
   - name: Releases and roadmap

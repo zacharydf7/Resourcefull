@@ -173,7 +173,10 @@ public interface IResourceServiceClient
     /// Some versions weren't deleted, because the cleanup handler or the delete failed; the others were, and those stay
     /// for the next call. Its message counts them all, and it holds the first few failures.
     /// </exception>
-    /// <exception cref="InvalidOperationException">The provider listed the same expired versions twice, against its contract.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// The provider broke its <c>GetExpiredAsync</c> contract: it listed the same expired versions twice, or listed one
+    /// without an expiry.
+    /// </exception>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
     /// <exception cref="NotSupportedException">
     /// The provider doesn't support expiry, or this is the default implementation, kept so implementations written for

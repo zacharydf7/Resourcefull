@@ -15,7 +15,7 @@ namespace Resourcefull;
 /// canceled operation throws <see cref="OperationCanceledException"/> and never returns a result, so a
 /// caller that cancels can trust that nothing it did not see was reported as done.
 /// </remarks>
-public interface IResourceContainerClient : IDisposable
+public interface IResourceContainerClient
 {
     /// <summary>
     /// The attributes of the container this client targets, as known when the client was made: the stored ones for a

@@ -6,7 +6,7 @@ namespace Resourcefull;
 /// <summary>
 /// The limits every container and resource name must stay within, and checks against all the name rules. The clients
 /// reject longer names, so a provider that sizes its storage from these always has room. Like
-/// <see cref="IResourceRepository"/>, the limits change only in a major release.
+/// <see cref="ResourceRepository"/>, the limits change only in a major release.
 /// </summary>
 public static class ResourceNames
 {

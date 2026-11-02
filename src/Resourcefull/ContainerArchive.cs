@@ -58,7 +58,7 @@ internal static class ContainerArchive
         [property: JsonPropertyName("contentType")] string? ContentType,
         [property: JsonPropertyName("contentLength")] long ContentLength,
         [property: JsonPropertyName("contentHash")] string ContentHash,
-        [property: JsonPropertyName("metadata")] IDictionary<string, string> Metadata,
+        [property: JsonPropertyName("metadata")] IReadOnlyDictionary<string, string> Metadata,
         [property: JsonPropertyName("copiedFrom")] ManifestOrigin? CopiedFrom,
         [property: JsonPropertyName("expiresAt")] DateTimeOffset? ExpiresAt,
         [property: JsonPropertyName("content")] string Content);
@@ -74,7 +74,7 @@ internal static class ContainerArchive
     /// <summary>How many names an export lists the versions of at a time.</summary>
     internal const int NamesPerPage = 1_000;
 
-    public static async Task<ResourceExportResult> ExportAsync(IResourceRepository repository, ResourceContainerInfo container,
+    public static async Task<ResourceExportResult> ExportAsync(ResourceRepository repository, ResourceContainerInfo container,
         Stream destination, Activity? activity, CancellationToken cancellationToken)
     {
         // Each distinct content's entry, by the version's recorded hash, or by its version ID when it has none.
@@ -109,7 +109,7 @@ internal static class ContainerArchive
             string? afterName = null;
             while (true)
             {
-                List<ResourceInfo> page = await repository.GetVersionPageAsync(container.Name, afterName, NamesPerPage,
+                IReadOnlyList<ResourceInfo> page = await repository.GetVersionPageAsync(container.Name, afterName, NamesPerPage,
                     cancellationToken);
                 // Only an empty page ends it: a page can hold fewer names than asked for, as when one is deleted while
                 // it's read, and more still follow.
@@ -128,8 +128,8 @@ internal static class ContainerArchive
                                 : version.VersionId);
                         if (!written.TryGetValue(entryName, out WrittenContent? content))
                         {
-                            await using Stream? source = await repository.GetResourceStreamAsync(container.Name,
-                                name.Key, version.VersionId, cancellationToken);
+                            await using Stream? source = await repository.GetResourceStreamAsync(
+                                new ResourceLocation(container.Name, name.Key), version.VersionId, cancellationToken);
                             // Deleted while the container was exported.
                             if (source is null) continue;
 
@@ -184,7 +184,7 @@ internal static class ContainerArchive
 
     /// <summary>Stores every version an export describes in <paramref name="containerName"/>, which must exist and be empty.</summary>
     public static async Task<ResourceImportResult> ImportAsync(ZipArchive zip, Manifest manifest, string containerName,
-        IResourceRepository repository, ContainerPolicies? policies, ClientTelemetry telemetry, IUriProvider? uriProvider,
+        ResourceRepository repository, ContainerPolicies? policies, ClientTelemetry telemetry,
         IResourceUploadInspector? inspector, CancellationToken cancellationToken)
     {
         // The container is new, so its usage is what the import has stored so far: counted here, so a policy's limits
@@ -196,11 +196,8 @@ internal static class ContainerArchive
             {
                 ZipArchiveEntry entry = zip.GetEntry(version.Content)
                     ?? throw new InvalidDataException($"The export has no content for version {version.VersionId} of {resource.Name}.");
-                var info = new ResourceInfo
+                var info = new NewResourceVersion(new ResourceLocation(containerName, resource.Name), version.VersionId)
                 {
-                    ContainerName = containerName,
-                    Name = resource.Name,
-                    VersionId = version.VersionId,
                     LastModified = version.LastModified,
                     ContentType = version.ContentType,
                     // Not declared: the entry's stream refuses content longer than the manifest's length, and the hash
@@ -209,9 +206,7 @@ internal static class ContainerArchive
                     CopiedFrom = version.CopiedFrom is { } from
                         ? new ResourceOrigin(from.ContainerName, from.ResourceName, from.VersionId)
                         : null,
-                    ExpiresAt = version.ExpiresAt,
-                    // Stored too, for applications on 2.x, which read it from storage.
-                    Uri = uriProvider?.GetAbsoluteUri(new ResourcefullContext(containerName, resource.Name, version.VersionId))
+                    ExpiresAt = version.ExpiresAt
                 };
 
                 // Able to go back to its start, so a provider that retries a transient failure can read it again, unless
@@ -227,8 +222,7 @@ internal static class ContainerArchive
                     ? null
                     : InspectedContentStream.Start(inspector, info, version.ContentLength, checkedContent, telemetry, "import",
                         cancellationToken);
-                WrittenContent stored = await repository.ImportVersionAsync(containerName, info, inspected ?? checkedContent,
-                    cancellationToken);
+                WrittenContent stored = await repository.ImportVersionAsync(info, inspected ?? checkedContent, cancellationToken);
                 // A refusal fails the import, which deletes the container, so a version stored before the answer goes too.
                 if (inspected is not null) await inspected.ThrowIfStoredUnansweredAsync(cancellationToken);
                 if (stored.ContentHash != version.ContentHash)

@@ -20,7 +20,7 @@ public abstract partial class ResourcefullContractTests
     {
         // Arrange
         using ServiceProvider provider = BuildServiceProvider();
-        IResourceRepository repository = provider.GetRequiredService<IResourceRepository>();
+        ResourceRepository repository = provider.GetRequiredService<ResourceRepository>();
         IResourceContainerClient container = await NewContainerAsync(provider);
         string containerName = container.ResourceContainerInfo.Name;
         await container.UploadAsync("kept", BinaryData.FromString("x"));
@@ -31,20 +31,20 @@ public abstract partial class ResourcefullContractTests
         // Act
         Task act() => operation switch
         {
-            "upload" => repository.AddResourceAsync(containerName, new ResourceInfo { ContainerName = containerName, Name = "new", VersionId = "v1" },
-                new MemoryStream([1, 2, 3]), false, canceled.Token),
-            "delete" => repository.DeleteResourceAsync(containerName, "kept", null, canceled.Token),
-            "create container" => repository.AddResourceContainerAsync(new ResourceContainerInfo { Name = newContainer }, canceled.Token),
+            "upload" => repository.AddResourceAsync(new NewResourceVersion(new ResourceLocation(containerName, "new"), "v1"),
+                new MemoryStream([1, 2, 3]), null, canceled.Token),
+            "delete" => repository.DeleteResourceAsync(new ResourceLocation(containerName, "kept"), null, null, canceled.Token),
+            "create container" => repository.AddResourceContainerAsync(newContainer, new Dictionary<string, string>(), canceled.Token),
             "delete container" => repository.DeleteResourceContainerAsync(containerName, canceled.Token),
             "list" => repository.GetAllResourceInfoAsync(containerName, canceled.Token),
-            "read" => repository.GetResourceStreamAsync(containerName, "kept", null, canceled.Token),
+            "read" => repository.GetResourceStreamAsync(new ResourceLocation(containerName, "kept"), null, canceled.Token),
             _ => throw new ArgumentOutOfRangeException(nameof(operation))
         };
 
         // Assert: a container delete may stop between whole versions, so only the container itself must remain.
         await Assert.ThrowsAnyAsync<OperationCanceledException>(act);
-        Assert.Null(await repository.GetResourceInfoAsync(containerName, "new"));
-        if (operation != "delete container") Assert.NotNull(await repository.GetResourceInfoAsync(containerName, "kept"));
+        Assert.Null(await repository.GetResourceInfoAsync(new ResourceLocation(containerName, "new")));
+        if (operation != "delete container") Assert.NotNull(await repository.GetResourceInfoAsync(new ResourceLocation(containerName, "kept")));
         Assert.NotNull(await repository.GetResourceContainerInfoAsync(containerName));
         Assert.Null(await repository.GetResourceContainerInfoAsync(newContainer));
     }
@@ -54,7 +54,7 @@ public abstract partial class ResourcefullContractTests
     {
         // Arrange: content whose first read cancels the upload's token.
         using ServiceProvider provider = BuildServiceProvider();
-        IResourceRepository repository = provider.GetRequiredService<IResourceRepository>();
+        ResourceRepository repository = provider.GetRequiredService<ResourceRepository>();
         IResourceContainerClient container = await NewContainerAsync(provider);
         string containerName = container.ResourceContainerInfo.Name;
         using var cancellation = new CancellationTokenSource();
@@ -65,13 +65,13 @@ public abstract partial class ResourcefullContractTests
         });
 
         // Act
-        Task act() => repository.AddResourceAsync(containerName, new ResourceInfo { ContainerName = containerName, Name = "n", VersionId = "v1" },
-            content, false, cancellation.Token);
+        Task act() => repository.AddResourceAsync(new NewResourceVersion(new ResourceLocation(containerName, "n"), "v1"),
+            content, null, cancellation.Token);
 
         // Assert: it stops reading too, rather than reading a large upload to its end before giving up.
         await Assert.ThrowsAnyAsync<OperationCanceledException>(act);
         Assert.True(content.Position < content.Length);
-        Assert.Null(await repository.GetResourceInfoAsync(containerName, "n"));
+        Assert.Null(await repository.GetResourceInfoAsync(new ResourceLocation(containerName, "n")));
     }
 
     [SkippableFact]
@@ -79,10 +79,10 @@ public abstract partial class ResourcefullContractTests
     {
         // Arrange
         using ServiceProvider provider = BuildServiceProvider();
-        IResourceRepository repository = provider.GetRequiredService<IResourceRepository>();
+        ResourceRepository repository = provider.GetRequiredService<ResourceRepository>();
         string containerName = NewContainerName();
         var given = new Dictionary<string, string> { ["owner"] = "billing" };
-        await repository.AddResourceContainerAsync(new ResourceContainerInfo { Name = containerName, Metadata = given });
+        await repository.AddResourceContainerAsync(containerName, given);
 
         // Act: change the dictionary given, and the ones a read and a listing return.
         given["owner"] = "changed";
@@ -98,18 +98,19 @@ public abstract partial class ResourcefullContractTests
     {
         // Arrange
         using ServiceProvider provider = BuildServiceProvider();
-        IResourceRepository repository = provider.GetRequiredService<IResourceRepository>();
+        ResourceRepository repository = provider.GetRequiredService<ResourceRepository>();
         IResourceContainerClient container = await NewContainerAsync(provider);
         string containerName = container.ResourceContainerInfo.Name;
         var given = new Dictionary<string, string> { ["author"] = "finance" };
-        await repository.AddResourceAsync(containerName, new ResourceInfo { ContainerName = containerName, Name = "n", VersionId = "v1", Metadata = given },
-            new MemoryStream([1]));
+        var location = new ResourceLocation(containerName, "n");
+        await repository.AddResourceAsync(new NewResourceVersion(location, "v1") { Metadata = given }, new MemoryStream([1]));
 
-        // Act: change both the dictionary given and the one returned.
+        // Act: change both the dictionary given and the one returned, which a caller could change by casting it.
         given["author"] = "changed";
-        (await repository.GetResourceInfoAsync(containerName, "n"))!.Metadata["author"] = "changed";
+        if ((await repository.GetResourceInfoAsync(location))!.Metadata is IDictionary<string, string> returned)
+            returned["author"] = "changed";
 
         // Assert
-        Assert.Equal("finance", (await repository.GetResourceInfoAsync(containerName, "n"))!.Metadata["author"]);
+        Assert.Equal("finance", (await repository.GetResourceInfoAsync(location))!.Metadata["author"]);
     }
 }

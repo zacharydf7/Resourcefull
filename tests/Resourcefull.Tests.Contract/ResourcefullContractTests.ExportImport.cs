@@ -245,12 +245,15 @@ public abstract partial class ResourcefullContractTests
         // Arrange
         using ServiceProvider provider = BuildServiceProvider();
         IResourceContainerClient container = await NewContainerAsync(provider);
-        IResourceRepository repository = provider.GetRequiredService<IResourceRepository>();
-        var version = new ResourceInfo { ContainerName = container.ResourceContainerInfo.Name, Name = "a", VersionId = "imported", LastModified = Past };
-        await repository.ImportVersionAsync(version.ContainerName, version, new MemoryStream([1]));
+        ResourceRepository repository = provider.GetRequiredService<ResourceRepository>();
+        var version = new NewResourceVersion(new ResourceLocation(container.ResourceContainerInfo.Name, "a"), "imported")
+        {
+            LastModified = Past
+        };
+        await repository.ImportVersionAsync(version, new MemoryStream([1]));
 
         // Act
-        Task again() => repository.ImportVersionAsync(version.ContainerName, version, new MemoryStream([2]));
+        Task again() => repository.ImportVersionAsync(version, new MemoryStream([2]));
 
         // Assert
         await Assert.ThrowsAsync<ResourceConflictException>(again);

@@ -82,20 +82,30 @@ public class ResourcefullOptionsBuilderTests
     }
 
     /// <summary>A provider defined outside the library, knowing one container and nothing else.</summary>
-    private sealed class OneContainerProvider : IResourceRepository
+    private sealed class OneContainerProvider : ResourceRepository
     {
-        public Task<ResourceContainerInfo?> GetResourceContainerInfoAsync(string resourceContainerName, CancellationToken cancellationToken = default)
+        public override Task<ResourceContainerInfo?> GetResourceContainerInfoAsync(string resourceContainerName,
+            CancellationToken cancellationToken = default)
             => Task.FromResult(resourceContainerName == "custom" ? new ResourceContainerInfo { Name = "custom" } : null);
 
-        public Task<WrittenContent> AddResourceAsync(string resourceContainerName, ResourceInfo resourceInfo, Stream stream, bool createOnly = false, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task<List<ResourceInfo>> GetAllResourceInfoAsync(string resourceContainerName, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task<List<ResourceInfo>> GetResourceVersionsAsync(string resourceContainerName, string resourceName, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task<ResourceInfo?> GetResourceInfoAsync(string resourceContainerName, string resourceName, string? versionId = null, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task<Stream?> GetResourceStreamAsync(string resourceContainerName, string resourceName, string? versionId = null, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task<bool> DeleteResourceAsync(string resourceContainerName, string resourceName, string? versionId = null, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task AddResourceContainerAsync(ResourceContainerInfo resourceContainerInfo, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task<List<ResourceContainerInfo>> GetAllResourceContainerInfoAsync(CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task<bool> DeleteResourceContainerAsync(string resourceContainerName, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public override Task<WrittenContent> AddResourceAsync(NewResourceVersion version, Stream content,
+            ResourceWriteCondition? condition = null, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public override Task<IReadOnlyList<ResourceInfo>> GetAllResourceInfoAsync(string resourceContainerName,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public override Task<IReadOnlyList<ResourceInfo>> GetResourceVersionsAsync(ResourceLocation resource,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public override Task<ResourceInfo?> GetResourceInfoAsync(ResourceLocation resource, string? versionId = null,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public override Task<Stream?> GetResourceStreamAsync(ResourceLocation resource, string? versionId = null,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public override Task<bool> DeleteResourceAsync(ResourceLocation resource, string? versionId = null,
+            ResourceConditions? conditions = null, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public override Task AddResourceContainerAsync(string resourceContainerName, IReadOnlyDictionary<string, string> metadata,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public override Task<IReadOnlyList<ResourceContainerInfo>> GetAllResourceContainerInfoAsync(
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public override Task<bool> DeleteResourceContainerAsync(string resourceContainerName,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 
     [Theory]
@@ -110,7 +120,7 @@ public class ResourcefullOptionsBuilderTests
         var builder = new ResourcefullOptionsBuilder(services).UseProvider<OneContainerProvider>(lifetime);
 
         // Assert
-        ServiceDescriptor descriptor = Assert.Single(services, d => d.ServiceType == typeof(IResourceRepository));
+        ServiceDescriptor descriptor = Assert.Single(services, d => d.ServiceType == typeof(ResourceRepository));
         Assert.Equal(typeof(OneContainerProvider), descriptor.ImplementationType);
         Assert.Equal(lifetime, descriptor.Lifetime);
         Assert.True(builder.ProviderConfigured);

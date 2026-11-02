@@ -8,7 +8,7 @@ using System.Runtime.ExceptionServices;
 
 namespace Resourcefull;
 
-internal class ResourceServiceClient(IResourceRepository resourceRepository, IOptions<ResourcefullOptions> options, IUriProvider? uriProvider = null,
+internal class ResourceServiceClient(ResourceRepository resourceRepository, IOptions<ResourcefullOptions> options, IUriProvider? uriProvider = null,
     ILogger<ResourceContainerClient>? containerLogger = null, ContainerPolicies? policies = null,
     IResourceCleanupHandler? cleanupHandler = null, TimeProvider? timeProvider = null, ExpirySettings? expiry = null,
     IResourceUploadInspector? uploadInspector = null) : IResourceServiceClient
@@ -63,15 +63,14 @@ internal class ResourceServiceClient(IResourceRepository resourceRepository, IOp
 
     private async Task<IResourceContainerClient> CreateContainerCoreAsync(string resourceContainerName, IDictionary<string, string>? metadata, CancellationToken cancellationToken)
     {
-        // The URI is stored too, for applications on 2.x, which read it from storage, while they share a database with
-        // this release during an upgrade.
         ResourceContainerInfo containerInfo = WithUri(new ResourceContainerInfo
         {
             Name = resourceContainerName,
             Metadata = metadata ?? new Dictionary<string, string>()
         });
 
-        await resourceRepository.AddResourceContainerAsync(containerInfo, cancellationToken);
+        await resourceRepository.AddResourceContainerAsync(resourceContainerName,
+            new Dictionary<string, string>(containerInfo.Metadata), cancellationToken);
         return new ResourceContainerClient(resourceRepository, uriProvider, _options, containerInfo, containerLogger, policies, cleanupHandler,
             timeProvider, expiry, uploadInspector);
     }
@@ -105,7 +104,7 @@ internal class ResourceServiceClient(IResourceRepository resourceRepository, IOp
     public Task<IReadOnlyList<ResourceContainerInfo>> GetResourceContainersAsync(CancellationToken cancellationToken)
         => _telemetry.RunAsync<IReadOnlyList<ResourceContainerInfo>>("list_containers", null, null, async () =>
         {
-            List<ResourceContainerInfo> containers = await resourceRepository.GetAllResourceContainerInfoAsync(cancellationToken);
+            IReadOnlyList<ResourceContainerInfo> containers = await resourceRepository.GetAllResourceContainerInfoAsync(cancellationToken);
             foreach (ResourceContainerInfo containerInfo in containers) WithUri(containerInfo);
             return containers;
         });
@@ -137,7 +136,8 @@ internal class ResourceServiceClient(IResourceRepository resourceRepository, IOp
             ResourceNames.ThrowIfInvalidContainerName(resourceContainerName);
             ArgumentNullException.ThrowIfNull(metadata);
             if (policies is not null) await policies.ThrowIfReadOnlyAsync(resourceContainerName, _telemetry, cancellationToken);
-            return await resourceRepository.SetResourceContainerMetadataAsync(resourceContainerName, metadata, cancellationToken);
+            return await resourceRepository.SetResourceContainerMetadataAsync(resourceContainerName,
+                new Dictionary<string, string>(metadata), cancellationToken);
         });
 
     public async Task<int> DeleteExpiredAsync(CancellationToken cancellationToken = default)
@@ -180,8 +180,8 @@ internal class ResourceServiceClient(IResourceRepository resourceRepository, IOp
 
             // Whether a version is gone, by whatever deleted it: a batch that failed partway may have.
             async Task<bool> GoneAsync(ResourceInfo version) =>
-                await resourceRepository.GetResourceInfoAsync(version.ContainerName, version.Name, version.VersionId,
-                    CancellationToken.None) is null;
+                await resourceRepository.GetResourceInfoAsync(new ResourceLocation(version.ContainerName, version.Name),
+                    version.VersionId, CancellationToken.None) is null;
 
             static (ResourceLocation, string) Key(ResourceInfo version) =>
                 (new ResourceLocation(version.ContainerName, version.Name), version.VersionId);
@@ -226,12 +226,12 @@ internal class ResourceServiceClient(IResourceRepository resourceRepository, IOp
             }
 
             // Each batch starts after the last one ended, so the versions a sweep skips or fails on can't hold up the rest.
-            ResourceInfo? after = null;
+            (DateTimeOffset ExpiresAt, string VersionId)? after = null;
             while (true)
             {
-                List<ResourceInfo> expired = await resourceRepository.GetExpiredAsync(now, ExpiredPerBatch, after, cancellationToken);
+                IReadOnlyList<ResourceInfo> expired = await resourceRepository.GetExpiredAsync(now, ExpiredPerBatch, after, cancellationToken);
                 // The versions the handler has been told about, each with the replaced versions waiting behind it.
-                var ready = new List<(ResourceInfo Version, List<ResourceInfo> Waiting)>();
+                var ready = new List<(ResourceInfo Version, IReadOnlyList<ResourceInfo> Waiting)>();
                 foreach (ResourceInfo version in expired)
                 {
                     try
@@ -246,7 +246,7 @@ internal class ResourceServiceClient(IResourceRepository resourceRepository, IOp
                             await _telemetry.NotifyCleanupAsync(cleanupHandler, new ResourceCleanup(version, ResourceCleanupReason.Expired, now),
                                 cancellationToken);
                         }
-                        List<ResourceInfo> waiting = version.IsLatest
+                        IReadOnlyList<ResourceInfo> waiting = version.IsLatest
                             ? await NewContainerClient(new ResourceContainerInfo { Name = version.ContainerName })
                                 .WaitingBehindAsync(version.Name, version.VersionId, cancellationToken)
                             : [];
@@ -271,7 +271,7 @@ internal class ResourceServiceClient(IResourceRepository resourceRepository, IOp
                     {
                         // Canceled partway, the batch may have deleted some; what waited behind those is still
                         // cleaned up, as each prune is, so replaced content doesn't come back.
-                        foreach ((ResourceInfo version, List<ResourceInfo> waiting) in
+                        foreach ((ResourceInfo version, IReadOnlyList<ResourceInfo> waiting) in
                             ready.Where(r => r.Waiting.Count > 0))
                         {
                             if (await GoneAsync(version))
@@ -282,7 +282,7 @@ internal class ResourceServiceClient(IResourceRepository resourceRepository, IOp
                         }
                         throw;
                     }
-                    foreach ((ResourceInfo version, List<ResourceInfo> waiting) in
+                    foreach ((ResourceInfo version, IReadOnlyList<ResourceInfo> waiting) in
                         ready.Where(r => gone.Contains(r.Version)))
                     {
                         deleted++;
@@ -295,7 +295,8 @@ internal class ResourceServiceClient(IResourceRepository resourceRepository, IOp
                 if (expired.Count < ExpiredPerBatch) break;
                 if (expired[^1].VersionId == after?.VersionId)
                     throw new InvalidOperationException($"{resourceRepository.GetType().Name} listed the same expired versions again: its GetExpiredAsync must list the versions after the one given.");
-                after = expired[^1];
+                after = (expired[^1].ExpiresAt ?? throw new InvalidOperationException($"{resourceRepository.GetType().Name} listed an expired version without an expiry: its GetExpiredAsync must list only versions with an ExpiresAt."),
+                    expired[^1].VersionId);
             }
 
             activity?.SetTag("resourcefull.expired", deleted);
@@ -375,7 +376,7 @@ internal class ResourceServiceClient(IResourceRepository resourceRepository, IOp
                 bool marked = await TrySetMetadataAsync(resourceContainerName,
                     new Dictionary<string, string>(metadata) { [ImportMarkerKey] = ImportMarkerValue }, cancellationToken);
                 imported = await ContainerArchive.ImportAsync(zip, manifest, resourceContainerName, resourceRepository, policies,
-                    _telemetry, uriProvider, uploadInspector, cancellationToken);
+                    _telemetry, uploadInspector, cancellationToken);
                 if (marked) await resourceRepository.SetResourceContainerMetadataAsync(resourceContainerName, metadata, cancellationToken);
             }
             catch (Exception failure)
@@ -403,12 +404,13 @@ internal class ResourceServiceClient(IResourceRepository resourceRepository, IOp
     internal const string ImportMarkerKey = "resourcefull.import", ImportMarkerValue = "in-progress";
 
     /// <returns><see langword="false"/> if the provider doesn't change container metadata.</returns>
-    private async Task<bool> TrySetMetadataAsync(string resourceContainerName, IDictionary<string, string> metadata,
+    private async Task<bool> TrySetMetadataAsync(string resourceContainerName, IReadOnlyDictionary<string, string> metadata,
         CancellationToken cancellationToken)
     {
         try
         {
-            return await resourceRepository.SetResourceContainerMetadataAsync(resourceContainerName, metadata, cancellationToken);
+            return await resourceRepository.SetResourceContainerMetadataAsync(resourceContainerName, metadata,
+                cancellationToken);
         }
         catch (NotSupportedException)
         {

@@ -83,7 +83,7 @@ public class DeleteLockingIntegrationTests(SqlServerFixture fixture)
         {
             "version" => await container.DeleteResourceIfExistsAsync("big", current.VersionId),
             "name" => await container.DeleteResourceIfExistsAsync("big"),
-            "expire" => (await provider.GetRequiredService<IResourceRepository>().DeleteExpiredVersionsAsync(
+            "expire" => (await provider.GetRequiredService<ResourceRepository>().DeleteExpiredVersionsAsync(
                 [(new ResourceLocation(containerName, "big"), current.VersionId)], DateTimeOffset.UtcNow)).Count == 1,
             _ => await service.DeleteResourceContainerIfExistsAsync(containerName)
         };
@@ -105,16 +105,16 @@ public class DeleteLockingIntegrationTests(SqlServerFixture fixture)
             new DbContextOptionsBuilder<ResourceDbContext>().UseSqlServer(fixture.ConnectionString).AddInterceptors(locks)
                 .Options)) { ChunksPerDeleteBatch = 4 };
         string containerName = $"c-{Guid.NewGuid():N}";
-        await repository.AddResourceContainerAsync(new ResourceContainerInfo { Name = containerName });
+        await repository.AddResourceContainerAsync(containerName, new Dictionary<string, string>());
         List<(ResourceLocation, string)> versions = [];
         for (int i = 0; i < 9; i++)
         {
-            var version = new ResourceInfo
+            var version = new NewResourceVersion(new ResourceLocation(containerName, $"n{i}"), $"v{i}")
             {
-                ContainerName = containerName, Name = $"n{i}", VersionId = $"v{i}", ExpiresAt = DateTimeOffset.UnixEpoch
+                ExpiresAt = DateTimeOffset.UnixEpoch
             };
-            await repository.AddResourceAsync(containerName, version, new MemoryStream("x"u8.ToArray()));
-            versions.Add((new ResourceLocation(containerName, version.Name), version.VersionId));
+            await repository.AddResourceAsync(version, new MemoryStream("x"u8.ToArray()));
+            versions.Add((version.Location, version.VersionId));
         }
         locks.Counts.Clear();
 

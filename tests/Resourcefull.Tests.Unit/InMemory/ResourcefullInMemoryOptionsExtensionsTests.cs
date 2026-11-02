@@ -31,6 +31,6 @@ public class ResourcefullInMemoryOptionsExtensionsTests
         // Assert
         Assert.True(resourcefullOptionsBuilder.ProviderConfigured, "Failure: Provider should be configured.");
         Assert.Single(services.ToList());
-        Assert.Equal(typeof(IResourceRepository), services.Single().ServiceType);
+        Assert.Equal(typeof(ResourceRepository), services.Single().ServiceType);
     }
 }

@@ -34,19 +34,19 @@ public class ResourcefullOptionsBuilder
     /// Uses <typeparamref name="TRepository"/> as the storage provider. Provider packages call this from their own
     /// <c>Use…</c> extension; a custom provider can be registered with it directly.
     /// </summary>
-    /// <typeparam name="TRepository">The provider's <see cref="IResourceRepository"/> implementation.</typeparam>
+    /// <typeparam name="TRepository">The provider's class, derived from <see cref="ResourceRepository"/>.</typeparam>
     /// <param name="lifetime">How long one instance serves: singleton for a provider that holds its own state.</param>
     /// <exception cref="InvalidOperationException">A provider has already been configured.</exception>
     public ResourcefullOptionsBuilder UseProvider<TRepository>(ServiceLifetime lifetime = ServiceLifetime.Scoped)
-        where TRepository : class, IResourceRepository
+        where TRepository : ResourceRepository
     {
         if (ProviderConfigured)
         {
             throw new InvalidOperationException("Provider has already been configured.");
         }
 
-        Services.RemoveAll<IResourceRepository>();
-        Services.Add(new ServiceDescriptor(typeof(IResourceRepository), typeof(TRepository), lifetime));
+        Services.RemoveAll<ResourceRepository>();
+        Services.Add(new ServiceDescriptor(typeof(ResourceRepository), typeof(TRepository), lifetime));
         ProviderConfigured = true;
         return this;
     }

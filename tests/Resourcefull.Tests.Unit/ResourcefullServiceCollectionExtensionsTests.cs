@@ -159,16 +159,16 @@ public class ResourcefullServiceCollectionExtensionsTests
     {
         // Arrange: a store that keeps two versions of the name and can't delete the older one.
         var failure = new InvalidOperationException("storage unavailable");
-        var repository = new Mock<IResourceRepository>();
-        repository.Setup(r => r.AddResourceAsync("reports", It.IsAny<ResourceInfo>(), It.IsAny<Stream>(), It.IsAny<bool>(),
+        var repository = new Mock<ResourceRepository>();
+        repository.Setup(r => r.AddResourceAsync( It.IsAny<NewResourceVersion>(), It.IsAny<Stream>(), It.IsAny<ResourceWriteCondition?>(),
             It.IsAny<CancellationToken>())).ReturnsAsync(new WrittenContent(0, "sha256:empty", DateTimeOffset.UnixEpoch));
-        repository.Setup(r => r.GetResourceVersionsAsync("reports", "name", It.IsAny<CancellationToken>()))
+        repository.Setup(r => r.GetResourceVersionsAsync(new ResourceLocation("reports", "name"), It.IsAny<CancellationToken>()))
             .ReturnsAsync(
             [
                 new() { ContainerName = "reports", Name = "name", VersionId = "new" },
                 new() { ContainerName = "reports", Name = "name", VersionId = "old" }
             ]);
-        repository.Setup(r => r.DeleteResourceAsync("reports", "name", "old", It.IsAny<CancellationToken>())).ThrowsAsync(failure);
+        repository.Setup(r => r.DeleteResourceAsync(new ResourceLocation("reports", "name"), "old", It.IsAny<ResourceConditions?>(), It.IsAny<CancellationToken>())).ThrowsAsync(failure);
 
         var logger = new Mock<ILogger>();
         logger.Setup(l => l.IsEnabled(It.IsAny<LogLevel>())).Returns(true);

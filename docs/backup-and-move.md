@@ -113,7 +113,7 @@ app.MapPost("/admin/containers/{name}/import", async (string name, HttpRequest r
   `resourcefull.import` set to `in-progress`, and the import removes it once every version is stored. A container that
   still has it after the import has stopped didn't finish; delete it and import again. (The mark is set just after the
   container is created, so an import stopped in that moment leaves an empty container without it. With a
-  [provider of your own](providers/newer-members.md#importing-versions) that doesn't implement
+  [provider of your own](providers/writing-a-provider.md#importing-versions) that doesn't override
   `SetResourceContainerMetadataAsync`, imports aren't marked.) This finds them:
 
   ```csharp
@@ -155,8 +155,8 @@ against it like any upload.
 ## Custom providers
 
 Export only reads, so it works with any provider. Import stores each version with its original ID and time, which
-needs the provider method `ImportVersionAsync`; a provider written before it existed throws `NotSupportedException`.
-See [Writing a provider](providers/newer-members.md#importing-versions).
+needs the provider method `ImportVersionAsync`; a provider that doesn't override it throws
+`NotSupportedException`. See [Writing a provider](providers/writing-a-provider.md#importing-versions).
 
 ## Telemetry
 

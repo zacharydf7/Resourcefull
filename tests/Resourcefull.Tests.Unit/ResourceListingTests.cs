@@ -6,7 +6,7 @@ public class ResourceListingTests
 {
     private const string Container = "containerName";
 
-    private static IResourceContainerClient NewClient(IResourceRepository repository) =>
+    private static IResourceContainerClient NewClient(ResourceRepository repository) =>
         new ResourceContainerClient(repository, null, new ResourcefullOptions(), new ResourceContainerInfo { Name = Container }, null);
 
     private static ResourceInfo Current(string name) => new() { ContainerName = Container, Name = name, VersionId = $"v-{name}", IsLatest = true };
@@ -17,7 +17,7 @@ public class ResourceListingTests
     public async Task GetResourcePageAsync_ShouldThrowArgumentOutOfRange_WhenGivenAPageSizeOutsideTheLimits(int pageSize)
     {
         // Arrange
-        var repository = new Mock<IResourceRepository>(MockBehavior.Strict);
+        var repository = new Mock<ResourceRepository>(MockBehavior.Strict);
 
         // Act
         Task act() => NewClient(repository.Object).GetResourcePageAsync(new ResourceListOptions { PageSize = pageSize });
@@ -34,7 +34,7 @@ public class ResourceListingTests
     public async Task GetResourcePageAsync_ShouldThrowArgumentException_WhenGivenAMalformedToken(string token)
     {
         // Arrange
-        var repository = new Mock<IResourceRepository>(MockBehavior.Strict);
+        var repository = new Mock<ResourceRepository>(MockBehavior.Strict);
 
         // Act
         Task act() => NewClient(repository.Object).GetResourcePageAsync(null, token);
@@ -47,7 +47,7 @@ public class ResourceListingTests
     public async Task GetResourcePageAsync_ShouldListEveryName_WhenGivenAnEmptyPrefix()
     {
         // Arrange
-        var repository = new Mock<IResourceRepository>();
+        var repository = new Mock<ResourceRepository>();
         repository.Setup(r => r.GetResourcePageAsync(Container, null, null, 11, It.IsAny<CancellationToken>())).ReturnsAsync([Current("a")]);
 
         // Act
@@ -58,15 +58,15 @@ public class ResourceListingTests
     }
 
     [Fact]
-    public async Task GetResourcePageAsync_ShouldFilterSortAndCutTheFullListing_WhenTheProviderWasWrittenFor30()
+    public async Task GetResourcePageAsync_ShouldFilterSortAndCutTheFullListing_WhenTheProviderDoesNotOverrideIt()
     {
-        // Arrange: a provider written for 3.0 has only the full listing, in no particular order.
-        var repository = new Mock<IResourceRepository> { CallBase = true };
+        // Arrange: a provider that answers only the full listing, in no particular order.
+        var repository = new Mock<ResourceRepository> { CallBase = true };
         repository.Setup(r => r.GetAllResourceInfoAsync(Container, It.IsAny<CancellationToken>()))
             .ReturnsAsync([Current("p/d"), Current("q/a"), Current("p/B"), Current("p/a"), Current("p/c")]);
 
         // Act
-        List<ResourceInfo> page = await repository.Object.GetResourcePageAsync(Container, "p/", "p/a", 2);
+        IReadOnlyList<ResourceInfo> page = await repository.Object.GetResourcePageAsync(Container, "p/", "p/a", 2);
 
         // Assert
         Assert.Equal(["p/c", "p/d"], page.Select(r => r.Name));

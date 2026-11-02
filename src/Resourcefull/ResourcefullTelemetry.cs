@@ -81,7 +81,7 @@ internal static class Telemetry
     /// <c>sqlserver</c> or <c>inmemory</c> for the built-in providers, otherwise the repository's type name: a
     /// low-cardinality tag that tells measurements from different stores apart.
     /// </summary>
-    public static string ProviderName(IResourceRepository repository) => ProviderNames.GetOrAdd(repository.GetType(), static type =>
+    public static string ProviderName(ResourceRepository repository) => ProviderNames.GetOrAdd(repository.GetType(), static type =>
     {
         string? assembly = type.Assembly.GetName().Name;
         return assembly?.StartsWith("Resourcefull.", StringComparison.Ordinal) == true

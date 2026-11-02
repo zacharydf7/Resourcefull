@@ -8,7 +8,7 @@ namespace Resourcefull;
 /// Checks that the configured provider's storage can be reached, with one read that changes nothing: it looks up a
 /// container that needn't exist.
 /// </summary>
-internal sealed class ResourcefullHealthCheck(IResourceRepository repository, ResourcefullOptions options) : IHealthCheck
+internal sealed class ResourcefullHealthCheck(ResourceRepository repository, ResourcefullOptions options) : IHealthCheck
 {
     internal const string ProbeContainerName = "resourcefull-health-check";
 
@@ -54,7 +54,7 @@ public static class ResourcefullHealthChecksBuilderExtensions
         ArgumentNullException.ThrowIfNull(builder);
         return builder.Add(new HealthCheckRegistration(name,
             services => new ResourcefullHealthCheck(
-                services.GetService<IResourceRepository>() ?? throw new InvalidOperationException(
+                services.GetService<ResourceRepository>() ?? throw new InvalidOperationException(
                     $"{nameof(AddResourcefullCheck)} needs Resourcefull added with " +
                     $"{nameof(ResourcefullServiceCollectionExtensions.AddResourcefull)}."),
                 services.GetRequiredService<IOptions<ResourcefullOptions>>().Value),

@@ -188,10 +188,10 @@ public class ExpiryTests
     }
 
     [Fact]
-    public async Task ExpiryMembers_ShouldThrowNotSupported_WhenAProviderOrClientWrittenFor31IsAsked()
+    public async Task ExpiryMembers_ShouldThrowNotSupported_WhenTheProviderOrClientDoesNotImplementThem()
     {
         // Arrange
-        IResourceRepository repository = new Mock<IResourceRepository> { CallBase = true }.Object;
+        ResourceRepository repository = new Mock<ResourceRepository> { CallBase = true }.Object;
         IResourceContainerClient container = new Mock<IResourceContainerClient> { CallBase = true }.Object;
         IResourceServiceClient service = new Mock<IResourceServiceClient> { CallBase = true }.Object;
         var location = new ResourceLocation("c", "a");
@@ -207,11 +207,11 @@ public class ExpiryTests
     [Fact]
     public async Task UploadAsync_ShouldDeleteThePrunedVersionAtOnce_WhenExpiryIsOnButTheProviderDoesNotSupportIt()
     {
-        // Arrange: a provider written for 3.1, whose SetExpiryAsync throws NotSupportedException by default.
-        var repository = new Mock<IResourceRepository> { CallBase = true };
-        repository.Setup(r => r.AddResourceAsync("c", It.IsAny<ResourceInfo>(), It.IsAny<Stream>(), false, It.IsAny<CancellationToken>()))
+        // Arrange: a provider that doesn't override SetExpiryAsync, which throws NotSupportedException by default.
+        var repository = new Mock<ResourceRepository> { CallBase = true };
+        repository.Setup(r => r.AddResourceAsync( It.IsAny<NewResourceVersion>(), It.IsAny<Stream>(), It.Is<ResourceWriteCondition?>(c => c == null || !c.CreateOnly), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new WrittenContent(1, "sha256:written", DateTimeOffset.UtcNow));
-        repository.Setup(r => r.GetResourceVersionsAsync("c", "a", It.IsAny<CancellationToken>())).ReturnsAsync(
+        repository.Setup(r => r.GetResourceVersionsAsync(new ResourceLocation("c", "a"), It.IsAny<CancellationToken>())).ReturnsAsync(
         [
             new ResourceInfo { ContainerName = "c", Name = "a", VersionId = "v2" },
             new ResourceInfo { ContainerName = "c", Name = "a", VersionId = "v1" }
@@ -226,7 +226,7 @@ public class ExpiryTests
         // Assert
         handler.Verify(h => h.OnCleanupAsync(It.Is<ResourceCleanup>(c => c.Reason == ResourceCleanupReason.Pruned && c.Resource.VersionId == "v1"),
             It.IsAny<CancellationToken>()));
-        repository.Verify(r => r.DeleteResourceAsync("c", "a", "v1", It.IsAny<CancellationToken>()));
+        repository.Verify(r => r.DeleteResourceAsync(new ResourceLocation("c", "a"), "v1", It.IsAny<ResourceConditions?>(), It.IsAny<CancellationToken>()));
     }
 
     /// <summary>Refuses the versions of the names a test lists, as an audit system that's down for them.</summary>

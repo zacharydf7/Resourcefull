@@ -232,16 +232,16 @@ public class ContainerPolicyTests
     }
 
     [Fact]
-    public async Task GetContainerUsageAsync_ShouldAddUpTheVersionsListing_WhenAProviderWrittenFor31IsAsked()
+    public async Task GetContainerUsageAsync_ShouldAddUpTheVersionsListing_WhenTheProviderDoesNotOverrideIt()
     {
         // Arrange
-        var repository = new Mock<IResourceRepository> { CallBase = true };
+        var repository = new Mock<ResourceRepository> { CallBase = true };
         repository.Setup(r => r.GetAllResourceInfoAsync("c", It.IsAny<CancellationToken>()))
-            .ReturnsAsync([new ResourceInfo { ContainerName = "c", Name = "a" }, new ResourceInfo { ContainerName = "c", Name = "b" }]);
-        repository.Setup(r => r.GetResourceVersionsAsync("c", "a", It.IsAny<CancellationToken>()))
-            .ReturnsAsync([new ResourceInfo { ContainerName = "c", Name = "a", ContentLength = 10 }, new ResourceInfo { ContainerName = "c", Name = "a", ContentLength = 5 }]);
-        repository.Setup(r => r.GetResourceVersionsAsync("c", "b", It.IsAny<CancellationToken>()))
-            .ReturnsAsync([new ResourceInfo { ContainerName = "c", Name = "b", ContentLength = null }]);
+            .ReturnsAsync([new ResourceInfo { ContainerName = "c", Name = "a", VersionId = "a1" }, new ResourceInfo { ContainerName = "c", Name = "b", VersionId = "b1" }]);
+        repository.Setup(r => r.GetResourceVersionsAsync(new ResourceLocation("c", "a"), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new ResourceInfo { ContainerName = "c", Name = "a", VersionId = "a2", ContentLength = 10 }, new ResourceInfo { ContainerName = "c", Name = "a", VersionId = "a1", ContentLength = 5 }]);
+        repository.Setup(r => r.GetResourceVersionsAsync(new ResourceLocation("c", "b"), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new ResourceInfo { ContainerName = "c", Name = "b", VersionId = "b1", ContentLength = null }]);
 
         // Act
         ResourceContainerUsage usage = await repository.Object.GetContainerUsageAsync("c");
@@ -263,7 +263,7 @@ public class ContainerPolicyTests
     private static ResourceInfo Version(string id, long length) => new() { ContainerName = "c", Name = "a", VersionId = id, ContentLength = length };
 
     /// <summary>A versioned client of container <c>c</c> whose policies come from <paramref name="settings"/>.</summary>
-    private static ResourceContainerClient NewMovingClient(IResourceRepository repository, ContainerPolicySettings settings) =>
+    private static ResourceContainerClient NewMovingClient(ResourceRepository repository, ContainerPolicySettings settings) =>
         new(repository, null, new ResourcefullOptions { IsVersioningEnabled = true }, new ResourceContainerInfo { Name = "c" }, null,
             new ContainerPolicies(settings, repository));
 
@@ -272,8 +272,8 @@ public class ContainerPolicyTests
     {
         // Arrange: the move checks v1, then an upload makes v2, too large for the destination, current before it moves.
         using var settings = new ContainerPolicySettings(new ResourceContainerPolicy { MaxResourceSize = new ResourceSize(10) }, TimeSpan.Zero, TimeSpan.Zero);
-        var repository = new Mock<IResourceRepository>();
-        repository.SetupSequence(r => r.GetResourceVersionsAsync("c", "a", It.IsAny<CancellationToken>()))
+        var repository = new Mock<ResourceRepository>();
+        repository.SetupSequence(r => r.GetResourceVersionsAsync(new ResourceLocation("c", "a"), It.IsAny<CancellationToken>()))
             .ReturnsAsync([Version("v1", 5)])
             .ReturnsAsync([Version("v2", 50), Version("v1", 5)]);
         repository.Setup(r => r.MoveResourceAsync(new ResourceLocation("c", "a"), new ResourceLocation("d", "a"),
@@ -295,8 +295,8 @@ public class ContainerPolicyTests
     {
         // Arrange
         using var settings = new ContainerPolicySettings(new ResourceContainerPolicy(), TimeSpan.Zero, TimeSpan.Zero);
-        var repository = new Mock<IResourceRepository>();
-        repository.Setup(r => r.GetResourceVersionsAsync("c", "a", It.IsAny<CancellationToken>())).ReturnsAsync([Version("v1", 5)]);
+        var repository = new Mock<ResourceRepository>();
+        repository.Setup(r => r.GetResourceVersionsAsync(new ResourceLocation("c", "a"), It.IsAny<CancellationToken>())).ReturnsAsync([Version("v1", 5)]);
         repository.Setup(r => r.MoveResourceAsync(new ResourceLocation("c", "a"), new ResourceLocation("d", "a"),
                 It.Is<ResourceConditions>(c => c.IfMatchVersionId == "v1" && c.IfMatchContentHash == "sha256:other"), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new ResourcePreconditionFailedException("The hash doesn't match.", "v1", "sha256:stored"));
@@ -307,7 +307,7 @@ public class ContainerPolicyTests
 
         // Assert
         await Assert.ThrowsAsync<ResourcePreconditionFailedException>(act);
-        repository.Verify(r => r.GetResourceVersionsAsync("c", "a", It.IsAny<CancellationToken>()), Times.Once);
+        repository.Verify(r => r.GetResourceVersionsAsync(new ResourceLocation("c", "a"), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -315,8 +315,8 @@ public class ContainerPolicyTests
     {
         // Arrange: an upload makes v2 current between the first check and the move; v2 fits too.
         using var settings = new ContainerPolicySettings(new ResourceContainerPolicy { MaxResourceSize = new ResourceSize(10) }, TimeSpan.Zero, TimeSpan.Zero);
-        var repository = new Mock<IResourceRepository>();
-        repository.SetupSequence(r => r.GetResourceVersionsAsync("c", "a", It.IsAny<CancellationToken>()))
+        var repository = new Mock<ResourceRepository>();
+        repository.SetupSequence(r => r.GetResourceVersionsAsync(new ResourceLocation("c", "a"), It.IsAny<CancellationToken>()))
             .ReturnsAsync([Version("v1", 5)])
             .ReturnsAsync([Version("v2", 6), Version("v1", 5)]);
         repository.Setup(r => r.MoveResourceAsync(new ResourceLocation("c", "a"), new ResourceLocation("d", "a"),
@@ -325,7 +325,7 @@ public class ContainerPolicyTests
         repository.Setup(r => r.MoveResourceAsync(new ResourceLocation("c", "a"), new ResourceLocation("d", "a"),
                 It.Is<ResourceConditions>(c => c.IfMatchVersionId == "v2"), It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
-        repository.Setup(r => r.GetResourceInfoAsync("d", "a", null, It.IsAny<CancellationToken>()))
+        repository.Setup(r => r.GetResourceInfoAsync(new ResourceLocation("d", "a"), null, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ResourceInfo { ContainerName = "d", Name = "a", VersionId = "v2" });
 
         // Act
@@ -340,9 +340,9 @@ public class ContainerPolicyTests
     {
         // Arrange: every time the move checks the name, another upload has made a newer version current by the move.
         using var settings = new ContainerPolicySettings(new ResourceContainerPolicy(), TimeSpan.Zero, TimeSpan.Zero);
-        var repository = new Mock<IResourceRepository>();
+        var repository = new Mock<ResourceRepository>();
         int checks = 0;
-        repository.Setup(r => r.GetResourceVersionsAsync("c", "a", It.IsAny<CancellationToken>()))
+        repository.Setup(r => r.GetResourceVersionsAsync(new ResourceLocation("c", "a"), It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => [Version($"v{++checks}", 5)]);
         repository.Setup(r => r.MoveResourceAsync(new ResourceLocation("c", "a"), new ResourceLocation("d", "a"),
                 It.IsAny<ResourceConditions?>(), It.IsAny<CancellationToken>()))
@@ -361,8 +361,8 @@ public class ContainerPolicyTests
     {
         // Arrange
         using var settings = new ContainerPolicySettings(new ResourceContainerPolicy(), TimeSpan.Zero, TimeSpan.Zero);
-        var repository = new Mock<IResourceRepository>();
-        repository.Setup(r => r.GetResourceVersionsAsync("c", "a", It.IsAny<CancellationToken>())).ReturnsAsync([Version("v1", 5)]);
+        var repository = new Mock<ResourceRepository>();
+        repository.Setup(r => r.GetResourceVersionsAsync(new ResourceLocation("c", "a"), It.IsAny<CancellationToken>())).ReturnsAsync([Version("v1", 5)]);
 
         // Act
         Task act() => NewMovingClient(repository.Object, settings).MoveResourceAsync("a", "d", "a",
@@ -468,7 +468,7 @@ public class ContainerPolicyTests
     {
         // Arrange: the provider gave the policy, then its cached answer ran out, and the provider went down.
         using var settings = new ContainerPolicySettings(new ResourceContainerPolicy(), TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(5));
-        var policies = new ContainerPolicies(settings, new Mock<IResourceRepository>().Object, new CountingFailingPolicies());
+        var policies = new ContainerPolicies(settings, new Mock<ResourceRepository>().Object, new CountingFailingPolicies());
         var telemetry = new ClientTelemetry("test", new ResourcefullOptions());
         string name = $"c-{Guid.NewGuid():N}";
         await policies.ThrowIfReadOnlyAsync(name, telemetry, CancellationToken.None);
@@ -499,7 +499,7 @@ public class ContainerPolicyTests
     {
         // Arrange: a last known policy is kept, but the failure is the caller's own cancellation.
         using var settings = new ContainerPolicySettings(new ResourceContainerPolicy(), TimeSpan.Zero, TimeSpan.FromMinutes(5));
-        var policies = new ContainerPolicies(settings, new Mock<IResourceRepository>().Object, new CanceledPolicies());
+        var policies = new ContainerPolicies(settings, new Mock<ResourceRepository>().Object, new CanceledPolicies());
         var telemetry = new ClientTelemetry("test", new ResourcefullOptions());
         string name = $"c-{Guid.NewGuid():N}";
         await policies.ThrowIfReadOnlyAsync(name, telemetry, CancellationToken.None);

@@ -4,9 +4,9 @@ How to move to a newer Resourcefull release without breaking anything, and how t
 major version, such as 3.x, upgrades are designed to be quiet: code written for an earlier release keeps compiling and
 working, and the database changes only by adding to it. Coming from 1.x or 2.x? See [Upgrading to 3.0](upgrading-to-3.md).
 
-4.0 <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> is a major release. Besides its new features, it will change the API in ways that need changes to
-your code, and an upgrade guide will list those as they're made. So far, its database changes only add, as the table
-below shows.
+4.0 <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> is a major release. Besides its new features, it changes the API in ways that need changes to
+your code: see [Upgrading to 4.0](upgrading-to-4.md). So far, its database changes only add, as the table below
+shows.
 
 ## Upgrading from 3.0 or later
 
@@ -54,8 +54,8 @@ With several instances, upgrade without downtime by changing the database first:
 - **Version numbers** follow [semantic versioning](https://semver.org), for all four packages together: a patch
   release fixes bugs, a minor release adds features without breaking code written for earlier releases of the same
   major version, and a major release may make breaking changes, each listed in its upgrade guide.
-- **Custom providers** are covered too: `IResourceRepository` changes incompatibly only in a major release, and members
-  added since 3.0 come with default implementations. See [Members added since 3.0](providers/newer-members.md).
+- **Custom providers** are covered too: the provider API changes incompatibly only in a major release, and members
+  added in a minor release come with default implementations. See [Writing a provider](providers/writing-a-provider.md).
 - **The database** within one major version only gains what the table above lists, so any 3.x application works
   against any 3.x database at least as new as itself. So far, 4.0's migrations only add too, so a 3.x application
   also works against a 4.0 database; 4.0's upgrade guide will say if that changes.

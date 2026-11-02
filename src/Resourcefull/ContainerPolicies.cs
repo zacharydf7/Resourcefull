@@ -28,7 +28,7 @@ internal sealed class ContainerPolicySettings(ResourceContainerPolicy defaults, 
 /// Enforces container policies for one scope's clients: finds a container's effective policy, asking the application's
 /// policy provider only when the cache misses, and throws for a write the policy refuses.
 /// </summary>
-internal sealed class ContainerPolicies(ContainerPolicySettings settings, IResourceRepository repository,
+internal sealed class ContainerPolicies(ContainerPolicySettings settings, ResourceRepository repository,
     IResourcePolicyProvider? provider = null)
 {
     public async Task ThrowIfReadOnlyAsync(string containerName, ClientTelemetry telemetry, CancellationToken cancellationToken)
@@ -64,7 +64,7 @@ internal sealed class ContainerPolicies(ContainerPolicySettings settings, IResou
             ? knownUsage ?? await repository.GetContainerUsageAsync(containerName, cancellationToken)
             : null;
         if (!restore && policy.MaxResourceCount is { } maxCount && usage!.ResourceCount >= maxCount
-            && await repository.GetResourceInfoAsync(containerName, resourceName, null, cancellationToken) is null)
+            && await repository.GetResourceInfoAsync(new ResourceLocation(containerName, resourceName), null, cancellationToken) is null)
         {
             throw CountExceeded(containerName, usage, maxCount);
         }

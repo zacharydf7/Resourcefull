@@ -32,11 +32,11 @@ public class ContainerDeleteIntegrationTests(SqlServerFixture fixture)
         // Act
         Exception? cancellation =
             await Record.ExceptionAsync(() => canceledAfterOneBatch.DeleteResourceContainerAsync(containerName, token));
-        List<ResourceInfo> remaining = await repository.GetAllResourceInfoAsync(containerName);
+        IReadOnlyList<ResourceInfo> remaining = await repository.GetAllResourceInfoAsync(containerName);
         var remainingContent = new List<byte[]>();
         foreach (ResourceInfo resource in remaining)
         {
-            await using Stream content = (await repository.GetResourceStreamAsync(containerName, resource.Name))!;
+            await using Stream content = (await repository.GetResourceStreamAsync(new ResourceLocation(containerName, resource.Name)))!;
             var copy = new MemoryStream();
             await content.CopyToAsync(copy);
             remainingContent.Add(copy.ToArray());
@@ -68,7 +68,7 @@ public class ContainerDeleteIntegrationTests(SqlServerFixture fixture)
 
         // Assert
         Assert.IsAssignableFrom<OperationCanceledException>(cancellation);
-        ResourceInfo current = Assert.Single(await repository.GetResourceVersionsAsync(containerName, "n"));
+        ResourceInfo current = Assert.Single(await repository.GetResourceVersionsAsync(new ResourceLocation(containerName, "n")));
         Assert.Equal("a", current.VersionId);
         Assert.True(current.IsLatest);
         await repository.DeleteResourceContainerAsync(containerName);
@@ -86,7 +86,7 @@ public class ContainerDeleteIntegrationTests(SqlServerFixture fixture)
         // has listed it.
         var (repository, _, _, containerName) = await NewRepositoriesAsync();
         string destination = $"c-{Guid.NewGuid():N}";
-        await repository.AddResourceContainerAsync(new ResourceContainerInfo { Name = destination });
+        await repository.AddResourceContainerAsync(destination, new Dictionary<string, string>());
         await AddAsync(repository, containerName, "a", "v1");
         await AddChunksAsync(containerName, "a", extraChunks);
         int chunks = await CountChunksAsync(containerName, "a");
@@ -163,8 +163,7 @@ public class ContainerDeleteIntegrationTests(SqlServerFixture fixture)
 
     private static Task<WrittenContent> AddAsync(ResourceSqlRepository repository, string containerName, string name,
         string versionId)
-        => repository.AddResourceAsync(containerName,
-            new ResourceInfo { ContainerName = containerName, Name = name, VersionId = versionId },
+        => repository.AddResourceAsync(new NewResourceVersion(new ResourceLocation(containerName, name), versionId),
             new MemoryStream(Payload));
 
     /// <summary>
@@ -181,7 +180,7 @@ public class ContainerDeleteIntegrationTests(SqlServerFixture fixture)
             new DbContextOptionsBuilder<ResourceDbContext>().UseSqlServer(fixture.ConnectionString)
                 .AddInterceptors(cancelAfterCommit).Options)) { ChunksPerDeleteBatch = 3 };
         string containerName = $"c-{Guid.NewGuid():N}";
-        await repository.AddResourceContainerAsync(new ResourceContainerInfo { Name = containerName });
+        await repository.AddResourceContainerAsync(containerName, new Dictionary<string, string>());
         return (repository, canceledAfterOneBatch, cancelAfterCommit.Token, containerName);
     }
 

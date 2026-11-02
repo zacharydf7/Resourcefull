@@ -105,6 +105,17 @@
 
 ### Changed
 
+- **Providers derive from the `ResourceRepository` base class,** which replaces the `IResourceRepository` interface.
+  Its members take a `ResourceLocation` rather than a container name and a resource name, return `IReadOnlyList<T>`
+  rather than `List<T>`, and take metadata as `IReadOnlyDictionary<string, string>`. A write is given a
+  `NewResourceVersion` rather than a `ResourceInfo`; it holds only what the write's caller can know. `AddResourceAsync`
+  and `DeleteResourceAsync` each have one overload, taking an optional condition, so every provider decides
+  conditional writes itself. Providers no longer store `Uri`. See [Upgrading to 4.0](docs/upgrading-to-4.md#custom-providers).
+- **`ResourceInfo` can't be changed:** it's a sealed record with `init`-only properties, and its `Metadata` is an
+  `IReadOnlyDictionary<string, string>`. Change a stored version with `SetResourceMetadataAsync` or
+  `SetContentTypeAsync`, or make a changed copy with `with`. See [Upgrading to 4.0](docs/upgrading-to-4.md).
+- **`IResourceContainerClient` isn't `IDisposable`,** since its `Dispose` did nothing; remove `using` where you call
+  `GetResourceContainerClient`.
 - **Uploads to SQL Server hold nothing while their content arrives.** An upload stores its version staged, hidden
   from every read, then its content a MiB at a time, each batch committing on its own on a connection it gives back,
   and makes the version current in a short transaction at the end. So a slow client no longer holds a connection,
@@ -135,9 +146,8 @@
   has a new design, a home page, and a sidebar grouped by what you're trying to do. Pages that covered several topics
   are split into one page each; links to the old pages still work.
 - **`ResourceInfo.VersionId` is non-nullable,** since every stored version has one, so passing it to methods that
-  take a version ID no longer needs `!`. Only the annotation changed: code that checked it for `null` still compiles.
-  A provider must set it on every `ResourceInfo` it returns; one that assigns it from a nullable value now gets a
-  nullable warning.
+  take a version ID no longer needs `!`. Code that checked it for `null` still compiles. It's also `required`, so a
+  provider must set it on every `ResourceInfo` it builds.
 - **Deleting a large container on SQL Server is faster:** each batch deletes its versions in one round trip without
   loading them first. A container of a million files deletes in about a third less time, with about 40% fewer round
   trips and allocations.

@@ -9,13 +9,13 @@ public class ResourceRangeTests
 
     private static readonly byte[] Payload = [.. Enumerable.Range(0, 200_000).Select(i => (byte)i)];
 
-    /// <summary>A provider written for 3.1: it opens whole content, and the range overload is the default one.</summary>
-    private static Mock<IResourceRepository> ProviderWrittenFor31()
+    /// <summary>A provider that opens only whole content, so the range overload is the default one.</summary>
+    private static Mock<ResourceRepository> ProviderWithoutRanges()
     {
-        var repository = new Mock<IResourceRepository> { CallBase = true };
-        repository.Setup(r => r.GetResourceInfoAsync(Container, "r", It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+        var repository = new Mock<ResourceRepository> { CallBase = true };
+        repository.Setup(r => r.GetResourceInfoAsync(new ResourceLocation(Container, "r"), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ResourceInfo { ContainerName = Container, Name = "r", VersionId = "v1" });
-        repository.Setup(r => r.GetResourceStreamAsync(Container, "r", "v1", It.IsAny<CancellationToken>()))
+        repository.Setup(r => r.GetResourceStreamAsync(new ResourceLocation(Container, "r"), "v1", It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => new MemoryStream(Payload, writable: false));
         return repository;
     }
@@ -24,13 +24,13 @@ public class ResourceRangeTests
     [InlineData(0)]
     [InlineData(100_000)]
     [InlineData(200_000)]
-    public async Task GetResourceStreamAsync_ShouldPositionTheWholeContentAtTheOffset_WhenAProviderWrittenFor31OpensARange(long offset)
+    public async Task GetResourceStreamAsync_ShouldPositionTheWholeContentAtTheOffset_WhenTheProviderDoesNotOverrideTheRangeOverload(long offset)
     {
         // Arrange
-        IResourceRepository repository = ProviderWrittenFor31().Object;
+        ResourceRepository repository = ProviderWithoutRanges().Object;
 
         // Act
-        await using Stream stream = (await repository.GetResourceStreamAsync(Container, "r", "v1", offset, 10))!;
+        await using Stream stream = (await repository.GetResourceStreamAsync(new ResourceLocation(Container, "r"), "v1", offset, 10))!;
 
         // Assert
         Assert.Equal(offset, stream.Position);
@@ -39,13 +39,13 @@ public class ResourceRangeTests
     }
 
     [Fact]
-    public async Task GetResourceStreamAsync_ShouldReturnNull_WhenAProviderWrittenFor31OpensARangeOfAVersionThatDoesNotExist()
+    public async Task GetResourceStreamAsync_ShouldReturnNull_WhenTheProviderDoesNotOverrideTheRangeOverloadAndTheVersionDoesNotExist()
     {
         // Arrange
-        IResourceRepository repository = ProviderWrittenFor31().Object;
+        ResourceRepository repository = ProviderWithoutRanges().Object;
 
         // Act
-        Stream? stream = await repository.GetResourceStreamAsync(Container, "r", "missing", 0, 10);
+        Stream? stream = await repository.GetResourceStreamAsync(new ResourceLocation(Container, "r"), "missing", 0, 10);
 
         // Assert
         Assert.Null(stream);
@@ -55,7 +55,7 @@ public class ResourceRangeTests
     public async Task DownloadStreamingAsync_ShouldStopAtTheRangesEnd_WhenTheProvidersStreamGoesOn()
     {
         // Arrange: the default range overload reads on to the end of the content.
-        var client = new ResourceContainerClient(ProviderWrittenFor31().Object, null, new ResourcefullOptions(),
+        var client = new ResourceContainerClient(ProviderWithoutRanges().Object, null, new ResourcefullOptions(),
             new ResourceContainerInfo { Name = Container }, null);
 
         // Act

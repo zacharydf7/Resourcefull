@@ -43,7 +43,7 @@ public abstract partial class ResourcefullContractTests
         ResourceInfo current = await container.UploadAsync("a", BinaryData.FromString("current"), Expiring(Past));
         ResourceInfo extended = await container.UploadAsync("b", BinaryData.FromString("b"), Expiring(Past));
         await container.SetExpiryAsync("b", extended.VersionId, Future);
-        IResourceRepository repository = provider.GetRequiredService<IResourceRepository>();
+        ResourceRepository repository = provider.GetRequiredService<ResourceRepository>();
 
         // Act
         IReadOnlyCollection<(ResourceLocation, string)> deleted = await repository.DeleteExpiredVersionsAsync(
@@ -71,7 +71,7 @@ public abstract partial class ResourcefullContractTests
         ResourceInfo kept = await container.UploadAsync("a", BinaryData.FromString("kept"));
         ResourceInfo second = await container.UploadAsync("a", BinaryData.FromString("second"), Expiring(Past));
         ResourceInfo third = await container.UploadAsync("a", BinaryData.FromString("third"), Expiring(Past));
-        IResourceRepository repository = provider.GetRequiredService<IResourceRepository>();
+        ResourceRepository repository = provider.GetRequiredService<ResourceRepository>();
 
         // Act
         IReadOnlyCollection<(ResourceLocation, string VersionId)> deleted = await repository.DeleteExpiredVersionsAsync(
@@ -347,7 +347,7 @@ public abstract partial class ResourcefullContractTests
         ResourceInfo stored = await container.UploadAsync("a", BinaryData.FromString("x"), Expiring(Past));
         DateTimeOffset sweepTime = DateTimeOffset.UtcNow;
         await container.SetExpiryAsync("a", stored.VersionId, Future);
-        IResourceRepository repository = provider.GetRequiredService<IResourceRepository>();
+        ResourceRepository repository = provider.GetRequiredService<ResourceRepository>();
 
         // Act
         bool deleted = await repository.DeleteExpiredVersionAsync(new ResourceLocation(container.ResourceContainerInfo.Name, "a"),
@@ -419,17 +419,19 @@ public abstract partial class ResourcefullContractTests
             await container.UploadAsync("b", BinaryData.FromString("x"), Expiring(tied)),
             await container.UploadAsync("c", BinaryData.FromString("x"), Expiring(tied.AddHours(1)))
         ];
-        IResourceRepository repository = provider.GetRequiredService<IResourceRepository>();
+        ResourceRepository repository = provider.GetRequiredService<ResourceRepository>();
         DateTimeOffset now = tied.AddDays(1);
 
         // Act
         var listed = new List<ResourceInfo>();
-        ResourceInfo? after = null;
+        (DateTimeOffset ExpiresAt, string VersionId)? after = null;
         for (int page = 0; page < 10_000; page++)
         {
-            List<ResourceInfo> batch = await repository.GetExpiredAsync(now, 1, after);
+            IReadOnlyList<ResourceInfo> batch = await repository.GetExpiredAsync(now, 1, after);
             if (batch.Count == 0) break;
-            listed.Add(after = Assert.Single(batch));
+            ResourceInfo version = Assert.Single(batch);
+            listed.Add(version);
+            after = (version.ExpiresAt!.Value, version.VersionId);
         }
 
         // Assert

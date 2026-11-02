@@ -41,7 +41,7 @@ public class ResourcefullHealthCheckTests
     {
         // Arrange
         var failure = new InvalidOperationException("storage is down");
-        var repository = new Mock<IResourceRepository>();
+        var repository = new Mock<ResourceRepository>();
         repository.Setup(r => r.GetResourceContainerInfoAsync(It.IsAny<string>(), It.IsAny<CancellationToken>())).ThrowsAsync(failure);
 
         // Act
@@ -56,7 +56,7 @@ public class ResourcefullHealthCheckTests
     public async Task AddResourcefullCheck_ShouldOnlyRead_WhenCalled()
     {
         // Arrange: a strict repository refuses anything but the one read.
-        var repository = new Mock<IResourceRepository>(MockBehavior.Strict);
+        var repository = new Mock<ResourceRepository>(MockBehavior.Strict);
         repository.Setup(r => r.GetResourceContainerInfoAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((ResourceContainerInfo?)null);
 

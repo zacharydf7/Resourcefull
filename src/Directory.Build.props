@@ -20,8 +20,8 @@
     <PackageIcon>icon.png</PackageIcon>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <EnablePackageValidation>true</EnablePackageValidation>
-    <!-- Packing fails on any change that would break code compiled against the last release; bump it at each release. -->
-    <PackageValidationBaselineVersion>3.1.0</PackageValidationBaselineVersion>
+    <!-- Packing fails on any change that would break code compiled against the last release; bump it at each release.
+         4.0 breaks 3.x on purpose, so there's no baseline until 4.0.0 is released: then set it to 4.0.0. -->
 
     <!-- XML docs ship in the packages for IntelliSense and the API reference, so every public member needs one. -->
     <GenerateDocumentationFile>true</GenerateDocumentationFile>

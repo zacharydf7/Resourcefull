@@ -92,7 +92,7 @@ internal sealed class InspectedContentStream : Stream
     private const int PipeSize = 1024 * 1024;
 
     private readonly Stream _content;
-    private readonly ResourceInfo _version;
+    private readonly ResourceLocation _location;
     private readonly Pipe _pipe = new(new PipeOptions(pauseWriterThreshold: PipeSize, resumeWriterThreshold: PipeSize / 2,
         useSynchronizationContext: false));
     private readonly CancellationTokenSource _stop;
@@ -100,14 +100,14 @@ internal sealed class InspectedContentStream : Stream
     private bool _feeding = true;
     private bool _ended;
 
-    private InspectedContentStream(IResourceUploadInspector inspector, ResourceInfo version, long? contentLength, Stream content,
+    private InspectedContentStream(IResourceUploadInspector inspector, NewResourceVersion version, long? contentLength, Stream content,
         ClientTelemetry telemetry, string operation, CancellationToken cancellationToken)
     {
         _content = content;
-        _version = version;
+        _location = version.Location;
         _stop = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        var upload = new ResourceUploadInspection(version.ContainerName, version.Name, version.VersionId, version.ContentType,
-            contentLength, version.Metadata.AsReadOnly(), _pipe.Reader.AsStream());
+        var upload = new ResourceUploadInspection(version.Location.ContainerName, version.Location.ResourceName, version.VersionId,
+            version.ContentType, contentLength, version.Metadata.ToDictionary().AsReadOnly(), _pipe.Reader.AsStream());
         // On the thread pool, so an inspector that reads synchronously can't block the upload that feeds it.
         _inspection = Task.Run(() => InspectAsync(inspector, upload, telemetry, operation, _stop.Token));
     }
@@ -116,7 +116,7 @@ internal sealed class InspectedContentStream : Stream
     /// Starts the inspector reading <paramref name="content"/> as it's read through the stream returned, telling it
     /// <paramref name="contentLength"/>, the length the upload declares, if any.
     /// </summary>
-    public static InspectedContentStream Start(IResourceUploadInspector inspector, ResourceInfo version, long? contentLength,
+    public static InspectedContentStream Start(IResourceUploadInspector inspector, NewResourceVersion version, long? contentLength,
         Stream content, ClientTelemetry telemetry, string operation, CancellationToken cancellationToken) =>
         new(inspector, version, contentLength, content, telemetry, operation, cancellationToken);
 
@@ -203,10 +203,10 @@ internal sealed class InspectedContentStream : Stream
         if (!result.IsAccepted)
         {
             throw new ResourceContentRefusedException(
-                $"The resource {_version.Name} wasn't stored in the container {_version.ContainerName}, because the " +
+                $"The resource {_location.ResourceName} wasn't stored in the container {_location.ContainerName}, because the " +
                 $"upload inspector refused it: {result.Reason}", result.Reason!)
             {
-                ContainerName = _version.ContainerName, ResourceName = _version.Name
+                ContainerName = _location.ContainerName, ResourceName = _location.ResourceName
             };
         }
     }

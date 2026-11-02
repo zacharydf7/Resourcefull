@@ -114,7 +114,7 @@ public class RetryPolicyIntegrationTests(SqlServerFixture fixture)
         await LockNameAsync(opponent, transaction, new ResourceLocation(containerName, "b"));
 
         // Act: once the delete holds "a" and waits for "b", the opponent asks for "a", closing the cycle.
-        Task<IReadOnlyCollection<(ResourceLocation, string)>> delete = provider.GetRequiredService<IResourceRepository>()
+        Task<IReadOnlyCollection<(ResourceLocation, string)>> delete = provider.GetRequiredService<ResourceRepository>()
             .DeleteExpiredVersionsAsync([(new ResourceLocation(containerName, "a"), a.VersionId),
                 (new ResourceLocation(containerName, "b"), b.VersionId)], DateTimeOffset.UtcNow);
         await using (SqlCommand waiting = opponent.CreateCommand())

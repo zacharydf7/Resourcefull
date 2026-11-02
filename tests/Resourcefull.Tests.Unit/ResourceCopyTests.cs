@@ -8,16 +8,17 @@ public class ResourceCopyTests
     private static readonly WrittenContent Written = new(5, "sha256:written", new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero));
 
     [Fact]
-    public async Task CopyResourceAsync_ShouldStoreTheSourcesContentThroughAddResource_WhenAProviderWrittenFor31Copies()
+    public async Task CopyResourceAsync_ShouldStoreTheSourcesContentThroughAddResource_WhenTheProviderDoesNotOverrideIt()
     {
         // Arrange
-        var repository = new Mock<IResourceRepository> { CallBase = true };
-        repository.Setup(r => r.GetResourceStreamAsync("c", "a", "v1", It.IsAny<CancellationToken>())).ReturnsAsync(new MemoryStream([1, 2, 3]));
+        var repository = new Mock<ResourceRepository> { CallBase = true };
+        repository.Setup(r => r.GetResourceStreamAsync(new ResourceLocation("c", "a"), "v1", It.IsAny<CancellationToken>())).ReturnsAsync(new MemoryStream([1, 2, 3]));
         byte[]? stored = null;
-        repository.Setup(r => r.AddResourceAsync("d", It.IsAny<ResourceInfo>(), It.IsAny<Stream>(), true, It.IsAny<CancellationToken>()))
-            .Callback((string _, ResourceInfo _, Stream content, bool _, CancellationToken _) => stored = new BinaryReader(content).ReadBytes(10))
+        repository.Setup(r => r.AddResourceAsync( It.IsAny<NewResourceVersion>(), It.IsAny<Stream>(), It.Is<ResourceWriteCondition?>(c => c != null && c.CreateOnly), It.IsAny<CancellationToken>()))
+            .Callback((NewResourceVersion _, Stream content, ResourceWriteCondition? _, CancellationToken _) =>
+                stored = new BinaryReader(content).ReadBytes(10))
             .ReturnsAsync(Written);
-        var destination = new ResourceInfo { ContainerName = "d", Name = "b", CopiedFrom = new ResourceOrigin("c", "a", "v1") };
+        var destination = new NewResourceVersion(new ResourceLocation("d", "b"), "v2") { CopiedFrom = new ResourceOrigin("c", "a", "v1") };
 
         // Act
         WrittenContent? written = await repository.Object.CopyResourceAsync(new ResourceLocation("c", "a"), "v1", destination,
@@ -29,32 +30,33 @@ public class ResourceCopyTests
     }
 
     [Fact]
-    public async Task CopyResourceAsync_ShouldReturnNull_WhenAProviderWrittenFor31HasNoSourceVersion()
+    public async Task CopyResourceAsync_ShouldReturnNull_WhenTheProviderDoesNotOverrideItAndHasNoSourceVersion()
     {
         // Arrange
-        IResourceRepository repository = new Mock<IResourceRepository> { CallBase = true }.Object;
+        ResourceRepository repository = new Mock<ResourceRepository> { CallBase = true }.Object;
 
         // Act
         WrittenContent? written = await repository.CopyResourceAsync(new ResourceLocation("c", "a"), "missing",
-            new ResourceInfo { ContainerName = "d", Name = "b" }, new ResourceWriteCondition());
+            new NewResourceVersion(new ResourceLocation("d", "b"), "v2"));
 
         // Assert
         Assert.Null(written);
     }
 
     [Fact]
-    public async Task RestoreVersionAsync_ShouldStoreTheVersionsContentThroughAddResource_WhenAProviderWrittenFor31Restores()
+    public async Task RestoreVersionAsync_ShouldStoreTheVersionsContentThroughAddResource_WhenTheProviderDoesNotOverrideCopy()
     {
         // Arrange
-        var repository = new Mock<IResourceRepository> { CallBase = true };
-        repository.Setup(r => r.GetResourceInfoAsync("c", "a", "v1", It.IsAny<CancellationToken>()))
+        var repository = new Mock<ResourceRepository> { CallBase = true };
+        repository.Setup(r => r.GetResourceInfoAsync(new ResourceLocation("c", "a"), "v1", It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ResourceInfo { ContainerName = "c", Name = "a", VersionId = "v1" });
-        repository.Setup(r => r.GetResourceStreamAsync("c", "a", "v1", It.IsAny<CancellationToken>())).ReturnsAsync(new MemoryStream([1, 2, 3]));
+        repository.Setup(r => r.GetResourceStreamAsync(new ResourceLocation("c", "a"), "v1", It.IsAny<CancellationToken>())).ReturnsAsync(new MemoryStream([1, 2, 3]));
         byte[]? stored = null;
-        repository.Setup(r => r.AddResourceAsync("c", It.IsAny<ResourceInfo>(), It.IsAny<Stream>(), false, It.IsAny<CancellationToken>()))
-            .Callback((string _, ResourceInfo _, Stream content, bool _, CancellationToken _) => stored = new BinaryReader(content).ReadBytes(10))
+        repository.Setup(r => r.AddResourceAsync( It.IsAny<NewResourceVersion>(), It.IsAny<Stream>(), It.Is<ResourceWriteCondition?>(c => c == null || !c.CreateOnly), It.IsAny<CancellationToken>()))
+            .Callback((NewResourceVersion _, Stream content, ResourceWriteCondition? _, CancellationToken _) =>
+                stored = new BinaryReader(content).ReadBytes(10))
             .ReturnsAsync(Written);
-        repository.Setup(r => r.GetResourceVersionsAsync("c", "a", It.IsAny<CancellationToken>())).ReturnsAsync([]);
+        repository.Setup(r => r.GetResourceVersionsAsync(new ResourceLocation("c", "a"), It.IsAny<CancellationToken>())).ReturnsAsync([]);
         var client = new ResourceContainerClient(repository.Object, null, new ResourcefullOptions { IsVersioningEnabled = true },
             new ResourceContainerInfo { Name = "c" }, null);
 
@@ -67,10 +69,10 @@ public class ResourceCopyTests
     }
 
     [Fact]
-    public async Task MoveResourceAsync_ShouldThrowNotSupported_WhenAProviderWrittenFor31IsAsked()
+    public async Task MoveResourceAsync_ShouldThrowNotSupported_WhenTheProviderDoesNotOverrideIt()
     {
         // Arrange
-        IResourceRepository repository = new Mock<IResourceRepository> { CallBase = true }.Object;
+        ResourceRepository repository = new Mock<ResourceRepository> { CallBase = true }.Object;
 
         // Act & Assert
         await Assert.ThrowsAsync<NotSupportedException>(() =>
@@ -78,15 +80,15 @@ public class ResourceCopyTests
     }
 
     [Fact]
-    public async Task ExportImportMembers_ShouldThrowNotSupported_WhenAProviderOrClientWrittenFor31IsAsked()
+    public async Task ExportImportMembers_ShouldThrowNotSupported_WhenTheProviderOrClientDoesNotImplementThem()
     {
         // Arrange
-        IResourceRepository repository = new Mock<IResourceRepository> { CallBase = true }.Object;
+        ResourceRepository repository = new Mock<ResourceRepository> { CallBase = true }.Object;
         IResourceServiceClient service = new Mock<IResourceServiceClient> { CallBase = true }.Object;
 
         // Act & Assert
         await Assert.ThrowsAsync<NotSupportedException>(() =>
-            repository.ImportVersionAsync("c", new ResourceInfo { ContainerName = "c", Name = "a" }, new MemoryStream()));
+            repository.ImportVersionAsync(new NewResourceVersion(new ResourceLocation("c", "a"), "v1"), new MemoryStream()));
         await Assert.ThrowsAsync<NotSupportedException>(() => service.ExportContainerAsync("c", new MemoryStream()));
         await Assert.ThrowsAsync<NotSupportedException>(() => service.ImportContainerAsync("c", new MemoryStream()));
         await Assert.ThrowsAsync<NotSupportedException>(() => service.PruneContainerAsync("c"));
