@@ -69,7 +69,7 @@ public class Reports(IResourceServiceClient resources)
         IResourceContainerClient reports = await resources.CreateResourceContainerIfNotExistsAsync("reports");
         return await reports.UploadAsync(name, content, new ResourceUploadOptions
         {
-            Overwrite = true,
+            Mode = ResourceWriteMode.Replace,
             Headers = new ResourceHeaders("application/pdf", null)
         });
     }

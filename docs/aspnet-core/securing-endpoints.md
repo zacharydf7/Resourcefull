@@ -68,7 +68,8 @@ the same container, or fill it with names your application doesn't expect.
   to show it. [Accepting uploads](accepting-uploads.md#from-an-html-form) shows this for forms.
 - **Or check the name** against what the user may write: a prefix of their own (`drafts/{userId}/`), or a fixed set
   of names.
-- **Use [`CreateOnly`](../uploading.md)** when an upload should never replace an existing file.
+- **Leave uploads [create-only](../uploading.md#replacing-a-file)** when they should never replace an existing file.
+  That's the default for `UploadAsync` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>; for `UploadFromRequestAsync`, require `If-None-Match: *`.
 
 ## 4. Limit what can be uploaded
 
@@ -118,7 +119,7 @@ your infrastructure, so they're safe to return to the person who asked.
 
 - [ ] Every file endpoint has `RequireAuthorization()`, except the one serving shared links.
 - [ ] The container comes from the signed-in user or a membership check, never straight from the URL.
-- [ ] Upload names are generated or checked; uploads that mustn't replace a file use `CreateOnly`.
+- [ ] Upload names are generated or checked; uploads that mustn't replace a file are create-only.
 - [ ] Request size limits are raised only where needed, and containers have size limits.
 - [ ] Allowed file types are exact types, and nothing relies on the declared type alone.
 - [ ] Forms keep antiforgery protection.

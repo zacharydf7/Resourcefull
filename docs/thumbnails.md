@@ -49,7 +49,7 @@ try
         Headers = new ResourceHeaders("image/webp", thumbnail.Length),
         Metadata = new Dictionary<string, string> { ["photo"] = name },
         ExpiresAt = photo.ExpiresAt,
-        Overwrite = true
+        Mode = ResourceWriteMode.Replace
     }, cancellationToken);
 }
 catch (ImageFormatException)
@@ -70,7 +70,7 @@ return photo;
   the orphan sweep in [Files and your own data](files-and-your-data.md#deleting-orphans), mistakes them for photos.
 - **Record the photo's name** in the thumbnail's metadata, so you can find the photo from its thumbnail.
 - **Give the thumbnail the original's expiry,** if it has one, so it doesn't outlive the photo.
-- **`Overwrite`** lets a retry replace a thumbnail an earlier attempt made, when versioning is off.
+- **`Replace`** lets a retry replace a thumbnail an earlier attempt made.
 
 Making a thumbnail of a large photo can take a second or more. If uploads shouldn't wait for that, put the version on
 a queue, such as a `Channel<T>` read by a `BackgroundService`, and make the thumbnail there. Until it's made, show a

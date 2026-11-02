@@ -13,7 +13,7 @@ public abstract partial class ResourcefullContractTests
         ResourceInfo first = await container.UploadAsync("report.pdf", BinaryData.FromString("first"),
             new ResourceUploadOptions { Metadata = new Dictionary<string, string> { ["author"] = "ada" } });
         ResourceInfo second = await container.UploadAsync("report.pdf", BinaryData.FromString("second"),
-            new ResourceUploadOptions { Metadata = new Dictionary<string, string> { ["author"] = "ada" } });
+            new ResourceUploadOptions { Mode = ResourceWriteMode.Replace, Metadata = new Dictionary<string, string> { ["author"] = "ada" } });
         var metadata = new Dictionary<string, string> { ["reviewed"] = "yes" };
 
         // Act: the dictionary passed in is changed afterward, which mustn't change what's stored.
@@ -37,7 +37,7 @@ public abstract partial class ResourcefullContractTests
         using ServiceProvider provider = BuildServiceProvider(o => o.UseVersioning());
         IResourceContainerClient container = await NewContainerAsync(provider);
         ResourceInfo first = await container.UploadAsync("report.pdf", BinaryData.FromString("first"));
-        await container.UploadAsync("report.pdf", BinaryData.FromString("second"));
+        await container.UploadAsync("report.pdf", BinaryData.FromString("second"), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace });
 
         // Act
         bool set = await container.SetResourceMetadataAsync("report.pdf", null, new Dictionary<string, string> { ["k"] = "v" });

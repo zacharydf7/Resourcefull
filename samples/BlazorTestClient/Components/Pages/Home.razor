@@ -25,7 +25,7 @@
                     <span>Upload Resource:</span>
                     <InputFile OnChange="(e) => UploadResource(e, container.Name)" />
                 </div>
-                @if (!_options.IsVersioningEnabled)
+                @if (_options.MaxVersions == 1)
                 {
                     <div class="flexDisplay">
                         <label><input type="checkbox" @bind="_overwrite" /> Overwrite existing resource</label>
@@ -44,7 +44,7 @@
                         <th>Uri</th>
                         <th>Delete</th>
                         <th>Download</th>
-                        @if (_options.IsVersioningEnabled)
+                        @if (_options.MaxVersions > 1)
                         {
                             <th>Version History</th>
                         }
@@ -64,7 +64,7 @@
                         <td class="uri-cell">@resource.Uri</td>
                         <td><button class="btn btn-danger" @onclick="() => DeleteResource(resource)">Delete</button></td>
                         <td><a class="btn btn-secondary" href="@DownloadUrl(resource)">Download</a></td>
-                        @if (_options.IsVersioningEnabled)
+                        @if (_options.MaxVersions > 1)
                         {
                             <td>
                                 <button class="btn btn-info" @onclick="() => ToggleVersionHistory(resource)">
@@ -74,7 +74,7 @@
                         }
                     </tr>
 
-                    @if (_options.IsVersioningEnabled && IsVersionHistoryOpen(versionKey))
+                    @if (_options.MaxVersions > 1 && IsVersionHistoryOpen(versionKey))
                     {
                         <tr>
                             <td colspan="10">
@@ -206,7 +206,8 @@
         FileExtensionContentTypeProvider.TryGetContentType(args.File.Name, out var contentType);
         ResourceUploadOptions resourceUploadOptions = new()
         {
-            Overwrite = _overwrite,
+            // When versions are kept, always replace, so another upload of a name adds a version to its history.
+            Mode = _overwrite || _options.MaxVersions > 1 ? ResourceWriteMode.Replace : ResourceWriteMode.Create,
             Headers = new(contentType, args.File.Size)
         };
         var containerClient = ResourceServiceClient.GetResourceContainerClient(containerName);

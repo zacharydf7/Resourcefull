@@ -5,7 +5,7 @@ namespace Resourcefull.Tests.Contract;
 public abstract partial class ResourcefullContractTests
 {
     [SkippableFact]
-    public async Task UploadAsync_ShouldThrowConflict_WhenTheNameExistsWithoutVersioningOrOverwrite()
+    public async Task UploadAsync_ShouldThrowConflict_WhenTheNameExistsAndNoModeIsGiven()
     {
         // Arrange
         using ServiceProvider provider = BuildServiceProvider();
@@ -21,7 +21,7 @@ public abstract partial class ResourcefullContractTests
     }
 
     [SkippableFact]
-    public async Task UploadAsync_ShouldReplaceTheOnlyVersion_WhenOverwritingWithoutVersioning()
+    public async Task UploadAsync_ShouldReplaceTheOnlyVersion_WhenReplacingWithoutVersioning()
     {
         // Arrange
         using ServiceProvider provider = BuildServiceProvider();
@@ -29,7 +29,7 @@ public abstract partial class ResourcefullContractTests
         await container.UploadAsync("doc", BinaryData.FromString("v1"));
 
         // Act
-        ResourceInfo replacement = await container.UploadAsync("doc", BinaryData.FromString("v2"), new ResourceUploadOptions { Overwrite = true });
+        ResourceInfo replacement = await container.UploadAsync("doc", BinaryData.FromString("v2"), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace });
 
         // Assert
         ResourceInfo only = Assert.Single(await container.GetResourceVersionsAsync("doc"));
@@ -38,7 +38,7 @@ public abstract partial class ResourcefullContractTests
     }
 
     [SkippableFact]
-    public async Task UploadAsync_ShouldThrowConflict_WhenCreateOnlyAndTheNameExistsWithVersioning()
+    public async Task UploadAsync_ShouldThrowConflict_WhenTheNameExistsWithVersioningAndNoModeIsGiven()
     {
         // Arrange
         using ServiceProvider provider = BuildServiceProvider(o => o.UseVersioning());
@@ -46,11 +46,36 @@ public abstract partial class ResourcefullContractTests
         await container.UploadAsync("doc", BinaryData.FromString("v1"));
 
         // Act
-        Task act() => container.UploadAsync("doc", BinaryData.FromString("v2"), new ResourceUploadOptions { CreateOnly = true });
+        Task act() => container.UploadAsync("doc", BinaryData.FromString("v2"));
 
         // Assert
         await Assert.ThrowsAsync<ResourceConflictException>(act);
         Assert.Single(await container.GetResourceVersionsAsync("doc"));
+    }
+
+    [SkippableFact]
+    public async Task UploadAsync_ShouldKeepEachContainersOwnNumberOfVersions_WhenItsPolicySetsMaxVersions()
+    {
+        // Arrange: the store keeps three versions of each name; one container keeps one, and another two.
+        using ServiceProvider provider = BuildServiceProvider(o => o.UseVersioning(3).UseContainerPolicies(cacheFor: TimeSpan.Zero)
+            .UsePolicyProvider<TestPolicyProvider>());
+        IResourceServiceClient service = ServiceOf(provider);
+        string one = NewContainerName(), two = NewContainerName(), storeWide = NewContainerName();
+        TestPolicyProvider.Policies[one] = new ResourceContainerPolicy { MaxVersions = 1 };
+        TestPolicyProvider.Policies[two] = new ResourceContainerPolicy { MaxVersions = 2 };
+
+        // Act
+        var kept = new List<int>();
+        foreach (string name in new[] { one, two, storeWide })
+        {
+            IResourceContainerClient container = await service.CreateResourceContainerAsync(name);
+            for (int i = 0; i < 4; i++)
+                await container.UploadAsync("doc", BinaryData.FromString($"v{i}"), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace });
+            kept.Add((await container.GetResourceVersionsAsync("doc")).Count);
+        }
+
+        // Assert
+        Assert.Equal([1, 2, 3], kept);
     }
 
     [SkippableFact]
@@ -62,8 +87,8 @@ public abstract partial class ResourcefullContractTests
 
         // Act
         await container.UploadAsync("doc", BinaryData.FromString("v1"));
-        ResourceInfo second = await container.UploadAsync("doc", BinaryData.FromString("v2"));
-        ResourceInfo third = await container.UploadAsync("doc", BinaryData.FromString("v3"));
+        ResourceInfo second = await container.UploadAsync("doc", BinaryData.FromString("v2"), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace });
+        ResourceInfo third = await container.UploadAsync("doc", BinaryData.FromString("v3"), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace });
 
         // Assert
         IReadOnlyList<ResourceInfo> versions = await container.GetResourceVersionsAsync("doc");
@@ -79,8 +104,8 @@ public abstract partial class ResourcefullContractTests
         using ServiceProvider provider = BuildServiceProvider(o => o.UseVersioning());
         IResourceContainerClient container = await NewContainerAsync(provider);
         ResourceInfo first = await container.UploadAsync("doc", BinaryData.FromString("v1"));
-        ResourceInfo second = await container.UploadAsync("doc", BinaryData.FromString("v2"));
-        ResourceInfo third = await container.UploadAsync("doc", BinaryData.FromString("v3"));
+        ResourceInfo second = await container.UploadAsync("doc", BinaryData.FromString("v2"), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace });
+        ResourceInfo third = await container.UploadAsync("doc", BinaryData.FromString("v3"), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace });
 
         // Act
         IReadOnlyList<ResourceInfo> versions = await container.GetResourceVersionsAsync("doc");
@@ -97,7 +122,7 @@ public abstract partial class ResourcefullContractTests
         using ServiceProvider provider = BuildServiceProvider(o => o.UseVersioning());
         IResourceContainerClient container = await NewContainerAsync(provider);
         ResourceInfo first = await container.UploadAsync("doc", BinaryData.FromString("v1"));
-        await container.UploadAsync("doc", BinaryData.FromString("v2"));
+        await container.UploadAsync("doc", BinaryData.FromString("v2"), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace });
 
         // Act
         ResourceContent? content = await container.DownloadContentAsync("doc", first.VersionId);
@@ -115,8 +140,8 @@ public abstract partial class ResourcefullContractTests
         using ServiceProvider provider = BuildServiceProvider(o => o.UseVersioning());
         IResourceContainerClient container = await NewContainerAsync(provider);
         await container.UploadAsync("doc", BinaryData.FromString("v1"));
-        ResourceInfo second = await container.UploadAsync("doc", BinaryData.FromString("v2"));
-        ResourceInfo third = await container.UploadAsync("doc", BinaryData.FromString("v3"));
+        ResourceInfo second = await container.UploadAsync("doc", BinaryData.FromString("v2"), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace });
+        ResourceInfo third = await container.UploadAsync("doc", BinaryData.FromString("v3"), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace });
 
         // Act
         bool deleted = await container.DeleteResourceIfExistsAsync("doc", third.VersionId);
@@ -138,7 +163,7 @@ public abstract partial class ResourcefullContractTests
         using ServiceProvider provider = BuildServiceProvider(o => o.UseVersioning());
         IResourceContainerClient container = await NewContainerAsync(provider);
         ResourceInfo first = await container.UploadAsync("doc", BinaryData.FromString("v1"));
-        ResourceInfo second = await container.UploadAsync("doc", BinaryData.FromString("v2"));
+        ResourceInfo second = await container.UploadAsync("doc", BinaryData.FromString("v2"), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace });
 
         // Act
         bool deleted = await container.DeleteResourceIfExistsAsync("doc", first.VersionId);
@@ -158,7 +183,7 @@ public abstract partial class ResourcefullContractTests
         using ServiceProvider provider = BuildServiceProvider(o => o.UseVersioning());
         IResourceContainerClient container = await NewContainerAsync(provider);
         await container.UploadAsync("doc", BinaryData.FromString("v1"));
-        await container.UploadAsync("doc", BinaryData.FromString("v2"));
+        await container.UploadAsync("doc", BinaryData.FromString("v2"), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace });
 
         // Act
         bool deleted = await container.DeleteResourceIfExistsAsync("doc");
@@ -182,7 +207,7 @@ public abstract partial class ResourcefullContractTests
             Metadata = new Dictionary<string, string> { ["draft"] = "1" }
         });
         await container.UploadAsync("doc", BinaryData.FromString("v2"), new ResourceUploadOptions
-        {
+        { Mode = ResourceWriteMode.Replace,
             Headers = new ResourceHeaders("text/markdown", null),
             Metadata = new Dictionary<string, string> { ["draft"] = "2", ["reviewed"] = "yes" }
         });
@@ -217,8 +242,8 @@ public abstract partial class ResourcefullContractTests
         clock.Now = now.AddHours(1);
         ResourceInfo first = await container.UploadAsync("n", BinaryData.FromString("1"));
         clock.Now = now;
-        ResourceInfo second = await container.UploadAsync("n", BinaryData.FromString("2"));
-        ResourceInfo third = await container.UploadAsync("n", BinaryData.FromString("3"));
+        ResourceInfo second = await container.UploadAsync("n", BinaryData.FromString("2"), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace });
+        ResourceInfo third = await container.UploadAsync("n", BinaryData.FromString("3"), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace });
 
         // Act
         IReadOnlyList<ResourceInfo> versions = await container.GetResourceVersionsAsync("n");

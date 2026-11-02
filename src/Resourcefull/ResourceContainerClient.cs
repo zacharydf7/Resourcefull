@@ -19,8 +19,11 @@ internal partial class ResourceContainerClient(ResourceRepository resourceReposi
 
     public Task<ResourceInfo> UploadAsync(string resourceName, Stream content, ResourceUploadOptions? options = null,
         CancellationToken cancellationToken = default)
-        => _telemetry.RunAsync("upload", ContainerName, resourceName, () => UploadCoreAsync(resourceName, content, options, cancellationToken),
-            "resourcefull.conditional", options?.Conditions is { IsEmpty: false });
+        => _telemetry.RunAsync("upload", ContainerName, resourceName, activity =>
+        {
+            activity?.SetTag("resourcefull.write_mode", WriteModeTag(options?.Mode ?? ResourceWriteMode.Create));
+            return UploadCoreAsync(resourceName, content, options, cancellationToken);
+        }, "resourcefull.conditional", options?.Conditions is { IsEmpty: false });
 
     private async Task<ResourceInfo> UploadCoreAsync(string resourceName, Stream content, ResourceUploadOptions? uploadOptions, CancellationToken cancellationToken)
     {
@@ -29,15 +32,7 @@ internal partial class ResourceContainerClient(ResourceRepository resourceReposi
 
         uploadOptions ??= new ResourceUploadOptions();
         ResourceConditions? conditions = uploadOptions.Conditions is { IsEmpty: false } set ? set : null;
-        if (uploadOptions.CreateOnly && conditions is not null)
-            throw new ArgumentException(
-                $"{nameof(ResourceUploadOptions.CreateOnly)} and {nameof(ResourceUploadOptions.Conditions)} can't both be set: " +
-                "a create-only upload requires that the name has no current version, and conditions require one.", nameof(uploadOptions));
-
-        // Without versioning, an upload that may not overwrite is a create-only write; one with conditions replaces
-        // the version they match.
-        bool createOnly = uploadOptions.CreateOnly
-            || (!options.IsVersioningEnabled && !uploadOptions.Overwrite && conditions is null);
+        bool createOnly = IsCreate(uploadOptions.Mode, conditions, nameof(ResourceUploadOptions.Conditions), "options");
         if (policies is not null && await policies.CheckNewVersionAsync(ContainerName, resourceName, restore: false,
             uploadOptions.Headers?.ContentType, uploadOptions.Headers?.ContentLength, _telemetry, cancellationToken) is { } limit)
         {
@@ -70,11 +65,11 @@ internal partial class ResourceContainerClient(ResourceRepository resourceReposi
                 ContainerName = ContainerName, ResourceName = resourceName
             };
         }
-        catch (ResourceConflictException exception) when (!uploadOptions.CreateOnly)
+        catch (ResourceConflictException exception)
         {
             throw new ResourceConflictException(
                 $"The resource {resourceName} already exists in the container {ContainerName}. Set " +
-                $"{nameof(uploadOptions.Overwrite)} to true in {nameof(ResourceUploadOptions)} to replace it.",
+                $"{nameof(ResourceUploadOptions.Mode)} to {nameof(ResourceWriteMode.Replace)} in {nameof(ResourceUploadOptions)} to replace it.",
                 exception)
             {
                 ContainerName = ContainerName, ResourceName = resourceName
@@ -95,11 +90,6 @@ internal partial class ResourceContainerClient(ResourceRepository resourceReposi
 
     private async Task<ResourceInfo?> RestoreCoreAsync(string resourceName, string versionId, CancellationToken cancellationToken)
     {
-        if (!options.IsVersioningEnabled)
-        {
-            throw new ResourceVersioningDisabledException(
-                $"The resource {resourceName} in the container {ContainerName} can't be restored: versioning is off.");
-        }
         ResourceNames.ThrowIfInvalidResourceName(resourceName);
         if (string.IsNullOrEmpty(versionId))
             throw new ArgumentException($"{nameof(versionId)} can't be empty.", nameof(versionId));
@@ -183,7 +173,9 @@ internal partial class ResourceContainerClient(ResourceRepository resourceReposi
         });
 
         // The new version is stored, so the upload has succeeded.
-        await PruneAfterAsync(containerName, resourceName, () => PruneAsync(containerName, resourceName, CancellationToken.None));
+        await PruneAfterAsync(containerName, resourceName, async () =>
+            await PruneAsync(containerName, resourceName, await MaxVersionsAsync(containerName, CancellationToken.None),
+                CancellationToken.None));
         return stored;
     }
 
@@ -217,14 +209,13 @@ internal partial class ResourceContainerClient(ResourceRepository resourceReposi
     }
 
     /// <summary>
-    /// Keeps the newest versions in store order. Reading the versions after the write means concurrent writers each
-    /// see all of them, so together they never keep more than the limit; without versioning the limit is one, which
-    /// is what an overwrite leaves.
+    /// Keeps the newest versions, up to the container's limit, in store order. Reading the versions after the write means
+    /// concurrent writers each see all of them, so together they never keep more than the limit; with a limit of one,
+    /// that's what a replacing upload leaves.
     /// </summary>
     /// <returns>How many versions were past the limit.</returns>
-    private async Task<int> PruneAsync(string containerName, string resourceName, CancellationToken cancellationToken)
+    private async Task<int> PruneAsync(string containerName, string resourceName, int keep, CancellationToken cancellationToken)
     {
-        int keep = options.IsVersioningEnabled ? options.MaxVersions : 1;
         IReadOnlyList<ResourceInfo> versions = await resourceRepository.GetResourceVersionsAsync(
             new ResourceLocation(containerName, resourceName), cancellationToken);
         DateTimeOffset now = (timeProvider ?? TimeProvider.System).GetUtcNow();
@@ -250,6 +241,7 @@ internal partial class ResourceContainerClient(ResourceRepository resourceReposi
     internal async Task<int> PruneAllAsync(Activity? activity, CancellationToken cancellationToken)
     {
         if (policies is not null) await policies.ThrowIfReadOnlyAsync(ContainerName, _telemetry, cancellationToken);
+        int keep = await MaxVersionsAsync(ContainerName, cancellationToken);
         int pruned = 0, failed = 0;
         // The first few failures are enough to say why; an outage of the cleanup handler's dependency fails every name.
         var failures = new List<Exception>();
@@ -262,7 +254,7 @@ internal partial class ResourceContainerClient(ResourceRepository resourceReposi
             {
                 try
                 {
-                    pruned += await PruneAsync(ContainerName, resource.Name, cancellationToken);
+                    pruned += await PruneAsync(ContainerName, resource.Name, keep, cancellationToken);
                 }
                 catch (Exception exception) when (exception is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
                 {
@@ -298,15 +290,16 @@ internal partial class ResourceContainerClient(ResourceRepository resourceReposi
     }
 
     /// <summary>
-    /// Without versioning, the versions an overwrite replaced that are still waiting out their grace period, behind
-    /// <paramref name="currentVersionId"/>. Deleting the current version must take them too, or the most recent of them
-    /// would become current again, bringing back content the overwrite replaced. Empty when versioning is on, where an
-    /// older version becoming current is what deleting the current one does, or when expiry is off and none wait.
+    /// In a container that keeps one version, the replaced versions still waiting out their grace period behind
+    /// <paramref name="currentVersionId"/>. Deleting the current version must take them too, or
+    /// the most recent of them would become current again, bringing back content the upload replaced. Empty in a
+    /// container that keeps more, where an older version becoming current is what deleting the current one does, or
+    /// when expiry is off and none wait.
     /// </summary>
     internal async Task<IReadOnlyList<ResourceInfo>> WaitingBehindAsync(string resourceName, string currentVersionId,
         CancellationToken cancellationToken)
     {
-        if (options.IsVersioningEnabled || expiry is null) return [];
+        if (expiry is null || await MaxVersionsAsync(ContainerName, cancellationToken) > 1) return [];
         IReadOnlyList<ResourceInfo> versions = await resourceRepository.GetResourceVersionsAsync(At(resourceName), cancellationToken);
         return versions.Count > 0 && versions[0].VersionId == currentVersionId ? [.. versions.Skip(1)] : [];
     }
@@ -320,6 +313,32 @@ internal partial class ResourceContainerClient(ResourceRepository resourceReposi
                 DateTimeOffset now = (timeProvider ?? TimeProvider.System).GetUtcNow();
                 foreach (ResourceInfo version in waiting) await DeletePrunedAsync(version, now, CancellationToken.None);
             });
+
+    /// <summary>
+    /// How many versions of each name <paramref name="containerName"/> keeps: its policy's, or the store-wide default.
+    /// </summary>
+    private async ValueTask<int> MaxVersionsAsync(string containerName, CancellationToken cancellationToken) =>
+        (policies is null ? null : (await policies.GetAsync(containerName, _telemetry, cancellationToken)).MaxVersions)
+            ?? options.MaxVersions;
+
+    /// <summary>
+    /// Whether a write in <paramref name="mode"/> is create-only. Throws for an undefined mode, or for conditions with
+    /// <see cref="ResourceWriteMode.Create"/>: a name that meets them has a current version, which a create-only write
+    /// refuses.
+    /// </summary>
+    private static bool IsCreate(ResourceWriteMode mode, ResourceConditions? conditions, string conditionsName, string paramName)
+    {
+        if (!Enum.IsDefined(mode))
+            throw new ArgumentOutOfRangeException(paramName, mode, $"{mode} isn't a {nameof(ResourceWriteMode)}.");
+        if (mode == ResourceWriteMode.Create && conditions is not null)
+            throw new ArgumentException(
+                $"{conditionsName} need {nameof(ResourceWriteMode)}.{nameof(ResourceWriteMode.Replace)}: a name that meets them " +
+                $"has a current version, which {nameof(ResourceWriteMode)}.{nameof(ResourceWriteMode.Create)} refuses.", paramName);
+        return mode == ResourceWriteMode.Create;
+    }
+
+    /// <summary>The <c>resourcefull.write_mode</c> span tag's value for <paramref name="mode"/>.</summary>
+    private static string WriteModeTag(ResourceWriteMode mode) => mode == ResourceWriteMode.Create ? "create" : "replace";
 
     /// <summary>How long a version past the versioning limit is kept when expiry is on, for downloads reading it.</summary>
     internal static readonly TimeSpan PruneGracePeriod = TimeSpan.FromMinutes(5);
@@ -467,9 +486,11 @@ internal partial class ResourceContainerClient(ResourceRepository resourceReposi
 
     public Task<ResourceInfo?> CopyResourceAsync(string resourceName, string destinationContainer, string destinationName,
         ResourceCopyOptions? options = null, CancellationToken cancellationToken = default)
-        => _telemetry.RunAsync("copy", ContainerName, resourceName,
-            () => CopyCoreAsync(resourceName, destinationContainer, destinationName, options ?? new ResourceCopyOptions(), cancellationToken),
-            "resourcefull.destination_container", destinationContainer);
+        => _telemetry.RunAsync("copy", ContainerName, resourceName, activity =>
+        {
+            activity?.SetTag("resourcefull.write_mode", WriteModeTag(options?.Mode ?? ResourceWriteMode.Create));
+            return CopyCoreAsync(resourceName, destinationContainer, destinationName, options ?? new ResourceCopyOptions(), cancellationToken);
+        }, "resourcefull.destination_container", destinationContainer);
 
     private async Task<ResourceInfo?> CopyCoreAsync(string resourceName, string destinationContainer, string destinationName,
         ResourceCopyOptions copyOptions, CancellationToken cancellationToken)
@@ -478,13 +499,8 @@ internal partial class ResourceContainerClient(ResourceRepository resourceReposi
         ResourceNames.ThrowIfInvalidContainerName(destinationContainer);
         ResourceNames.ThrowIfInvalidResourceName(destinationName);
         ResourceConditions? conditions = copyOptions.DestinationConditions is { IsEmpty: false } set ? set : null;
-        if (copyOptions.CreateOnly && conditions is not null)
-            throw new ArgumentException(
-                $"{nameof(ResourceCopyOptions.CreateOnly)} and {nameof(ResourceCopyOptions.DestinationConditions)} can't both be set: " +
-                "a create-only copy requires that the destination has no current version, and conditions require one.",
-                "options"); // CopyResourceAsync's parameter; nameof(options) here is the client's own options
-        // As for an upload: without versioning, a copy that may not overwrite is a create-only write.
-        bool createOnly = copyOptions.CreateOnly || (!options.IsVersioningEnabled && !copyOptions.Overwrite && conditions is null);
+        // "options" is CopyResourceAsync's parameter; nameof(options) here is the client's own options.
+        bool createOnly = IsCreate(copyOptions.Mode, conditions, nameof(ResourceCopyOptions.DestinationConditions), "options");
 
         ResourceInfo? source = await resourceRepository.GetResourceInfoAsync(At(resourceName), copyOptions.VersionId, cancellationToken);
         if (source is null) return null;
@@ -655,9 +671,15 @@ internal partial class ResourceContainerClient(ResourceRepository resourceReposi
         => _telemetry.RunAsync("get_usage", ContainerName, null, () => resourceRepository.GetContainerUsageAsync(ContainerName, cancellationToken));
 
     public Task<ResourceContainerPolicy> GetPolicyAsync(CancellationToken cancellationToken = default)
-        => _telemetry.RunAsync("get_container_policy", ContainerName, null, async () => policies is null
-            ? new ResourceContainerPolicy()
-            : await policies.GetAsync(ContainerName, _telemetry, cancellationToken));
+        => _telemetry.RunAsync("get_container_policy", ContainerName, null, async () =>
+        {
+            // UseVersioning's limit fills in when neither the container's policy nor the defaults set MaxVersions, so the
+            // result always has the limit in force.
+            var storeWide = new ResourceContainerPolicy { MaxVersions = options.MaxVersions };
+            return policies is null
+                ? storeWide
+                : ContainerPolicies.Merge(await policies.GetAsync(ContainerName, _telemetry, cancellationToken), storeWide);
+        });
 
     public Task<bool> ExistsAsync(string resourceName, string? versionId = null,
         CancellationToken cancellationToken = default)

@@ -189,20 +189,23 @@ internal sealed class ContainerPolicies(ContainerPolicySettings settings, Resour
             }
         }
 
-        ResourceContainerPolicy defaults = settings.Defaults;
-        ResourceContainerPolicy effective = own is null ? defaults : new ResourceContainerPolicy
-        {
-            MaxResourceSize = own.MaxResourceSize ?? defaults.MaxResourceSize,
-            MaxContainerSize = own.MaxContainerSize ?? defaults.MaxContainerSize,
-            MaxResourceCount = own.MaxResourceCount ?? defaults.MaxResourceCount,
-            AllowedContentTypes = own.AllowedContentTypes ?? defaults.AllowedContentTypes,
-            ReadOnly = own.ReadOnly ?? defaults.ReadOnly
-        };
+        ResourceContainerPolicy effective = own is null ? settings.Defaults : Merge(own, settings.Defaults);
         if (settings.CacheFor > TimeSpan.Zero) settings.Cache.Set(containerName, effective, settings.CacheFor);
         if (provider is not null && settings.KeepLastKnownFor > TimeSpan.Zero)
             settings.Cache.Set(new LastKnown(containerName), effective, settings.KeepLastKnownFor);
         return effective;
     }
+
+    /// <summary><paramref name="own"/>, with <paramref name="defaults"/>' value for each property it leaves unset.</summary>
+    public static ResourceContainerPolicy Merge(ResourceContainerPolicy own, ResourceContainerPolicy defaults) => new()
+    {
+        MaxResourceSize = own.MaxResourceSize ?? defaults.MaxResourceSize,
+        MaxContainerSize = own.MaxContainerSize ?? defaults.MaxContainerSize,
+        MaxResourceCount = own.MaxResourceCount ?? defaults.MaxResourceCount,
+        AllowedContentTypes = own.AllowedContentTypes ?? defaults.AllowedContentTypes,
+        ReadOnly = own.ReadOnly ?? defaults.ReadOnly,
+        MaxVersions = own.MaxVersions ?? defaults.MaxVersions
+    };
 
     /// <summary>The cache key of a container's policy as the provider last gave it.</summary>
     private sealed record LastKnown(string ContainerName);

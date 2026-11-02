@@ -221,7 +221,7 @@ public class ExpiryTests
             null, cleanupHandler: handler.Object, expiry: new ExpirySettings(TimeSpan.FromMinutes(1)));
 
         // Act
-        await client.UploadAsync("a", BinaryData.FromString("x"), new ResourceUploadOptions { Overwrite = true });
+        await client.UploadAsync("a", BinaryData.FromString("x"), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace });
 
         // Assert
         handler.Verify(h => h.OnCleanupAsync(It.Is<ResourceCleanup>(c => c.Reason == ResourceCleanupReason.Pruned && c.Resource.VersionId == "v1"),
@@ -252,7 +252,7 @@ public class ExpiryTests
         for (int i = 0; i < names; i++)
         {
             await container.UploadAsync($"n{i:D5}", BinaryData.FromString("1"));
-            await container.UploadAsync($"n{i:D5}", BinaryData.FromString("2"));
+            await container.UploadAsync($"n{i:D5}", BinaryData.FromString("2"), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace });
         }
 
         RefusingCleanupHandler.Refusing.TryRemove(name + "/*", out _);

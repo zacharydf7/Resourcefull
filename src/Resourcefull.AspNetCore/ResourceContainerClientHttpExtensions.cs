@@ -11,18 +11,18 @@ public static class ResourceContainerClientHttpExtensions
     /// <c>Content-Type</c>, and its <c>Content-Length</c> as the declared length so a truncated body stores nothing. The
     /// request's preconditions decide whether it's stored, race-free: <c>If-Match</c> (an entity tag from a download,
     /// several, or <c>*</c>), <c>If-None-Match</c> (<c>*</c> for "only if it doesn't exist", or entity tags), and
-    /// <c>If-Unmodified-Since</c>. When the request has any, they replace <see cref="ResourceUploadOptions.Conditions"/>
-    /// and <see cref="ResourceUploadOptions.CreateOnly"/>. Like an HTTP <c>PUT</c>, the upload replaces the current
-    /// version even without versioning; to refuse when the name exists, send <c>If-None-Match: *</c> or set
-    /// <see cref="ResourceUploadOptions.CreateOnly"/>.
+    /// <c>If-Unmodified-Since</c>. When the request has any, they replace <see cref="ResourceUploadOptions.Conditions"/>.
+    /// Like an HTTP <c>PUT</c>, the upload replaces the current version, whatever <see cref="ResourceUploadOptions.Mode"/>
+    /// says; to refuse when the name exists, the client sends
+    /// <c>If-None-Match: *</c>. An endpoint that must only create can require that header, answering 428 Precondition
+    /// Required without it.
     /// </summary>
     /// <param name="container">The container to store into.</param>
     /// <param name="resourceName">The resource's name.</param>
     /// <param name="request">The request whose body, headers and preconditions to use.</param>
     /// <param name="options">
-    /// Metadata, the headers to store instead of the request's, and <see cref="ResourceUploadOptions.CreateOnly"/> or
-    /// <see cref="ResourceUploadOptions.Conditions"/>. <see cref="ResourceUploadOptions.Overwrite"/> is ignored. The
-    /// options aren't changed.
+    /// Metadata, the headers to store instead of the request's, and <see cref="ResourceUploadOptions.Conditions"/> for a
+    /// request without preconditions. <see cref="ResourceUploadOptions.Mode"/> is ignored. The options aren't changed.
     /// </param>
     /// <param name="cancellationToken">Cancels the upload; pass the request's.</param>
     /// <returns>
@@ -41,8 +41,7 @@ public static class ResourceContainerClientHttpExtensions
         // A copy, so the caller's options aren't changed. A PUT replaces, whether or not the container keeps versions.
         var upload = new ResourceUploadOptions
         {
-            Overwrite = true,
-            CreateOnly = options?.CreateOnly ?? false,
+            Mode = ResourceWriteMode.Replace,
             Conditions = options?.Conditions,
             Headers = options?.Headers ?? new ResourceHeaders(request.ContentType, request.ContentLength),
             Metadata = options?.Metadata ?? new Dictionary<string, string>(),
@@ -56,13 +55,12 @@ public static class ResourceContainerClientHttpExtensions
         {
             // One strong tag: the write itself compares it with the current version's hash.
             upload.Conditions = new ResourceConditions { IfMatchContentHash = tag.Tag.ToString().Trim('"') };
-            upload.CreateOnly = false;
             existed = true;
         }
         else if (headers is { IfMatch.Count: 0, IfNoneMatch: [{ Tag.Value: "*" }], IfUnmodifiedSince: null })
         {
             upload.Conditions = null;
-            upload.CreateOnly = true;
+            upload.Mode = ResourceWriteMode.Create;
             existed = false;
         }
         else
@@ -76,7 +74,7 @@ public static class ResourceContainerClientHttpExtensions
                 if (Preconditions.Evaluate(request, current) != StatusCodes.Status200OK)
                     return PreconditionFailed(request, current?.ContentHash, $"Resource {resourceName} doesn't meet the request's preconditions.");
                 upload.Conditions = current is null ? null : new ResourceConditions { IfMatchVersionId = current.VersionId };
-                upload.CreateOnly = current is null;
+                upload.Mode = current is null ? ResourceWriteMode.Create : ResourceWriteMode.Replace;
             }
         }
 
@@ -89,10 +87,11 @@ public static class ResourceContainerClientHttpExtensions
         {
             return PreconditionFailed(request, exception.CurrentContentHash, exception.Message);
         }
-        catch (ResourceConflictException exception) when (hasPreconditions && upload.CreateOnly)
+        catch (ResourceConflictException) when (hasPreconditions && upload.Mode == ResourceWriteMode.Create)
         {
-            // The name was created after it was checked: If-None-Match no longer holds.
-            return PreconditionFailed(request, null, exception.Message);
+            // The name exists, or was created after it was checked: If-None-Match doesn't hold. The exception's message
+            // says to set Mode, which an HTTP client can't do, so the client gets a message of its own.
+            return PreconditionFailed(request, null, $"Resource {resourceName} already exists.");
         }
 
         if (hasPreconditions) Preconditions.Record(request.HttpContext, "met");

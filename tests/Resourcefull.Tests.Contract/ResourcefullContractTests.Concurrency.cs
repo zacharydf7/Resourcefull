@@ -17,7 +17,7 @@ public abstract partial class ResourcefullContractTests
 
         // Act
         Exception?[] outcomes = await RaceAsync(provider, _ =>
-            container.UploadAsync("report.txt", BinaryData.FromString("x"), new ResourceUploadOptions { CreateOnly = true }));
+            container.UploadAsync("report.txt", BinaryData.FromString("x"), new ResourceUploadOptions { Mode = ResourceWriteMode.Create }));
 
         // Assert
         Assert.Single(outcomes, o => o is null);
@@ -26,7 +26,7 @@ public abstract partial class ResourcefullContractTests
     }
 
     [SkippableFact]
-    public async Task UploadAsync_ShouldLetExactlyOneSucceed_WhenConcurrentUploadsWithoutOverwriteTargetOneNameWithoutVersioning()
+    public async Task UploadAsync_ShouldLetExactlyOneSucceed_WhenConcurrentUploadsWithNoModeTargetOneName()
     {
         // Arrange
         using ServiceProvider provider = BuildServiceProvider();
@@ -42,7 +42,7 @@ public abstract partial class ResourcefullContractTests
     }
 
     [SkippableFact]
-    public async Task UploadAsync_ShouldLeaveOneVersion_WhenConcurrentOverwritingUploadsTargetOneNameWithoutVersioning()
+    public async Task UploadAsync_ShouldLeaveOneVersion_WhenConcurrentReplacingUploadsTargetOneNameWithoutVersioning()
     {
         // Arrange
         using ServiceProvider provider = BuildServiceProvider();
@@ -50,7 +50,7 @@ public abstract partial class ResourcefullContractTests
 
         // Act
         Exception?[] outcomes = await RaceAsync(provider, i =>
-            container.UploadAsync("report.txt", BinaryData.FromString($"v{i}"), new ResourceUploadOptions { Overwrite = true }));
+            container.UploadAsync("report.txt", BinaryData.FromString($"v{i}"), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace }));
 
         // Assert
         Assert.All(outcomes, Assert.Null);
@@ -66,7 +66,7 @@ public abstract partial class ResourcefullContractTests
         IResourceContainerClient container = await NewContainerAsync(provider);
 
         // Act
-        Exception?[] outcomes = await RaceAsync(provider, i => container.UploadAsync("report.txt", BinaryData.FromString($"v{i}")));
+        Exception?[] outcomes = await RaceAsync(provider, i => container.UploadAsync("report.txt", BinaryData.FromString($"v{i}"), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace }));
 
         // Assert
         Assert.All(outcomes, Assert.Null);
@@ -84,7 +84,7 @@ public abstract partial class ResourcefullContractTests
         IResourceContainerClient container = await NewContainerAsync(provider);
 
         // Act
-        Exception?[] outcomes = await RaceAsync(provider, i => container.UploadAsync("report.txt", BinaryData.FromString($"v{i}")));
+        Exception?[] outcomes = await RaceAsync(provider, i => container.UploadAsync("report.txt", BinaryData.FromString($"v{i}"), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace }));
 
         // Assert
         Assert.All(outcomes, Assert.Null);

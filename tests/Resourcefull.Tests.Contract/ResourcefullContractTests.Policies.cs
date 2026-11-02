@@ -15,7 +15,7 @@ public abstract partial class ResourcefullContractTests
     }
 
     private static ResourceUploadOptions Typed(string contentType, long? length = null) =>
-        new() { Headers = new ResourceHeaders(contentType, length) };
+        new() { Mode = ResourceWriteMode.Replace, Headers = new ResourceHeaders(contentType, length) };
 
     /// <summary>Content that throws if it's read, for a write that must be refused before its content is.</summary>
     private sealed class UnreadableStream : MemoryStream
@@ -121,7 +121,7 @@ public abstract partial class ResourcefullContractTests
             .UseContainerPolicies(new ResourceContainerPolicy { MaxContainerSize = 100 }));
         IResourceContainerClient container = await NewContainerAsync(provider);
         await container.UploadAsync("a", new MemoryStream(new byte[30]));
-        await container.UploadAsync("a", new MemoryStream(new byte[30]));
+        await container.UploadAsync("a", new MemoryStream(new byte[30]), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace });
 
         // Act
         Exception? declared = await Record.ExceptionAsync(() => container.UploadAsync("b", new UnreadableStream(),
@@ -150,7 +150,7 @@ public abstract partial class ResourcefullContractTests
 
         // Act
         Exception? third = await Record.ExceptionAsync(() => container.UploadAsync("c", BinaryData.FromString("1")));
-        await container.UploadAsync("a", BinaryData.FromString("2"));
+        await container.UploadAsync("a", BinaryData.FromString("2"), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace });
 
         // Assert
         var violation = Assert.IsType<ResourcePolicyViolationException>(third);
@@ -168,7 +168,7 @@ public abstract partial class ResourcefullContractTests
         string name = NewContainerName();
         IResourceContainerClient container = await ServiceOf(provider).CreateResourceContainerAsync(name);
         ResourceInfo large = await container.UploadAsync("a", new MemoryStream(new byte[100]));
-        await container.UploadAsync("a", new MemoryStream(new byte[10]));
+        await container.UploadAsync("a", new MemoryStream(new byte[10]), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace });
         TestPolicyProvider.Policies[name] = new ResourceContainerPolicy { MaxResourceSize = 50 };
 
         // Act
@@ -233,7 +233,7 @@ public abstract partial class ResourcefullContractTests
         using ServiceProvider provider = BuildServiceProvider(o => o.UseVersioning());
         IResourceContainerClient container = await NewContainerAsync(provider);
         await container.UploadAsync("a", new MemoryStream(new byte[100_000]));
-        await container.UploadAsync("a", new MemoryStream(new byte[5]));
+        await container.UploadAsync("a", new MemoryStream(new byte[5]), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace });
         await container.UploadAsync("b", new MemoryStream(new byte[7]));
 
         // Act

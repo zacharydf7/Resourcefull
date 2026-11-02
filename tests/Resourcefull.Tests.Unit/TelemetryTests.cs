@@ -240,6 +240,26 @@ public sealed class TelemetryTests : IDisposable
         Assert.Equal(5, _measurements.Where(m => m.Instrument == "resourcefull.client.downloaded").Sum(m => m.Value));
     }
 
+    [Theory]
+    [InlineData(ResourceWriteMode.Create, "create")]
+    [InlineData(ResourceWriteMode.Replace, "replace")]
+    public async Task UploadAndCopy_ShouldTagTheWriteMode_WhenGivenAMode(ResourceWriteMode mode, string tag)
+    {
+        // Arrange
+        using ServiceProvider provider = NewServices();
+        IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>().CreateResourceContainerAsync("c");
+        await container.UploadAsync("source", BinaryData.FromString("x"));
+        using Activity root = TestSource.StartActivity("test")!;
+
+        // Act
+        await container.UploadAsync("upload", BinaryData.FromString("x"), new ResourceUploadOptions { Mode = mode });
+        await container.CopyResourceAsync("source", "c", "copy", new ResourceCopyOptions { Mode = mode });
+
+        // Assert
+        Assert.Equal(tag, Assert.Single(SpansIn(root), s => s.OperationName == "resourcefull upload").GetTagItem("resourcefull.write_mode"));
+        Assert.Equal(tag, Assert.Single(SpansIn(root), s => s.OperationName == "resourcefull copy").GetTagItem("resourcefull.write_mode"));
+    }
+
     [Fact]
     public async Task DownloadStreamingAsync_ShouldNotTagARange_WhenGivenNone()
     {
@@ -477,10 +497,10 @@ public sealed class TelemetryTests : IDisposable
         using ServiceProvider provider = NewServices();
         IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>().CreateResourceContainerAsync("c");
         await container.UploadAsync("a", BinaryData.FromString("1"));
-        await container.UploadAsync("a", BinaryData.FromString("2"));
-        await container.UploadAsync("a", BinaryData.FromString("3"));
+        await container.UploadAsync("a", BinaryData.FromString("2"), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace });
+        await container.UploadAsync("a", BinaryData.FromString("3"), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace });
         var keepingOne = new ResourceServiceClient(provider.GetRequiredService<ResourceRepository>(),
-            Microsoft.Extensions.Options.Options.Create(new ResourcefullOptions { IsVersioningEnabled = true, MaxVersions = 1 }));
+            Microsoft.Extensions.Options.Options.Create(new ResourcefullOptions { MaxVersions = 1 }));
         using Activity root = TestSource.StartActivity("test")!;
 
         // Act
@@ -506,10 +526,10 @@ public sealed class TelemetryTests : IDisposable
         IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>().CreateResourceContainerAsync("c");
         foreach (string name in new[] { "kept", "refused" })
         {
-            for (int i = 0; i < 3; i++) await container.UploadAsync(name, BinaryData.FromString($"{i}"));
+            for (int i = 0; i < 3; i++) await container.UploadAsync(name, BinaryData.FromString($"{i}"), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace });
         }
         var keepingOne = new ResourceServiceClient(provider.GetRequiredService<ResourceRepository>(),
-            Microsoft.Extensions.Options.Options.Create(new ResourcefullOptions { IsVersioningEnabled = true, MaxVersions = 1 }),
+            Microsoft.Extensions.Options.Options.Create(new ResourcefullOptions { MaxVersions = 1 }),
             cleanupHandler: new RefusingCleanupHandler());
         using Activity root = TestSource.StartActivity("test")!;
 
@@ -544,7 +564,7 @@ public sealed class TelemetryTests : IDisposable
         IResourceServiceClient service = provider.GetRequiredService<IResourceServiceClient>();
         IResourceContainerClient container = await service.CreateResourceContainerAsync("c");
         await container.UploadAsync("a", BinaryData.FromString("1"));
-        await container.UploadAsync("a", BinaryData.FromString("2"));
+        await container.UploadAsync("a", BinaryData.FromString("2"), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace });
         await container.UploadAsync("b", BinaryData.FromString("3"));
         using Activity root = TestSource.StartActivity("test")!;
         var export = new MemoryStream();
@@ -682,7 +702,7 @@ public sealed class TelemetryTests : IDisposable
 
         // Act
         await Assert.ThrowsAsync<ResourceConflictException>(() => container.UploadAsync("payroll-jane-doe.pdf", BinaryData.FromString("y"),
-            new ResourceUploadOptions { CreateOnly = true }));
+            new ResourceUploadOptions { Mode = ResourceWriteMode.Create }));
 
         // Assert
         Activity upload = Assert.Single(SpansIn(root), s => s.OperationName == "resourcefull upload");
@@ -725,7 +745,7 @@ public sealed class TelemetryTests : IDisposable
 
         // Act
         await container.UploadAsync("report.txt", BinaryData.FromString("y"),
-            new ResourceUploadOptions { Conditions = new ResourceConditions { IfMatchVersionId = version.VersionId } });
+            new ResourceUploadOptions { Mode = ResourceWriteMode.Replace, Conditions = new ResourceConditions { IfMatchVersionId = version.VersionId } });
         await container.GetResourcePageAsync(new ResourceListOptions { PageSize = 7 });
 
         // Assert
@@ -753,7 +773,7 @@ public sealed class TelemetryTests : IDisposable
         await container.UploadAsync("a", BinaryData.FromString("x"));
 
         // Act
-        await container.UploadAsync("a", BinaryData.FromString("y"), new ResourceUploadOptions { Overwrite = true });
+        await container.UploadAsync("a", BinaryData.FromString("y"), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace });
 
         // Assert
         Dictionary<string, object?> prune = Assert.Single(MeasurementsOf("resourcefull.client.prune.failures"));
@@ -842,15 +862,19 @@ public sealed class TelemetryTests : IDisposable
             .BuildServiceProvider();
         IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>().CreateResourceContainerAsync("c");
         await container.UploadAsync("a", BinaryData.FromString("x"));
+        _measurements.Clear();
         using Activity root = TestSource.StartActivity("test")!;
 
         // Act
         await container.UploadAsync("b", BinaryData.FromString("x"));
 
         // Assert
-        Activity lookup = Assert.Single(SpansIn(root), s => s.OperationName == "resourcefull get_policy");
-        Assert.Equal(true, lookup.GetTagItem("resourcefull.policy_last_known"));
-        Dictionary<string, object?> use = Assert.Single(MeasurementsOf("resourcefull.client.policy.last_known_uses"));
-        Assert.Equal(("inmemory", "System.InvalidOperationException"), (use["resourcefull.provider"], use["error.type"]));
+        // Uncached, the upload looks the policy up for its checks and again for pruning.
+        Activity[] lookups = [.. SpansIn(root).Where(s => s.OperationName == "resourcefull get_policy")];
+        Assert.Equal(2, lookups.Length);
+        Assert.All(lookups, lookup => Assert.Equal(true, lookup.GetTagItem("resourcefull.policy_last_known")));
+        IReadOnlyList<Dictionary<string, object?>> uses = MeasurementsOf("resourcefull.client.policy.last_known_uses");
+        Assert.Equal(lookups.Length, uses.Count);
+        Assert.All(uses, use => Assert.Equal(("inmemory", "System.InvalidOperationException"), (use["resourcefull.provider"], use["error.type"])));
     }
 }

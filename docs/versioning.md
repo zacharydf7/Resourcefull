@@ -1,13 +1,25 @@
 # Versioning
 
-Without versioning, each name holds one version: an upload with `Overwrite` replaces it. With versioning, every upload
-of a name stores a new **version**, and the older ones stay until there are more than you keep.
+Every upload stores a new **version** of its name. Uploads replace an existing name only when they ask to, with
+`ResourceWriteMode.Replace`; by default, an upload of a name that exists is refused (see
+[Uploading](uploading.md#replacing-a-file)). With versioning, the version an upload replaces stays as an older
+version until the name has more than you keep.
 
 ```csharp
 builder.Services.AddResourcefull(options => options
     .UseSqlServer(connectionString)
     .UseVersioning(maxVersions: 10)); // keeps 100 when you don't say
+
+await container.UploadAsync("contract.docx", file, new ResourceUploadOptions { Mode = ResourceWriteMode.Replace });
 ```
+
+Without versioning, a container keeps one version of each name, so a replacing upload deletes the version it
+replaced. A [container policy](container-policies.md) <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> can give a container a limit of its own with
+`MaxVersions`, such as keeping the history of contracts but not of thumbnails; `UseVersioning` is the default for
+containers whose policy doesn't set one.
+
+<span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> In 3.1, versioning is store-wide: with it, every upload of a name adds a version; without it, an upload
+with `Overwrite` replaces the name's only version.
 
 ## Current and older versions
 
@@ -30,7 +42,7 @@ when a version became current, by the storing server's clock, and is for display
 
 ## Keeping a limited number
 
-After each upload, Resourcefull deletes the oldest versions beyond `maxVersions`, counting the current one. Uploads
+After each upload, Resourcefull deletes the oldest versions beyond the container's limit, counting the current one. Uploads
 don't wait for each other's pruning, but each prune looks at the versions as they stand after its own write, so
 together they never leave more than the limit when every prune succeeds.
 
@@ -52,9 +64,9 @@ With [expiry](expiry.md) turned on <span class="rf-badge rf-upcoming" title="Com
 minutes later, and the expiry sweep deletes it then. A download already reading it can finish, rather than fail
 partway. Until it's deleted, it's listed, readable and counted toward [container policies](container-policies.md)
 like any version, with its `ExpiresAt` showing when it goes. A version that already expires sooner keeps its expiry.
-Without versioning, deleting the current version, or its expiring, deletes the versions it replaced that are still
-waiting too, so replaced content doesn't come back; if deleting them fails, the failure is logged as a failed prune and
-they stay until they expire. With versioning, deleting the current version makes the
+In a container that keeps one version, deleting the current version, or its expiring, deletes the versions it replaced
+that are still waiting too, so replaced content doesn't come back; if deleting them fails, the failure is logged as a
+failed prune and they stay until they expire. In a container that keeps more, deleting the current version makes the
 previous one current, as always, and that can be one waiting to be deleted.
 
 To record the versions that pruning deletes, such as for an audit, register a
@@ -62,15 +74,16 @@ To record the versions that pruning deletes, such as for an audit, register a
 
 ## Changing the setting
 
-Versioning is a setting of each application, not something stored with the files. Every application that writes to
-the same store applies its own setting to the names it uploads:
+The limit is a setting of each application, and of the policies it gives containers, not something stored with the
+files. Every application that writes to the same store applies its own limit to the names it uploads:
 
-- **An application without `UseVersioning` keeps one version per name,** so its next upload of a name deletes every
-  older version of that name.
-- **Lowering `maxVersions`** deletes each name's extra versions the next time that name is uploaded, not straight away.
+- **An application without `UseVersioning` or a policy's `MaxVersions` keeps one version per name,** so its
+  next replacing upload of a name deletes every older version of that name.
+- **Lowering the limit** deletes each name's extra versions the next time that name is uploaded, not straight away;
+  `PruneContainerAsync` applies it to a whole container at once.
 
-So give every application that shares a store, workers and scheduled jobs included, the same `UseVersioning` setting.
-To turn versioning off for good, expect each name's history to go at its next upload; a
+So give every application that shares a store, workers and scheduled jobs included, the same `UseVersioning` setting
+and policies. To turn versioning off for good, expect each name's history to go at its next upload; a
 [cleanup handler](expiry.md#auditing-whats-deleted) <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> hears about every version deleted that way.
 
 ## Restoring
@@ -89,8 +102,10 @@ as [copying](copying-and-moving.md) is: with SQL Server, the content doesn't pas
 transient failure is retried rather than ending the restore. (A version stored before 3.0 is still read through the
 application, and can't be retried once its content has started, until the [hash backfill](providers/sql-server-upgrades.md#recording-hashes-for-older-versions)
 records its hash.) Its `CopiedFrom` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> names the version it restored, so
-a history view can show it. `RestoreVersionAsync` throws
-`ResourceVersioningDisabledException` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>, an `InvalidOperationException`, when versioning is off.
+a history view can show it. A restore works in any container that still has the version <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>. In a
+container that keeps a single version, an older version exists only with expiry on, for the five minutes after it's
+replaced. (In 3.1,
+`RestoreVersionAsync` throws `InvalidOperationException` when versioning is off.)
 
 ## Deleting
 

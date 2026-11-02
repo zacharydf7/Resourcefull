@@ -10,6 +10,18 @@ namespace Resourcefull.Tests.Unit;
 public class ContainerPolicyTests
 {
     [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void ResourceContainerPolicy_ShouldThrowOutOfRange_WhenGivenMaxVersionsBelowOne(int maxVersions)
+    {
+        // Act
+        void act() => _ = new ResourceContainerPolicy { MaxVersions = maxVersions };
+
+        // Assert
+        Assert.Throws<ArgumentOutOfRangeException>(act);
+    }
+
+    [Theory]
     [InlineData("5 GB", 5L << 30)]
     [InlineData("100MB", 100L << 20)]
     [InlineData("1.5 gb", 3L << 29)]
@@ -138,6 +150,12 @@ public class ContainerPolicyTests
             ValueTask.FromResult<ResourceContainerPolicy?>(new ResourceContainerPolicy { ReadOnly = true });
     }
 
+    private sealed class TwoVersionsProvider : IResourcePolicyProvider
+    {
+        public ValueTask<ResourceContainerPolicy?> GetPolicyAsync(string containerName, CancellationToken cancellationToken) =>
+            ValueTask.FromResult<ResourceContainerPolicy?>(new ResourceContainerPolicy { MaxVersions = 2 });
+    }
+
     private sealed class LargerLimitsProvider : IResourcePolicyProvider
     {
         public ValueTask<ResourceContainerPolicy?> GetPolicyAsync(string containerName,
@@ -173,12 +191,40 @@ public class ContainerPolicyTests
         Assert.Null(policy.MaxResourceCount);
     }
 
-    [Fact]
-    public async Task GetPolicyAsync_ShouldGiveNoLimits_WhenContainerPoliciesAreOff()
+    [Theory]
+    [InlineData(null, false, 10)]
+    [InlineData(5, false, 5)]
+    [InlineData(5, true, 2)]
+    public async Task VersionLimit_ShouldComeFromThePolicyThenTheDefaultsThenUseVersioning_WhenContainerPoliciesAreOn(
+        int? defaults, bool provider, int expected)
+    {
+        // Arrange: the store keeps 10 versions of each name.
+        using ServiceProvider services = new ServiceCollection().AddResourcefull(o =>
+        {
+            o.UseInMemory().UseVersioning(10)
+                .UseContainerPolicies(new ResourceContainerPolicy { MaxVersions = defaults }, cacheFor: TimeSpan.Zero);
+            if (provider) o.UsePolicyProvider<TwoVersionsProvider>();
+        }).BuildServiceProvider();
+        IResourceContainerClient container = await services.GetRequiredService<IResourceServiceClient>()
+            .CreateResourceContainerAsync("c");
+
+        // Act
+        for (int i = 0; i < 12; i++)
+            await container.UploadAsync("a", BinaryData.FromString($"{i}"), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace });
+
+        // Assert: the limit reported is the one pruning kept to.
+        Assert.Equal(expected, (await container.GetPolicyAsync()).MaxVersions);
+        Assert.Equal(expected, (await container.GetResourceVersionsAsync("a")).Count);
+    }
+
+    [Theory]
+    [InlineData(null, 1)]
+    [InlineData(10, 10)]
+    public async Task GetPolicyAsync_ShouldGiveOnlyTheVersionLimit_WhenContainerPoliciesAreOff(int? versioning, int maxVersions)
     {
         // Arrange
-        using ServiceProvider provider =
-            new ServiceCollection().AddResourcefull(o => o.UseInMemory()).BuildServiceProvider();
+        using ServiceProvider provider = new ServiceCollection()
+            .AddResourcefull(o => { o.UseInMemory(); if (versioning is { } keep) o.UseVersioning(keep); }).BuildServiceProvider();
         IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>()
             .CreateResourceContainerAsync("c");
 
@@ -186,7 +232,7 @@ public class ContainerPolicyTests
         ResourceContainerPolicy policy = await container.GetPolicyAsync();
 
         // Assert
-        Assert.Equivalent(new ResourceContainerPolicy(), policy);
+        Assert.Equivalent(new ResourceContainerPolicy { MaxVersions = maxVersions }, policy);
     }
 
     private sealed class ReadOnlyDestination : IResourcePolicyProvider
@@ -264,7 +310,7 @@ public class ContainerPolicyTests
 
     /// <summary>A versioned client of container <c>c</c> whose policies come from <paramref name="settings"/>.</summary>
     private static ResourceContainerClient NewMovingClient(ResourceRepository repository, ContainerPolicySettings settings) =>
-        new(repository, null, new ResourcefullOptions { IsVersioningEnabled = true }, new ResourceContainerInfo { Name = "c" }, null,
+        new(repository, null, new ResourcefullOptions { MaxVersions = 100 }, new ResourceContainerInfo { Name = "c" }, null,
             new ContainerPolicies(settings, repository));
 
     [Fact]

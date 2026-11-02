@@ -46,7 +46,7 @@ public class ResourcefullException : Exception
 
 /// <summary>
 /// Thrown when an operation would conflict with an existing resource or container — for example
-/// uploading a resource whose name already exists when overwrite is not enabled, or creating a
+/// uploading with <see cref="ResourceWriteMode.Create"/> to a name that already exists, or creating a
 /// container that already exists. Maps naturally to an HTTP 409.
 /// </summary>
 public sealed class ResourceConflictException : ResourcefullException
@@ -89,19 +89,6 @@ public sealed class ResourceNameException : ArgumentException
     /// <para>Coming in 4.0.</para>
     /// </summary>
     public string? Name { get; }
-}
-
-/// <summary>
-/// Thrown when an operation needs versioning and it's off, such as restoring a version. It's a mistake in the
-/// application, which shouldn't offer the operation without versioning. It derives from
-/// <see cref="InvalidOperationException"/>, so code that catches that still catches it.
-/// <para>Coming in 4.0.</para>
-/// </summary>
-public sealed class ResourceVersioningDisabledException : InvalidOperationException
-{
-    /// <summary>Creates the exception with a message.</summary>
-    /// <param name="message">The message that describes the error.</param>
-    public ResourceVersioningDisabledException(string message) : base(message) { }
 }
 
 /// <summary>

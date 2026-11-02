@@ -57,7 +57,7 @@ public class ResourceWorkflowIntegrationTests(SqlServerFixture fixture)
         var containerName = $"c-{Guid.NewGuid():N}";
         var container = await service.CreateResourceContainerAsync(containerName);
         await container.UploadAsync("report.txt", BinaryData.FromString("v1"));
-        await container.UploadAsync("report.txt", BinaryData.FromString("v2"));
+        await container.UploadAsync("report.txt", BinaryData.FromString("v2"), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace });
         ResourceInfo older = (await container.GetResourceVersionsAsync("report.txt"))[1];
 
         // Act

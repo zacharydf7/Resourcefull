@@ -44,7 +44,7 @@ public class ResourcefullServiceCollectionExtensionsTests
                 "ContainerPolicies": {
                   "Defaults": {
                     "MaxResourceSize": "100 MB", "MaxContainerSize": "5 GB", "MaxResourceCount": 1000,
-                    "AllowedContentTypes": [ "application/pdf", "image/png" ], "ReadOnly": false
+                    "AllowedContentTypes": [ "application/pdf", "image/png" ], "ReadOnly": false, "MaxVersions": 5
                   },
                   "CacheFor": "00:00:10",
                   "KeepLastKnownFor": "00:01:00"
@@ -55,8 +55,7 @@ public class ResourcefullServiceCollectionExtensionsTests
 
         // Assert
         ResourcefullOptions options = provider.GetRequiredService<IOptions<ResourcefullOptions>>().Value;
-        Assert.Equal((true, 10, true),
-            (options.IsVersioningEnabled, options.MaxVersions, options.Telemetry.RecordResourceNames));
+        Assert.Equal((10, true), (options.MaxVersions, options.Telemetry.RecordResourceNames));
         Assert.Equal(TimeSpan.FromSeconds(30), provider.GetRequiredService<ExpirySettings>().Interval);
         var policies = provider.GetRequiredService<ContainerPolicySettings>();
         Assert.Equal((TimeSpan.FromSeconds(10), TimeSpan.FromMinutes(1)),
@@ -64,7 +63,7 @@ public class ResourcefullServiceCollectionExtensionsTests
         Assert.Equivalent(new ResourceContainerPolicy
         {
             MaxResourceSize = ResourceSize.Megabytes(100), MaxContainerSize = ResourceSize.Gigabytes(5),
-            MaxResourceCount = 1000, AllowedContentTypes = ["application/pdf", "image/png"], ReadOnly = false
+            MaxResourceCount = 1000, AllowedContentTypes = ["application/pdf", "image/png"], ReadOnly = false, MaxVersions = 5
         }, policies.Defaults);
     }
 
@@ -77,7 +76,7 @@ public class ResourcefullServiceCollectionExtensionsTests
 
         // Assert
         ResourcefullOptions options = provider.GetRequiredService<IOptions<ResourcefullOptions>>().Value;
-        Assert.Equal((true, 100), (options.IsVersioningEnabled, options.MaxVersions));
+        Assert.Equal(100, options.MaxVersions);
         Assert.Equal(TimeSpan.FromMinutes(1), provider.GetRequiredService<ExpirySettings>().Interval);
         Assert.Equivalent(new ResourceContainerPolicy(),
             provider.GetRequiredService<ContainerPolicySettings>().Defaults);
@@ -104,7 +103,7 @@ public class ResourcefullServiceCollectionExtensionsTests
         using ServiceProvider provider = ConfiguredFrom("""{ "Resourcefull": {} }""");
 
         // Assert
-        Assert.False(provider.GetRequiredService<IOptions<ResourcefullOptions>>().Value.IsVersioningEnabled);
+        Assert.Equal(1, provider.GetRequiredService<IOptions<ResourcefullOptions>>().Value.MaxVersions);
         Assert.Null(provider.GetService<ExpirySettings>());
         Assert.Null(provider.GetService<ContainerPolicySettings>());
     }
@@ -125,6 +124,8 @@ public class ResourcefullServiceCollectionExtensionsTests
     [InlineData("""{ "Expiry": { "Interval": "soon" } }""", "Resourcefull:Expiry:Interval")]
     [InlineData("""{ "Versioning": { "MaxVersions": 0 } }""", "Resourcefull:Versioning aren't valid")]
     [InlineData("""{ "Expiry": { "Interval": "00:00:00" } }""", "Resourcefull:Expiry aren't valid")]
+    [InlineData("""{ "ContainerPolicies": { "Defaults": { "MaxVersions": 0 } } }""",
+        "Resourcefull:ContainerPolicies aren't valid")]
     [InlineData("""{ "ContainerPolicies": { "CacheFor": "-00:00:01" } }""",
         "Resourcefull:ContainerPolicies aren't valid")]
     public void UseConfiguration_ShouldThrowNamingTheSetting_WhenGivenOneItCantUse(string section, string named)
@@ -184,7 +185,7 @@ public class ResourcefullServiceCollectionExtensionsTests
         var client = provider.GetRequiredService<IResourceServiceClient>().GetResourceContainerClient("reports");
 
         // Act
-        await client.UploadAsync("name", new MemoryStream(), new ResourceUploadOptions { Overwrite = true });
+        await client.UploadAsync("name", new MemoryStream(), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace });
 
         // Assert
         logger.Verify(l => l.Log(LogLevel.Warning, It.IsAny<EventId>(), It.IsAny<It.IsAnyType>(), failure,

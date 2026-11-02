@@ -113,9 +113,14 @@
   token passed by position after a version ID needs naming. `UploadAsync`'s `uploadOptions` parameter is now
   `options`. `GetResourcesAsync`, which read a whole container into memory, is removed, and with it the `list` span;
   use `ListResourcesAsync`. See [Upgrading to 4.0](docs/upgrading-to-4.md#one-method-per-operation).
-- **Restoring a version while versioning is off** throws `ResourceVersioningDisabledException`, which derives from
-  `InvalidOperationException`, so code that catches that still catches it. A failed `restore` span's `error.type` is
-  `Resourcefull.ResourceVersioningDisabledException` now, rather than `System.InvalidOperationException`.
+- **Uploads say whether they replace.** `ResourceUploadOptions.Mode` and `ResourceCopyOptions.Mode`, a
+  `ResourceWriteMode`, replace `Overwrite` and `CreateOnly`: `Create`, the default, refuses a name that exists, and
+  `Replace` stores a new current version, whether or not versioning is on. With versioning on, an upload of an
+  existing name is now refused unless it asks to replace. Conditions need `Replace`. `ResourceContainerPolicy` gains
+  `MaxVersions`, so each container can keep its own number of versions; `UseVersioning` sets the default for the
+  rest. `ResourcefullOptions.IsVersioningEnabled` is gone. `RestoreVersionAsync` works with versioning off, as long
+  as the version exists. The `upload` and `copy` spans gain `resourcefull.write_mode`. `UploadFromRequestAsync` still
+  replaces, as a `PUT` does. See [Upgrading to 4.0](docs/upgrading-to-4.md#uploads-say-whether-they-replace).
 - **Providers derive from the `ResourceRepository` base class,** which replaces the `IResourceRepository` interface.
   Its members take a `ResourceLocation` rather than a container name and a resource name, return `IReadOnlyList<T>`
   rather than `List<T>`, and take metadata as `IReadOnlyDictionary<string, string>`. A write is given a

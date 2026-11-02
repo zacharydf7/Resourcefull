@@ -144,12 +144,12 @@ public class StreamingIntegrationTests(SqlServerFixture fixture)
         using ServiceProvider provider = fixture.BuildServiceProvider(o => o.UseVersioning());
         IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>().CreateResourceContainerAsync($"c-{Guid.NewGuid():N}");
         var paused = new GeneratedStream(3L * 1024 * 1024, pauseAfter: 1024 * 1024);
-        Task<ResourceInfo> slowUpload = container.UploadAsync("report.bin", paused);
+        Task<ResourceInfo> slowUpload = container.UploadAsync("report.bin", paused, new ResourceUploadOptions { Mode = ResourceWriteMode.Replace });
         Assert.True(await paused.Paused.WaitAsync(TimeSpan.FromSeconds(30)), "The upload never reached its pause.");
 
         // Act
         IReadOnlyList<ResourceInfo> visibleWhilePaused = await container.GetResourceVersionsAsync("report.bin");
-        ResourceInfo other = await container.UploadAsync("report.bin", BinaryData.FromString("written meanwhile")).WaitAsync(TimeSpan.FromSeconds(30));
+        ResourceInfo other = await container.UploadAsync("report.bin", BinaryData.FromString("written meanwhile"), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace }).WaitAsync(TimeSpan.FromSeconds(30));
         paused.Release();
         ResourceInfo slow = await slowUpload.WaitAsync(TimeSpan.FromSeconds(30));
 

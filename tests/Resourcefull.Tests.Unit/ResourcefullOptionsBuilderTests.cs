@@ -33,7 +33,6 @@ public class ResourcefullOptionsBuilderTests
 
         // Assert
         ResourcefullOptions options = services.BuildServiceProvider().GetRequiredService<IOptions<ResourcefullOptions>>().Value;
-        Assert.True(options.IsVersioningEnabled);
         Assert.Equal(100, options.MaxVersions);
     }
 
@@ -48,7 +47,6 @@ public class ResourcefullOptionsBuilderTests
 
         // Assert
         ResourcefullOptions options = services.BuildServiceProvider().GetRequiredService<IOptions<ResourcefullOptions>>().Value;
-        Assert.True(options.IsVersioningEnabled);
         Assert.Equal(7, options.MaxVersions);
     }
 

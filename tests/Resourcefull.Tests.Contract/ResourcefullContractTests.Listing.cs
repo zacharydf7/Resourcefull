@@ -13,7 +13,7 @@ public abstract partial class ResourcefullContractTests
         await UploadAllAsync(container, "c", "a");
         var versionsOfB = new List<string>();
         for (int i = 0; i < 3; i++)
-            versionsOfB.Add((await container.UploadAsync("b", BinaryData.FromString($"b{i}"))).VersionId);
+            versionsOfB.Add((await container.UploadAsync("b", BinaryData.FromString($"b{i}"), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace })).VersionId);
         ResourceRepository repository = provider.GetRequiredService<ResourceRepository>();
         string containerName = container.ResourceContainerInfo.Name;
 
@@ -49,7 +49,7 @@ public abstract partial class ResourcefullContractTests
         using ServiceProvider provider = BuildServiceProvider(o => o.UseVersioning());
         IResourceContainerClient container = await NewContainerAsync(provider);
         await UploadAllAsync(container, "e", "b", "g", "a", "d", "c", "f");
-        ResourceInfo current = await container.UploadAsync("d", BinaryData.FromString("newer"));
+        ResourceInfo current = await container.UploadAsync("d", BinaryData.FromString("newer"), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace });
 
         // Act
         var resources = new List<ResourceInfo>();

@@ -96,7 +96,7 @@ public class Invoices(IResourceServiceClient resources)
 
         return await invoices.UploadAsync(fileName, content, new ResourceUploadOptions
         {
-            Overwrite = true,
+            Mode = ResourceWriteMode.Replace,
             Headers = new ResourceHeaders("application/pdf", null)
         }, cancellationToken);
     }
@@ -220,7 +220,7 @@ using (IServiceScope scope = host.Services.CreateScope())
     IResourceContainerClient reports = await resources.CreateResourceContainerIfNotExistsAsync("reports");
 
     await using FileStream file = File.OpenRead("summary.csv");
-    await reports.UploadAsync("summary.csv", file, new ResourceUploadOptions { Overwrite = true });
+    await reports.UploadAsync("summary.csv", file, new ResourceUploadOptions { Mode = ResourceWriteMode.Replace });
 }
 ```
 

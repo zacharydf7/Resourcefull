@@ -9,24 +9,38 @@ Resourcefull checks each file's length and hash as it's stored.
 ```csharp
 ResourceInfo stored = await container.UploadAsync("report.pdf", stream, new ResourceUploadOptions
 {
-    Overwrite = true,
+    Mode = ResourceWriteMode.Replace,
     Headers = new ResourceHeaders("application/pdf", ContentLength: null),
     Metadata = new Dictionary<string, string> { ["author"] = "finance" }
 });
 ```
 
 - **The stream is read from its current position to its end**, like `Stream.CopyTo`. Rewind a stream you've just
-  written (`stream.Position = 0`) before uploading it, or the upload stores an empty version, which with `Overwrite`
+  written (`stream.Position = 0`) before uploading it, or the upload stores an empty version, which with `Replace`
   replaces the existing content. Resourcefull doesn't dispose the stream.
 - **What's returned is what was stored:** the new version's `VersionId`, the `ContentLength` measured from the bytes
   read, the `ContentHash`, `LastModified` (when the version became current) and `IsLatest = true`.
-- **Overwriting.** Without versioning, a name holds one version: an upload to an existing name throws
-  `ResourceConflictException` unless `Overwrite` is set. With versioning, every upload adds a version, and
-  `Overwrite` is ignored. Set `CreateOnly` to store the upload only if the name doesn't exist yet, with or without
-  versioning.
+- **A name that exists is refused** unless the upload asks to replace it; see [Replacing a file](#replacing-a-file).
 - **Content type and metadata** are stored as given and returned on every read. Resourcefull doesn't check the type
   against the content, but an [upload inspector](upload-inspection.md) <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> can, and can scan the file for
   malware before it's stored.
+
+## Replacing a file
+
+`ResourceUploadOptions.Mode` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> says what an upload does when its name already has a current version:
+
+- **`ResourceWriteMode.Create`, the default,** stores the upload only if the name doesn't exist yet, and otherwise
+  throws `ResourceConflictException` and stores nothing. The check is part of the write, so of several uploads of a
+  new name at once, exactly one succeeds.
+- **`ResourceWriteMode.Replace`** stores the upload as the name's new current version, whether or not the name
+  exists. What happens to the version it replaced depends on the container's [version limit](versioning.md): with
+  one, the default, it's deleted, and with more it's kept as an older version.
+
+[Conditions](concurrency.md#updating-only-if-unchanged) replace a version only if it's still the one you read, so
+they go with `Replace`; with `Create`, an upload that sets them throws `ArgumentException`.
+
+<span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> In 3.1, `Overwrite` and `CreateOnly` do this instead: without versioning, an upload to an existing name
+is refused unless `Overwrite` is set; with versioning, every upload adds a version unless `CreateOnly` is set.
 
 ## Changing metadata and content type
 

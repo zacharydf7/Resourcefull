@@ -47,17 +47,16 @@ public interface IResourceContainerClient
     /// </returns>
     /// <exception cref="ArgumentException">
     /// <paramref name="resourceName"/> is null, empty, longer than 256 characters, or starts or ends with whitespace
-    /// (<see cref="ArgumentNullException"/> when null); or <see cref="ResourceUploadOptions.CreateOnly"/> and
-    /// <see cref="ResourceUploadOptions.Conditions"/> are both set.
+    /// (<see cref="ArgumentNullException"/> when null); or <see cref="ResourceUploadOptions.Conditions"/> are set without
+    /// <see cref="ResourceWriteMode.Replace"/>.
     /// </exception>
     /// <exception cref="ArgumentNullException"><paramref name="content"/> is null.</exception>
     /// <exception cref="ResourceContentLengthMismatchException">
     /// <see cref="ResourceUploadOptions.Headers"/> declares a content length that differs from the content; nothing was stored.
     /// </exception>
     /// <exception cref="ResourceConflictException">
-    /// A resource with the same name already exists and the upload is create-only: either
-    /// <see cref="ResourceUploadOptions.CreateOnly"/> is set, or versioning is disabled and
-    /// <see cref="ResourceUploadOptions.Overwrite"/> is <see langword="false"/>.
+    /// A resource with the same name already exists and <see cref="ResourceUploadOptions.Mode"/> is
+    /// <see cref="ResourceWriteMode.Create"/>, the default.
     /// </exception>
     /// <exception cref="ResourcePreconditionFailedException">
     /// The name's current version doesn't meet <see cref="ResourceUploadOptions.Conditions"/>; nothing was stored.
@@ -82,13 +81,14 @@ public interface IResourceContainerClient
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Restores a previous version of a resource by creating a new current version from it.
+    /// Restores a previous version of a resource by creating a new current version from it, as long as that version still
+    /// exists. In a container that keeps one version, a replaced version exists only with expiry on, for the five minutes
+    /// after it's replaced.
     /// </summary>
     /// <param name="resourceName">The name of the resource to restore.</param>
     /// <param name="versionId">The version ID to restore.</param>
     /// <param name="cancellationToken">Cancels the restore. A canceled restore creates no version.</param>
     /// <returns>The <see cref="ResourceInfo"/> for the newly created version, or <see langword="null"/> if the resource or version does not exist.</returns>
-    /// <exception cref="ResourceVersioningDisabledException">Versioning is not enabled.</exception>
     /// <exception cref="ArgumentException"><paramref name="resourceName"/> is null, empty, longer than 256 characters, or starts or ends with whitespace (<see cref="ArgumentNullException"/> when null); or <paramref name="versionId"/> is null or empty.</exception>
     /// <exception cref="ResourcePolicyViolationException">The container's policy refuses the restored version; nothing was stored.</exception>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
@@ -266,16 +266,15 @@ public interface IResourceContainerClient
     /// <param name="cancellationToken">Cancels the copy; a canceled copy stores nothing.</param>
     /// <returns>The new version, or <see langword="null"/> if the resource or version doesn't exist.</returns>
     /// <exception cref="ResourceConflictException">
-    /// The destination name exists and the copy is create-only: either <see cref="ResourceCopyOptions.CreateOnly"/> is
-    /// set, or versioning is off and <see cref="ResourceCopyOptions.Overwrite"/> isn't set.
+    /// The destination name exists and <see cref="ResourceCopyOptions.Mode"/> is <see cref="ResourceWriteMode.Create"/>,
+    /// the default.
     /// </exception>
     /// <exception cref="ResourceContainerNotFoundException">The destination container doesn't exist.</exception>
     /// <exception cref="ResourcePreconditionFailedException">The destination's current version doesn't meet <see cref="ResourceCopyOptions.DestinationConditions"/>.</exception>
     /// <exception cref="ResourcePolicyViolationException">The destination container's policy refuses the copy.</exception>
     /// <exception cref="ArgumentException">
     /// A name breaks the name rules (<see cref="ResourceNameException"/>), or is null (<see cref="ArgumentNullException"/>);
-    /// or <see cref="ResourceCopyOptions.CreateOnly"/> and <see cref="ResourceCopyOptions.DestinationConditions"/> are
-    /// both set.
+    /// or <see cref="ResourceCopyOptions.DestinationConditions"/> are set without <see cref="ResourceWriteMode.Replace"/>.
     /// </exception>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
     /// <exception cref="NotSupportedException">
@@ -423,12 +422,14 @@ public interface IResourceContainerClient
     /// <summary>
     /// Gets the policy this container's writes are checked against: the defaults from
     /// <see cref="ResourcefullOptionsBuilder.UseContainerPolicies"/>, with what the policy provider gives for this
-    /// container in place of each limit it sets. With <see cref="GetUsageAsync"/>, use it to show a user their limits,
+    /// container in place of each limit it sets. Its <see cref="ResourceContainerPolicy.MaxVersions"/> is always the limit
+    /// in force: the policy's, then the defaults', then <see cref="ResourcefullOptionsBuilder.UseVersioning"/>'s, then 1.
+    /// With <see cref="GetUsageAsync"/>, use it to show a user their limits,
     /// such as "4.2 GB of 5 GB". It's cached, and stands in for the provider while it fails, as for writes.
     /// <para>Coming in 4.0.</para>
     /// </summary>
     /// <param name="cancellationToken">Cancels the lookup.</param>
-    /// <returns>The container's policy; one with no limits without container policies.</returns>
+    /// <returns>The container's policy; without container policies, one that sets only the version limit.</returns>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
     /// <exception cref="NotSupportedException">
     /// This default implementation doesn't report the policy.

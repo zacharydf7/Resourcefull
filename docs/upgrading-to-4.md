@@ -8,6 +8,38 @@ For upgrades within a major version, and for rolling an upgrade out, see [Upgrad
 
 ## Upgrading your code
 
+### Uploads say whether they replace
+
+`ResourceUploadOptions.Overwrite` and `CreateOnly`, and the same options on `ResourceCopyOptions`, are replaced by
+`Mode`, a `ResourceWriteMode`. What an upload does no longer depends on whether versioning is on:
+
+- **`Create`, the default,** stores the upload only if the name doesn't exist yet.
+- **`Replace`** stores it as the name's new current version. The container's version limit decides whether the version
+  it replaced is kept.
+
+```csharp
+// Before
+await container.UploadAsync("report.pdf", file, new ResourceUploadOptions { Overwrite = true });
+
+// 4.0
+await container.UploadAsync("report.pdf", file, new ResourceUploadOptions { Mode = ResourceWriteMode.Replace });
+```
+
+Check these, even where your code compiles:
+
+- **With versioning on, an upload of a name that exists is refused** unless it sets `Mode = ResourceWriteMode.Replace`.
+  In 3.x, it added a version. Without versioning, `Overwrite = true` becomes `Replace`, and `CreateOnly = true` is now
+  the default, so you can leave it out.
+- **Conditions need `Replace`.** An upload or copy with `Conditions` or `DestinationConditions` and the default `Create`
+  throws `ArgumentException`.
+- **`ResourcefullOptions.IsVersioningEnabled` is gone.** `MaxVersions` is 1 without versioning, and a
+  [container policy](container-policies.md) can set its own `MaxVersions` for a container.
+- **`RestoreVersionAsync` works with versioning off,** where the version still exists, rather than throwing
+  `InvalidOperationException`.
+- **`UploadFromRequestAsync` replaces, as a `PUT` does,** and ignores `Mode`, so setting `Mode = ResourceWriteMode.Create`
+  there doesn't make it create-only. Where your 3.x code set `CreateOnly` for it, have the client send
+  `If-None-Match: *`, or have the endpoint require that header.
+
 ### One method per operation
 
 Each operation of `IResourceContainerClient` and `IResourceServiceClient` is now one method: its required parameters,

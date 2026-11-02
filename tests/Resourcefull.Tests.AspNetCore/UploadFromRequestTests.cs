@@ -124,8 +124,7 @@ public class UploadFromRequestTests
         Assert.Equal("application/x-report", stored.ContentType);
         Assert.Equal("ops", stored.Metadata["owner"]);
         Assert.Equal(options.ExpiresAt, stored.ExpiresAt);
-        Assert.False(options.Overwrite);
-        Assert.False(options.CreateOnly);
+        Assert.Equal(ResourceWriteMode.Create, options.Mode);
         Assert.Null(options.Conditions);
     }
 
@@ -136,7 +135,7 @@ public class UploadFromRequestTests
         // pinned to create-only; another upload creates the name before the write, which then finds it taken.
         var container = new Mock<IResourceContainerClient>();
         container.Setup(c => c.GetResourceInfoAsync("report.txt", null, It.IsAny<CancellationToken>())).ReturnsAsync((ResourceInfo?)null);
-        container.Setup(c => c.UploadAsync("report.txt", It.IsAny<Stream>(), It.Is<ResourceUploadOptions>(o => o.CreateOnly),
+        container.Setup(c => c.UploadAsync("report.txt", It.IsAny<Stream>(), It.Is<ResourceUploadOptions>(o => o.Mode == ResourceWriteMode.Create),
             It.IsAny<CancellationToken>())).ThrowsAsync(new ResourceConflictException("Resource with name report.txt already exists."));
         var context = new DefaultHttpContext();
         context.Request.Headers.IfNoneMatch = "\"sha256:other\"";

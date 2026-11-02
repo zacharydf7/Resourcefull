@@ -6,23 +6,17 @@
 public class ResourceUploadOptions
 {
     /// <summary>
-    /// Determines whether to overwrite a resource when a resource with the same name exists. Applies only when
-    /// versioning is disabled; with versioning enabled every upload adds a version.
+    /// What the upload does when the name already has a current version: <see cref="ResourceWriteMode.Create"/>, the
+    /// default, refuses it, and <see cref="ResourceWriteMode.Replace"/> stores the upload as the new current version.
+    /// <para>Coming in 4.0.</para>
     /// </summary>
-    public bool Overwrite { get; set; }
-
-    /// <summary>
-    /// Store the upload only if no resource with this name exists yet, whether or not versioning is enabled. The
-    /// check is part of the write, so of several concurrent create-only uploads of one name exactly one succeeds and
-    /// the rest throw <see cref="ResourceConflictException"/>. Takes precedence over <see cref="Overwrite"/>.
-    /// </summary>
-    public bool CreateOnly { get; set; }
+    public ResourceWriteMode Mode { get; set; }
 
     /// <summary>
     /// Store the upload only if the name's current version meets these, decided by the write itself; otherwise
-    /// <see cref="ResourcePreconditionFailedException"/> is thrown and nothing is stored. An upload that meets them
-    /// replaces the current version, as if <see cref="Overwrite"/> were set. Can't be combined with
-    /// <see cref="CreateOnly"/>.
+    /// <see cref="ResourcePreconditionFailedException"/> is thrown and nothing is stored. They need
+    /// <see cref="Mode"/> set to <see cref="ResourceWriteMode.Replace"/>, since a name that meets them has a
+    /// current version.
     /// </summary>
     public ResourceConditions? Conditions { get; set; }
 

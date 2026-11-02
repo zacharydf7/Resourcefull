@@ -74,7 +74,7 @@ public class DeleteLockingIntegrationTests(SqlServerFixture fixture)
         IResourceContainerClient container = await service.CreateResourceContainerAsync(containerName);
         await container.UploadAsync("big", BinaryData.FromString("older"));
         ResourceInfo current = await container.UploadAsync("big", BinaryData.FromString("x"),
-            what == "expire" ? new ResourceUploadOptions { ExpiresAt = DateTimeOffset.UtcNow.AddDays(-1) } : null);
+            new ResourceUploadOptions { Mode = ResourceWriteMode.Replace, ExpiresAt = what == "expire" ? DateTimeOffset.UtcNow.AddDays(-1) : null });
         await InflateAsync(containerName, "big", chunks, bytes);
         long before = await LockEscalationsAsync();
 

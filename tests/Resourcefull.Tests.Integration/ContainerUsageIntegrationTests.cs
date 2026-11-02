@@ -20,7 +20,7 @@ public class ContainerUsageIntegrationTests(SqlServerFixture fixture)
         string containerName = $"c-{Guid.NewGuid():N}";
         IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>().CreateResourceContainerAsync(containerName);
         ResourceInfo legacy = await container.UploadAsync("a", new MemoryStream(new byte[150_000]));
-        await container.UploadAsync("a", new MemoryStream(new byte[10]));
+        await container.UploadAsync("a", new MemoryStream(new byte[10]), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace });
         await using (SqlConnection connection = await fixture.OpenConnectionAsync())
         await using (SqlCommand command = connection.CreateCommand())
         {

@@ -3,7 +3,7 @@ namespace Resourcefull;
 /// <summary>
 /// Hears about every version Resourcefull deletes by itself, before it's deleted: expired versions, which
 /// <see cref="ResourcefullOptionsBuilder.UseExpiry"/> deletes, and older versions pruned past
-/// <see cref="ResourcefullOptions.MaxVersions"/>. Use it to record them in an audit system. The application's own
+/// the container's <see cref="ResourceContainerPolicy.MaxVersions"/>. Use it to record them in an audit system. The application's own
 /// deletes aren't included. Register one with <see cref="ResourcefullOptionsBuilder.UseCleanupHandler{THandler}"/>;
 /// it's a scoped service, so it can depend on the application's own.
 /// <para>Coming in 4.0.</para>
@@ -43,11 +43,11 @@ public enum ResourceCleanupReason
     Expired,
 
     /// <summary>
-    /// The name has more versions than <see cref="ResourcefullOptions.MaxVersions"/> keeps. With
+    /// The name has more versions than its container's <see cref="ResourceContainerPolicy.MaxVersions"/> keeps. With
     /// <see cref="ResourcefullOptionsBuilder.UseExpiry"/> and a provider that supports it, such a version is set to
     /// expire five minutes later instead, and
-    /// is reported as <see cref="Expired"/> when the sweep deletes it, or as <see cref="Pruned"/> if, without versioning,
-    /// it's deleted sooner along with the version that replaced it.
+    /// is reported as <see cref="Expired"/> when the sweep deletes it, or as <see cref="Pruned"/> if, in a container
+    /// that keeps one version, it's deleted sooner along with the version that replaced it.
     /// </summary>
     Pruned
 }

@@ -27,7 +27,7 @@ public class ResourceLinkTests
         await using TestApp app = await TestApp.StartAsync();
         await app.Files.UploadAsync("avatar", BinaryData.FromString("png"), new ResourceUploadOptions { Headers = new ResourceHeaders("image/png", null) });
         string token = await TokenAsync(app, new ResourceLink(TestApp.Container, "avatar") { Inline = true, FollowCurrent = true });
-        await app.Files.UploadAsync("avatar", BinaryData.FromString("<script></script>"), new ResourceUploadOptions { Headers = new ResourceHeaders("text/html", null) });
+        await app.Files.UploadAsync("avatar", BinaryData.FromString("<script></script>"), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace, Headers = new ResourceHeaders("text/html", null) });
 
         // Act
         HttpResponseMessage response = await app.Client.GetAsync("/shared/" + token);
@@ -69,7 +69,7 @@ public class ResourceLinkTests
         await using TestApp app = await StartWithReportAsync();
         string pinned = await TokenAsync(app);
         string following = await TokenAsync(app, new ResourceLink(TestApp.Container, "2026/report.txt") { FollowCurrent = true });
-        await app.Files.UploadAsync("2026/report.txt", BinaryData.FromString("second"));
+        await app.Files.UploadAsync("2026/report.txt", BinaryData.FromString("second"), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace });
 
         // Act
         string viaPinned = await app.Client.GetStringAsync($"/shared/{pinned}");

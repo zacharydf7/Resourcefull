@@ -76,8 +76,7 @@ comment saying you need it helps decide what comes first.
   [storing identical content once](https://github.com/zacharydf7/Resourcefull/issues/58).
 - **Seeing your storage:** a [dashboard page](https://github.com/zacharydf7/Resourcefull/issues/129) for containers,
   usage and limits.
-- **A simpler API, also in 4.0:** [more predictable writes](https://github.com/zacharydf7/Resourcefull/issues/126)
-  and [stricter names](https://github.com/zacharydf7/Resourcefull/issues/128). They break code written for 3.x, so
-  they come in a major release.
+- **Also in 4.0:** [stricter names](https://github.com/zacharydf7/Resourcefull/issues/128). They break code written
+  for 3.x, so they come in a major release.
 
 Something missing? [Open an issue](https://github.com/zacharydf7/Resourcefull/issues/new/choose).

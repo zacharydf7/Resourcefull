@@ -10,8 +10,9 @@ two throws `Provider has already been configured.`
 
 ## `ResourceConflictException` on upload
 
-The name already exists and the upload is create-only: versioning is off and `Overwrite` isn't set, or `CreateOnly`
-is set. Set `Overwrite = true` to replace the resource, or turn on versioning to keep both.
+The name already exists and the upload is create-only, which is the default <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>. Set
+`Mode = ResourceWriteMode.Replace` to replace the resource, and turn on [versioning](versioning.md) to keep the
+version it replaces too. (In 3.1, an upload is create-only when versioning is off and `Overwrite` isn't set, or when `CreateOnly` is set.)
 
 ## `ResourceContainerNotFoundException` on upload
 
@@ -26,7 +27,7 @@ Usually the stream wasn't at the start (rewind it with `stream.Position = 0`), o
 ## An upload stored zero bytes
 
 Uploads read from the stream's current position. A `MemoryStream` you've just written is positioned at its end, so
-rewind it first. Otherwise the upload stores an empty version, which with `Overwrite` replaces the existing content.
+rewind it first. Otherwise the upload stores an empty version, which with `Replace` replaces the existing content.
 
 ## `ArgumentException` for a name that looks fine
 

@@ -61,8 +61,8 @@ gone, as it is if the service deleted it first. A [read-only](container-policies
 To record every version Resourcefull deletes by itself, such as in an audit system, register a cleanup handler. It
 hears about expired versions, and about older versions [pruned](versioning.md#keeping-a-limited-number) past
 `MaxVersions`, before each is deleted. With expiry on, pruning gives a version five minutes before the sweep deletes
-it, so the handler hears about it then, with the reason `Expired`, or with `Pruned` if, without versioning, it's
-deleted sooner along with the version that replaced it:
+it, so the handler hears about it then, with the reason `Expired`, or with `Pruned` if, in a container that keeps one
+version, it's deleted sooner along with the version that replaced it:
 
 ```csharp
 public sealed class AuditCleanup(AuditClient audit) : IResourceCleanupHandler

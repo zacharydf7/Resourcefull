@@ -118,7 +118,7 @@ public abstract partial class ResourcefullContractTests
         using ServiceProvider provider = BuildServiceProvider(o => o.UseVersioning());
         IResourceContainerClient container = await NewContainerAsync(provider);
         ResourceInfo first = await container.UploadAsync("notes.txt", BinaryData.FromString("first version"));
-        await container.UploadAsync("notes.txt", BinaryData.FromString("second version"));
+        await container.UploadAsync("notes.txt", BinaryData.FromString("second version"), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace });
 
         // Act
         ResourceDownloadResult? result = await container.DownloadStreamingAsync("notes.txt", first.VersionId, new ResourceRange(0, 5), CancellationToken.None);

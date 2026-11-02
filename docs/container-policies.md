@@ -3,7 +3,8 @@
 <div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 4.0</span></div>
 
 Container policies limit what can be written to a container: how large a file can be, how much a container can hold,
-how many files it can have, which types of file it accepts, and whether it can change at all. Set defaults for every
+how many files it can have, which types of file it accepts, and whether it can change at all. They also set how many
+versions of each file it keeps. Set defaults for every
 container, and give any container its own policy, such as each user's storage plan, which can change while the
 application runs.
 
@@ -39,11 +40,14 @@ reports those.
 
 - **Sizes count every version.** `MaxContainerSize` includes older versions until they're deleted, including a
   pruned version's five minutes with [expiry](expiry.md) on, so with [versioning](versioning.md) a container's history
-  counts against it. Pruning is never refused. Overwriting a resource needs room for the new content while the old
+  counts against it. Pruning is never refused. Replacing a resource needs room for the new content while the old
   version still counts, even without versioning.
 - **Content types** are compared without their parameters and ignoring case, so `application/pdf` allows
   `Application/PDF; charset=binary`. End a type with `/*` to allow every subtype, such as `image/*`.
 - **Lowering a limit** below what a container holds deletes nothing: it only refuses new writes.
+- **`MaxVersions`** isn't a rule a write can break: it's how many versions of each name this container keeps, in
+  place of the store-wide [`UseVersioning`](versioning.md) setting. Lowering it deletes each
+  name's extra versions at the name's next upload, or at once with `PruneContainerAsync`.
 - **Writes at the same time can go slightly over.** The size and count limits read what the container holds once per
   write, so uploads running at the same moment can together pass `MaxContainerSize` or `MaxResourceCount` by up to
   one upload each. Set `MaxResourceSize` alongside `MaxContainerSize` to bound that: without it, each of those uploads
@@ -146,7 +150,8 @@ string shown = policy.MaxContainerSize is { } max ? $"{usage.StoredSize} of {max
 
 `GetPolicyAsync` gives the policy as a write sees it: your defaults, with each limit the policy provider sets for
 the container in place of the default. It's cached, and stands in for the provider while it fails, as for writes.
-Without container policies, it's a policy with no limits.
+Its `MaxVersions` is always the version limit in force, from the policy, the defaults or `UseVersioning`, or 1 when
+none of them sets one. Without container policies, that's the only limit it sets.
 
 With SQL Server it's one query over the container's version rows, without reading content. The size and count
 limits read it once per write they check, so for containers with very many versions, expect each limited upload to

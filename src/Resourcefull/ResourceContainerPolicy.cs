@@ -40,6 +40,24 @@ public sealed class ResourceContainerPolicy
     public IReadOnlyCollection<string>? AllowedContentTypes { get; init; }
 
     /// <summary>
+    /// How many versions of each name to keep, including the current one. An upload with
+    /// <see cref="ResourceWriteMode.Replace"/> keeps the version it replaces as an older one until the name has more
+    /// than this, and then the oldest are pruned; with 1, the replaced version is deleted. When neither the
+    /// container's policy nor the defaults set it, <see cref="ResourcefullOptionsBuilder.UseVersioning"/> decides, and
+    /// without that, 1. <see cref="IResourceContainerClient.GetPolicyAsync"/> reports the limit in force.
+    /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">It's set to less than 1.</exception>
+    public int? MaxVersions
+    {
+        get => _maxVersions;
+        init => _maxVersions = value < 1
+            ? throw new ArgumentOutOfRangeException(nameof(MaxVersions), value, "Keep at least one version.")
+            : value;
+    }
+
+    private readonly int? _maxVersions;
+
+    /// <summary>
     /// Whether the container refuses every change: uploads, restores, deletes, and deleting the container itself.
     /// Reads still work.
     /// </summary>

@@ -168,7 +168,7 @@ public interface IResourceServiceClient
         => throw new NotSupportedException($"{GetType().Name} doesn't support expiry.");
 
     /// <summary>
-    /// Prunes every resource in the container to <see cref="ResourcefullOptions.MaxVersions"/> (one without versioning),
+    /// Prunes every resource in the container to its <see cref="ResourceContainerPolicy.MaxVersions"/>,
     /// as each upload prunes its own name, telling the <see cref="IResourceCleanupHandler"/> as a prune does. Run it after
     /// an import, which keeps every version it was given, or after a prune failed and its name hasn't been written since.
     /// With <see cref="ResourcefullOptionsBuilder.UseExpiry"/>, the versions past the limit are set to expire five

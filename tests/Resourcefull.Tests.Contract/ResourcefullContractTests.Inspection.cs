@@ -107,7 +107,7 @@ public abstract partial class ResourcefullContractTests
         };
 
         // Act
-        Task act() => container.UploadAsync("report.pdf", new MemoryStream(RandomNumberGenerator.GetBytes(InspectedSize)));
+        Task act() => container.UploadAsync("report.pdf", new MemoryStream(RandomNumberGenerator.GetBytes(InspectedSize)), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace });
 
         // Assert
         var refused = await Assert.ThrowsAsync<ResourceContentRefusedException>(act);
@@ -207,7 +207,7 @@ public abstract partial class ResourcefullContractTests
         using ServiceProvider provider = BuildInspectedServiceProvider();
         IResourceContainerClient container = await NewContainerAsync(provider);
         ResourceInfo first = await container.UploadAsync("report.pdf", BinaryData.FromString("first"));
-        await container.UploadAsync("report.pdf", BinaryData.FromString("second"));
+        await container.UploadAsync("report.pdf", BinaryData.FromString("second"), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace });
         int inspected = 0;
         TestUploadInspector.Answers[container.Name] = (_, _) =>
         {

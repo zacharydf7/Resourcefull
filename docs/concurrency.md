@@ -8,8 +8,9 @@ same guarantees:
   this with a unique index.
 - **Uploads don't wait for each other's content.** Each upload streams its content on its own, and the name is locked
   only for the moment the new version is made current.
-- **Create-only uploads are decided by the write.** Of several concurrent uploads of a new name with `CreateOnly` set
-  (or, without versioning, without `Overwrite`), exactly one succeeds and the rest throw `ResourceConflictException`.
+- **Create-only uploads are decided by the write.** Of several concurrent uploads of a new name with
+  `ResourceWriteMode.Create`, the default <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>, exactly one succeeds and the rest throw
+  `ResourceConflictException`.
   There's no window between a check and the write.
 - **Creating a container is decided by the write too.** Of several concurrent `CreateResourceContainerAsync` calls for
   one name, exactly one succeeds. `CreateResourceContainerIfNotExistsAsync` returns a client to every caller.
@@ -21,8 +22,8 @@ same guarantees:
   name prunes them (see [Versioning](versioning.md#keeping-a-limited-number)).
 - **A download reads the version it resolved.** If another upload makes a newer version current while you read, you
   keep reading the version the `ResourceInfo` describes, as long as that version still exists. An upload can delete
-  it: without versioning, an upload replaces the name's only version, and with versioning, an upload past
-  `maxVersions` prunes the oldest. With SQL Server, a download of a version deleted partway through throws
+  it: without versioning, a replacing upload deletes the name's only version, and with versioning, one past the
+  limit prunes the oldest. With SQL Server, a download of a version deleted partway through throws
   `IOException`, so a client downloading a file that's often replaced should be ready to download it again. Turning on
   [expiry](expiry.md) <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> avoids this: a replaced or pruned version then stays five minutes more, so
   downloads already reading it finish.
@@ -59,9 +60,9 @@ They can read again, reapply their change and retry.
   [backfill](providers/sql-server-upgrades.md#recording-hashes-for-older-versions) records one, and until then they meet no
   hash condition.
 - **Set both** and both must hold.
-- **A name with no current version meets no condition.** For "only if it doesn't exist yet", use `CreateOnly`; it
+- **A name with no current version meets no condition.** For "only if it doesn't exist yet", use `ResourceWriteMode.Create`; it
   can't be combined with conditions.
-- **A conditional upload replaces the version it matched**, even without versioning or `Overwrite`.
+- **A conditional upload replaces the version it matched**, so it needs `ResourceWriteMode.Replace` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>.
 - **Deletes take conditions too**, with
   `DeleteResourceIfExistsAsync(name, versionId, conditions, cancellationToken)`. The conditions apply to the name's
   current version, and a name that doesn't exist throws rather than returning `false`.

@@ -102,7 +102,7 @@ app.MapPost("/api/resources/{containerName}", async (string containerName, IReso
 
     var resourceUploadOptions = new ResourceUploadOptions()
     {
-        Overwrite = overwrite,
+        Mode = overwrite ? ResourceWriteMode.Replace : ResourceWriteMode.Create,
         Headers = new(file.ContentType, file.Length),
         Metadata = metadata
     };
@@ -156,9 +156,6 @@ app.MapPost("/api/resources/{containerName}/restore", async (string containerNam
     {
         return Results.BadRequest("Resource name and versionId cannot be null or empty");
     }
-
-    if (!options.Value.IsVersioningEnabled)
-        return Results.BadRequest("Versioning isn't enabled, so there are no versions to restore.");
 
     if (!await resourceServiceClient.ContainerExistsAsync(containerName))
         return Results.NotFound("Resource Container not found.");

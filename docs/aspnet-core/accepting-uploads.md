@@ -36,8 +36,9 @@ exactly one succeeds (see [Updating only if unchanged](../concurrency.md#updatin
 | `If-Unmodified-Since` | the current version hasn't changed since then |
 
 `If-Match` compares tags strongly, so a weak tag (`W/"…"`) never matches. Pass `ResourceUploadOptions` for metadata,
-other headers to store, or `CreateOnly`; when the request has preconditions, they replace the options' `Conditions`
-and `CreateOnly`.
+other headers to store, or `Conditions`; when the request has preconditions, they replace the options' `Conditions`.
+The options' `Mode` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> is ignored: a `PUT` replaces, unless the client sends `If-None-Match: *`. An endpoint
+that must only create files can require that header, answering 428 Precondition Required without it.
 
 With SQL Server <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>, a transient failure partway through an upload is retried, even though a request body can't
 be read twice: the content goes in about a MiB at a time, and a batch that fails is sent again from what it holds.

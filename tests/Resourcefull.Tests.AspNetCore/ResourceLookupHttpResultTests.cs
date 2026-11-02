@@ -222,7 +222,7 @@ public class ResourceLookupHttpResultTests
         // Arrange
         await using TestApp app = await StartWithDigitsAsync();
         ResourceInfo older = (await app.Files.GetResourceInfoAsync("digits.txt"))!;
-        await app.Files.UploadAsync("digits.txt", BinaryData.FromString("abcdefghij"), new ResourceUploadOptions { Overwrite = true });
+        await app.Files.UploadAsync("digits.txt", BinaryData.FromString("abcdefghij"), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace });
 
         // Act
         HttpResponseMessage response = await app.Client.SendAsync(Get($"/ranged/digits.txt?versionId={Uri.EscapeDataString(older.VersionId)}",

@@ -82,14 +82,14 @@ metrics. It also has:
 
 | Operation | Methods | Extra span tags |
 |---|---|---|
-| `upload` | `UploadAsync`, both overloads | `resourcefull.conditional`; a `resourcefull prune` child span for pruning older versions; with an [upload inspector](upload-inspection.md) <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>, a `resourcefull inspect` child span, with `resourcefull.inspection_outcome`; with SQL Server <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>, `resourcefull.batches`: the batches of about a MiB its content was stored in |
+| `upload` | `UploadAsync`, both overloads | `resourcefull.conditional`; `resourcefull.write_mode` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>: `create` or `replace`; a `resourcefull prune` child span for pruning older versions; with an [upload inspector](upload-inspection.md) <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>, a `resourcefull inspect` child span, with `resourcefull.inspection_outcome`; with SQL Server <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>, `resourcefull.batches`: the batches of about a MiB its content was stored in |
 | `restore` | `RestoreVersionAsync` | a `resourcefull prune` child span; with SQL Server <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>, `resourcefull.batches` when it stores the version's content again, as for a version stored before 3.0 without a hash |
 | `download` | `DownloadStreamingAsync`, `DownloadContentAsync` | for a range, `resourcefull.range`, as HTTP writes it: `100-199`, or `100-` to the end |
 | `get_info` | `GetResourceInfoAsync` | |
 | `exists` | `ExistsAsync` | |
 | `get_usage` | `GetUsageAsync` | |
 | `get_container_policy` | `GetPolicyAsync` | |
-| `copy` | `CopyResourceAsync` | `resourcefull.destination_container`; a `resourcefull prune` child span; with SQL Server <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>, `resourcefull.batches` when it stores the content again, as for a version stored before 3.0 without a hash |
+| `copy` | `CopyResourceAsync` | `resourcefull.destination_container`; `resourcefull.write_mode` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>: `create` or `replace`; a `resourcefull prune` child span; with SQL Server <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>, `resourcefull.batches` when it stores the content again, as for a version stored before 3.0 without a hash |
 | `move` | `MoveResourceAsync`, `RenameResourceAsync` | `resourcefull.destination_container` |
 | `set_expiry` | `SetExpiryAsync` | |
 | `set_metadata` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | `SetResourceMetadataAsync` | |

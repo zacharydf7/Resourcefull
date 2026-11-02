@@ -25,7 +25,6 @@ Resourcefull reports an expected absence with a return value and everything else
 | A write that breaks its container's [policy](container-policies.md) <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | `ResourcePolicyViolationException` (nothing changes) |
 | An upload or imported version your [upload inspector](upload-inspection.md) refuses <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | `ResourceContentRefusedException`, with the inspector's reason (nothing is stored) |
 | An upload inspector that throws <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | the inspector's exception (nothing is stored) |
-| Restoring a version while versioning is off | `ResourceVersioningDisabledException` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>, an `InvalidOperationException` |
 | `UseVersioning` with fewer than one version | `ArgumentOutOfRangeException` |
 | Configuring no provider, or two | `InvalidOperationException` from `AddResourcefull` |
 | A canceled operation | `OperationCanceledException` |
@@ -80,7 +79,7 @@ your application.
 ```csharp
 try
 {
-    await container.UploadAsync(name, content, new ResourceUploadOptions { CreateOnly = true });
+    await container.UploadAsync(name, content);
 }
 catch (ResourceConflictException)
 {

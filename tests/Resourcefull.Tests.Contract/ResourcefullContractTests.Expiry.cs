@@ -29,7 +29,8 @@ public abstract partial class ResourcefullContractTests
         public static List<ResourceCleanup> In(string containerName) => [.. Cleanups.Where(c => c.Resource.ContainerName == containerName)];
     }
 
-    private static ResourceUploadOptions Expiring(DateTimeOffset expiresAt) => new() { ExpiresAt = expiresAt };
+    private static ResourceUploadOptions Expiring(DateTimeOffset expiresAt) =>
+        new() { Mode = ResourceWriteMode.Replace, ExpiresAt = expiresAt };
 
     [SkippableFact]
     public async Task DeleteExpiredVersionsAsync_ShouldDeleteOnlyWhatsStillExpired_WhenGivenABatch()
@@ -156,7 +157,7 @@ public abstract partial class ResourcefullContractTests
         IResourceContainerClient container = await NewContainerAsync(provider);
         string name = container.ResourceContainerInfo.Name;
         ResourceInfo first = await container.UploadAsync("a", BinaryData.FromString("1"), Expiring(Future));
-        await container.UploadAsync("a", BinaryData.FromString("2"));
+        await container.UploadAsync("a", BinaryData.FromString("2"), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace });
 
         // Act
         ResourceInfo? plainCopy = await container.CopyResourceAsync("a", name, "copy", new ResourceCopyOptions { VersionId = first.VersionId });
@@ -182,7 +183,7 @@ public abstract partial class ResourcefullContractTests
         ResourceInfo pruned = await container.UploadAsync("notes.txt", BinaryData.FromString("1"));
 
         // Act
-        await container.UploadAsync("notes.txt", BinaryData.FromString("2"));
+        await container.UploadAsync("notes.txt", BinaryData.FromString("2"), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace });
         await ServiceOf(provider).DeleteExpiredAsync();
 
         // Assert
@@ -207,7 +208,7 @@ public abstract partial class ResourcefullContractTests
         DateTimeOffset pruned = clock.Now;
 
         // Act
-        await container.UploadAsync("notes.txt", BinaryData.FromString("2"));
+        await container.UploadAsync("notes.txt", BinaryData.FromString("2"), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace });
         ResourceInfo? kept = await container.GetResourceInfoAsync("notes.txt", first.VersionId);
         bool reportedWhilePruning = RecordingCleanupHandler.In(container.ResourceContainerInfo.Name).Count > 0;
         clock.Now = clock.Now.AddMinutes(6);
@@ -235,21 +236,29 @@ public abstract partial class ResourcefullContractTests
         ResourceInfo first = await container.UploadAsync("notes.txt", BinaryData.FromString("1"), Expiring(clock.Now.AddMinutes(1)));
 
         // Act
-        await container.UploadAsync("notes.txt", BinaryData.FromString("2"));
+        await container.UploadAsync("notes.txt", BinaryData.FromString("2"), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace });
 
         // Assert
         Assert.Equal(clock.Now.AddMinutes(1), (await container.GetResourceInfoAsync("notes.txt", first.VersionId))!.ExpiresAt);
     }
 
-    [SkippableFact]
-    public async Task DeleteResourceIfExistsAsync_ShouldDeleteTheReplacedVersionsToo_WhenTheCurrentVersionIsDeletedWithoutVersioning()
+    [SkippableTheory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task DeleteResourceIfExistsAsync_ShouldDeleteTheReplacedVersionsToo_WhenTheContainerKeepsOneVersion(bool byPolicy)
     {
-        // Arrange: without versioning, the version an overwrite replaced waits out its grace period.
-        using ServiceProvider provider = BuildServiceProvider(o => o.UseExpiry());
-        IResourceContainerClient container = await NewContainerAsync(provider);
+        // Arrange: the container keeps one version, either store-wide or through its own policy while the store keeps
+        // three. The version the second upload replaces waits out its grace period.
+        using ServiceProvider provider = byPolicy
+            ? BuildServiceProvider(o => o.UseExpiry().UseVersioning(3).UseContainerPolicies(cacheFor: TimeSpan.Zero)
+                .UsePolicyProvider<TestPolicyProvider>())
+            : BuildServiceProvider(o => o.UseExpiry());
+        string name = NewContainerName();
+        TestPolicyProvider.Policies[name] = new ResourceContainerPolicy { MaxVersions = 1 };
+        IResourceContainerClient container = await ServiceOf(provider).CreateResourceContainerAsync(name);
         await container.UploadAsync("notes.txt", BinaryData.FromString("replaced"));
         ResourceInfo current = await container.UploadAsync("notes.txt", BinaryData.FromString("current"),
-            new ResourceUploadOptions { Overwrite = true });
+            new ResourceUploadOptions { Mode = ResourceWriteMode.Replace });
 
         // Act
         bool deleted = await container.DeleteResourceIfExistsAsync("notes.txt", current.VersionId);
@@ -273,7 +282,7 @@ public abstract partial class ResourcefullContractTests
         IResourceContainerClient container = await NewContainerAsync(provider);
         await container.UploadAsync("notes.txt", BinaryData.FromString("replaced"));
         await container.UploadAsync("notes.txt", BinaryData.FromString("current"),
-            new ResourceUploadOptions { Overwrite = true, ExpiresAt = clock.Now.AddMinutes(1) });
+            new ResourceUploadOptions { Mode = ResourceWriteMode.Replace, ExpiresAt = clock.Now.AddMinutes(1) });
 
         // Act
         clock.Now = clock.Now.AddMinutes(2);
@@ -297,7 +306,7 @@ public abstract partial class ResourcefullContractTests
         await download.Stream.ReadExactlyAsync(start);
 
         // Act
-        await container.UploadAsync("video.mp4", BinaryData.FromString("replaced"), new ResourceUploadOptions { Overwrite = true });
+        await container.UploadAsync("video.mp4", BinaryData.FromString("replaced"), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace });
         var rest = new MemoryStream();
         await download.Stream.CopyToAsync(rest);
 
@@ -321,7 +330,7 @@ public abstract partial class ResourcefullContractTests
         try
         {
             // Act
-            await container.UploadAsync("notes.txt", BinaryData.FromString("2"));
+            await container.UploadAsync("notes.txt", BinaryData.FromString("2"), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace });
             Exception? sweep = await Record.ExceptionAsync(() => ServiceOf(provider).DeleteExpiredAsync());
 
             // Assert: the upload still succeeded, nothing was deleted unreported, and the other container's version went.

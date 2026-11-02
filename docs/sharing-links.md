@@ -108,8 +108,8 @@ a link to a later draft.
 To share whatever the file holds now and later, set `FollowCurrent = true`. Think of that link as a standing
 permission to read the name until it expires.
 
-**If you overwrite files, use `FollowCurrent`.** Every upload stores a new version, even without versioning turned on.
-Without versioning, uploading a file again replaces its only version, so a link that shows the old version answers
+**If you replace files, use `FollowCurrent`.** Every upload stores a new version, even without versioning turned on.
+Without versioning, replacing a file deletes its only version, so a link that shows the old version answers
 404 from then on. With versioning, the same happens once the old version is pruned past `MaxVersions`. For a file you
 keep updating in place, such as a price list or a dashboard export, create its links with `FollowCurrent = true`, so
 they always show the latest upload.

@@ -5,7 +5,7 @@ namespace Resourcefull.Tests.Contract;
 public abstract partial class ResourcefullContractTests
 {
     private static ResourceUploadOptions IfMatch(string? versionId = null, string? contentHash = null) =>
-        new() { Conditions = new ResourceConditions { IfMatchVersionId = versionId, IfMatchContentHash = contentHash } };
+        new() { Mode = ResourceWriteMode.Replace, Conditions = new ResourceConditions { IfMatchVersionId = versionId, IfMatchContentHash = contentHash } };
 
     [SkippableFact]
     public async Task UploadAsync_ShouldStoreANewCurrentVersion_WhenIfMatchVersionIdIsTheCurrentVersion()
@@ -30,7 +30,7 @@ public abstract partial class ResourcefullContractTests
         using ServiceProvider provider = BuildServiceProvider(o => o.UseVersioning());
         IResourceContainerClient container = await NewContainerAsync(provider);
         ResourceInfo first = await container.UploadAsync("report.txt", BinaryData.FromString("one"));
-        ResourceInfo second = await container.UploadAsync("report.txt", BinaryData.FromString("two"));
+        ResourceInfo second = await container.UploadAsync("report.txt", BinaryData.FromString("two"), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace });
 
         // Act
         Task act() => container.UploadAsync("report.txt", BinaryData.FromString("three"), IfMatch(first.VersionId));
@@ -52,7 +52,7 @@ public abstract partial class ResourcefullContractTests
         ResourceInfo read = await container.UploadAsync("report.txt", BinaryData.FromString("one"));
         ResourceInfo? competitor = null;
         var content = new InterruptedStream("two"u8.ToArray(),
-            async () => competitor = await container.UploadAsync("report.txt", BinaryData.FromString("other")));
+            async () => competitor = await container.UploadAsync("report.txt", BinaryData.FromString("other"), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace }));
 
         // Act
         Task act() => container.UploadAsync("report.txt", content, IfMatch(read.VersionId));
@@ -128,7 +128,7 @@ public abstract partial class ResourcefullContractTests
     }
 
     [SkippableFact]
-    public async Task UploadAsync_ShouldReplaceTheCurrentVersion_WhenItsConditionsHoldWithoutVersioningOrOverwrite()
+    public async Task UploadAsync_ShouldReplaceTheCurrentVersion_WhenItsConditionsHoldWithoutVersioning()
     {
         // Arrange
         using ServiceProvider provider = BuildServiceProvider();
@@ -203,7 +203,7 @@ public abstract partial class ResourcefullContractTests
         using ServiceProvider provider = BuildServiceProvider(o => o.UseVersioning());
         IResourceContainerClient container = await NewContainerAsync(provider);
         ResourceInfo first = await container.UploadAsync("report.txt", BinaryData.FromString("one"));
-        ResourceInfo second = await container.UploadAsync("report.txt", BinaryData.FromString("two"));
+        ResourceInfo second = await container.UploadAsync("report.txt", BinaryData.FromString("two"), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace });
 
         // Act
         Task act() => container.DeleteResourceIfExistsAsync("report.txt", first.VersionId,

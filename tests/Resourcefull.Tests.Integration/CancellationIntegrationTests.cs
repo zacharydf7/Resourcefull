@@ -24,7 +24,7 @@ public class CancellationIntegrationTests(SqlServerFixture fixture)
         var containerName = $"c-{Guid.NewGuid():N}";
         var container = await service.CreateResourceContainerAsync(containerName);
         await container.UploadAsync("doc", new MemoryStream(Encoding.UTF8.GetBytes("v1")));
-        await container.UploadAsync("doc", new MemoryStream(Encoding.UTF8.GetBytes("v2")));
+        await container.UploadAsync("doc", new MemoryStream(Encoding.UTF8.GetBytes("v2")), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace });
         IReadOnlyList<ResourceInfo> versionsBefore = await container.GetResourceVersionsAsync("doc");
         int chunksBefore = await CountChunksAsync(containerName);
         using var cts = new CancellationTokenSource();
@@ -34,7 +34,7 @@ public class CancellationIntegrationTests(SqlServerFixture fixture)
             cts, readsBeforeCancel: Batch + 4);
 
         // Act
-        Task act() => container.UploadAsync("doc", content, null, cts.Token);
+        Task act() => container.UploadAsync("doc", content, new ResourceUploadOptions { Mode = ResourceWriteMode.Replace }, cts.Token);
 
         // Assert
         await Assert.ThrowsAnyAsync<OperationCanceledException>(act);

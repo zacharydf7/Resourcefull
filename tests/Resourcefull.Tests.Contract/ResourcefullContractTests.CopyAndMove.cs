@@ -41,7 +41,7 @@ public abstract partial class ResourcefullContractTests
         using ServiceProvider provider = BuildServiceProvider(o => o.UseVersioning());
         IResourceContainerClient container = await NewContainerAsync(provider);
         ResourceInfo first = await container.UploadAsync("notes.txt", BinaryData.FromString("first"));
-        await container.UploadAsync("notes.txt", BinaryData.FromString("second"));
+        await container.UploadAsync("notes.txt", BinaryData.FromString("second"), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace });
 
         // Act
         ResourceInfo? copy = await container.CopyResourceAsync("notes.txt", container.ResourceContainerInfo.Name, "copy.txt",
@@ -53,7 +53,7 @@ public abstract partial class ResourcefullContractTests
     }
 
     [SkippableFact]
-    public async Task CopyResourceAsync_ShouldRefuseAnExistingNameUnlessOverwriteIsSet_WhenVersioningIsOff()
+    public async Task CopyResourceAsync_ShouldRefuseAnExistingNameUnlessModeIsReplace_WhenVersioningIsOff()
     {
         // Arrange
         using ServiceProvider provider = BuildServiceProvider();
@@ -66,7 +66,7 @@ public abstract partial class ResourcefullContractTests
         Task refused() => container.CopyResourceAsync("a", name, "b");
         await Assert.ThrowsAsync<ResourceConflictException>(refused);
         string before = (await container.DownloadContentAsync("b"))!.Content.ToString();
-        await container.CopyResourceAsync("a", name, "b", new ResourceCopyOptions { Overwrite = true });
+        await container.CopyResourceAsync("a", name, "b", new ResourceCopyOptions { Mode = ResourceWriteMode.Replace });
 
         // Assert
         Assert.Equal("existing", before);
@@ -75,7 +75,7 @@ public abstract partial class ResourcefullContractTests
     }
 
     [SkippableFact]
-    public async Task CopyResourceAsync_ShouldRefuseAnExistingNameButCopyToANewOne_WhenCreateOnlyWithVersioning()
+    public async Task CopyResourceAsync_ShouldRefuseAnExistingNameButCopyToANewOne_WhenGivenCreateWithVersioning()
     {
         // Arrange
         using ServiceProvider provider = BuildServiceProvider(o => o.UseVersioning());
@@ -83,7 +83,7 @@ public abstract partial class ResourcefullContractTests
         await container.UploadAsync("a", BinaryData.FromString("source"));
         await container.UploadAsync("b", BinaryData.FromString("existing"));
         string name = container.ResourceContainerInfo.Name;
-        var createOnly = new ResourceCopyOptions { CreateOnly = true, Overwrite = true };
+        var createOnly = new ResourceCopyOptions { Mode = ResourceWriteMode.Create };
 
         // Act
         Task refused() => container.CopyResourceAsync("a", name, "b", createOnly);
@@ -109,10 +109,10 @@ public abstract partial class ResourcefullContractTests
 
         // Act
         Task stale() => container.CopyResourceAsync("a", name, "b",
-            new ResourceCopyOptions { DestinationConditions = new ResourceConditions { IfMatchVersionId = "not-current" } });
+            new ResourceCopyOptions { Mode = ResourceWriteMode.Replace, DestinationConditions = new ResourceConditions { IfMatchVersionId = "not-current" } });
         await Assert.ThrowsAsync<ResourcePreconditionFailedException>(stale);
         await container.CopyResourceAsync("a", name, "b",
-            new ResourceCopyOptions { DestinationConditions = new ResourceConditions { IfMatchVersionId = current.VersionId } });
+            new ResourceCopyOptions { Mode = ResourceWriteMode.Replace, DestinationConditions = new ResourceConditions { IfMatchVersionId = current.VersionId } });
 
         // Assert
         Assert.Equal("source", (await container.DownloadContentAsync("b"))!.Content.ToString());
@@ -143,7 +143,7 @@ public abstract partial class ResourcefullContractTests
         using ServiceProvider provider = BuildServiceProvider(o => o.UseVersioning());
         IResourceContainerClient container = await NewContainerAsync(provider);
         ResourceInfo first = await container.UploadAsync("notes.txt", BinaryData.FromString("first"));
-        await container.UploadAsync("notes.txt", BinaryData.FromString("second"));
+        await container.UploadAsync("notes.txt", BinaryData.FromString("second"), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace });
 
         // Act
         ResourceInfo? restored = await container.RestoreVersionAsync("notes.txt", first.VersionId);
@@ -163,7 +163,7 @@ public abstract partial class ResourcefullContractTests
         IResourceContainerClient destination = await NewContainerAsync(provider);
         await source.UploadAsync("original", BinaryData.FromString("v1"));
         ResourceInfo first = (await source.CopyResourceAsync("original", source.ResourceContainerInfo.Name, "doc"))!;
-        ResourceInfo second = await source.UploadAsync("doc", BinaryData.FromString("v2"));
+        ResourceInfo second = await source.UploadAsync("doc", BinaryData.FromString("v2"), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace });
 
         // Act
         ResourceInfo? moved = await source.MoveResourceAsync("doc", destination.ResourceContainerInfo.Name, "moved/doc");
@@ -238,7 +238,7 @@ public abstract partial class ResourcefullContractTests
         using ServiceProvider provider = BuildServiceProvider(o => o.UseVersioning());
         IResourceContainerClient container = await NewContainerAsync(provider);
         await container.UploadAsync("draft.txt", BinaryData.FromString("first"));
-        ResourceInfo current = await container.UploadAsync("draft.txt", BinaryData.FromString("second"));
+        ResourceInfo current = await container.UploadAsync("draft.txt", BinaryData.FromString("second"), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace });
 
         // Act
         ResourceInfo? renamed = await container.RenameResourceAsync("draft.txt", "final.txt");
@@ -329,7 +329,7 @@ public abstract partial class ResourcefullContractTests
 
         // Act
         Exception? newName = await Record.ExceptionAsync(() => container.CopyResourceAsync("a", name, "c"));
-        ResourceInfo? newVersion = await container.CopyResourceAsync("a", name, "b");
+        ResourceInfo? newVersion = await container.CopyResourceAsync("a", name, "b", new ResourceCopyOptions { Mode = ResourceWriteMode.Replace });
 
         // Assert
         Assert.Equal(ResourcePolicyRule.MaxResourceCount, Assert.IsType<ResourcePolicyViolationException>(newName).Rule);

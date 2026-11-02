@@ -74,7 +74,7 @@ public abstract partial class ResourcefullContractTests
             Metadata = new Dictionary<string, string> { ["author"] = "ada" },
             ExpiresAt = Future
         });
-        await source.UploadAsync("report.pdf", BinaryData.FromString("second"));
+        await source.UploadAsync("report.pdf", BinaryData.FromString("second"), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace });
         await source.CopyResourceAsync("report.pdf", sourceName, "copy.pdf", new ResourceCopyOptions
         {
             VersionId = (await source.GetResourceVersionsAsync("report.pdf"))[1].VersionId
@@ -109,7 +109,7 @@ public abstract partial class ResourcefullContractTests
         IResourceContainerClient container = await NewContainerAsync(provider);
         string name = container.ResourceContainerInfo.Name;
         await container.UploadAsync("a", BinaryData.FromString("same"));
-        await container.UploadAsync("a", BinaryData.FromString("same"));
+        await container.UploadAsync("a", BinaryData.FromString("same"), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace });
         await container.CopyResourceAsync("a", name, "b");
         await container.UploadAsync("c", BinaryData.FromString("different"));
 
@@ -330,7 +330,7 @@ public abstract partial class ResourcefullContractTests
         IResourceServiceClient service = ServiceOf(provider);
         IResourceContainerClient source = await NewContainerAsync(provider);
         await source.UploadAsync("a", new MemoryStream(new byte[10]));
-        await source.UploadAsync("a", new MemoryStream(new byte[10]));
+        await source.UploadAsync("a", new MemoryStream(new byte[10]), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace });
         await source.UploadAsync("b", new MemoryStream(new byte[10]));
         MemoryStream export = await ExportAsync(service, source.ResourceContainerInfo.Name);
         string restoredName = NewContainerName();

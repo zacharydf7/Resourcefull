@@ -16,14 +16,13 @@ This page shows the order of steps that makes sure only the second can happen, a
 
 ## Name each file once
 
-Give each file a name of its own, such as one built from your row's ID, and upload it with `CreateOnly`, so no other
-upload can replace it:
+Give each file a name of its own, such as one built from your row's ID, and upload it create-only, the default <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>,
+so no other upload can replace it:
 
 ```csharp
 ResourceInfo stored = await invoices.UploadAsync($"{invoice.Id}.pdf", file, new ResourceUploadOptions
 {
-    Headers = new ResourceHeaders("application/pdf", null),
-    CreateOnly = true
+    Headers = new ResourceHeaders("application/pdf", null)
 });
 ```
 
@@ -37,8 +36,7 @@ versioning, the first row's file is gone.
 Store the file first, then save your row:
 
 ```csharp
-ResourceInfo stored = await invoices.UploadAsync($"{invoice.Id}.pdf", file,
-    new ResourceUploadOptions { CreateOnly = true });
+ResourceInfo stored = await invoices.UploadAsync($"{invoice.Id}.pdf", file);
 
 invoice.PdfName = stored.Name;
 invoice.PdfVersionId = stored.VersionId;
@@ -61,8 +59,7 @@ Store the new file under a new name, point the row at it, and only then delete t
 
 ```csharp
 string oldName = invoice.PdfName;
-ResourceInfo stored = await invoices.UploadAsync($"{invoice.Id}-{Guid.NewGuid():N}.pdf", file,
-    new ResourceUploadOptions { CreateOnly = true });
+ResourceInfo stored = await invoices.UploadAsync($"{invoice.Id}-{Guid.NewGuid():N}.pdf", file);
 
 invoice.PdfName = stored.Name;
 invoice.PdfVersionId = stored.VersionId;

@@ -281,7 +281,7 @@ public sealed class PerformanceTests(SqlServerFixture fixture, ITestOutputHelper
         // delete-16MiB.
         IResourceContainerClient container = await NewContainerAsync(versioned: false);
         long length = 16L * Mebibyte;
-        var overwrite = new ResourceUploadOptions { Overwrite = true };
+        var overwrite = new ResourceUploadOptions { Mode = ResourceWriteMode.Replace };
         await container.UploadAsync("r", new GeneratedStream(length));
 
         await MeasureAsync("overwrite-16MiB", length,
@@ -313,7 +313,7 @@ public sealed class PerformanceTests(SqlServerFixture fixture, ITestOutputHelper
         IResourceContainerClient container = await NewContainerAsync();
         long length = 16L * Mebibyte;
         string first = (await container.UploadAsync("r", new GeneratedStream(length))).VersionId;
-        await container.UploadAsync("r", new GeneratedStream(1024));
+        await container.UploadAsync("r", new GeneratedStream(1024), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace });
 
         await MeasureAsync("restore-16MiB", length, run: _ => container.RestoreVersionAsync("r", first));
     }

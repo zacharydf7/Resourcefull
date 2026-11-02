@@ -57,7 +57,7 @@ public class ResourceCopyTests
                 stored = new BinaryReader(content).ReadBytes(10))
             .ReturnsAsync(Written);
         repository.Setup(r => r.GetResourceVersionsAsync(new ResourceLocation("c", "a"), It.IsAny<CancellationToken>())).ReturnsAsync([]);
-        var client = new ResourceContainerClient(repository.Object, null, new ResourcefullOptions { IsVersioningEnabled = true },
+        var client = new ResourceContainerClient(repository.Object, null, new ResourcefullOptions { MaxVersions = 100 },
             new ResourceContainerInfo { Name = "c" }, null);
 
         // Act

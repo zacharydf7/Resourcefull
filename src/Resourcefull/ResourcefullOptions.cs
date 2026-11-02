@@ -7,15 +7,11 @@
 public class ResourcefullOptions
 {
     /// <summary>
-    /// Gets whether versioning is enabled. Set through <see cref="ResourcefullOptionsBuilder.UseVersioning(int?)"/>.
+    /// Gets how many versions of each name to keep, including the current one, in a container whose
+    /// <see cref="ResourceContainerPolicy.MaxVersions"/> isn't set. Set through
+    /// <see cref="ResourcefullOptionsBuilder.UseVersioning(int?)"/>; 1 without it, which keeps only the current version.
     /// </summary>
-    public bool IsVersioningEnabled { get; internal set; }
-
-    /// <summary>
-    /// Gets the maximum number of versions to keep. Set through <see cref="ResourcefullOptionsBuilder.UseVersioning(int?)"/>,
-    /// which guarantees it is greater than zero whenever versioning is enabled.
-    /// </summary>
-    public int MaxVersions { get; internal set; }
+    public int MaxVersions { get; internal set; } = 1;
 
     /// <summary>
     /// Gets what telemetry records. Set through

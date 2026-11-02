@@ -72,9 +72,11 @@ public class ResourcefullOptionsBuilder
     }
 
     /// <summary>
-    /// Turns on versioning: each upload of a name stores a new version and keeps up to <paramref name="maxVersions"/>
-    /// of them, pruning the oldest. Without versioning, a name holds one version, which an upload with
-    /// <see cref="ResourceUploadOptions.Overwrite"/> replaces.
+    /// Turns on versioning: each name keeps up to <paramref name="maxVersions"/> versions, so an upload with
+    /// <see cref="ResourceWriteMode.Replace"/> keeps the version it replaces as an older one, and the oldest past that
+    /// limit are pruned. It's the store-wide default for <see cref="ResourceContainerPolicy.MaxVersions"/>: a container's
+    /// policy, or the defaults given to <see cref="UseContainerPolicies"/>, take precedence. Without versioning, a name
+    /// keeps only its current version.
     /// </summary>
     /// <param name="maxVersions">How many versions of each name to keep, including the current one; 100 when null.</param>
     /// <exception cref="InvalidOperationException"><paramref name="maxVersions"/> is zero or negative.</exception>
@@ -85,11 +87,7 @@ public class ResourcefullOptionsBuilder
             throw new ArgumentOutOfRangeException(nameof(maxVersions), maxVersions, "Keep at least one version.");
         }
 
-        Services.Configure<ResourcefullOptions>(options =>
-        {
-            options.IsVersioningEnabled = true;
-            options.MaxVersions = maxVersions ?? 100;
-        });
+        Services.Configure<ResourcefullOptions>(options => options.MaxVersions = maxVersions ?? 100);
         return this;
     }
 
@@ -163,7 +161,7 @@ public class ResourcefullOptionsBuilder
     /// <paramref name="interval"/> after, so a version is gone within one interval of its
     /// <see cref="ResourceInfo.ExpiresAt"/>. Every instance of the application can run it. With a provider that doesn't
     /// support expiry, it logs a warning and stops. It also changes pruning: a version past
-    /// <see cref="ResourcefullOptions.MaxVersions"/>, or replaced by an overwrite, is set to expire five minutes later
+    /// the container's <see cref="ResourceContainerPolicy.MaxVersions"/> is set to expire five minutes later
     /// instead of being deleted at once, so a download already reading it can finish.
     /// <para>Coming in 4.0.</para>
     /// </summary>
@@ -256,18 +254,20 @@ public class ResourcefullOptionsBuilder
             IConfigurationSection? defaults = Present(policies, "Defaults",
                 nameof(ResourceContainerPolicy.MaxResourceSize), nameof(ResourceContainerPolicy.MaxContainerSize),
                 nameof(ResourceContainerPolicy.MaxResourceCount), nameof(ResourceContainerPolicy.AllowedContentTypes),
-                nameof(ResourceContainerPolicy.ReadOnly));
-            var policy = defaults is null ? null : new ResourceContainerPolicy
+                nameof(ResourceContainerPolicy.ReadOnly), nameof(ResourceContainerPolicy.MaxVersions));
+            int? maxVersions = defaults is null ? null : Read<int>(defaults, nameof(ResourceContainerPolicy.MaxVersions));
+            TimeSpan? cacheFor = Read<TimeSpan>(policies, "CacheFor");
+            TimeSpan? keepLastKnownFor = Read<TimeSpan>(policies, "KeepLastKnownFor");
+            // Built in Apply, so a value the policy refuses, such as MaxVersions of 0, names the section.
+            Apply(policies, () => UseContainerPolicies(defaults is null ? null : new ResourceContainerPolicy
             {
                 MaxResourceSize = Read<ResourceSize>(defaults, nameof(ResourceContainerPolicy.MaxResourceSize)),
                 MaxContainerSize = Read<ResourceSize>(defaults, nameof(ResourceContainerPolicy.MaxContainerSize)),
                 MaxResourceCount = Read<long>(defaults, nameof(ResourceContainerPolicy.MaxResourceCount)),
                 AllowedContentTypes = ReadList(defaults, nameof(ResourceContainerPolicy.AllowedContentTypes)),
-                ReadOnly = Read<bool>(defaults, nameof(ResourceContainerPolicy.ReadOnly))
-            };
-            TimeSpan? cacheFor = Read<TimeSpan>(policies, "CacheFor");
-            TimeSpan? keepLastKnownFor = Read<TimeSpan>(policies, "KeepLastKnownFor");
-            Apply(policies, () => UseContainerPolicies(policy, cacheFor, keepLastKnownFor));
+                ReadOnly = Read<bool>(defaults, nameof(ResourceContainerPolicy.ReadOnly)),
+                MaxVersions = maxVersions
+            }, cacheFor, keepLastKnownFor));
         }
         return this;
     }
