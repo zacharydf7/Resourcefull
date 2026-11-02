@@ -30,6 +30,8 @@
     href: files-and-your-data.md
   - name: Large files
     href: large-files.md
+  - name: Thumbnails and previews
+    href: thumbnails.md
   - name: Cancellation
     href: cancellation.md
 - name: Web apps
