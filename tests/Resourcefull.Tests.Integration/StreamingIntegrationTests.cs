@@ -7,7 +7,7 @@ namespace Resourcefull.Tests.Integration;
 /// Content moves through the SQL Server provider a little at a time: memory stays bounded whatever the size, and a
 /// version is invisible, and holds no lock on its name, until all of it is stored.
 /// </summary>
-[Collection(SqlServerCollection.Name)]
+[Collection(SqlServerAloneCollection.Name)]
 public class StreamingIntegrationTests(SqlServerFixture fixture)
 {
     private const long LargePayload = 64L * 1024 * 1024 + 12_345;

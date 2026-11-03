@@ -159,6 +159,16 @@ public sealed class SqlServerCollection : ICollectionFixture<SqlServerFixture>
     public const string Name = "SqlServer";
 }
 
+/// <summary>
+/// A test database for tests that measure the process's memory. They don't run alongside other tests, since every live
+/// object in the process counts toward what they measure.
+/// </summary>
+[CollectionDefinition(Name, DisableParallelization = true)]
+public sealed class SqlServerAloneCollection : ICollectionFixture<SqlServerFixture>
+{
+    public const string Name = "SqlServer, alone";
+}
+
 /// <summary>A test database whose tables are in a schema of their own rather than <c>dbo</c>.</summary>
 public sealed class SqlServerSchemaFixture : SqlServerFixture
 {
