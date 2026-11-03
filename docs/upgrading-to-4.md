@@ -41,6 +41,25 @@ Check these, even where your code compiles:
   `Mode = ResourceWriteMode.Create` there doesn't make it create-only. Where your 3.x code set `CreateOnly` for it,
   have the client send `If-None-Match: *`, or have the endpoint require that header.
 
+### Consistent names
+
+4.0 renames these so related methods read alike:
+
+| 3.x | 4.0 |
+|---|---|
+| `CreateResourceContainerAsync`, `CreateResourceContainerIfNotExistsAsync` | `CreateContainerAsync`, `CreateContainerIfNotExistsAsync` |
+| `GetResourceContainerInfoAsync`, `GetResourceContainersAsync` | `GetContainerInfoAsync`, `GetContainersAsync` |
+| `DeleteResourceContainerIfExistsAsync`, `GetResourceContainerClient` | `DeleteContainerIfExistsAsync`, `GetContainerClient` |
+| `ResourceContainerInfo`, and `IResourceContainerClient.ResourceContainerInfo` | `ContainerInfo`, and `IResourceContainerClient.Info` |
+| `SetUriProvider` | `UseUriProvider`, like the other `Use…` methods |
+| `ResourceUploadOptions`' settable properties | `init` properties, like the other per-call options types: set them when you create the options |
+| `IResourceRepository`, `ResourceWriteCondition`, `HashingStream` and `WrittenContent` in `Resourcefull` | `ResourceRepository`, `NewResourceVersion`, `ResourceLocation`, `ResourceWriteCondition`, `HashingStream` and `WrittenContent` in `Resourcefull.Providers` |
+
+Some methods already had the shorter names and keep them, such as `ContainerExistsAsync` and `ExportContainerAsync`.
+For a provider of your own, the container members are renamed the same way: `AddContainerAsync`,
+`GetAllContainerInfoAsync`, `GetContainerInfoAsync` and `DeleteContainerAsync`. Add `using Resourcefull.Providers;`
+where you use the provider types. Telemetry's operation names, such as `create_container`, don't change.
+
 ### Names are stricter
 
 Names a write creates can't have control characters, Unicode's bidirectional controls or unpaired surrogates; see
@@ -52,10 +71,10 @@ and an export of them can be imported. `ResourceNames.IsValidContainerName` and 
 `false` for these names, so you can use them to find any already stored:
 
 ```csharp
-foreach (ResourceContainerInfo container in await resources.GetResourceContainersAsync())
+foreach (ContainerInfo container in await resources.GetContainersAsync())
 {
     if (!ResourceNames.IsValidContainerName(container.Name)) Console.WriteLine($"Container: {container.Name}");
-    await foreach (ResourceInfo resource in resources.GetResourceContainerClient(container.Name).ListResourcesAsync())
+    await foreach (ResourceInfo resource in resources.GetContainerClient(container.Name).ListResourcesAsync())
     {
         if (!ResourceNames.IsValidResourceName(resource.Name)) Console.WriteLine($"{container.Name}: {resource.Name}");
     }
@@ -63,7 +82,7 @@ foreach (ResourceContainerInfo container in await resources.GetResourceContainer
 ```
 
 Containers can't be renamed, so for a container whose name breaks the new rules, move its resources to a new container, then
-delete it. `CreateResourceContainerIfNotExistsAsync` still finds such a container, and checks the name only when it
+delete it. `CreateContainerIfNotExistsAsync` still finds such a container, and checks the name only when it
 creates one.
 
 ### One method per operation
@@ -112,14 +131,14 @@ stored anyway.
 ### Container clients aren't disposable
 
 `IResourceContainerClient` no longer implements `IDisposable`. Its `Dispose` did nothing, so remove `using` where you
-call `GetResourceContainerClient`:
+call `GetResourceContainerClient` (`GetContainerClient` in 4.0):
 
 ```csharp
 // Before
 using IResourceContainerClient container = service.GetResourceContainerClient("reports");
 
 // 4.0
-IResourceContainerClient container = service.GetResourceContainerClient("reports");
+IResourceContainerClient container = service.GetContainerClient("reports");
 ```
 
 ### Custom providers
@@ -136,7 +155,7 @@ change the members whose signatures changed:
 | The two `AddResourceAsync` overloads, one taking `bool createOnly` and one taking a `ResourceWriteCondition` | One `AddResourceAsync(NewResourceVersion version, Stream content, ResourceWriteCondition? condition, ...)`; `condition` is `null` for no condition, and `createOnly` is now `condition.CreateOnly` |
 | The two `DeleteResourceAsync` overloads, with and without `ResourceConditions` | One, with `ResourceConditions? conditions`, `null` for no condition |
 | Reads and deletes taking `string resourceContainerName, string resourceName` | A `ResourceLocation` |
-| `AddResourceContainerAsync(ResourceContainerInfo)` | `AddResourceContainerAsync(string resourceContainerName, IReadOnlyDictionary<string, string> metadata, ...)` |
+| `AddResourceContainerAsync(ResourceContainerInfo)` | `AddContainerAsync(string resourceContainerName, IReadOnlyDictionary<string, string> metadata, ...)` |
 | `CopyResourceAsync`'s `ResourceInfo destination` | A `NewResourceVersion` |
 | `ImportVersionAsync(string resourceContainerName, ResourceInfo version, ...)` | `ImportVersionAsync(NewResourceVersion version, ...)` |
 | `GetExpiredAsync`'s `ResourceInfo? after` | `(DateTimeOffset ExpiresAt, string VersionId)? after`: the expiry and version ID of the previous batch's last version |

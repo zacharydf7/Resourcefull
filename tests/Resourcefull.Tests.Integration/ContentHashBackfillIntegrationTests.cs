@@ -23,7 +23,7 @@ public class ContentHashBackfillIntegrationTests(SqlServerFixture fixture)
         (ServiceProvider provider, string connectionString) = await NewDatabaseAsync("Backfill");
         using (provider)
         {
-            IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>().CreateResourceContainerAsync("c");
+            IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>().CreateContainerAsync("c");
             ResourceInfo first = await container.UploadAsync("a", BinaryData.FromString("first"));
             ResourceInfo second = await container.UploadAsync("b", new MemoryStream(new byte[200_000]));
             ResourceInfo third = await container.UploadAsync("c", BinaryData.FromString(""));
@@ -58,7 +58,7 @@ public class ContentHashBackfillIntegrationTests(SqlServerFixture fixture)
         (ServiceProvider provider, string connectionString) = await NewDatabaseAsync("BackfillResume");
         using (provider)
         {
-            IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>().CreateResourceContainerAsync("c");
+            IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>().CreateContainerAsync("c");
             foreach (string name in new[] { "a", "b", "c" })
             {
                 await container.UploadAsync(name, BinaryData.FromString(name));
@@ -97,7 +97,7 @@ public class ContentHashBackfillIntegrationTests(SqlServerFixture fixture)
         (ServiceProvider provider, string connectionString) = await NewDatabaseAsync("BackfillDeleted");
         using (provider)
         {
-            IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>().CreateResourceContainerAsync("c");
+            IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>().CreateContainerAsync("c");
             foreach (string name in new[] { "a", "b", "c" })
             {
                 await container.UploadAsync(name, BinaryData.FromString(name));

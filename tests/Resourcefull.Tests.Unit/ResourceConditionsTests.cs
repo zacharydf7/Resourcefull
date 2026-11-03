@@ -1,4 +1,5 @@
 using Moq;
+using Resourcefull.Providers;
 
 namespace Resourcefull.Tests.Unit;
 
@@ -9,7 +10,7 @@ public class ResourceConditionsTests
     private static readonly WrittenContent Written = new(1, "sha256:written", DateTimeOffset.UnixEpoch);
 
     private static ResourceContainerClient NewClient(ResourceRepository repository, bool versioning = false) =>
-        new(repository, null, new ResourcefullOptions { MaxVersions = versioning ? 100 : 1 }, new ResourceContainerInfo { Name = Container }, null);
+        new(repository, null, new ResourcefullOptions { MaxVersions = versioning ? 100 : 1 }, new ContainerInfo { Name = Container }, null);
 
     private static Mock<ResourceRepository> NewRepository()
     {

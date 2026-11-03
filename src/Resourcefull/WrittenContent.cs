@@ -1,4 +1,4 @@
-namespace Resourcefull;
+namespace Resourcefull.Providers;
 
 /// <summary>
 /// What a repository wrote, as returned by <see cref="ResourceRepository.AddResourceAsync"/>: the length and hash of

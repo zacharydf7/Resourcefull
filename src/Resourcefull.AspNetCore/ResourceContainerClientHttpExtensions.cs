@@ -38,15 +38,9 @@ public static class ResourceContainerClientHttpExtensions
         ArgumentNullException.ThrowIfNull(container);
         ArgumentNullException.ThrowIfNull(request);
 
-        // A copy, so the caller's options aren't changed. A PUT replaces, whether or not the container keeps versions.
-        var upload = new ResourceUploadOptions
-        {
-            Mode = ResourceWriteMode.Replace,
-            Conditions = options?.Conditions,
-            Headers = options?.Headers ?? new ResourceHeaders(request.ContentType, request.ContentLength),
-            Metadata = options?.Metadata ?? new Dictionary<string, string>(),
-            ExpiresAt = options?.ExpiresAt
-        };
+        // A PUT replaces, whether or not the container keeps versions; the request's preconditions can change that.
+        ResourceWriteMode mode = ResourceWriteMode.Replace;
+        ResourceConditions? conditions = options?.Conditions;
         RequestHeaders headers = request.GetTypedHeaders();
         bool hasPreconditions = headers.IfMatch.Count > 0 || headers.IfNoneMatch.Count > 0 || headers.IfUnmodifiedSince is not null;
 
@@ -54,13 +48,13 @@ public static class ResourceContainerClientHttpExtensions
         if (headers is { IfMatch: [{ IsWeak: false } tag], IfNoneMatch.Count: 0, IfUnmodifiedSince: null } && tag.Tag != "*")
         {
             // One strong tag: the write itself compares it with the current version's hash.
-            upload.Conditions = new ResourceConditions { IfMatchContentHash = tag.Tag.ToString().Trim('"') };
+            conditions = new ResourceConditions { IfMatchContentHash = tag.Tag.ToString().Trim('"') };
             existed = true;
         }
         else if (headers is { IfMatch.Count: 0, IfNoneMatch: [{ Tag.Value: "*" }], IfUnmodifiedSince: null })
         {
-            upload.Conditions = null;
-            upload.Mode = ResourceWriteMode.Create;
+            conditions = null;
+            mode = ResourceWriteMode.Create;
             existed = false;
         }
         else
@@ -73,11 +67,20 @@ public static class ResourceContainerClientHttpExtensions
             {
                 if (Preconditions.Evaluate(request, current) != StatusCodes.Status200OK)
                     return PreconditionFailed(request, current?.ContentHash, $"Resource {resourceName} doesn't meet the request's preconditions.");
-                upload.Conditions = current is null ? null : new ResourceConditions { IfMatchVersionId = current.VersionId };
-                upload.Mode = current is null ? ResourceWriteMode.Create : ResourceWriteMode.Replace;
+                conditions = current is null ? null : new ResourceConditions { IfMatchVersionId = current.VersionId };
+                mode = current is null ? ResourceWriteMode.Create : ResourceWriteMode.Replace;
             }
         }
 
+        // A copy, so the caller's options aren't changed.
+        var upload = new ResourceUploadOptions
+        {
+            Mode = mode,
+            Conditions = conditions,
+            Headers = options?.Headers ?? new ResourceHeaders(request.ContentType, request.ContentLength),
+            Metadata = options?.Metadata ?? new Dictionary<string, string>(),
+            ExpiresAt = options?.ExpiresAt
+        };
         ResourceInfo stored;
         try
         {
@@ -87,7 +90,7 @@ public static class ResourceContainerClientHttpExtensions
         {
             return PreconditionFailed(request, exception.CurrentContentHash, exception.Message);
         }
-        catch (ResourceConflictException) when (hasPreconditions && upload.Mode == ResourceWriteMode.Create)
+        catch (ResourceConflictException) when (hasPreconditions && mode == ResourceWriteMode.Create)
         {
             // The name exists, or was created after it was checked: If-None-Match doesn't hold. The exception's message
             // says to set Mode, which an HTTP client can't do, so the client gets a message of its own.

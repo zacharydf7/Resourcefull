@@ -1,5 +1,6 @@
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.DependencyInjection;
+using Resourcefull.Providers;
 using Resourcefull.SqlServer;
 using Resourcefull.SqlServer.Utilities;
 using Resourcefull.Tests.Contract;
@@ -181,7 +182,7 @@ public class StagedUploadIntegrationTests(SqlServerFixture fixture)
         fixture.BuildServiceProvider(o => DelegatingUploadInspector.Register(o, answer));
 
     private static async Task<IResourceContainerClient> NewContainerAsync(ServiceProvider provider) =>
-        await provider.GetRequiredService<IResourceServiceClient>().CreateResourceContainerAsync($"c-{Guid.NewGuid():N}");
+        await provider.GetRequiredService<IResourceServiceClient>().CreateContainerAsync($"c-{Guid.NewGuid():N}");
 
     /// <summary>
     /// Counts every chunk with locking reads that give up after two seconds, so it fails if an upload holds locks on its

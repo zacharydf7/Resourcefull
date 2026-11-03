@@ -39,7 +39,7 @@ public sealed class TelemetryIntegrationTests(SqlServerFixture fixture)
 
         // Act
         await provider.MigrateResourcefullDatabaseAsync();
-        IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>().CreateResourceContainerAsync("c");
+        IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>().CreateContainerAsync("c");
         await container.UploadAsync("r", BinaryData.FromString("x"));
         // Work for the backfill, with counts that differ: two versions without a hash, one with a wrong length.
         ResourceInfo wrong = await container.UploadAsync("s", BinaryData.FromString("y"));

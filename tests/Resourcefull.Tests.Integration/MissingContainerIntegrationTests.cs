@@ -22,8 +22,8 @@ public class MissingContainerIntegrationTests(SqlServerFixture fixture)
         using var scope = provider.CreateScope();
         var service = scope.ServiceProvider.GetRequiredService<IResourceServiceClient>();
         var containerName = $"c-{Guid.NewGuid():N}";
-        var container = await service.CreateResourceContainerAsync(containerName);
-        await service.DeleteResourceContainerIfExistsAsync(containerName);
+        var container = await service.CreateContainerAsync(containerName);
+        await service.DeleteContainerIfExistsAsync(containerName);
 
         // Act
         var exception = await Record.ExceptionAsync(

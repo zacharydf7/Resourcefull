@@ -92,7 +92,7 @@ public class Invoices(IResourceServiceClient resources)
     public async Task<ResourceInfo> SaveAsync(string fileName, Stream content, CancellationToken cancellationToken)
     {
         IResourceContainerClient invoices =
-            await resources.CreateResourceContainerIfNotExistsAsync("invoices", cancellationToken: cancellationToken);
+            await resources.CreateContainerIfNotExistsAsync("invoices", cancellationToken: cancellationToken);
 
         return await invoices.UploadAsync(fileName, content, new ResourceUploadOptions
         {
@@ -102,7 +102,7 @@ public class Invoices(IResourceServiceClient resources)
     }
 
     public async Task<ResourceDownloadResult?> OpenAsync(string fileName, CancellationToken cancellationToken)
-        => await resources.GetResourceContainerClient("invoices").DownloadStreamingAsync(fileName, cancellationToken: cancellationToken);
+        => await resources.GetContainerClient("invoices").DownloadStreamingAsync(fileName, cancellationToken: cancellationToken);
 }
 ```
 
@@ -110,13 +110,13 @@ public class Invoices(IResourceServiceClient resources)
   measured `ContentLength` and a SHA-256 `ContentHash`.
 - `DownloadStreamingAsync` returns `null` when there's no such resource. Otherwise its `Stream` reads the content
   from storage as you read it, so memory use stays flat whatever the file size. Dispose the stream when you're done.
-- `GetResourceContainerClient` doesn't contact storage, so it's cheap to call per request. A container client is a
+- `GetContainerClient` doesn't contact storage, so it's cheap to call per request. A container client is a
   lightweight handle: there's nothing to dispose.
 
 List, inspect and delete with the same client:
 
 ```csharp
-IResourceContainerClient invoices = resources.GetResourceContainerClient("invoices");
+IResourceContainerClient invoices = resources.GetContainerClient("invoices");
 
 await foreach (ResourceInfo invoice in invoices.ListResourcesAsync()) Console.WriteLine(invoice.Name);
 ResourceInfo? info = await invoices.GetResourceInfoAsync("2026-10.pdf");
@@ -168,14 +168,14 @@ await app.Services.MigrateResourcefullDatabaseAsync();
 
 // The container the endpoints store into, created once.
 using (IServiceScope scope = app.Services.CreateScope())
-    await scope.ServiceProvider.GetRequiredService<IResourceServiceClient>().CreateResourceContainerIfNotExistsAsync("files");
+    await scope.ServiceProvider.GetRequiredService<IResourceServiceClient>().CreateContainerIfNotExistsAsync("files");
 
 app.MapPut("/files/{**name}", (string name, HttpRequest request, IResourceServiceClient resources,
     CancellationToken cancellationToken) =>
-    resources.GetResourceContainerClient("files").UploadFromRequestAsync(name, request, null, cancellationToken));
+    resources.GetContainerClient("files").UploadFromRequestAsync(name, request, null, cancellationToken));
 
 app.MapGet("/files/{**name}", (string name, IResourceServiceClient resources) =>
-    Results.Resource(resources.GetResourceContainerClient("files"), name));
+    Results.Resource(resources.GetContainerClient("files"), name));
 
 app.Run();
 ```
@@ -217,7 +217,7 @@ await host.Services.MigrateResourcefullDatabaseAsync();
 using (IServiceScope scope = host.Services.CreateScope())
 {
     var resources = scope.ServiceProvider.GetRequiredService<IResourceServiceClient>();
-    IResourceContainerClient reports = await resources.CreateResourceContainerIfNotExistsAsync("reports");
+    IResourceContainerClient reports = await resources.CreateContainerIfNotExistsAsync("reports");
 
     await using FileStream file = File.OpenRead("summary.csv");
     await reports.UploadAsync("summary.csv", file, new ResourceUploadOptions { Mode = ResourceWriteMode.Replace });

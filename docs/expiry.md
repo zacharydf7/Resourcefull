@@ -47,8 +47,8 @@ await container.UploadAsync("exports/report.zip", stream, new ResourceUploadOpti
 await container.SetExpiryAsync("exports/report.zip", versionId, DateTimeOffset.UtcNow.AddDays(7));
 ```
 
-Only the expiry changes: the content, `LastModified` and ETag stay as they are. It returns `false` when the version is
-gone, as it is if the service deleted it first. A [read-only](container-policies.md) container refuses it.
+A `null` version ID changes the current version's expiry. Only the expiry changes: the content, `LastModified` and ETag
+stay as they are. It returns `false` when the version is gone, as it is if the service deleted it first. A [read-only](container-policies.md) container refuses it.
 
 ## Copies, moves and restores
 

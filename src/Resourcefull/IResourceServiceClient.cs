@@ -14,12 +14,12 @@ public interface IResourceServiceClient
     /// <summary>
     /// Returns a client for a container without contacting the store. The container need not exist
     /// yet; operations report absence at the time they run. Since nothing is read, the client's
-    /// <see cref="IResourceContainerClient.ResourceContainerInfo"/> carries the name and the URI provider's URI but no
-    /// metadata; use <see cref="GetResourceContainerInfoAsync(string, CancellationToken)"/> for the stored metadata.
+    /// <see cref="IResourceContainerClient.Info"/> carries the name and the URI provider's URI but no
+    /// metadata; use <see cref="GetContainerInfoAsync(string, CancellationToken)"/> for the stored metadata.
     /// </summary>
     /// <param name="resourceContainerName">The name of the resource container.</param>
     /// <exception cref="ArgumentException"><paramref name="resourceContainerName"/> is null, empty, longer than 128 characters, or starts or ends with whitespace (<see cref="ArgumentNullException"/> when null).</exception>
-    public IResourceContainerClient GetResourceContainerClient(string resourceContainerName);
+    public IResourceContainerClient GetContainerClient(string resourceContainerName);
 
     /// <summary>
     /// Creates a new resource container.
@@ -31,7 +31,7 @@ public interface IResourceServiceClient
     /// <exception cref="ResourceConflictException">A container with the same name already exists.</exception>
     /// <exception cref="ArgumentException"><paramref name="resourceContainerName"/> is null, empty, longer than 128 characters, or starts or ends with whitespace (<see cref="ArgumentNullException"/> when null).</exception>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
-    public Task<IResourceContainerClient> CreateResourceContainerAsync(string resourceContainerName, IDictionary<string, string>? metadata = null,
+    public Task<IResourceContainerClient> CreateContainerAsync(string resourceContainerName, IDictionary<string, string>? metadata = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -43,7 +43,7 @@ public interface IResourceServiceClient
     /// <returns>A client for the container.</returns>
     /// <exception cref="ArgumentException"><paramref name="resourceContainerName"/> is null, empty, longer than 128 characters, or starts or ends with whitespace (<see cref="ArgumentNullException"/> when null).</exception>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
-    public Task<IResourceContainerClient> CreateResourceContainerIfNotExistsAsync(string resourceContainerName, IDictionary<string, string>? metadata = null,
+    public Task<IResourceContainerClient> CreateContainerIfNotExistsAsync(string resourceContainerName, IDictionary<string, string>? metadata = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -51,10 +51,10 @@ public interface IResourceServiceClient
     /// </summary>
     /// <param name="resourceContainerName">The name of the container.</param>
     /// <param name="cancellationToken">Cancels the lookup.</param>
-    /// <returns>The <see cref="ResourceContainerInfo"/>, or <see langword="null"/> if the container does not exist.</returns>
+    /// <returns>The <see cref="ContainerInfo"/>, or <see langword="null"/> if the container does not exist.</returns>
     /// <exception cref="ArgumentException"><paramref name="resourceContainerName"/> is null, empty, longer than 128 characters, or starts or ends with whitespace (<see cref="ArgumentNullException"/> when null).</exception>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
-    public Task<ResourceContainerInfo?> GetResourceContainerInfoAsync(string resourceContainerName,
+    public Task<ContainerInfo?> GetContainerInfoAsync(string resourceContainerName,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -63,7 +63,7 @@ public interface IResourceServiceClient
     /// <param name="cancellationToken">Cancels the listing.</param>
     /// <returns>A (possibly empty) list of container attributes.</returns>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
-    public Task<IReadOnlyList<ResourceContainerInfo>> GetResourceContainersAsync(CancellationToken cancellationToken = default);
+    public Task<IReadOnlyList<ContainerInfo>> GetContainersAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Checks whether a container exists.
@@ -85,7 +85,7 @@ public interface IResourceServiceClient
     /// <exception cref="ArgumentException"><paramref name="resourceContainerName"/> is null, empty, longer than 128 characters, or starts or ends with whitespace (<see cref="ArgumentNullException"/> when null).</exception>
     /// <exception cref="ResourcePolicyViolationException">The container is read-only; nothing was deleted.</exception>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
-    public Task<bool> DeleteResourceContainerIfExistsAsync(string resourceContainerName,
+    public Task<bool> DeleteContainerIfExistsAsync(string resourceContainerName,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -214,7 +214,7 @@ public interface IResourceServiceClient
     /// The provider doesn't change container metadata, or this is the default implementation, kept so implementations
     /// written for 3.1 still compile.
     /// </exception>
-    public Task<bool> SetResourceContainerMetadataAsync(string resourceContainerName, IDictionary<string, string> metadata,
+    public Task<bool> SetContainerMetadataAsync(string resourceContainerName, IDictionary<string, string> metadata,
         CancellationToken cancellationToken = default)
         => throw new NotSupportedException($"{GetType().Name} doesn't change container metadata.");
 }

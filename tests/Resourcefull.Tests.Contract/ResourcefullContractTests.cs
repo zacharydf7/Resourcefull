@@ -20,5 +20,5 @@ public abstract partial class ResourcefullContractTests
     private static string NewContainerName() => $"c-{Guid.NewGuid():N}";
 
     private static Task<IResourceContainerClient> NewContainerAsync(ServiceProvider provider) =>
-        ServiceOf(provider).CreateResourceContainerAsync(NewContainerName());
+        ServiceOf(provider).CreateContainerAsync(NewContainerName());
 }

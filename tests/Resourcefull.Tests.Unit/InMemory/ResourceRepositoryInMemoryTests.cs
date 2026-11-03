@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using Resourcefull.InMemory;
+using Resourcefull.Providers;
 using Resourcefull.Tests.Contract;
 
 namespace Resourcefull.Tests.Unit.InMemory;
@@ -14,7 +15,7 @@ public class ResourceInMemoryRepositoryTests
         var containerName = "containerName";
         var repository = new ResourceInMemoryRepository();
         var resourceInfo = new NewResourceVersion(new ResourceLocation(containerName, "newResourceName"), Guid.NewGuid().ToString());
-        await repository.AddResourceContainerAsync(containerName, new Dictionary<string, string>());
+        await repository.AddContainerAsync(containerName, new Dictionary<string, string>());
 
         // Act
         await repository.AddResourceAsync(resourceInfo, new MemoryStream());
@@ -44,10 +45,10 @@ public class ResourceInMemoryRepositoryTests
         var containerName = "containerName";
         var repository = new ResourceInMemoryRepository();
         var resourceInfo = new NewResourceVersion(new ResourceLocation(containerName, "newResourceName"), Guid.NewGuid().ToString());
-        await repository.AddResourceContainerAsync(containerName, new Dictionary<string, string>());
+        await repository.AddContainerAsync(containerName, new Dictionary<string, string>());
 
         // Act
-        await repository.DeleteResourceContainerAsync(containerName);
+        await repository.DeleteContainerAsync(containerName);
 
         // Assert
         await Assert.ThrowsAsync<ResourceContainerNotFoundException>(() => 
@@ -61,7 +62,7 @@ public class ResourceInMemoryRepositoryTests
         var containerName = "containerName";
         var repository = new ResourceInMemoryRepository();
         var resourceInfo = new NewResourceVersion(new ResourceLocation(containerName, "existingResourceName"), Guid.NewGuid().ToString());
-        await repository.AddResourceContainerAsync(containerName, new Dictionary<string, string>());
+        await repository.AddContainerAsync(containerName, new Dictionary<string, string>());
         await repository.AddResourceAsync(resourceInfo, new MemoryStream());
 
         // Act
@@ -78,7 +79,7 @@ public class ResourceInMemoryRepositoryTests
         var containerName = "containerName";
         var repository = new ResourceInMemoryRepository();
         var resourceInfo = new NewResourceVersion(new ResourceLocation(containerName, "existingResourceName"), Guid.NewGuid().ToString());
-        await repository.AddResourceContainerAsync(containerName, new Dictionary<string, string>());
+        await repository.AddContainerAsync(containerName, new Dictionary<string, string>());
         await repository.AddResourceAsync(resourceInfo, new MemoryStream());
 
         // Act
@@ -95,7 +96,7 @@ public class ResourceInMemoryRepositoryTests
         var containerName = "containerName";
         var repository = new ResourceInMemoryRepository();
         var resourceInfo = new NewResourceVersion(new ResourceLocation(containerName, "existingResourceName"), Guid.NewGuid().ToString());
-        await repository.AddResourceContainerAsync(containerName, new Dictionary<string, string>());
+        await repository.AddContainerAsync(containerName, new Dictionary<string, string>());
         await repository.AddResourceAsync(resourceInfo, new MemoryStream());
 
         // Act
@@ -111,7 +112,7 @@ public class ResourceInMemoryRepositoryTests
         // Arrange
         var containerName = "containerName";
         var repository = new ResourceInMemoryRepository();
-        await repository.AddResourceContainerAsync(containerName, new Dictionary<string, string>());
+        await repository.AddContainerAsync(containerName, new Dictionary<string, string>());
         List<NewResourceVersion> resourceInfos = [
             new NewResourceVersion(new ResourceLocation(containerName, "Resource1"), Guid.NewGuid().ToString()),
             new NewResourceVersion(new ResourceLocation(containerName, "Resource2"), Guid.NewGuid().ToString()),
@@ -137,7 +138,7 @@ public class ResourceInMemoryRepositoryTests
         // Arrange
         var containerName = "containerName";
         var repository = new ResourceInMemoryRepository();
-        await repository.AddResourceContainerAsync(containerName, new Dictionary<string, string>());
+        await repository.AddContainerAsync(containerName, new Dictionary<string, string>());
         List<NewResourceVersion> resourceInfos = [
             new NewResourceVersion(new ResourceLocation(containerName, "Resource1"), Guid.NewGuid().ToString()),
             new NewResourceVersion(new ResourceLocation(containerName, "Resource2"), Guid.NewGuid().ToString()),
@@ -164,7 +165,7 @@ public class ResourceInMemoryRepositoryTests
         var clock = new ManualTimeProvider();
         var repository = new ResourceInMemoryRepository(clock);
         var resourceInfo = new NewResourceVersion(new ResourceLocation(containerName, "existingResourceName"), Guid.NewGuid().ToString());
-        await repository.AddResourceContainerAsync(containerName, new Dictionary<string, string>());
+        await repository.AddContainerAsync(containerName, new Dictionary<string, string>());
         var stream = new MemoryStream();
         await repository.AddResourceAsync(resourceInfo, stream);
 
@@ -191,7 +192,7 @@ public class ResourceInMemoryRepositoryTests
         var containerName = "containerName";
         var repository = new ResourceInMemoryRepository();
         var resourceInfo = new NewResourceVersion(new ResourceLocation(containerName, "existingResourceName"), Guid.NewGuid().ToString());
-        await repository.AddResourceContainerAsync(containerName, new Dictionary<string, string>());
+        await repository.AddContainerAsync(containerName, new Dictionary<string, string>());
         var stream = new MemoryStream();
         await repository.AddResourceAsync(resourceInfo, stream);
 
@@ -209,7 +210,7 @@ public class ResourceInMemoryRepositoryTests
         var containerName = "containerName";
         var repository = new ResourceInMemoryRepository();
         var resourceInfo = new NewResourceVersion(new ResourceLocation(containerName, "existingResourceName"), Guid.NewGuid().ToString());
-        await repository.AddResourceContainerAsync(containerName, new Dictionary<string, string>());
+        await repository.AddContainerAsync(containerName, new Dictionary<string, string>());
         var stream = new MemoryStream();
         await repository.AddResourceAsync(resourceInfo, stream);
 
@@ -228,7 +229,7 @@ public class ResourceInMemoryRepositoryTests
         var resourceName = "existingResourceName";
         var repository = new ResourceInMemoryRepository();
         var resourceInfo = new NewResourceVersion(new ResourceLocation(containerName, resourceName), Guid.NewGuid().ToString());
-        await repository.AddResourceContainerAsync(containerName, new Dictionary<string, string>());
+        await repository.AddContainerAsync(containerName, new Dictionary<string, string>());
         var stream = new MemoryStream("Test"u8.ToArray());
         await repository.AddResourceAsync(resourceInfo, stream);
 
@@ -247,7 +248,7 @@ public class ResourceInMemoryRepositoryTests
         var resourceName = "existingResourceName";
         var repository = new ResourceInMemoryRepository();
         var resourceInfo = new NewResourceVersion(new ResourceLocation(containerName, resourceName), Guid.NewGuid().ToString());
-        await repository.AddResourceContainerAsync(containerName, new Dictionary<string, string>());
+        await repository.AddContainerAsync(containerName, new Dictionary<string, string>());
         var stream = new MemoryStream("Test"u8.ToArray());
         await repository.AddResourceAsync(resourceInfo, stream);
 
@@ -266,7 +267,7 @@ public class ResourceInMemoryRepositoryTests
         var resourceName = "existingResourceName";
         var repository = new ResourceInMemoryRepository();
         var resourceInfo = new NewResourceVersion(new ResourceLocation(containerName, resourceName), Guid.NewGuid().ToString());
-        await repository.AddResourceContainerAsync(containerName, new Dictionary<string, string>());
+        await repository.AddContainerAsync(containerName, new Dictionary<string, string>());
         var stream = new MemoryStream("Test"u8.ToArray());
         await repository.AddResourceAsync(resourceInfo, stream);
 
@@ -278,59 +279,59 @@ public class ResourceInMemoryRepositoryTests
     }
 
     [Fact]
-    public async Task AddResourceContainerAsync_ShouldAddContainer_WhenContainerDoesNotExist()
+    public async Task AddContainerAsync_ShouldAddContainer_WhenContainerDoesNotExist()
     {
         // Arrange
         var containerName = "containerName";
         var repository = new ResourceInMemoryRepository();
 
         // Act
-        await repository.AddResourceContainerAsync(containerName, new Dictionary<string, string>());
+        await repository.AddContainerAsync(containerName, new Dictionary<string, string>());
 
         // Assert
-        Assert.NotEmpty(await repository.GetAllResourceContainerInfoAsync());
+        Assert.NotEmpty(await repository.GetAllContainerInfoAsync());
     }
 
     [Fact]
-    public async Task DeleteResourceContainerAsync_ShouldDeleteResourceContainer_WhenContainerExists()
+    public async Task DeleteContainerAsync_ShouldDeleteResourceContainer_WhenContainerExists()
     {
         // Arrange
         var containerName = "containerName";
         var repository = new ResourceInMemoryRepository();
-        await repository.AddResourceContainerAsync(containerName, new Dictionary<string, string>());
+        await repository.AddContainerAsync(containerName, new Dictionary<string, string>());
 
         // Act
-        await repository.DeleteResourceContainerAsync(containerName);
+        await repository.DeleteContainerAsync(containerName);
 
         // Assert
-        Assert.Empty(await repository.GetAllResourceContainerInfoAsync());
+        Assert.Empty(await repository.GetAllContainerInfoAsync());
     }
 
     [Fact]
-    public async Task DeleteResourceContainerAsync_ShouldNotDeleteAnyResourceContainer_WhenContainerDoesNotExist()
+    public async Task DeleteContainerAsync_ShouldNotDeleteAnyResourceContainer_WhenContainerDoesNotExist()
     {
         // Arrange
         var containerName = "containerName";
         var repository = new ResourceInMemoryRepository();
-        await repository.AddResourceContainerAsync(containerName, new Dictionary<string, string>());
+        await repository.AddContainerAsync(containerName, new Dictionary<string, string>());
 
         // Act
-        await repository.DeleteResourceContainerAsync("nonExistentContainer");
+        await repository.DeleteContainerAsync("nonExistentContainer");
 
         // Assert
-        Assert.NotEmpty(await repository.GetAllResourceContainerInfoAsync());
+        Assert.NotEmpty(await repository.GetAllContainerInfoAsync());
     }
 
     [Fact]
-    public async Task GetResourceContainerInfoAsync_ShouldGetCorrectContainer_WhenGivenExistingName()
+    public async Task GetContainerInfoAsync_ShouldGetCorrectContainer_WhenGivenExistingName()
     {
         // Arrange
         var containerName = "containerName";
         var repository = new ResourceInMemoryRepository();
-        await repository.AddResourceContainerAsync(containerName, new Dictionary<string, string>());
+        await repository.AddContainerAsync(containerName, new Dictionary<string, string>());
 
         // Act
-        ResourceContainerInfo? outputResourceContainer = await repository.GetResourceContainerInfoAsync(containerName);
+        ContainerInfo? outputResourceContainer = await repository.GetContainerInfoAsync(containerName);
 
         // Assert
         Assert.NotNull(outputResourceContainer);
@@ -338,32 +339,32 @@ public class ResourceInMemoryRepositoryTests
     }
 
     [Fact]
-    public async Task GetResourceContainerInfoAsync_ShouldNotGetAnyContainer_WhenGivenNonExistingName()
+    public async Task GetContainerInfoAsync_ShouldNotGetAnyContainer_WhenGivenNonExistingName()
     {
         // Arrange
         var containerName = "containerName";
         var repository = new ResourceInMemoryRepository();
-        await repository.AddResourceContainerAsync(containerName, new Dictionary<string, string>());
+        await repository.AddContainerAsync(containerName, new Dictionary<string, string>());
 
         // Act
-        ResourceContainerInfo? outputResourceContainer = await repository.GetResourceContainerInfoAsync("nonExistingContainer");
+        ContainerInfo? outputResourceContainer = await repository.GetContainerInfoAsync("nonExistingContainer");
 
         // Assert
         Assert.Null(outputResourceContainer);
     }
 
     [Fact]
-    public async Task GetAllResourceContainerInfoAsync_ShouldReturnAllContainers_WhenMultipleContainersExist()
+    public async Task GetAllContainerInfoAsync_ShouldReturnAllContainers_WhenMultipleContainersExist()
     {
         // Arrange
         var repository = new ResourceInMemoryRepository();
 
         // Act
-        await repository.AddResourceContainerAsync("container1", new Dictionary<string, string>());
-        await repository.AddResourceContainerAsync("container2", new Dictionary<string, string>());
+        await repository.AddContainerAsync("container1", new Dictionary<string, string>());
+        await repository.AddContainerAsync("container2", new Dictionary<string, string>());
 
         // Assert
-        Assert.Equal(2, (await repository.GetAllResourceContainerInfoAsync()).Count);
+        Assert.Equal(2, (await repository.GetAllContainerInfoAsync()).Count);
     }
 
     [Fact]
@@ -378,7 +379,7 @@ public class ResourceInMemoryRepositoryTests
         var repository = new ResourceInMemoryRepository();
         var resourceInfo1 = new NewResourceVersion(new ResourceLocation(containerName, resourceName), date1.ToString("yyyy-MM-ddTHH:mm:ss.fffffffZ")) { LastModified = date1 };
         var resourceInfo2 = new NewResourceVersion(new ResourceLocation(containerName, resourceName), date2.ToString("yyyy-MM-ddTHH:mm:ss.fffffffZ")) { LastModified = date2 };
-        await repository.AddResourceContainerAsync(containerName, new Dictionary<string, string>());
+        await repository.AddContainerAsync(containerName, new Dictionary<string, string>());
 
         // Act
         await repository.AddResourceAsync(resourceInfo1, new MemoryStream());
@@ -400,7 +401,7 @@ public class ResourceInMemoryRepositoryTests
         var repository = new ResourceInMemoryRepository(clock);
         var resourceInfo1 = new NewResourceVersion(new ResourceLocation(containerName, "newResourceName"), date1.ToString("yyyy-MM-ddTHH:mm:ss.fffffffZ"));
         var resourceInfo2 = new NewResourceVersion(new ResourceLocation(containerName, "newResourceName"), date2.ToString("yyyy-MM-ddTHH:mm:ss.fffffffZ"));
-        await repository.AddResourceContainerAsync(containerName, new Dictionary<string, string>());
+        await repository.AddContainerAsync(containerName, new Dictionary<string, string>());
         clock.Now = date1;
         await repository.AddResourceAsync(resourceInfo1, new MemoryStream());
         clock.Now = date2;
@@ -426,7 +427,7 @@ public class ResourceInMemoryRepositoryTests
         var repository = new ResourceInMemoryRepository(clock);
         var resourceInfo1 = new NewResourceVersion(new ResourceLocation(containerName, "newResourceName"), date1.ToString("yyyy-MM-ddTHH:mm:ss.fffffffZ"));
         var resourceInfo2 = new NewResourceVersion(new ResourceLocation(containerName, "newResourceName"), date2.ToString("yyyy-MM-ddTHH:mm:ss.fffffffZ"));
-        await repository.AddResourceContainerAsync(containerName, new Dictionary<string, string>());
+        await repository.AddContainerAsync(containerName, new Dictionary<string, string>());
         clock.Now = date1;
         await repository.AddResourceAsync(resourceInfo1, new MemoryStream());
         clock.Now = date2;
@@ -452,7 +453,7 @@ public class ResourceInMemoryRepositoryTests
         var repository = new ResourceInMemoryRepository(clock);
         var resourceInfo1 = new NewResourceVersion(new ResourceLocation(containerName, "newResourceName"), date1.ToString("yyyy-MM-ddTHH:mm:ss.fffffffZ"));
         var resourceInfo2 = new NewResourceVersion(new ResourceLocation(containerName, "newResourceName"), date2.ToString("yyyy-MM-ddTHH:mm:ss.fffffffZ"));
-        await repository.AddResourceContainerAsync(containerName, new Dictionary<string, string>());
+        await repository.AddContainerAsync(containerName, new Dictionary<string, string>());
         clock.Now = date1;
         await repository.AddResourceAsync(resourceInfo1, new MemoryStream());
         clock.Now = date2;
@@ -478,7 +479,7 @@ public class ResourceInMemoryRepositoryTests
         var resourceInfo1 = new NewResourceVersion(new ResourceLocation(resourceContainerName, resourceName), date1.ToString("yyyy-MM-ddTHH:mm:ss.fffffffZ")) { LastModified = date1 };
         var resourceInfo2 = new NewResourceVersion(new ResourceLocation(resourceContainerName, resourceName), date2.ToString("yyyy-MM-ddTHH:mm:ss.fffffffZ")) { LastModified = date2 };
         var repository = new ResourceInMemoryRepository();
-        await repository.AddResourceContainerAsync(resourceContainerName, new Dictionary<string, string>());
+        await repository.AddContainerAsync(resourceContainerName, new Dictionary<string, string>());
         var stream = new MemoryStream();
         await repository.AddResourceAsync(resourceInfo1, stream);
         await repository.AddResourceAsync(resourceInfo2, stream);
@@ -492,17 +493,17 @@ public class ResourceInMemoryRepositoryTests
     }
 
     [Fact]
-    public async Task DeleteResourceContainerAsync_ShouldMakeItsResourcesUnreadable_WhenContainerHeldResources()
+    public async Task DeleteContainerAsync_ShouldMakeItsResourcesUnreadable_WhenContainerHeldResources()
     {
         // Arrange
         var containerName = "containerName";
         var resourceName = "resourceName";
         var repository = new ResourceInMemoryRepository();
-        await repository.AddResourceContainerAsync(containerName, new Dictionary<string, string>());
+        await repository.AddContainerAsync(containerName, new Dictionary<string, string>());
         await repository.AddResourceAsync(new NewResourceVersion(new ResourceLocation(containerName, resourceName), Guid.NewGuid().ToString()), new MemoryStream([1, 2, 3]));
 
         // Act
-        await repository.DeleteResourceContainerAsync(containerName);
+        await repository.DeleteContainerAsync(containerName);
 
         // Assert
         Assert.Null(await repository.GetResourceInfoAsync(new ResourceLocation(containerName, resourceName)));
@@ -512,22 +513,22 @@ public class ResourceInMemoryRepositoryTests
     }
 
     [Fact]
-    public async Task GetResourceContainerInfoAsync_ShouldReturnACopyOfTheStoredMetadata_WhenTheContainerWasAddedWithIt()
+    public async Task GetContainerInfoAsync_ShouldReturnACopyOfTheStoredMetadata_WhenTheContainerWasAddedWithIt()
     {
         // Arrange
         var repository = new ResourceInMemoryRepository();
         var metadata = new Dictionary<string, string> { ["key"] = "original" };
-        await repository.AddResourceContainerAsync("c", metadata);
+        await repository.AddContainerAsync("c", metadata);
         metadata["key"] = "changed by the caller";
 
         // Act
-        ResourceContainerInfo? first = await repository.GetResourceContainerInfoAsync("c");
+        ContainerInfo? first = await repository.GetContainerInfoAsync("c");
         first!.Metadata["key"] = "changed by a reader";
-        ResourceContainerInfo listed = Assert.Single(await repository.GetAllResourceContainerInfoAsync());
+        ContainerInfo listed = Assert.Single(await repository.GetAllContainerInfoAsync());
 
         // Assert
         Assert.Equal("original", listed.Metadata["key"]);
-        Assert.Equal("original", (await repository.GetResourceContainerInfoAsync("c"))!.Metadata["key"]);
+        Assert.Equal("original", (await repository.GetContainerInfoAsync("c"))!.Metadata["key"]);
     }
 
     [Fact]
@@ -535,7 +536,7 @@ public class ResourceInMemoryRepositoryTests
     {
         // Arrange
         var repository = new ResourceInMemoryRepository();
-        await repository.AddResourceContainerAsync("c", new Dictionary<string, string>());
+        await repository.AddContainerAsync("c", new Dictionary<string, string>());
         await repository.AddResourceAsync(new NewResourceVersion(new ResourceLocation("c", "n"), "v1"), new MemoryStream([1, 2, 3, 4, 5, 6]));
 
         // Act
@@ -556,21 +557,21 @@ public class ResourceInMemoryRepositoryTests
     }
 
     [Fact]
-    public async Task DeleteResourceContainerAsync_ShouldThrowOperationCanceledAndDeleteNothing_WhenTokenIsAlreadyCanceled()
+    public async Task DeleteContainerAsync_ShouldThrowOperationCanceledAndDeleteNothing_WhenTokenIsAlreadyCanceled()
     {
         // Arrange
         var containerName = "containerName";
         var repository = new ResourceInMemoryRepository();
-        await repository.AddResourceContainerAsync(containerName, new Dictionary<string, string>());
+        await repository.AddContainerAsync(containerName, new Dictionary<string, string>());
         using var cts = new CancellationTokenSource();
         cts.Cancel();
 
         // Act
-        Task act() => repository.DeleteResourceContainerAsync(containerName, cts.Token);
+        Task act() => repository.DeleteContainerAsync(containerName, cts.Token);
 
         // Assert
         await Assert.ThrowsAnyAsync<OperationCanceledException>(act);
-        Assert.NotNull(await repository.GetResourceContainerInfoAsync(containerName));
+        Assert.NotNull(await repository.GetContainerInfoAsync(containerName));
     }
 
     [Fact]
@@ -578,7 +579,7 @@ public class ResourceInMemoryRepositoryTests
     {
         // Arrange
         var repository = new ResourceInMemoryRepository();
-        await repository.AddResourceContainerAsync("c", new Dictionary<string, string>());
+        await repository.AddContainerAsync("c", new Dictionary<string, string>());
         await repository.AddResourceAsync(new NewResourceVersion(new ResourceLocation("c", "n"), "v1"), new MemoryStream());
 
         // Act
@@ -595,7 +596,7 @@ public class ResourceInMemoryRepositoryTests
     {
         // Arrange
         var repository = new ResourceInMemoryRepository();
-        await repository.AddResourceContainerAsync("c", new Dictionary<string, string>());
+        await repository.AddContainerAsync("c", new Dictionary<string, string>());
         await repository.AddResourceAsync(new NewResourceVersion(new ResourceLocation("c", "n"), "first"), new MemoryStream());
 
         // Act
@@ -611,7 +612,7 @@ public class ResourceInMemoryRepositoryTests
     {
         // Arrange
         var repository = new ResourceInMemoryRepository();
-        await repository.AddResourceContainerAsync("c", new Dictionary<string, string>());
+        await repository.AddContainerAsync("c", new Dictionary<string, string>());
         await repository.AddResourceAsync(new NewResourceVersion(new ResourceLocation("c", "n"), "v1"), new MemoryStream([1]));
 
         // Act
@@ -627,7 +628,7 @@ public class ResourceInMemoryRepositoryTests
     {
         // Arrange
         var repository = new ResourceInMemoryRepository();
-        await repository.AddResourceContainerAsync("c", new Dictionary<string, string>());
+        await repository.AddContainerAsync("c", new Dictionary<string, string>());
 
         // Act
         await repository.AddResourceAsync(new NewResourceVersion(new ResourceLocation("c", "n"), "first"), new MemoryStream(), new ResourceWriteCondition { CreateOnly = true });
@@ -637,18 +638,18 @@ public class ResourceInMemoryRepositoryTests
     }
 
     [Fact]
-    public async Task AddResourceContainerAsync_ShouldThrowConflict_WhenTheContainerExists()
+    public async Task AddContainerAsync_ShouldThrowConflict_WhenTheContainerExists()
     {
         // Arrange
         var repository = new ResourceInMemoryRepository();
-        await repository.AddResourceContainerAsync("c", new Dictionary<string, string>());
+        await repository.AddContainerAsync("c", new Dictionary<string, string>());
 
         // Act
-        Task act() => repository.AddResourceContainerAsync("c", new Dictionary<string, string>());
+        Task act() => repository.AddContainerAsync("c", new Dictionary<string, string>());
 
         // Assert
         await Assert.ThrowsAsync<ResourceConflictException>(act);
-        Assert.Single(await repository.GetAllResourceContainerInfoAsync());
+        Assert.Single(await repository.GetAllContainerInfoAsync());
     }
 
     [Fact]
@@ -657,7 +658,7 @@ public class ResourceInMemoryRepositoryTests
         // Arrange
         byte[] payload = Encoding.UTF8.GetBytes("measured, not declared");
         var repository = new ResourceInMemoryRepository();
-        await repository.AddResourceContainerAsync("c", new Dictionary<string, string>());
+        await repository.AddContainerAsync("c", new Dictionary<string, string>());
 
         // Act
         WrittenContent written = await repository.AddResourceAsync(new NewResourceVersion(new ResourceLocation("c", "n"), "v1"), new MemoryStream(payload));
@@ -673,7 +674,7 @@ public class ResourceInMemoryRepositoryTests
     {
         // Arrange
         var repository = new ResourceInMemoryRepository();
-        await repository.AddResourceContainerAsync("c", new Dictionary<string, string>());
+        await repository.AddContainerAsync("c", new Dictionary<string, string>());
 
         // Act
         Task act() => repository.AddResourceAsync(new NewResourceVersion(new ResourceLocation("c", "n"), "v1") { DeclaredLength = 4 }, new MemoryStream([1, 2, 3]));
@@ -688,7 +689,7 @@ public class ResourceInMemoryRepositoryTests
     {
         // Arrange
         var repository = new ResourceInMemoryRepository();
-        await repository.AddResourceContainerAsync("c", new Dictionary<string, string>());
+        await repository.AddContainerAsync("c", new Dictionary<string, string>());
         await repository.AddResourceAsync(new NewResourceVersion(new ResourceLocation("c", "n"), "first"), new MemoryStream());
         await repository.AddResourceAsync(new NewResourceVersion(new ResourceLocation("c", "n"), "second"), new MemoryStream());
         await repository.AddResourceAsync(new NewResourceVersion(new ResourceLocation("c", "other"), "kept"), new MemoryStream());
@@ -728,7 +729,7 @@ public class ResourceInMemoryRepositoryTests
         // Arrange
         byte[] payload = RandomNumberGenerator.GetBytes(100_000);
         var repository = new ResourceInMemoryRepository();
-        await repository.AddResourceContainerAsync("c", new Dictionary<string, string>());
+        await repository.AddContainerAsync("c", new Dictionary<string, string>());
         await repository.AddResourceAsync(new NewResourceVersion(new ResourceLocation("c", "n"), "v1"), new MemoryStream(payload));
 
         // Act
@@ -749,7 +750,7 @@ public class ResourceInMemoryRepositoryTests
     {
         // Arrange
         var repository = new ResourceInMemoryRepository();
-        await repository.AddResourceContainerAsync("c", new Dictionary<string, string>());
+        await repository.AddContainerAsync("c", new Dictionary<string, string>());
 
         // Act
         Task[] work = [.. Enumerable.Range(0, 64).Select(i => Task.Run(async () =>
@@ -768,7 +769,7 @@ public class ResourceInMemoryRepositoryTests
     {
         // Arrange
         var repository = new ResourceInMemoryRepository();
-        await repository.AddResourceContainerAsync("c", new Dictionary<string, string>());
+        await repository.AddContainerAsync("c", new Dictionary<string, string>());
 
         // Act
         Exception?[] outcomes = await Task.WhenAll(Enumerable.Range(0, 16).Select(i => Task.Run(() => Record.ExceptionAsync(() =>
@@ -785,15 +786,15 @@ public class ResourceInMemoryRepositoryTests
     {
         // Arrange
         var repository = new ResourceInMemoryRepository();
-        await repository.AddResourceContainerAsync("c", new Dictionary<string, string>());
-        var content = new BeforeFirstReadStream([1, 2, 3],() => repository.DeleteResourceContainerAsync("c"));
+        await repository.AddContainerAsync("c", new Dictionary<string, string>());
+        var content = new BeforeFirstReadStream([1, 2, 3],() => repository.DeleteContainerAsync("c"));
 
         // Act
         Task act() => repository.AddResourceAsync(new NewResourceVersion(new ResourceLocation("c", "n"), "v1"), content);
 
         // Assert
         await Assert.ThrowsAsync<ResourceContainerNotFoundException>(act);
-        await repository.AddResourceContainerAsync("c", new Dictionary<string, string>());
+        await repository.AddContainerAsync("c", new Dictionary<string, string>());
         Assert.Null(await repository.GetResourceInfoAsync(new ResourceLocation("c", "n")));
     }
 }

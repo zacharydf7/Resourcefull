@@ -19,7 +19,7 @@ builder.Services.AddResourcefull(options =>
 {
     if (string.IsNullOrWhiteSpace(connectionString)) options.UseInMemory();
     else options.UseSqlServer(connectionString);
-    options.SetUriProvider<TestUriProvider>();
+    options.UseUriProvider<TestUriProvider>();
     //options.UseVersioning();
 });
 builder.Services.AddSingleton(provider);
@@ -52,6 +52,6 @@ app.MapRazorComponents<App>()
 // file endpoints" before using it elsewhere.
 app.MapMethods("/download/{container}/{**name}", ["GET", "HEAD"], (string container, string name, string? versionId,
     IResourceServiceClient resources) =>
-    Results.Resource(resources.GetResourceContainerClient(container), name, versionId));
+    Results.Resource(resources.GetContainerClient(container), name, versionId));
 
 app.Run();

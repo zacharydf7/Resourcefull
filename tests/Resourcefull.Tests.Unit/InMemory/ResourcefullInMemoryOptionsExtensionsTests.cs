@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Resourcefull.InMemory;
+using Resourcefull.Providers;
 using Resourcefull.SqlServer;
 
 namespace Resourcefull.Tests.Unit.InMemory;

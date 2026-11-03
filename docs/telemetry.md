@@ -94,7 +94,7 @@ metrics. It also has:
 | `set_expiry` | `SetExpiryAsync` | |
 | `set_metadata` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | `SetResourceMetadataAsync` | |
 | `set_content_type` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | `SetContentTypeAsync` | |
-| `set_container_metadata` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | `SetResourceContainerMetadataAsync` | |
+| `set_container_metadata` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | `SetContainerMetadataAsync` | |
 | `export` | `ExportContainerAsync` | `resourcefull.resources`, `resourcefull.versions`: what it wrote; `resourcefull.pages`: the pages of 1,000 names it read |
 | `import` | `ImportContainerAsync` | `resourcefull.resources`, `resourcefull.versions`: what it stored; with an [upload inspector](upload-inspection.md) <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>, a `resourcefull inspect` child span for each version; with SQL Server <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>, `resourcefull.batches`: the batches of about a MiB every version's content was stored in |
 | `prune_container` | `PruneContainerAsync` | `resourcefull.pruned`: how many versions were past the limit |
@@ -102,16 +102,16 @@ metrics. It also has:
 | `list_page` | `GetResourcePageAsync`, and each page `ListResourcesAsync` fetches | `resourcefull.page_size` |
 | `list_versions` | `GetResourceVersionsAsync` | |
 | `delete` | `DeleteResourceIfExistsAsync` | `resourcefull.conditional` |
-| `create_container` | `CreateResourceContainerAsync`, `CreateResourceContainerIfNotExistsAsync` | |
-| `get_container` | `GetResourceContainerInfoAsync` | |
+| `create_container` | `CreateContainerAsync`, `CreateContainerIfNotExistsAsync` | |
+| `get_container` | `GetContainerInfoAsync` | |
 | `container_exists` | `ContainerExistsAsync` | |
-| `list_containers` | `GetResourceContainersAsync` | |
-| `delete_container` | `DeleteResourceContainerIfExistsAsync` | |
+| `list_containers` | `GetContainersAsync` | |
+| `delete_container` | `DeleteContainerIfExistsAsync` | |
 | `migrate` | `MigrateResourcefullDatabaseAsync` (SQL Server) | span only |
 | `backfill` | `ContentHashBackfill.RunAsync` (SQL Server) | span only; `resourcefull.hashed`, `resourcefull.mismatches` |
 | `health_check` | `AddResourcefullCheck`; `AddResourcefullSqlServerCheck` (span only) | for SQL Server, `resourcefull.pending_migrations` |
 
-`GetResourceContainerClient` doesn't contact storage, so it records nothing. With
+`GetContainerClient` doesn't contact storage, so it records nothing. With
 [container policies](container-policies.md), every operation that checks one (`upload`, `restore`, `copy`, `move`,
 `delete`, `delete_container`, `prune_container`, `set_metadata`, `set_content_type`,
 `set_container_metadata` and `get_container_policy`) records a `resourcefull get_policy` child span when it asks the policy provider, and

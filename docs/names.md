@@ -21,7 +21,7 @@ too.
 The rule on these characters applies only to names a write creates: uploads, the names copies, moves and renames go
 to, and containers being created or imported. A name stored by 3.1 or earlier, which allowed these characters, can
 still be read and deleted, and an export of it can be imported; a resource with one can be moved or renamed to a name
-that follows the rule. `CreateResourceContainerIfNotExistsAsync` still finds a container with such a name, and checks
+that follows the rule. `CreateContainerIfNotExistsAsync` still finds a container with such a name, and checks
 the rule only when it creates one.
 
 Every method that takes a name checks it before contacting storage, and throws `ArgumentNullException` for `null` and

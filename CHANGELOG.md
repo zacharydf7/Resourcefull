@@ -10,7 +10,7 @@
   Providers get `ImportVersionAsync`, which returns what it stored and whose default throws `NotSupportedException`.
   With SQL Server, a version whose write hits a transient failure is retried, reading its file from the export again.
   While an import runs, its container's metadata has `resourcefull.import: in-progress`, so one that never finished can
-  be found; providers get `SetResourceContainerMetadataAsync` for it, whose default leaves imports unmarked. Exports
+  be found; providers get `SetContainerMetadataAsync` for it, whose default leaves imports unmarked. Exports
   read a container 1,000 names at a time, through `GetVersionPageAsync`, and write the manifest to a temporary file
   rather than holding it in memory; providers can answer it in one query, and its default asks for each name's
   versions in turn. See
@@ -22,7 +22,8 @@
   [Sharing files with links](docs/sharing-links.md).
 - **Expiring resources.** `ResourceUploadOptions.ExpiresAt` sets when a version expires, and `UseExpiry` runs a
   background service that deletes expired versions within one interval, on every instance safely. `SetExpiryAsync`
-  changes or clears an expiry. An `IResourceCleanupHandler` hears about every version Resourcefull deletes by itself,
+  changes or clears a version's expiry, or the current version's with a `null` version ID. An
+  `IResourceCleanupHandler` hears about every version Resourcefull deletes by itself,
   expired or pruned, before it's deleted, for auditing. With expiry on, pruning sets a version to expire five minutes
   later instead of deleting it, so a download already reading it finishes. The `AddExpiresAt` migration adds a
   nullable column and an index. Providers get three members whose defaults throw `NotSupportedException`, and
@@ -60,7 +61,7 @@
 - **Changing metadata and content type.** `SetResourceMetadataAsync` and `SetContentTypeAsync` change a version's
   metadata or content type in place, without uploading it again: it keeps its ID, content, `LastModified` and ETag,
   and no new version is made. A new content type is checked against `AllowedContentTypes`, and a read-only container
-  refuses both. `IResourceServiceClient.SetResourceContainerMetadataAsync` replaces a container's metadata, which
+  refuses both. `IResourceServiceClient.SetContainerMetadataAsync` replaces a container's metadata, which
   could only be set when the container was created. Providers get `SetResourceMetadataAsync` and
   `SetContentTypeAsync`, whose defaults throw `NotSupportedException`. See
   [Changing metadata and content type](docs/uploading.md#changing-metadata-and-content-type).
@@ -121,6 +122,13 @@
   rest. `ResourcefullOptions.IsVersioningEnabled` is gone. `RestoreVersionAsync` works with versioning off, as long
   as the version exists. The `upload` and `copy` spans gain `resourcefull.write_mode`. `UploadFromRequestAsync` still
   replaces, as a `PUT` does. See [Upgrading to 4.0](docs/upgrading-to-4.md#uploads-say-whether-they-replace).
+- **Consistent names.** The container methods drop "Resource": `CreateContainerAsync`,
+  `CreateContainerIfNotExistsAsync`, `GetContainerInfoAsync`, `GetContainersAsync`, `DeleteContainerIfExistsAsync` and
+  `GetContainerClient`, beside the existing `ContainerExistsAsync`. `ResourceContainerInfo` is `ContainerInfo`, and
+  `IResourceContainerClient.ResourceContainerInfo` is `Info`. `SetUriProvider` is `UseUriProvider`.
+  `ResourceUploadOptions` has `init` properties. The provider types move to `Resourcefull.Providers`,
+  and the provider's container members are renamed to match. Telemetry's operation names don't change. See
+  [Upgrading to 4.0](docs/upgrading-to-4.md#consistent-names).
 - **Stricter names.** Uploads, copies, moves and renames, and creating or importing a container, refuse new names with
   control characters, Unicode's bidirectional controls or unpaired surrogates, and `ResourceNames.IsValidContainerName`
   and `IsValidResourceName` now return `false` for them. Names already stored stay readable and deletable, resources
@@ -139,7 +147,7 @@
   `IReadOnlyDictionary<string, string>`. Change a stored version with `SetResourceMetadataAsync` or
   `SetContentTypeAsync`, or make a changed copy with `with`. See [Upgrading to 4.0](docs/upgrading-to-4.md).
 - **`IResourceContainerClient` isn't `IDisposable`,** since its `Dispose` did nothing; remove `using` where you call
-  `GetResourceContainerClient`.
+  `GetContainerClient`.
 - **Uploads to SQL Server hold nothing while their content arrives.** An upload stores its version staged, hidden
   from every read, then its content a MiB at a time, each batch committing on its own on a connection it gives back,
   and makes the version current in a short transaction at the end. So a slow client no longer holds a connection,

@@ -31,7 +31,7 @@ tests, or in a storage provider of your own.</p>
 app.MapPut("/files/{container}/{**name}",
     (string container, string name,
      HttpRequest request, IResourceServiceClient files) =&gt;
-        files.GetResourceContainerClient(container)
+        files.GetContainerClient(container)
              .UploadFromRequestAsync(name, request));
 
 // Sends the file with ETags and range requests (4.0).
@@ -39,7 +39,7 @@ app.MapGet("/files/{container}/{**name}",
     (string container, string name,
      IResourceServiceClient files) =&gt;
         Results.Resource(
-            files.GetResourceContainerClient(container),
+            files.GetContainerClient(container),
             name));</code></pre>
 
 </div>

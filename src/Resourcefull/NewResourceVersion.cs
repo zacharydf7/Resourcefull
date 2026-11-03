@@ -1,6 +1,6 @@
 using System.Collections.ObjectModel;
 
-namespace Resourcefull;
+namespace Resourcefull.Providers;
 
 /// <summary>
 /// A version for a <see cref="ResourceRepository"/> to store: where it goes, what its writer declared, and where it

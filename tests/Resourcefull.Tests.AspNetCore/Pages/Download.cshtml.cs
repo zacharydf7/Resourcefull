@@ -10,5 +10,5 @@ namespace Resourcefull.Tests.AspNetCore.Pages;
 /// </summary>
 public class DownloadModel(IResourceServiceClient resources) : PageModel
 {
-    public ResourceLookupHttpResult OnGet(string name) => TypedResults.Resource(resources.GetResourceContainerClient(TestApp.Container), name);
+    public ResourceLookupHttpResult OnGet(string name) => TypedResults.Resource(resources.GetContainerClient(TestApp.Container), name);
 }

@@ -33,7 +33,7 @@ public async Task SaveAsync_ShouldStoreTheReport_WhenGivenAFile()
 
     await new Invoices(resources).SaveAsync("q3.pdf", new MemoryStream("%PDF"u8.ToArray()), CancellationToken.None);
 
-    ResourceInfo? stored = await resources.GetResourceContainerClient("invoices").GetResourceInfoAsync("q3.pdf");
+    ResourceInfo? stored = await resources.GetContainerClient("invoices").GetResourceInfoAsync("q3.pdf");
     Assert.Equal(4, stored?.ContentLength);
 }
 ```

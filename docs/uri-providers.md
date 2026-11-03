@@ -1,6 +1,6 @@
 # URI providers
 
-Resourcefull doesn't serve files itself; your application does. A URI provider lets each `ResourceContainerInfo` and
+Resourcefull doesn't serve files itself; your application does. A URI provider lets each `ContainerInfo` and
 `ResourceInfo` carry the URI your application serves it at, so callers get a link along with the attributes.
 
 Implement `IUriProvider`. `GetAbsoluteUri` gets a `ResourcefullContext` with the container name and, for a resource,
@@ -27,7 +27,7 @@ public class FilesUriProvider(IConfiguration configuration) : IUriProvider
 ```csharp
 builder.Services.AddResourcefull(options => options
     .UseSqlServer(connectionString)
-    .SetUriProvider<FilesUriProvider>());
+    .UseUriProvider<FilesUriProvider>());
 ```
 
 - **Escape every part.** Names can contain `/`, `?`, `#`, `&`, spaces and any other character, so pass each part

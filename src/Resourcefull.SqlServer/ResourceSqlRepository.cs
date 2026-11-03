@@ -1,6 +1,7 @@
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
+using Resourcefull.Providers;
 using Resourcefull.SqlServer.Models;
 using Resourcefull.SqlServer.Utilities;
 using System.Data;
@@ -1247,7 +1248,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
                 e.Version.VersionId!, e.Chunks))]);
     }
 
-    public override Task<bool> SetExpiryAsync(ResourceLocation resource, string versionId, DateTimeOffset? expiresAt,
+    public override Task<bool> SetExpiryAsync(ResourceLocation resource, string? versionId, DateTimeOffset? expiresAt,
         CancellationToken cancellationToken = default) =>
         WriteNameAsync(resource.ContainerName, resource.ResourceName, async (dbContext, ct) =>
             await Version(dbContext.Resources, resource.ContainerName, resource.ResourceName, versionId)
@@ -1268,7 +1269,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
             await Version(dbContext.Resources, resource.ContainerName, resource.ResourceName, versionId)
                 .ExecuteUpdateAsync(s => s.SetProperty(r => r.ContentType, contentType), ct) > 0, cancellationToken);
 
-    public override async Task AddResourceContainerAsync(string resourceContainerName,
+    public override async Task AddContainerAsync(string resourceContainerName,
         IReadOnlyDictionary<string, string> metadata, CancellationToken cancellationToken = default)
     {
         bool created = false;
@@ -1297,7 +1298,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
         }, cancellationToken);
     }
 
-    public override async Task<bool> SetResourceContainerMetadataAsync(string resourceContainerName,
+    public override async Task<bool> SetContainerMetadataAsync(string resourceContainerName,
         IReadOnlyDictionary<string, string> metadata, CancellationToken cancellationToken = default)
     {
         using ResourceDbContext dbContext = dbContextFactory.CreateDbContext();
@@ -1306,24 +1307,24 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
             .ExecuteUpdateAsync(s => s.SetProperty(c => c.Metadata, copy), cancellationToken) > 0;
     }
 
-    public override async Task<IReadOnlyList<ResourceContainerInfo>> GetAllResourceContainerInfoAsync(
+    public override async Task<IReadOnlyList<ContainerInfo>> GetAllContainerInfoAsync(
         CancellationToken cancellationToken = default)
     {
         using ResourceDbContext dbContext = dbContextFactory.CreateDbContext();
 
-        return await dbContext.ResourceContainers.Select(x => new ResourceContainerInfo
+        return await dbContext.ResourceContainers.Select(x => new ContainerInfo
         {
             Name = x.Name,
             Metadata = x.Metadata
         }).ToListAsync(cancellationToken);
     }
 
-    public override async Task<ResourceContainerInfo?> GetResourceContainerInfoAsync(string resourceContainerName,
+    public override async Task<ContainerInfo?> GetContainerInfoAsync(string resourceContainerName,
         CancellationToken cancellationToken = default)
     {
         using ResourceDbContext dbContext = dbContextFactory.CreateDbContext();
 
-        return await dbContext.ResourceContainers.Where(x => x.Name == resourceContainerName).Select(x => new ResourceContainerInfo
+        return await dbContext.ResourceContainers.Where(x => x.Name == resourceContainerName).Select(x => new ContainerInfo
         {
             Name = x.Name,
             Metadata = x.Metadata
@@ -1358,7 +1359,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
         return new ResourceContainerUsage(storedSize, usage.ResourceCount, usage.VersionCount);
     }
 
-    public override async Task<bool> DeleteResourceContainerAsync(string resourceContainerName,
+    public override async Task<bool> DeleteContainerAsync(string resourceContainerName,
         CancellationToken cancellationToken = default)
     {
         using ResourceDbContext dbContext = dbContextFactory.CreateDbContext();

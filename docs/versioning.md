@@ -113,7 +113,7 @@ replaced. (In 3.1,
 |---|---|
 | `DeleteResourceIfExistsAsync(name)` | the name and every version of it |
 | `DeleteResourceIfExistsAsync(name, versionId)` | that one version; if it was current, the most recently stored remaining version becomes current |
-| `DeleteResourceContainerIfExistsAsync(container)` | the container and everything in it |
+| `DeleteContainerIfExistsAsync(container)` | the container and everything in it |
 
 Each returns `true` if it deleted anything.
 

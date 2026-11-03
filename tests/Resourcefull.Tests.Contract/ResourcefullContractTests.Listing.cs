@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Resourcefull.Providers;
 
 namespace Resourcefull.Tests.Contract;
 
@@ -15,7 +16,7 @@ public abstract partial class ResourcefullContractTests
         for (int i = 0; i < 3; i++)
             versionsOfB.Add((await container.UploadAsync("b", BinaryData.FromString($"b{i}"), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace })).VersionId);
         ResourceRepository repository = provider.GetRequiredService<ResourceRepository>();
-        string containerName = container.ResourceContainerInfo.Name;
+        string containerName = container.Info.Name;
 
         // Act
         IReadOnlyList<ResourceInfo> first = await repository.GetVersionPageAsync(containerName, null, 2);
@@ -165,7 +166,7 @@ public abstract partial class ResourcefullContractTests
     {
         // Arrange
         using ServiceProvider provider = BuildServiceProvider();
-        IResourceContainerClient container = ServiceOf(provider).GetResourceContainerClient(NewContainerName());
+        IResourceContainerClient container = ServiceOf(provider).GetContainerClient(NewContainerName());
 
         // Act
         ResourcePage page = await container.GetResourcePageAsync();

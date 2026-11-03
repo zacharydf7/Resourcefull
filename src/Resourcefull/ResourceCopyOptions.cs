@@ -41,14 +41,6 @@ public sealed class ResourceMoveOptions
 }
 
 /// <summary>
-/// A resource name in a container.
-/// <para>Coming in 4.0.</para>
-/// </summary>
-/// <param name="ContainerName">The container's name.</param>
-/// <param name="ResourceName">The resource's name.</param>
-public readonly record struct ResourceLocation(string ContainerName, string ResourceName);
-
-/// <summary>
 /// The version a copy or restore was made from. It's a record of where the content came from, not a link: it stays
 /// as it is when the source is later moved or deleted.
 /// <para>Coming in 4.0.</para>

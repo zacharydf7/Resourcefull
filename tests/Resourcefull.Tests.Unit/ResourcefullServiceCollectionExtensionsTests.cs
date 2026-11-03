@@ -6,6 +6,7 @@ using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Resourcefull.InMemory;
+using Resourcefull.Providers;
 
 namespace Resourcefull.Tests.Unit;
 
@@ -182,7 +183,7 @@ public class ResourcefullServiceCollectionExtensionsTests
         services.AddResourcefull(options => options.UseInMemory());
         services.AddScoped(_ => repository.Object);
         await using ServiceProvider provider = services.BuildServiceProvider();
-        var client = provider.GetRequiredService<IResourceServiceClient>().GetResourceContainerClient("reports");
+        var client = provider.GetRequiredService<IResourceServiceClient>().GetContainerClient("reports");
 
         // Act
         await client.UploadAsync("name", new MemoryStream(), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace });

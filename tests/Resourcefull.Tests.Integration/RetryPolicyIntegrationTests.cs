@@ -3,6 +3,7 @@ using System.Diagnostics.Metrics;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Resourcefull.Providers;
 using Resourcefull.SqlServer;
 
 namespace Resourcefull.Tests.Integration;
@@ -100,7 +101,7 @@ public class RetryPolicyIntegrationTests(SqlServerFixture fixture)
         using ServiceProvider provider = services.BuildServiceProvider();
         var service = provider.GetRequiredService<IResourceServiceClient>();
         string containerName = $"c-{Guid.NewGuid():N}";
-        IResourceContainerClient container = await service.CreateResourceContainerAsync(containerName);
+        IResourceContainerClient container = await service.CreateContainerAsync(containerName);
         var expired = new ResourceUploadOptions { ExpiresAt = DateTimeOffset.UtcNow.AddDays(-1) };
         ResourceInfo a = await container.UploadAsync("a", BinaryData.FromString("a"), expired);
         ResourceInfo b = await container.UploadAsync("b", BinaryData.FromString("b"), expired);

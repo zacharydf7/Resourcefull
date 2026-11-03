@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
 using Resourcefull.InMemory;
+using Resourcefull.Providers;
 
 namespace Resourcefull.Tests.Unit;
 
@@ -22,7 +23,7 @@ public class ResourcePropertiesTests
         await Assert.ThrowsAsync<NotSupportedException>(() => repository.SetContentTypeAsync(location, null, "text/plain"));
         await Assert.ThrowsAsync<NotSupportedException>(() => container.SetResourceMetadataAsync("a", null, metadata));
         await Assert.ThrowsAsync<NotSupportedException>(() => container.SetContentTypeAsync("a", null, "text/plain"));
-        await Assert.ThrowsAsync<NotSupportedException>(() => service.SetResourceContainerMetadataAsync("c", metadata));
+        await Assert.ThrowsAsync<NotSupportedException>(() => service.SetContainerMetadataAsync("c", metadata));
     }
 
     [Fact]
@@ -31,10 +32,10 @@ public class ResourcePropertiesTests
         // Arrange
         using ServiceProvider provider = new ServiceCollection().AddResourcefull(o => o.UseInMemory()).BuildServiceProvider();
         IResourceServiceClient service = provider.GetRequiredService<IResourceServiceClient>();
-        IResourceContainerClient container = await service.CreateResourceContainerAsync("c");
+        IResourceContainerClient container = await service.CreateContainerAsync("c");
 
         // Act & Assert
         await Assert.ThrowsAsync<ArgumentNullException>(() => container.SetResourceMetadataAsync("a", null, null!));
-        await Assert.ThrowsAsync<ArgumentNullException>(() => service.SetResourceContainerMetadataAsync("c", null!));
+        await Assert.ThrowsAsync<ArgumentNullException>(() => service.SetContainerMetadataAsync("c", null!));
     }
 }

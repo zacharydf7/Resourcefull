@@ -12,8 +12,8 @@ same guarantees:
   `ResourceWriteMode.Create`, the default <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>, exactly one succeeds and the rest throw
   `ResourceConflictException`.
   There's no window between a check and the write.
-- **Creating a container is decided by the write too.** Of several concurrent `CreateResourceContainerAsync` calls for
-  one name, exactly one succeeds. `CreateResourceContainerIfNotExistsAsync` returns a client to every caller.
+- **Creating a container is decided by the write too.** Of several concurrent `CreateContainerAsync` calls for
+  one name, exactly one succeeds. `CreateContainerIfNotExistsAsync` returns a client to every caller.
 - **An upload never succeeds into a missing container.** A container deleted while an upload into it runs makes the
   upload throw `ResourceContainerNotFoundException`, not report success.
 - **Pruning never leaves more than `MaxVersions`**, even with concurrent uploads, because each prune works from the

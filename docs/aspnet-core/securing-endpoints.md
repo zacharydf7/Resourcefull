@@ -37,7 +37,7 @@ app.MapGet("/files/{**name}", async (string name, ClaimsPrincipal user, IResourc
 {
     // The container belongs to whoever signed in; nothing in the URL can point it elsewhere.
     string container = $"user-{user.FindFirstValue(ClaimTypes.NameIdentifier)}";
-    return Results.Resource(resources.GetResourceContainerClient(container), name);
+    return Results.Resource(resources.GetContainerClient(container), name);
 }).RequireAuthorization();
 ```
 
@@ -49,7 +49,7 @@ app.MapGet("/projects/{projectId}/files/{**name}", async (string projectId, stri
     IProjectMembers members, IResourceServiceClient resources, CancellationToken cancellationToken) =>
 {
     if (!await members.IsMemberAsync(projectId, user, cancellationToken)) return Results.NotFound();
-    return Results.Resource(resources.GetResourceContainerClient($"project-{projectId}"), name);
+    return Results.Resource(resources.GetContainerClient($"project-{projectId}"), name);
 }).RequireAuthorization();
 ```
 

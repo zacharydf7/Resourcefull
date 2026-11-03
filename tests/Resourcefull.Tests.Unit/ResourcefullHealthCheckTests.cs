@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Resourcefull.InMemory;
+using Resourcefull.Providers;
 
 namespace Resourcefull.Tests.Unit;
 
@@ -42,7 +43,7 @@ public class ResourcefullHealthCheckTests
         // Arrange
         var failure = new InvalidOperationException("storage is down");
         var repository = new Mock<ResourceRepository>();
-        repository.Setup(r => r.GetResourceContainerInfoAsync(It.IsAny<string>(), It.IsAny<CancellationToken>())).ThrowsAsync(failure);
+        repository.Setup(r => r.GetContainerInfoAsync(It.IsAny<string>(), It.IsAny<CancellationToken>())).ThrowsAsync(failure);
 
         // Act
         HealthReportEntry entry = await CheckAsync(services => services.Replace(ServiceDescriptor.Scoped(_ => repository.Object)), failureStatus);
@@ -57,14 +58,14 @@ public class ResourcefullHealthCheckTests
     {
         // Arrange: a strict repository refuses anything but the one read.
         var repository = new Mock<ResourceRepository>(MockBehavior.Strict);
-        repository.Setup(r => r.GetResourceContainerInfoAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((ResourceContainerInfo?)null);
+        repository.Setup(r => r.GetContainerInfoAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((ContainerInfo?)null);
 
         // Act
         HealthReportEntry entry = await CheckAsync(services => services.Replace(ServiceDescriptor.Scoped(_ => repository.Object)));
 
         // Assert
         Assert.Equal(HealthStatus.Healthy, entry.Status);
-        repository.Verify(r => r.GetResourceContainerInfoAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+        repository.Verify(r => r.GetContainerInfoAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 }

@@ -1,4 +1,5 @@
 using Moq;
+using Resourcefull.Providers;
 
 namespace Resourcefull.Tests.Unit;
 
@@ -56,7 +57,7 @@ public class ResourceRangeTests
     {
         // Arrange: the default range overload reads on to the end of the content.
         var client = new ResourceContainerClient(ProviderWithoutRanges().Object, null, new ResourcefullOptions(),
-            new ResourceContainerInfo { Name = Container }, null);
+            new ContainerInfo { Name = Container }, null);
 
         // Act
         ResourceDownloadResult? result = await client.DownloadStreamingAsync("r", null, new ResourceRange(100_000, 1_000), CancellationToken.None);

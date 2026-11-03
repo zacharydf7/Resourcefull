@@ -24,7 +24,7 @@ builder.Services.AddResourcefull(options =>
 {
     if (string.IsNullOrWhiteSpace(connectionString)) options.UseInMemory();
     else options.UseSqlServer(connectionString);
-    options.SetUriProvider<TestUriProvider>();
+    options.UseUriProvider<TestUriProvider>();
     //options.UseVersioning();
 });
 // Turns Resourcefull's exceptions into problem details: 409 for a conflict, 404 for a missing container, and so on.
@@ -46,19 +46,19 @@ if (app.Environment.IsDevelopment())
 
 app.MapGet("/api/containers", async (IResourceServiceClient resourceServiceClient) =>
 {
-    IReadOnlyList<ResourceContainerInfo> containers = await resourceServiceClient.GetResourceContainersAsync();
+    IReadOnlyList<ContainerInfo> containers = await resourceServiceClient.GetContainersAsync();
     return Results.Ok(containers);
 });
 
 app.MapGet("/api/containers/{containerName}", async (string containerName, IResourceServiceClient resourceServiceClient) =>
 {
-    ResourceContainerInfo? containerInfo = await resourceServiceClient.GetResourceContainerInfoAsync(containerName);
+    ContainerInfo? containerInfo = await resourceServiceClient.GetContainerInfoAsync(containerName);
     if (containerInfo is null)
     {
         return Results.NotFound("Resource Container not found.");
     }
 
-    IResourceContainerClient containerClient = resourceServiceClient.GetResourceContainerClient(containerName);
+    IResourceContainerClient containerClient = resourceServiceClient.GetContainerClient(containerName);
     IReadOnlyList<ResourceInfo> containerResourceInfo = await containerClient.ListResourcesAsync().ToListAsync();
 
     return Results.Ok(new { containerInfo.Name, containerInfo.Metadata, containerResourceInfo });
@@ -74,7 +74,7 @@ app.MapGet("/api/resources/{containerName}", async (string containerName, IResou
 
     if (!await resourceServiceClient.ContainerExistsAsync(containerName)) return Results.NotFound("Resource Container not found.");
 
-    IResourceContainerClient containerClient = resourceServiceClient.GetResourceContainerClient(containerName);
+    IResourceContainerClient containerClient = resourceServiceClient.GetContainerClient(containerName);
 
     if (stream)
     {
@@ -98,7 +98,7 @@ app.MapPost("/api/resources/{containerName}", async (string containerName, IReso
 {
     if (!TryReadMetadata(metadataJson, out Dictionary<string, string> metadata)) return Results.BadRequest(InvalidMetadata);
 
-    IResourceContainerClient containerClient = resourceServiceClient.GetResourceContainerClient(containerName);
+    IResourceContainerClient containerClient = resourceServiceClient.GetContainerClient(containerName);
 
     var resourceUploadOptions = new ResourceUploadOptions()
     {
@@ -115,15 +115,15 @@ app.MapPost("/api/resources/{containerName}", async (string containerName, IReso
 // stored, so a client can update only the version it read.
 app.MapPut("/api/resources/{containerName}", (string containerName, string resourceName, HttpRequest request,
     IResourceServiceClient resourceServiceClient, CancellationToken cancellationToken) =>
-    resourceServiceClient.GetResourceContainerClient(containerName).UploadFromRequestAsync(resourceName, request, null, cancellationToken));
+    resourceServiceClient.GetContainerClient(containerName).UploadFromRequestAsync(resourceName, request, null, cancellationToken));
 
 app.MapPost("/api/containers/{containerName}", async (string containerName, IResourceServiceClient resourceServiceClient,
     [FromForm] string? metadataJson = null) =>
 {
     if (!TryReadMetadata(metadataJson, out Dictionary<string, string> metadata)) return Results.BadRequest(InvalidMetadata);
 
-    IResourceContainerClient containerClient = await resourceServiceClient.CreateResourceContainerAsync(containerName, metadata);
-    ResourceContainerInfo containerInfo = containerClient.ResourceContainerInfo;
+    IResourceContainerClient containerClient = await resourceServiceClient.CreateContainerAsync(containerName, metadata);
+    ContainerInfo containerInfo = containerClient.Info;
     return Results.Created(containerInfo.Uri, containerInfo);
 }).DisableAntiforgery();
 
@@ -136,7 +136,7 @@ app.MapDelete("/api/resources/{containerName}", async (string containerName, IRe
 
     if (!await resourceServiceClient.ContainerExistsAsync(containerName)) return Results.NotFound("Resource Container not found.");
 
-    IResourceContainerClient containerClient = resourceServiceClient.GetResourceContainerClient(containerName);
+    IResourceContainerClient containerClient = resourceServiceClient.GetContainerClient(containerName);
 
     bool deleted = await containerClient.DeleteResourceIfExistsAsync(resourceName);
     return deleted ? Results.NoContent() : Results.NotFound();
@@ -144,7 +144,7 @@ app.MapDelete("/api/resources/{containerName}", async (string containerName, IRe
 
 app.MapDelete("/api/containers/{containerName}", async (string containerName, IResourceServiceClient resourceServiceClient) =>
 {
-    bool deleted = await resourceServiceClient.DeleteResourceContainerIfExistsAsync(containerName);
+    bool deleted = await resourceServiceClient.DeleteContainerIfExistsAsync(containerName);
     return deleted ? Results.NoContent() : Results.NotFound();
 
 }).DisableAntiforgery();
@@ -160,7 +160,7 @@ app.MapPost("/api/resources/{containerName}/restore", async (string containerNam
     if (!await resourceServiceClient.ContainerExistsAsync(containerName))
         return Results.NotFound("Resource Container not found.");
 
-    IResourceContainerClient containerClient = resourceServiceClient.GetResourceContainerClient(containerName);
+    IResourceContainerClient containerClient = resourceServiceClient.GetContainerClient(containerName);
 
     ResourceInfo? restored = await containerClient.RestoreVersionAsync(resourceName, versionId);
     return restored is null

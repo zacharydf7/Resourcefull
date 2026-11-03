@@ -36,7 +36,7 @@ public abstract partial class ResourcefullContractTests
             .UseContainerPolicies(cacheFor: TimeSpan.Zero).UsePolicyProvider<TestPolicyProvider>());
         IResourceServiceClient service = ServiceOf(provider);
         string name = NewContainerName();
-        IResourceContainerClient frozen = await service.CreateResourceContainerAsync(name);
+        IResourceContainerClient frozen = await service.CreateContainerAsync(name);
         ResourceInfo stored = await frozen.UploadAsync("notes.txt", BinaryData.FromString("kept"));
         TestPolicyProvider.Policies[name] = new ResourceContainerPolicy { ReadOnly = true };
 
@@ -48,8 +48,8 @@ public abstract partial class ResourcefullContractTests
             await Record.ExceptionAsync(() => frozen.DeleteResourceIfExistsAsync("notes.txt")),
             await Record.ExceptionAsync(() => frozen.SetResourceMetadataAsync("notes.txt", null, new Dictionary<string, string> { ["k"] = "v" })),
             await Record.ExceptionAsync(() => frozen.SetContentTypeAsync("notes.txt", null, "text/plain")),
-            await Record.ExceptionAsync(() => service.SetResourceContainerMetadataAsync(name, new Dictionary<string, string> { ["k"] = "v" })),
-            await Record.ExceptionAsync(() => service.DeleteResourceContainerIfExistsAsync(name))
+            await Record.ExceptionAsync(() => service.SetContainerMetadataAsync(name, new Dictionary<string, string> { ["k"] = "v" })),
+            await Record.ExceptionAsync(() => service.DeleteContainerIfExistsAsync(name))
         };
 
         // Assert
@@ -57,7 +57,7 @@ public abstract partial class ResourcefullContractTests
         ResourceContent kept = (await frozen.DownloadContentAsync("notes.txt"))!;
         Assert.Equal(("kept", null), (kept.Content.ToString(), kept.ResourceInfo.ContentType));
         Assert.Empty(kept.ResourceInfo.Metadata);
-        Assert.Empty((await service.GetResourceContainerInfoAsync(name))!.Metadata);
+        Assert.Empty((await service.GetContainerInfoAsync(name))!.Metadata);
         Assert.Single(await frozen.GetResourceVersionsAsync("notes.txt"));
         Assert.False(await frozen.ExistsAsync("other.txt"));
     }
@@ -166,7 +166,7 @@ public abstract partial class ResourcefullContractTests
         using ServiceProvider provider = BuildServiceProvider(o => o.UseVersioning()
             .UseContainerPolicies(cacheFor: TimeSpan.Zero).UsePolicyProvider<TestPolicyProvider>());
         string name = NewContainerName();
-        IResourceContainerClient container = await ServiceOf(provider).CreateResourceContainerAsync(name);
+        IResourceContainerClient container = await ServiceOf(provider).CreateContainerAsync(name);
         ResourceInfo large = await container.UploadAsync("a", new MemoryStream(new byte[100]));
         await container.UploadAsync("a", new MemoryStream(new byte[10]), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace });
         TestPolicyProvider.Policies[name] = new ResourceContainerPolicy { MaxResourceSize = 50 };
@@ -190,7 +190,7 @@ public abstract partial class ResourcefullContractTests
         IResourceServiceClient service = ServiceOf(provider);
         string images = NewContainerName();
         TestPolicyProvider.Policies[images] = new ResourceContainerPolicy { AllowedContentTypes = ["image/png"] };
-        IResourceContainerClient own = await service.CreateResourceContainerAsync(images);
+        IResourceContainerClient own = await service.CreateContainerAsync(images);
         IResourceContainerClient other = await NewContainerAsync(provider);
 
         // Act
@@ -215,7 +215,7 @@ public abstract partial class ResourcefullContractTests
             .UseContainerPolicies(cacheFor: TimeSpan.FromSeconds(cacheSeconds))
             .UsePolicyProvider<TestPolicyProvider>());
         string name = NewContainerName();
-        IResourceContainerClient container = await ServiceOf(provider).CreateResourceContainerAsync(name);
+        IResourceContainerClient container = await ServiceOf(provider).CreateContainerAsync(name);
         await container.UploadAsync("first", BinaryData.FromString("x"));
 
         // Act
@@ -238,7 +238,7 @@ public abstract partial class ResourcefullContractTests
 
         // Act
         ResourceContainerUsage usage = await container.GetUsageAsync();
-        ResourceContainerUsage empty = await ServiceOf(provider).GetResourceContainerClient(NewContainerName()).GetUsageAsync();
+        ResourceContainerUsage empty = await ServiceOf(provider).GetContainerClient(NewContainerName()).GetUsageAsync();
 
         // Assert
         Assert.Equal(new ResourceContainerUsage(100_012, 2, 3), usage);

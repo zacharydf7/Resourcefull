@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
+using Resourcefull.Providers;
 using Resourcefull.SqlServer;
 using Resourcefull.SqlServer.Utilities;
 
@@ -71,7 +72,7 @@ public class DeleteLockingIntegrationTests(SqlServerFixture fixture)
         using ServiceProvider provider = fixture.BuildServiceProvider(options => options.UseVersioning());
         var service = provider.GetRequiredService<IResourceServiceClient>();
         string containerName = $"c-{Guid.NewGuid():N}";
-        IResourceContainerClient container = await service.CreateResourceContainerAsync(containerName);
+        IResourceContainerClient container = await service.CreateContainerAsync(containerName);
         await container.UploadAsync("big", BinaryData.FromString("older"));
         ResourceInfo current = await container.UploadAsync("big", BinaryData.FromString("x"),
             new ResourceUploadOptions { Mode = ResourceWriteMode.Replace, ExpiresAt = what == "expire" ? DateTimeOffset.UtcNow.AddDays(-1) : null });
@@ -85,7 +86,7 @@ public class DeleteLockingIntegrationTests(SqlServerFixture fixture)
             "name" => await container.DeleteResourceIfExistsAsync("big"),
             "expire" => (await provider.GetRequiredService<ResourceRepository>().DeleteExpiredVersionsAsync(
                 [(new ResourceLocation(containerName, "big"), current.VersionId)], DateTimeOffset.UtcNow)).Count == 1,
-            _ => await service.DeleteResourceContainerIfExistsAsync(containerName)
+            _ => await service.DeleteContainerIfExistsAsync(containerName)
         };
 
         // Assert
@@ -105,7 +106,7 @@ public class DeleteLockingIntegrationTests(SqlServerFixture fixture)
             new DbContextOptionsBuilder<ResourceDbContext>().UseSqlServer(fixture.ConnectionString).AddInterceptors(locks)
                 .Options)) { ChunksPerDeleteBatch = 4 };
         string containerName = $"c-{Guid.NewGuid():N}";
-        await repository.AddResourceContainerAsync(containerName, new Dictionary<string, string>());
+        await repository.AddContainerAsync(containerName, new Dictionary<string, string>());
         List<(ResourceLocation, string)> versions = [];
         for (int i = 0; i < 9; i++)
         {

@@ -22,13 +22,13 @@ public class FilesController(IResourceServiceClient resources) : ControllerBase
 {
     // Downloads, with ETags, conditional requests and ranges.
     [HttpGet("{**name}")]
-    public IResult Get(string name) => Results.Resource(resources.GetResourceContainerClient("files"), name);
+    public IResult Get(string name) => Results.Resource(resources.GetContainerClient("files"), name);
 
     // Uploads the request body as it arrives, of any size up to the limit below.
     [HttpPut("{**name}")]
     [RequestSizeLimit(1L * 1024 * 1024 * 1024)]
     public Task<IResult> Put(string name, CancellationToken cancellationToken) =>
-        resources.GetResourceContainerClient("files").UploadFromRequestAsync(name, Request, null, cancellationToken);
+        resources.GetContainerClient("files").UploadFromRequestAsync(name, Request, null, cancellationToken);
 }
 ```
 
@@ -44,7 +44,7 @@ the result looks the resource up, as here:
 
 ```csharp
 public IActionResult OnGet(string name) =>
-    TypedResults.Resource(_resources.GetResourceContainerClient("files"), name);
+    TypedResults.Resource(_resources.GetContainerClient("files"), name);
 ```
 
 Use `TypedResults`, not `Results`: `Results.Resource` is declared to return `IResult`, which a handler can't return.
@@ -56,7 +56,7 @@ render after it:
 ```csharp
 public async Task<IActionResult> OnGetAsync(string name, CancellationToken cancellationToken)
 {
-    ResourceDownloadResult? download = await _resources.GetResourceContainerClient("files")
+    ResourceDownloadResult? download = await _resources.GetContainerClient("files")
         .DownloadStreamingAsync(name, cancellationToken: cancellationToken);
     if (download is null) return NotFound();
     await Results.Resource(download).ExecuteAsync(HttpContext);
@@ -84,7 +84,7 @@ as any other code does. (A statically rendered component has no `InputFile` even
       await using Stream content = e.File.OpenReadStream(maxAllowedSize: 100 * 1024 * 1024);
       // Browsers report an empty type for files they don't recognize; store none rather than an empty one.
       string? type = string.IsNullOrEmpty(e.File.ContentType) ? null : e.File.ContentType;
-      await Resources.GetResourceContainerClient("files").UploadAsync(e.File.Name, content,
+      await Resources.GetContainerClient("files").UploadAsync(e.File.Name, content,
           new ResourceUploadOptions { Headers = new ResourceHeaders(type, e.File.Size) });
   }
   ```

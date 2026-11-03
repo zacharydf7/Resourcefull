@@ -22,7 +22,7 @@ public class CancellationIntegrationTests(SqlServerFixture fixture)
         using var scope = provider.CreateScope();
         var service = scope.ServiceProvider.GetRequiredService<IResourceServiceClient>();
         var containerName = $"c-{Guid.NewGuid():N}";
-        var container = await service.CreateResourceContainerAsync(containerName);
+        var container = await service.CreateContainerAsync(containerName);
         await container.UploadAsync("doc", new MemoryStream(Encoding.UTF8.GetBytes("v1")));
         await container.UploadAsync("doc", new MemoryStream(Encoding.UTF8.GetBytes("v2")), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace });
         IReadOnlyList<ResourceInfo> versionsBefore = await container.GetResourceVersionsAsync("doc");
@@ -56,7 +56,7 @@ public class CancellationIntegrationTests(SqlServerFixture fixture)
         using var provider = fixture.BuildServiceProvider();
         using var scope = provider.CreateScope();
         var service = scope.ServiceProvider.GetRequiredService<IResourceServiceClient>();
-        var container = await service.CreateResourceContainerAsync($"c-{Guid.NewGuid():N}");
+        var container = await service.CreateContainerAsync($"c-{Guid.NewGuid():N}");
         await container.UploadAsync("doc", new MemoryStream(new byte[200_000]));
         ResourceDownloadResult? download = await container.DownloadStreamingAsync("doc", cancellationToken: CancellationToken.None);
         using var cts = new CancellationTokenSource();
@@ -71,7 +71,7 @@ public class CancellationIntegrationTests(SqlServerFixture fixture)
     }
 
     [SkippableFact]
-    public async Task CreateResourceContainerAsync_ShouldCreateNothing_WhenTokenIsAlreadyCanceled()
+    public async Task CreateContainerAsync_ShouldCreateNothing_WhenTokenIsAlreadyCanceled()
     {
         fixture.SkipIfUnavailable();
 
@@ -84,7 +84,7 @@ public class CancellationIntegrationTests(SqlServerFixture fixture)
         cts.Cancel();
 
         // Act
-        Task act() => service.CreateResourceContainerAsync(containerName, null, cts.Token);
+        Task act() => service.CreateContainerAsync(containerName, null, cts.Token);
 
         // Assert
         await Assert.ThrowsAnyAsync<OperationCanceledException>(act);

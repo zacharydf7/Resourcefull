@@ -83,7 +83,7 @@ Because a thumbnail's name includes the version ID and never changes, browsers a
 
 ```csharp
 app.MapGet("/photos/{versionId}/thumbnail", (string versionId, IResourceServiceClient resources) =>
-    Results.Resource(resources.GetResourceContainerClient("thumbnails"), $"{versionId}.webp",
+    Results.Resource(resources.GetContainerClient("thumbnails"), $"{versionId}.webp",
         options: new ResourceResultOptions { Inline = true, CacheControl = "public, max-age=31536000, immutable" }));
 ```
 

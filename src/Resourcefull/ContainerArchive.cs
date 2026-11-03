@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.IO.Compression;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Resourcefull.Providers;
 
 namespace Resourcefull;
 
@@ -74,7 +75,7 @@ internal static class ContainerArchive
     /// <summary>How many names an export lists the versions of at a time.</summary>
     internal const int NamesPerPage = 1_000;
 
-    public static async Task<ResourceExportResult> ExportAsync(ResourceRepository repository, ResourceContainerInfo container,
+    public static async Task<ResourceExportResult> ExportAsync(ResourceRepository repository, ContainerInfo container,
         Stream destination, Activity? activity, CancellationToken cancellationToken)
     {
         // Each distinct content's entry, by the version's recorded hash, or by its version ID when it has none.

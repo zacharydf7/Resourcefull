@@ -8,7 +8,7 @@ public class ResourceWorkflowIntegrationTests(SqlServerFixture fixture)
     private readonly SqlServerFixture _fixture = fixture;
 
     [SkippableFact]
-    public async Task DeleteResourceContainerIfExistsAsync_ShouldCascadeDeleteResourcesAndChunks_WhenContainerHoldsAResource()
+    public async Task DeleteContainerIfExistsAsync_ShouldCascadeDeleteResourcesAndChunks_WhenContainerHoldsAResource()
     {
         _fixture.SkipIfUnavailable();
 
@@ -18,13 +18,13 @@ public class ResourceWorkflowIntegrationTests(SqlServerFixture fixture)
         var service = scope.ServiceProvider.GetRequiredService<IResourceServiceClient>();
 
         var containerName = $"c-{Guid.NewGuid():N}";
-        await service.CreateResourceContainerAsync(containerName);
-        var container = service.GetResourceContainerClient(containerName);
+        await service.CreateContainerAsync(containerName);
+        var container = service.GetContainerClient(containerName);
         await container.UploadAsync("artifact.bin", new MemoryStream(new byte[200_000]));
         Assert.True(await CountChunksAsync(containerName) > 0);
 
         // Act
-        var deleted = await service.DeleteResourceContainerIfExistsAsync(containerName);
+        var deleted = await service.DeleteContainerIfExistsAsync(containerName);
 
         // Assert
         Assert.True(deleted);
@@ -55,7 +55,7 @@ public class ResourceWorkflowIntegrationTests(SqlServerFixture fixture)
         using var scope = provider.CreateScope();
         var service = scope.ServiceProvider.GetRequiredService<IResourceServiceClient>();
         var containerName = $"c-{Guid.NewGuid():N}";
-        var container = await service.CreateResourceContainerAsync(containerName);
+        var container = await service.CreateContainerAsync(containerName);
         await container.UploadAsync("report.txt", BinaryData.FromString("v1"));
         await container.UploadAsync("report.txt", BinaryData.FromString("v2"), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace });
         ResourceInfo older = (await container.GetResourceVersionsAsync("report.txt"))[1];

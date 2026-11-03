@@ -7,7 +7,9 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Moq;
 using Resourcefull.InMemory;
+using Resourcefull.Providers;
 using Resourcefull.SqlServer;
+using ResourceLocation = Resourcefull.Providers.ResourceLocation;
 
 namespace Resourcefull.Tests.Unit;
 
@@ -74,9 +76,9 @@ public sealed class TelemetryTests : IDisposable
         // in another container, which the operations on "c" leave for the expiry sweep to find.
         using ServiceProvider provider = NewServices();
         var service = provider.GetRequiredService<IResourceServiceClient>();
-        IResourceContainerClient container = await service.CreateResourceContainerAsync("c");
+        IResourceContainerClient container = await service.CreateContainerAsync("c");
         ResourceInfo version = await container.UploadAsync("r", BinaryData.FromString("x"));
-        await (await service.CreateResourceContainerAsync("expiring")).UploadAsync("r", BinaryData.FromString("x"),
+        await (await service.CreateContainerAsync("expiring")).UploadAsync("r", BinaryData.FromString("x"),
             new ResourceUploadOptions { ExpiresAt = DateTimeOffset.UtcNow.AddDays(-1) });
         var silent = new List<string>();
 
@@ -103,7 +105,7 @@ public sealed class TelemetryTests : IDisposable
 
     private static IEnumerable<(object, MethodInfo)> Operations(IResourceServiceClient service, IResourceContainerClient container)
     {
-        foreach (MethodInfo method in typeof(IResourceServiceClient).GetMethods().Where(m => m.Name != nameof(IResourceServiceClient.GetResourceContainerClient)))
+        foreach (MethodInfo method in typeof(IResourceServiceClient).GetMethods().Where(m => m.Name != nameof(IResourceServiceClient.GetContainerClient)))
             yield return (service, method);
         foreach (MethodInfo method in typeof(IResourceContainerClient).GetMethods().Where(m => !m.IsSpecialName && m.Name != nameof(IDisposable.Dispose)))
             yield return (container, method);
@@ -125,7 +127,7 @@ public sealed class TelemetryTests : IDisposable
     {
         // Arrange
         using ServiceProvider provider = NewServices();
-        IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>().CreateResourceContainerAsync("c");
+        IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>().CreateContainerAsync("c");
         using Activity root = TestSource.StartActivity("test")!;
 
         // Act
@@ -149,7 +151,7 @@ public sealed class TelemetryTests : IDisposable
     {
         // Arrange
         using ServiceProvider provider = NewServices();
-        IResourceContainerClient missing = provider.GetRequiredService<IResourceServiceClient>().GetResourceContainerClient("missing");
+        IResourceContainerClient missing = provider.GetRequiredService<IResourceServiceClient>().GetContainerClient("missing");
         using Activity root = TestSource.StartActivity("test")!;
 
         // Act
@@ -177,7 +179,7 @@ public sealed class TelemetryTests : IDisposable
             "refused" => Task.FromResult(ResourceInspectionResult.Refused("No.")),
             _ => throw new InvalidOperationException("The scanner is unavailable.")
         });
-        IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>().CreateResourceContainerAsync("c");
+        IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>().CreateContainerAsync("c");
         using Activity root = TestSource.StartActivity("test")!;
 
         // Act
@@ -200,7 +202,7 @@ public sealed class TelemetryTests : IDisposable
     {
         // Arrange
         using ServiceProvider provider = NewServices();
-        IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>().CreateResourceContainerAsync("c");
+        IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>().CreateContainerAsync("c");
         await container.UploadAsync("report.txt", BinaryData.FromString("hello"));
         ResourceDownloadResult download = (await container.DownloadStreamingAsync("report.txt"))!;
         await using Stream stream = download.Stream;
@@ -225,7 +227,7 @@ public sealed class TelemetryTests : IDisposable
     {
         // Arrange
         using ServiceProvider provider = NewServices();
-        IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>().CreateResourceContainerAsync("c");
+        IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>().CreateContainerAsync("c");
         await container.UploadAsync("report.txt", BinaryData.FromString("hello world"));
         using Activity root = TestSource.StartActivity("test")!;
 
@@ -247,7 +249,7 @@ public sealed class TelemetryTests : IDisposable
     {
         // Arrange
         using ServiceProvider provider = NewServices();
-        IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>().CreateResourceContainerAsync("c");
+        IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>().CreateContainerAsync("c");
         await container.UploadAsync("source", BinaryData.FromString("x"));
         using Activity root = TestSource.StartActivity("test")!;
 
@@ -265,7 +267,7 @@ public sealed class TelemetryTests : IDisposable
     {
         // Arrange
         using ServiceProvider provider = NewServices();
-        IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>().CreateResourceContainerAsync("c");
+        IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>().CreateContainerAsync("c");
         await container.UploadAsync("report.txt", BinaryData.FromString("hello world"));
         using Activity root = TestSource.StartActivity("test")!;
 
@@ -290,7 +292,7 @@ public sealed class TelemetryTests : IDisposable
         // Arrange
         using ServiceProvider provider = new ServiceCollection()
             .AddResourcefull(o => o.UseInMemory().UsePolicyProvider<TextOnlyProvider>()).BuildServiceProvider();
-        IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>().CreateResourceContainerAsync("c");
+        IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>().CreateContainerAsync("c");
         using Activity root = TestSource.StartActivity("test")!;
         var html = new ResourceUploadOptions { Headers = new ResourceHeaders("text/html", null) };
 
@@ -313,8 +315,8 @@ public sealed class TelemetryTests : IDisposable
         // Arrange
         using ServiceProvider provider = NewServices();
         IResourceServiceClient service = provider.GetRequiredService<IResourceServiceClient>();
-        IResourceContainerClient container = await service.CreateResourceContainerAsync("c");
-        await service.CreateResourceContainerAsync("d");
+        IResourceContainerClient container = await service.CreateContainerAsync("c");
+        await service.CreateContainerAsync("d");
         await container.UploadAsync("a", BinaryData.FromString("x"));
         using Activity root = TestSource.StartActivity("test")!;
 
@@ -336,14 +338,14 @@ public sealed class TelemetryTests : IDisposable
         using ServiceProvider provider = new ServiceCollection().AddResourcefull(o => o.UseInMemory()
             .UseContainerPolicies(cacheFor: TimeSpan.Zero).UsePolicyProvider<NoPolicies>()).BuildServiceProvider();
         IResourceServiceClient service = provider.GetRequiredService<IResourceServiceClient>();
-        IResourceContainerClient container = await service.CreateResourceContainerAsync("c");
+        IResourceContainerClient container = await service.CreateContainerAsync("c");
         await container.UploadAsync("a", BinaryData.FromString("x"));
         using Activity root = TestSource.StartActivity("test")!;
 
         // Act
         await container.SetResourceMetadataAsync("a", null, new Dictionary<string, string>());
         await container.SetContentTypeAsync("a", null, "text/plain");
-        await service.SetResourceContainerMetadataAsync("c", new Dictionary<string, string>());
+        await service.SetContainerMetadataAsync("c", new Dictionary<string, string>());
 
         // Assert
         foreach (string operation in new[] { "set_metadata", "set_content_type", "set_container_metadata" })
@@ -359,7 +361,7 @@ public sealed class TelemetryTests : IDisposable
         // Arrange
         using ServiceProvider provider = NewServices();
         IResourceServiceClient service = provider.GetRequiredService<IResourceServiceClient>();
-        IResourceContainerClient container = await service.CreateResourceContainerAsync("c");
+        IResourceContainerClient container = await service.CreateContainerAsync("c");
         ResourceInfo stored = await container.UploadAsync("a", BinaryData.FromString("x"), new ResourceUploadOptions { ExpiresAt = DateTimeOffset.UtcNow.AddDays(-1) });
         await container.UploadAsync("b", BinaryData.FromString("x"), new ResourceUploadOptions { ExpiresAt = DateTimeOffset.UtcNow.AddDays(-1) });
         using Activity root = TestSource.StartActivity("test")!;
@@ -495,7 +497,7 @@ public sealed class TelemetryTests : IDisposable
     {
         // Arrange: versioning keeps three, then a service keeping one prunes the container.
         using ServiceProvider provider = NewServices();
-        IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>().CreateResourceContainerAsync("c");
+        IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>().CreateContainerAsync("c");
         await container.UploadAsync("a", BinaryData.FromString("1"));
         await container.UploadAsync("a", BinaryData.FromString("2"), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace });
         await container.UploadAsync("a", BinaryData.FromString("3"), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace });
@@ -523,7 +525,7 @@ public sealed class TelemetryTests : IDisposable
     {
         // Arrange: two names with three versions each, then a service keeping one whose cleanup handler refuses one name.
         using ServiceProvider provider = NewServices();
-        IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>().CreateResourceContainerAsync("c");
+        IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>().CreateContainerAsync("c");
         foreach (string name in new[] { "kept", "refused" })
         {
             for (int i = 0; i < 3; i++) await container.UploadAsync(name, BinaryData.FromString($"{i}"), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace });
@@ -562,7 +564,7 @@ public sealed class TelemetryTests : IDisposable
         // Arrange
         using ServiceProvider provider = NewServices();
         IResourceServiceClient service = provider.GetRequiredService<IResourceServiceClient>();
-        IResourceContainerClient container = await service.CreateResourceContainerAsync("c");
+        IResourceContainerClient container = await service.CreateContainerAsync("c");
         await container.UploadAsync("a", BinaryData.FromString("1"));
         await container.UploadAsync("a", BinaryData.FromString("2"), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace });
         await container.UploadAsync("b", BinaryData.FromString("3"));
@@ -590,7 +592,7 @@ public sealed class TelemetryTests : IDisposable
     {
         // Arrange
         using ServiceProvider provider = NewServices();
-        IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>().CreateResourceContainerAsync("c");
+        IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>().CreateContainerAsync("c");
         using Activity root = TestSource.StartActivity("test")!;
 
         // Act
@@ -608,7 +610,7 @@ public sealed class TelemetryTests : IDisposable
         using ServiceProvider provider = new ServiceCollection()
             .AddResourcefull(o => o.UseInMemory().UsePolicyProvider<NoPolicies>()).BuildServiceProvider();
         IResourceContainerClient container =
-            await provider.GetRequiredService<IResourceServiceClient>().CreateResourceContainerAsync("c");
+            await provider.GetRequiredService<IResourceServiceClient>().CreateContainerAsync("c");
         using Activity root = TestSource.StartActivity("test")!;
 
         // Act
@@ -632,7 +634,7 @@ public sealed class TelemetryTests : IDisposable
     {
         // Arrange: it reads through the streaming download, which mustn't record a second one.
         using ServiceProvider provider = NewServices();
-        IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>().CreateResourceContainerAsync("c");
+        IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>().CreateContainerAsync("c");
         await container.UploadAsync("report.txt", BinaryData.FromString("hello"));
         using Activity root = TestSource.StartActivity("test")!;
 
@@ -644,16 +646,16 @@ public sealed class TelemetryTests : IDisposable
     }
 
     [Fact]
-    public async Task DeleteResourceContainerIfExistsAsync_ShouldRecordOneOperation_WhenCalled()
+    public async Task DeleteContainerIfExistsAsync_ShouldRecordOneOperation_WhenCalled()
     {
         // Arrange
         using ServiceProvider provider = NewServices();
         var service = provider.GetRequiredService<IResourceServiceClient>();
-        await service.CreateResourceContainerAsync("c");
+        await service.CreateContainerAsync("c");
         using Activity root = TestSource.StartActivity("test")!;
 
         // Act
-        await service.DeleteResourceContainerIfExistsAsync("c");
+        await service.DeleteContainerIfExistsAsync("c");
 
         // Assert
         Assert.Equal(["resourcefull delete_container"], SpansIn(root).Select(s => s.OperationName));
@@ -664,7 +666,7 @@ public sealed class TelemetryTests : IDisposable
     {
         // Arrange
         using ServiceProvider provider = NewServices(recordResourceNames: true);
-        IResourceContainerClient container = provider.GetRequiredService<IResourceServiceClient>().GetResourceContainerClient("c");
+        IResourceContainerClient container = provider.GetRequiredService<IResourceServiceClient>().GetContainerClient("c");
         using Activity root = TestSource.StartActivity("test")!;
 
         // Act
@@ -682,11 +684,11 @@ public sealed class TelemetryTests : IDisposable
         var service = provider.GetRequiredService<IResourceServiceClient>();
 
         // Act & Assert
-        await Assert.ThrowsAsync<ArgumentNullException>(() => service.CreateResourceContainerAsync(null!));
-        await Assert.ThrowsAsync<ArgumentNullException>(() => service.CreateResourceContainerIfNotExistsAsync(null!));
-        await Assert.ThrowsAsync<ArgumentNullException>(() => service.GetResourceContainerInfoAsync(null!));
+        await Assert.ThrowsAsync<ArgumentNullException>(() => service.CreateContainerAsync(null!));
+        await Assert.ThrowsAsync<ArgumentNullException>(() => service.CreateContainerIfNotExistsAsync(null!));
+        await Assert.ThrowsAsync<ArgumentNullException>(() => service.GetContainerInfoAsync(null!));
         await Assert.ThrowsAsync<ArgumentNullException>(() => service.ContainerExistsAsync(null!));
-        await Assert.ThrowsAsync<ArgumentNullException>(() => service.DeleteResourceContainerIfExistsAsync(null!));
+        await Assert.ThrowsAsync<ArgumentNullException>(() => service.DeleteContainerIfExistsAsync(null!));
     }
 
     [Theory]
@@ -696,7 +698,7 @@ public sealed class TelemetryTests : IDisposable
     {
         // Arrange: a conflict's message names the resource.
         using ServiceProvider provider = NewServices(recordResourceNames);
-        IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>().CreateResourceContainerAsync("c");
+        IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>().CreateContainerAsync("c");
         await container.UploadAsync("payroll-jane-doe.pdf", BinaryData.FromString("x"));
         using Activity root = TestSource.StartActivity("test")!;
 
@@ -739,7 +741,7 @@ public sealed class TelemetryTests : IDisposable
     {
         // Arrange
         using ServiceProvider provider = NewServices();
-        IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>().CreateResourceContainerAsync("c");
+        IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>().CreateContainerAsync("c");
         ResourceInfo version = await container.UploadAsync("report.txt", BinaryData.FromString("x"));
         using Activity root = TestSource.StartActivity("test")!;
 
@@ -769,7 +771,7 @@ public sealed class TelemetryTests : IDisposable
         using ServiceProvider provider = new ServiceCollection()
             .AddResourcefull(o => o.UseInMemory().UseCleanupHandler<FailingCleanupHandler>())
             .BuildServiceProvider();
-        IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>().CreateResourceContainerAsync("c");
+        IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>().CreateContainerAsync("c");
         await container.UploadAsync("a", BinaryData.FromString("x"));
 
         // Act
@@ -788,7 +790,7 @@ public sealed class TelemetryTests : IDisposable
         // Arrange
         using ServiceProvider provider = NewServices();
         IResourceServiceClient service = provider.GetRequiredService<IResourceServiceClient>();
-        IResourceContainerClient container = await service.CreateResourceContainerAsync("c");
+        IResourceContainerClient container = await service.CreateContainerAsync("c");
         var expired = new ResourceUploadOptions { ExpiresAt = DateTimeOffset.UtcNow.AddDays(-1) };
         await container.UploadAsync("a", BinaryData.FromString("x"), expired);
         await container.UploadAsync("b", BinaryData.FromString("x"), expired);
@@ -809,7 +811,7 @@ public sealed class TelemetryTests : IDisposable
             .AddResourcefull(o => o.UseInMemory().UseCleanupHandler<FailingCleanupHandler>())
             .BuildServiceProvider();
         IResourceServiceClient service = provider.GetRequiredService<IResourceServiceClient>();
-        IResourceContainerClient container = await service.CreateResourceContainerAsync("c");
+        IResourceContainerClient container = await service.CreateContainerAsync("c");
         await container.UploadAsync("a", BinaryData.FromString("x"), new ResourceUploadOptions { ExpiresAt = DateTimeOffset.UtcNow.AddDays(-1) });
 
         // Act
@@ -860,7 +862,7 @@ public sealed class TelemetryTests : IDisposable
         using ServiceProvider provider = new ServiceCollection()
             .AddResourcefull(o => o.UseInMemory().UseContainerPolicies(cacheFor: TimeSpan.Zero).UsePolicyProvider<OncePolicies>())
             .BuildServiceProvider();
-        IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>().CreateResourceContainerAsync("c");
+        IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>().CreateContainerAsync("c");
         await container.UploadAsync("a", BinaryData.FromString("x"));
         _measurements.Clear();
         using Activity root = TestSource.StartActivity("test")!;

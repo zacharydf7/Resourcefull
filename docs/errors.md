@@ -41,7 +41,7 @@ first and answer 404 if it's `false`:
 
 ```csharp
 if (!await resources.ContainerExistsAsync(name, cancellationToken)) return Results.NotFound();
-IResourceContainerClient container = resources.GetResourceContainerClient(name);
+IResourceContainerClient container = resources.GetContainerClient(name);
 ```
 
 ## Resourcefull's exceptions

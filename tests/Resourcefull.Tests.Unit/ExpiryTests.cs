@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Resourcefull.InMemory;
+using Resourcefull.Providers;
 
 namespace Resourcefull.Tests.Unit;
 
@@ -64,7 +65,7 @@ public class ExpiryTests
         // Arrange: more than the 100 versions one batch lists, in a store of their own.
         using ServiceProvider provider = new ServiceCollection().AddResourcefull(o => o.UseInMemory()).BuildServiceProvider();
         IResourceServiceClient service = provider.GetRequiredService<IResourceServiceClient>();
-        IResourceContainerClient container = await service.CreateResourceContainerAsync("c");
+        IResourceContainerClient container = await service.CreateContainerAsync("c");
         for (int i = 0; i < 101; i++)
             await container.UploadAsync($"r{i}", BinaryData.FromString("x"), new ResourceUploadOptions { ExpiresAt = DateTimeOffset.UtcNow.AddDays(-1) });
 
@@ -93,8 +94,8 @@ public class ExpiryTests
             .AddResourcefull(o => o.UseInMemory().UseContainerPolicies(cacheFor: TimeSpan.Zero).UsePolicyProvider<FrozenPolicies>())
             .BuildServiceProvider();
         IResourceServiceClient service = provider.GetRequiredService<IResourceServiceClient>();
-        IResourceContainerClient frozen = await service.CreateResourceContainerAsync("frozen");
-        IResourceContainerClient other = await service.CreateResourceContainerAsync("other");
+        IResourceContainerClient frozen = await service.CreateContainerAsync("frozen");
+        IResourceContainerClient other = await service.CreateContainerAsync("other");
         DateTimeOffset expired = DateTimeOffset.UtcNow.AddDays(-1);
         for (int i = 0; i < 101; i++)
             await frozen.UploadAsync($"r{i}", BinaryData.FromString("x"), new ResourceUploadOptions { ExpiresAt = expired });
@@ -130,7 +131,7 @@ public class ExpiryTests
         using ServiceProvider provider = new ServiceCollection()
             .AddResourcefull(o => o.UseInMemory().UseCleanupHandler<TimingOutHandler>()).BuildServiceProvider();
         IResourceServiceClient service = provider.GetRequiredService<IResourceServiceClient>();
-        IResourceContainerClient container = await service.CreateResourceContainerAsync("c");
+        IResourceContainerClient container = await service.CreateContainerAsync("c");
         DateTimeOffset expired = DateTimeOffset.UtcNow.AddDays(-1);
         await container.UploadAsync("first", BinaryData.FromString("x"), new ResourceUploadOptions { ExpiresAt = expired });
         await container.UploadAsync("second", BinaryData.FromString("x"), new ResourceUploadOptions { ExpiresAt = expired.AddMinutes(1) });
@@ -158,7 +159,7 @@ public class ExpiryTests
         using ServiceProvider provider = new ServiceCollection()
             .AddResourcefull(o => o.UseInMemory().UseCleanupHandler<FailingHandler>()).BuildServiceProvider();
         IResourceServiceClient service = provider.GetRequiredService<IResourceServiceClient>();
-        IResourceContainerClient container = await service.CreateResourceContainerAsync("c");
+        IResourceContainerClient container = await service.CreateContainerAsync("c");
         for (int i = 0; i < 12; i++)
             await container.UploadAsync($"r{i}", BinaryData.FromString("x"), new ResourceUploadOptions { ExpiresAt = DateTimeOffset.UtcNow.AddDays(-1) });
 
@@ -217,7 +218,7 @@ public class ExpiryTests
             new ResourceInfo { ContainerName = "c", Name = "a", VersionId = "v1" }
         ]);
         var handler = new Mock<IResourceCleanupHandler>();
-        var client = new ResourceContainerClient(repository.Object, null, new ResourcefullOptions(), new ResourceContainerInfo { Name = "c" },
+        var client = new ResourceContainerClient(repository.Object, null, new ResourcefullOptions(), new ContainerInfo { Name = "c" },
             null, cleanupHandler: handler.Object, expiry: new ExpirySettings(TimeSpan.FromMinutes(1)));
 
         // Act
@@ -246,7 +247,7 @@ public class ExpiryTests
     {
         IResourceServiceClient service = services.GetRequiredService<IResourceServiceClient>();
         string name = $"c-{Guid.NewGuid():N}";
-        IResourceContainerClient container = await service.CreateResourceContainerAsync(name);
+        IResourceContainerClient container = await service.CreateContainerAsync(name);
         // Each upload's own prune is refused, so the older versions stay.
         RefusingCleanupHandler.Refusing[name + "/*"] = true;
         for (int i = 0; i < names; i++)
@@ -275,7 +276,7 @@ public class ExpiryTests
 
         // Assert
         Assert.Equal(ResourceListOptions.DefaultPageSize + 1, pruned);
-        Assert.Single(await service.GetResourceContainerClient(name).GetResourceVersionsAsync($"n{ResourceListOptions.DefaultPageSize:D5}"));
+        Assert.Single(await service.GetContainerClient(name).GetResourceVersionsAsync($"n{ResourceListOptions.DefaultPageSize:D5}"));
     }
 
     [Fact]
@@ -292,7 +293,7 @@ public class ExpiryTests
         // Assert
         AggregateException failed = await Assert.ThrowsAsync<AggregateException>(act);
         Assert.IsType<InvalidOperationException>(Assert.Single(failed.InnerExceptions));
-        IResourceContainerClient container = service.GetResourceContainerClient(name);
+        IResourceContainerClient container = service.GetContainerClient(name);
         Assert.Equal(2, (await container.GetResourceVersionsAsync("n00000")).Count);
         Assert.Single(await container.GetResourceVersionsAsync("n00001"));
         Assert.Single(await container.GetResourceVersionsAsync("n00002"));

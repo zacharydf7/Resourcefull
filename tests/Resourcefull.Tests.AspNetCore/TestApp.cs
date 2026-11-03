@@ -32,7 +32,7 @@ internal sealed class TestApp : IAsyncDisposable
     public IServiceProvider Services => _app.Services;
 
     public IResourceContainerClient Files => _app.Services.CreateScope().ServiceProvider
-        .GetRequiredService<IResourceServiceClient>().GetResourceContainerClient(Container);
+        .GetRequiredService<IResourceServiceClient>().GetContainerClient(Container);
 
     /// <summary>Creates signed links in this app.</summary>
     public IResourceLinkSigner Links => _app.Services.CreateScope().ServiceProvider.GetRequiredService<IResourceLinkSigner>();
@@ -56,27 +56,27 @@ internal sealed class TestApp : IAsyncDisposable
         app.UseExceptionHandler();
         app.MapMethods("/files/{**name}", ["GET", "HEAD"], async (string name, IResourceServiceClient resources, CancellationToken cancellationToken) =>
         {
-            ResourceDownloadResult? download = await resources.GetResourceContainerClient(Container).DownloadStreamingAsync(name, cancellationToken: cancellationToken);
+            ResourceDownloadResult? download = await resources.GetContainerClient(Container).DownloadStreamingAsync(name, cancellationToken: cancellationToken);
             return download is null ? Results.NotFound() : Results.Resource(download);
         });
         app.MapGet("/inline/{**name}", async (string name, IResourceServiceClient resources, CancellationToken cancellationToken) =>
         {
-            ResourceDownloadResult? download = await resources.GetResourceContainerClient(Container).DownloadStreamingAsync(name, cancellationToken: cancellationToken);
+            ResourceDownloadResult? download = await resources.GetContainerClient(Container).DownloadStreamingAsync(name, cancellationToken: cancellationToken);
             return download is null ? Results.NotFound() : TypedResults.Resource(download, new ResourceResultOptions { Inline = true, FileName = "shown.txt" });
         });
         app.MapMethods("/ranged/{**name}", ["GET", "HEAD"], (string name, string? versionId, IResourceServiceClient resources) =>
-            Results.Resource(resources.GetResourceContainerClient(Container), name, versionId));
+            Results.Resource(resources.GetContainerClient(Container), name, versionId));
         app.MapGet("/ranged-inline/{**name}", (string name, IResourceServiceClient resources) =>
-            TypedResults.Resource(resources.GetResourceContainerClient(Container), name, null, new ResourceResultOptions { Inline = true, FileName = "shown.txt" }));
+            TypedResults.Resource(resources.GetContainerClient(Container), name, null, new ResourceResultOptions { Inline = true, FileName = "shown.txt" }));
         app.MapMethods("/shared/{token}", ["GET", "HEAD"], (string token, IResourceServiceClient resources) =>
             Results.SharedResource(resources, token));
         app.MapPut("/files/{**name}", (string name, HttpRequest request, IResourceServiceClient resources, CancellationToken cancellationToken) =>
-            resources.GetResourceContainerClient(Container).UploadFromRequestAsync(name, request, null, cancellationToken));
+            resources.GetContainerClient(Container).UploadFromRequestAsync(name, request, null, cancellationToken));
         app.MapGet("/throw", () => { throw toThrow!; });
         app.MapRazorPages();
 
         await app.StartAsync();
-        await app.Services.CreateScope().ServiceProvider.GetRequiredService<IResourceServiceClient>().CreateResourceContainerAsync(Container);
+        await app.Services.CreateScope().ServiceProvider.GetRequiredService<IResourceServiceClient>().CreateContainerAsync(Container);
         return new TestApp(app);
     }
 

@@ -1,4 +1,5 @@
 using Resourcefull.InMemory.Models;
+using Resourcefull.Providers;
 
 namespace Resourcefull.InMemory;
 
@@ -191,7 +192,7 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : R
             return true;
         }, cancellationToken);
 
-    public override Task<bool> SetExpiryAsync(ResourceLocation resource, string versionId, DateTimeOffset? expiresAt,
+    public override Task<bool> SetExpiryAsync(ResourceLocation resource, string? versionId, DateTimeOffset? expiresAt,
         CancellationToken cancellationToken = default) =>
         ChangeAsync(resource, versionId, info => info with { ExpiresAt = expiresAt }, cancellationToken);
 
@@ -285,7 +286,7 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : R
             return true;
         }, cancellationToken);
 
-    public override Task<bool> SetResourceContainerMetadataAsync(string resourceContainerName,
+    public override Task<bool> SetContainerMetadataAsync(string resourceContainerName,
         IReadOnlyDictionary<string, string> metadata, CancellationToken cancellationToken = default) =>
         UnderLockAsync(() =>
         {
@@ -295,7 +296,7 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : R
             return true;
         }, cancellationToken);
 
-    public override Task AddResourceContainerAsync(string resourceContainerName, IReadOnlyDictionary<string, string> metadata,
+    public override Task AddContainerAsync(string resourceContainerName, IReadOnlyDictionary<string, string> metadata,
         CancellationToken cancellationToken = default) =>
         UnderLockAsync(() =>
         {
@@ -314,18 +315,18 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : R
             return true;
         }, cancellationToken);
 
-    public override Task<IReadOnlyList<ResourceContainerInfo>> GetAllResourceContainerInfoAsync(
+    public override Task<IReadOnlyList<ContainerInfo>> GetAllContainerInfoAsync(
         CancellationToken cancellationToken = default) =>
-        UnderLockAsync<IReadOnlyList<ResourceContainerInfo>>(() => [.. _containers.Values.Select(ToContainerInfo)],
+        UnderLockAsync<IReadOnlyList<ContainerInfo>>(() => [.. _containers.Values.Select(ToContainerInfo)],
             cancellationToken);
 
-    public override Task<ResourceContainerInfo?> GetResourceContainerInfoAsync(string resourceContainerName,
+    public override Task<ContainerInfo?> GetContainerInfoAsync(string resourceContainerName,
         CancellationToken cancellationToken = default) =>
         UnderLockAsync(() => _containers.GetValueOrDefault(resourceContainerName) is { } container
             ? ToContainerInfo(container)
             : null, cancellationToken);
 
-    public override Task<bool> DeleteResourceContainerAsync(string resourceContainerName,
+    public override Task<bool> DeleteContainerAsync(string resourceContainerName,
         CancellationToken cancellationToken = default) =>
         UnderLockAsync(() => _containers.Remove(resourceContainerName), cancellationToken);
 
@@ -387,7 +388,7 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : R
         ? versions.MaxBy(r => r.Sequence)
         : versions.FirstOrDefault(r => r.ResourceInfo.VersionId == versionId);
 
-    private static ResourceContainerInfo ToContainerInfo(InMemoryResourceContainer container) => new()
+    private static ContainerInfo ToContainerInfo(InMemoryResourceContainer container) => new()
     {
         Name = container.Name,
         Metadata = new Dictionary<string, string>(container.Metadata)

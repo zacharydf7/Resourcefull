@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Moq;
 using Resourcefull.InMemory;
+using Resourcefull.Providers;
 using Resourcefull.Tests.Contract;
 
 namespace Resourcefull.Tests.Unit;
@@ -35,7 +36,7 @@ public class UploadInspectionTests
             }
         });
         IResourceContainerClient container =
-            await provider.GetRequiredService<IResourceServiceClient>().CreateResourceContainerAsync("c");
+            await provider.GetRequiredService<IResourceServiceClient>().CreateContainerAsync("c");
 
         // Act
         Task act() => container.UploadAsync("r", new FailingStream(Payload, failAt: 100_000));
@@ -56,7 +57,7 @@ public class UploadInspectionTests
             return Task.FromResult(ResourceInspectionResult.Accepted);
         });
         IResourceContainerClient container =
-            await provider.GetRequiredService<IResourceServiceClient>().CreateResourceContainerAsync("c");
+            await provider.GetRequiredService<IResourceServiceClient>().CreateContainerAsync("c");
 
         // Act
         ResourceInfo stored = await container.UploadAsync("r", new MemoryStream(Payload)).WaitAsync(TimeSpan.FromSeconds(30));
@@ -70,7 +71,7 @@ public class UploadInspectionTests
     {
         // Arrange: a provider that reads only the declared length, so it never makes the read that waits for the answer.
         var store = new ResourceInMemoryRepository();
-        await store.AddResourceContainerAsync("c", new Dictionary<string, string>());
+        await store.AddContainerAsync("c", new Dictionary<string, string>());
         var repository = new Mock<ResourceRepository>();
         repository.Setup(r => r.AddResourceAsync( It.IsAny<NewResourceVersion>(), It.IsAny<Stream>(), It.IsAny<ResourceWriteCondition?>(), It.IsAny<CancellationToken>()))
             .Returns(async (NewResourceVersion version, Stream content, ResourceWriteCondition? condition,
@@ -89,7 +90,7 @@ public class UploadInspectionTests
             return ResourceInspectionResult.Refused("It looks like malware.");
         });
         IResourceContainerClient container = new ResourceServiceClient(repository.Object,
-            Options.Create(new ResourcefullOptions()), uploadInspector: inspector).GetResourceContainerClient("c");
+            Options.Create(new ResourcefullOptions()), uploadInspector: inspector).GetContainerClient("c");
 
         // Act
         Task act() => container.UploadAsync("r", new MemoryStream(Payload),

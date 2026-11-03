@@ -4,6 +4,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
 using Resourcefull.InMemory;
+using Resourcefull.Providers;
 
 namespace Resourcefull.Tests.Unit;
 
@@ -179,7 +180,7 @@ public class ContainerPolicyTests
                 .UsePolicyProvider<LargerLimitsProvider>())
             .BuildServiceProvider();
         IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>()
-            .CreateResourceContainerAsync("c");
+            .CreateContainerAsync("c");
 
         // Act
         ResourceContainerPolicy policy = await container.GetPolicyAsync();
@@ -206,7 +207,7 @@ public class ContainerPolicyTests
             if (provider) o.UsePolicyProvider<TwoVersionsProvider>();
         }).BuildServiceProvider();
         IResourceContainerClient container = await services.GetRequiredService<IResourceServiceClient>()
-            .CreateResourceContainerAsync("c");
+            .CreateContainerAsync("c");
 
         // Act
         for (int i = 0; i < 12; i++)
@@ -226,7 +227,7 @@ public class ContainerPolicyTests
         using ServiceProvider provider = new ServiceCollection()
             .AddResourcefull(o => { o.UseInMemory(); if (versioning is { } keep) o.UseVersioning(keep); }).BuildServiceProvider();
         IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>()
-            .CreateResourceContainerAsync("c");
+            .CreateContainerAsync("c");
 
         // Act
         ResourceContainerPolicy policy = await container.GetPolicyAsync();
@@ -250,8 +251,8 @@ public class ContainerPolicyTests
         using ServiceProvider provider = new ServiceCollection()
             .AddResourcefull(o => o.UseInMemory().UsePolicyProvider<ReadOnlyDestination>()).BuildServiceProvider();
         var service = provider.GetRequiredService<IResourceServiceClient>();
-        IResourceContainerClient source = await service.CreateResourceContainerAsync("c");
-        await service.CreateResourceContainerAsync("d");
+        IResourceContainerClient source = await service.CreateContainerAsync("c");
+        await service.CreateContainerAsync("d");
         await source.UploadAsync("a", BinaryData.FromString("x"));
 
         // Act
@@ -271,7 +272,7 @@ public class ContainerPolicyTests
         IResourceServiceClient service = provider.GetRequiredService<IResourceServiceClient>();
 
         // Act
-        Task act() => service.DeleteResourceContainerIfExistsAsync("c");
+        Task act() => service.DeleteContainerIfExistsAsync("c");
 
         // Assert
         Assert.Equal(ResourcePolicyRule.ReadOnly, (await Assert.ThrowsAsync<ResourcePolicyViolationException>(act)).Rule);
@@ -310,7 +311,7 @@ public class ContainerPolicyTests
 
     /// <summary>A versioned client of container <c>c</c> whose policies come from <paramref name="settings"/>.</summary>
     private static ResourceContainerClient NewMovingClient(ResourceRepository repository, ContainerPolicySettings settings) =>
-        new(repository, null, new ResourcefullOptions { MaxVersions = 100 }, new ResourceContainerInfo { Name = "c" }, null,
+        new(repository, null, new ResourcefullOptions { MaxVersions = 100 }, new ContainerInfo { Name = "c" }, null,
             new ContainerPolicies(settings, repository));
 
     [Fact]
@@ -433,7 +434,7 @@ public class ContainerPolicyTests
     }
 
     private static async Task<IResourceContainerClient> NewFlakyContainerAsync(ServiceProvider services) =>
-        await services.GetRequiredService<IResourceServiceClient>().CreateResourceContainerAsync($"c-{Guid.NewGuid():N}");
+        await services.GetRequiredService<IResourceServiceClient>().CreateContainerAsync($"c-{Guid.NewGuid():N}");
 
     [Fact]
     public async Task UploadAsync_ShouldCheckTheLastKnownPolicy_WhenThePolicyProviderFails()
@@ -444,7 +445,7 @@ public class ContainerPolicyTests
             .BuildServiceProvider();
         IResourceContainerClient container = await NewFlakyContainerAsync(services);
         await container.UploadAsync("small", BinaryData.FromString("12345"));
-        FlakyPolicies.Down[container.ResourceContainerInfo.Name] = true;
+        FlakyPolicies.Down[container.Info.Name] = true;
 
         // Act
         Task tooLarge() => container.UploadAsync("large", new BinaryData(new byte[50]));
@@ -468,7 +469,7 @@ public class ContainerPolicyTests
             .BuildServiceProvider();
         IResourceContainerClient container = await NewFlakyContainerAsync(services);
         if (givenBefore) await container.UploadAsync("small", BinaryData.FromString("12345"));
-        FlakyPolicies.Down[container.ResourceContainerInfo.Name] = true;
+        FlakyPolicies.Down[container.Info.Name] = true;
 
         // Act
         Task act() => container.UploadAsync("small2", BinaryData.FromString("12345"));
@@ -488,7 +489,7 @@ public class ContainerPolicyTests
             .BuildServiceProvider();
         IResourceContainerClient container = await NewFlakyContainerAsync(services);
         await container.UploadAsync("small", BinaryData.FromString("12345"));
-        FlakyPolicies.Down[container.ResourceContainerInfo.Name] = true;
+        FlakyPolicies.Down[container.Info.Name] = true;
         await Task.Delay(TimeSpan.FromMilliseconds(300));
 
         // Act
@@ -577,7 +578,7 @@ public class ContainerPolicyTests
             .AddResourcefull(o => o.UseInMemory().UseContainerPolicies(new ResourceContainerPolicy { ReadOnly = true }))
             .BuildServiceProvider();
         IResourceServiceClient service = services.GetRequiredService<IResourceServiceClient>();
-        await service.CreateResourceContainerAsync("c");
+        await service.CreateContainerAsync("c");
 
         // Act
         Task act() => service.PruneContainerAsync("c");

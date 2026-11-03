@@ -94,14 +94,14 @@ public abstract partial class ResourcefullContractTests
     }
 
     [SkippableFact]
-    public async Task CreateResourceContainerAsync_ShouldLetExactlyOneSucceed_WhenCalledConcurrently()
+    public async Task CreateContainerAsync_ShouldLetExactlyOneSucceed_WhenCalledConcurrently()
     {
         // Arrange
         using ServiceProvider provider = BuildServiceProvider();
         string name = NewContainerName();
 
         // Act
-        Exception?[] outcomes = await RaceAsync(provider, (_, service) => service.CreateResourceContainerAsync(name));
+        Exception?[] outcomes = await RaceAsync(provider, (_, service) => service.CreateContainerAsync(name));
 
         // Assert
         Assert.Single(outcomes, o => o is null);
@@ -109,18 +109,18 @@ public abstract partial class ResourcefullContractTests
     }
 
     [SkippableFact]
-    public async Task CreateResourceContainerIfNotExistsAsync_ShouldSucceedForEveryCaller_WhenCalledConcurrently()
+    public async Task CreateContainerIfNotExistsAsync_ShouldSucceedForEveryCaller_WhenCalledConcurrently()
     {
         // Arrange
         using ServiceProvider provider = BuildServiceProvider();
         string name = NewContainerName();
 
         // Act
-        Exception?[] outcomes = await RaceAsync(provider, (_, service) => service.CreateResourceContainerIfNotExistsAsync(name));
+        Exception?[] outcomes = await RaceAsync(provider, (_, service) => service.CreateContainerIfNotExistsAsync(name));
 
         // Assert
         Assert.All(outcomes, Assert.Null);
-        Assert.Single(await ServiceOf(provider).GetResourceContainersAsync(), c => c.Name == name);
+        Assert.Single(await ServiceOf(provider).GetContainersAsync(), c => c.Name == name);
     }
 
     private static Task<Exception?[]> RaceAsync(ServiceProvider provider, Func<int, Task> write) =>

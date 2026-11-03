@@ -68,7 +68,7 @@ public abstract partial class ResourcefullContractTests
         var kept = new List<int>();
         foreach (string name in new[] { one, two, storeWide })
         {
-            IResourceContainerClient container = await service.CreateResourceContainerAsync(name);
+            IResourceContainerClient container = await service.CreateContainerAsync(name);
             for (int i = 0; i < 4; i++)
                 await container.UploadAsync("doc", BinaryData.FromString($"v{i}"), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace });
             kept.Add((await container.GetResourceVersionsAsync("doc")).Count);

@@ -95,7 +95,7 @@ public sealed class PerformanceTests(SqlServerFixture fixture, ITestOutputHelper
         await source.UploadAsync("r", new GeneratedStream(length));
 
         await MeasureAsync("copy-16MiB", length,
-            run: iteration => source.CopyResourceAsync("r", destination.ResourceContainerInfo.Name, $"r{iteration}"));
+            run: iteration => source.CopyResourceAsync("r", destination.Info.Name, $"r{iteration}"));
     }
 
     [SkippableFact]
@@ -325,7 +325,7 @@ public sealed class PerformanceTests(SqlServerFixture fixture, ITestOutputHelper
     {
         // A move changes only the versions' name, whatever their size.
         IResourceContainerClient container = await NewContainerAsync();
-        string containerName = container.ResourceContainerInfo.Name;
+        string containerName = container.Info.Name;
         for (int i = 0; i <= Repetitions; i++) await container.UploadAsync($"r{i}", new GeneratedStream(16 * Mebibyte));
 
         await MeasureAsync("move-16MiB", 0,
@@ -345,7 +345,7 @@ public sealed class PerformanceTests(SqlServerFixture fixture, ITestOutputHelper
             length += 4 * Mebibyte + i;
         }
         IResourceServiceClient service = _provider!.GetRequiredService<IResourceServiceClient>();
-        string name = container.ResourceContainerInfo.Name;
+        string name = container.Info.Name;
         var export = new MemoryStream();
         await service.ExportContainerAsync(name, export);
 
@@ -359,22 +359,22 @@ public sealed class PerformanceTests(SqlServerFixture fixture, ITestOutputHelper
     }
 
     [SkippableFact]
-    public async Task DeleteResourceContainerIfExistsAsync_ShouldStayWithinItsBaseline_WhenTheContainerHoldsSixteenMebibytes()
+    public async Task DeleteContainerIfExistsAsync_ShouldStayWithinItsBaseline_WhenTheContainerHoldsSixteenMebibytes()
     {
         // In a database of its own, since it lists the container's rows.
         IResourceContainerClient first = await NewContainerAsync(ownDatabase: "containers");
         IResourceServiceClient service = _provider!.GetRequiredService<IResourceServiceClient>();
-        var names = new List<string> { first.ResourceContainerInfo.Name };
+        var names = new List<string> { first.Info.Name };
         for (int i = 1; i <= Repetitions; i++)
-            names.Add((await service.CreateResourceContainerAsync($"{names[0]}-{i}")).ResourceContainerInfo.Name);
+            names.Add((await service.CreateContainerAsync($"{names[0]}-{i}")).Info.Name);
         foreach (string name in names)
         {
-            IResourceContainerClient container = service.GetResourceContainerClient(name);
+            IResourceContainerClient container = service.GetContainerClient(name);
             for (int i = 0; i < 4; i++) await container.UploadAsync($"r{i}", new GeneratedStream(4 * Mebibyte));
         }
 
         await MeasureAsync("delete-container-16MiB", 0,
-            run: iteration => service.DeleteResourceContainerIfExistsAsync(names[iteration]));
+            run: iteration => service.DeleteContainerIfExistsAsync(names[iteration]));
     }
 
     [SkippableFact]
@@ -455,7 +455,7 @@ public sealed class PerformanceTests(SqlServerFixture fixture, ITestOutputHelper
         if (ownDatabase is not null) await _provider.MigrateResourcefullDatabaseAsync();
 
         var resources = _provider.GetRequiredService<IResourceServiceClient>();
-        return await resources.CreateResourceContainerAsync($"perf-{Guid.NewGuid():N}");
+        return await resources.CreateContainerAsync($"perf-{Guid.NewGuid():N}");
     }
 
     /// <summary>

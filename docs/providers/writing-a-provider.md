@@ -1,8 +1,10 @@
 # Writing a provider
 
 To store resources somewhere else, such as a file system, object storage or another database, derive a class from
-`ResourceRepository` and register it with `UseProvider`. The clients handle names, versioning, pruning, URIs and
-cancellation plumbing; a provider stores and retrieves.
+`ResourceRepository` (in the `Resourcefull.Providers` namespace) and register it with `UseProvider`. The clients handle
+names, versioning, pruning, URIs and cancellation plumbing; a provider stores and retrieves. A file that also uses
+`System.Reflection` sees two `ResourceLocation` types, so it needs an alias:
+`using ResourceLocation = Resourcefull.Providers.ResourceLocation;`.
 
 <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> This page describes 4.0, where providers derive
 from the `ResourceRepository` base class. In 3.1, a provider implements the `IResourceRepository` interface instead;
@@ -85,23 +87,23 @@ public sealed class FileSystemRepository(FileSystemOptions options, TimeProvider
 
     // Containers
 
-    public override Task AddResourceContainerAsync(string resourceContainerName,
+    public override Task AddContainerAsync(string resourceContainerName,
         IReadOnlyDictionary<string, string> metadata, CancellationToken cancellationToken = default)
         // Store the name and a copy of the metadata. A container that already exists throws
         // ResourceConflictException, decided by the write itself, not by a check before it.
         => throw new NotImplementedException();
 
-    public override Task<IReadOnlyList<ResourceContainerInfo>> GetAllResourceContainerInfoAsync(
+    public override Task<IReadOnlyList<ContainerInfo>> GetAllContainerInfoAsync(
         CancellationToken cancellationToken = default)
         // Every container, each with its own copy of the metadata.
         => throw new NotImplementedException();
 
-    public override Task<ResourceContainerInfo?> GetResourceContainerInfoAsync(string resourceContainerName,
+    public override Task<ContainerInfo?> GetContainerInfoAsync(string resourceContainerName,
         CancellationToken cancellationToken = default)
         // The container, or null if there's none by that name (compared ordinally).
         => throw new NotImplementedException();
 
-    public override Task<bool> DeleteResourceContainerAsync(string resourceContainerName,
+    public override Task<bool> DeleteContainerAsync(string resourceContainerName,
         CancellationToken cancellationToken = default)
         // The container and every version in it; false if it didn't exist. It may stop between whole versions when
         // canceled, as long as every name left keeps its current version and calling it again finishes.
@@ -199,7 +201,7 @@ store: with the `VersionId` and `LastModified` it's given, rather than new ones,
 refuse a wrong `DeclaredLength`, and make the version the name's current one. Its default throws
 `NotSupportedException`, so imports fail; exports work with any provider, because they only read.
 
-`SetResourceContainerMetadataAsync` replaces a container's metadata: an import uses it to mark the container it's
+`SetContainerMetadataAsync` replaces a container's metadata: an import uses it to mark the container it's
 filling as unfinished, and to clear the mark at the end. Its default throws `NotSupportedException`, and imports then
 go unmarked.
 
@@ -249,7 +251,7 @@ the metadata you're given, so the caller can't change it afterward, and serializ
 name, as for `SetExpiryAsync`. Their defaults throw `NotSupportedException`, so the clients' methods report that the
 provider doesn't support them.
 
-The service client's `SetResourceContainerMetadataAsync` calls the provider member of the same name, described under
+The service client's `SetContainerMetadataAsync` calls the provider member of the same name, described under
 [Importing versions](#importing-versions), so with a provider that doesn't override it, the service client's method
 throws `NotSupportedException`.
 

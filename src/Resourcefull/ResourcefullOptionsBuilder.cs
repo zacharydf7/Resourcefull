@@ -3,6 +3,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
+using Resourcefull.Providers;
 
 namespace Resourcefull;
 
@@ -56,7 +57,7 @@ public class ResourcefullOptionsBuilder
     /// before. It is registered as a scoped service, so it can depend on other services.
     /// </summary>
     /// <typeparam name="T">The <see cref="IUriProvider"/> implementation.</typeparam>
-    public ResourcefullOptionsBuilder SetUriProvider<T>() where T : class, IUriProvider
+    public ResourcefullOptionsBuilder UseUriProvider<T>() where T : class, IUriProvider
     {
         ServiceDescriptor? descriptor = Services.SingleOrDefault(
                 d => d.ServiceType ==

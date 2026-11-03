@@ -18,7 +18,7 @@ public class ContainerUsageIntegrationTests(SqlServerFixture fixture)
         // Arrange: two versions across several chunks, one of them with its recorded length removed.
         using ServiceProvider provider = fixture.BuildServiceProvider(o => o.UseVersioning());
         string containerName = $"c-{Guid.NewGuid():N}";
-        IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>().CreateResourceContainerAsync(containerName);
+        IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>().CreateContainerAsync(containerName);
         ResourceInfo legacy = await container.UploadAsync("a", new MemoryStream(new byte[150_000]));
         await container.UploadAsync("a", new MemoryStream(new byte[10]), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace });
         await using (SqlConnection connection = await fixture.OpenConnectionAsync())
@@ -46,8 +46,8 @@ public class ContainerUsageIntegrationTests(SqlServerFixture fixture)
             .UsePolicyProvider<SmallDestinations>());
         IResourceServiceClient service = provider.GetRequiredService<IResourceServiceClient>();
         string sourceName = $"c-{Guid.NewGuid():N}", destinationName = $"small-{Guid.NewGuid():N}";
-        IResourceContainerClient source = await service.CreateResourceContainerAsync(sourceName);
-        await service.CreateResourceContainerAsync(destinationName);
+        IResourceContainerClient source = await service.CreateContainerAsync(sourceName);
+        await service.CreateContainerAsync(destinationName);
         ResourceInfo legacy = await source.UploadAsync("a", new MemoryStream(new byte[150_000]));
         await using (SqlConnection connection = await fixture.OpenConnectionAsync())
         await using (SqlCommand command = connection.CreateCommand())
@@ -83,7 +83,7 @@ public class ContainerUsageIntegrationTests(SqlServerFixture fixture)
         // Arrange
         using ServiceProvider provider = fixture.BuildServiceProvider();
         string containerName = $"c-{Guid.NewGuid():N}";
-        IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>().CreateResourceContainerAsync(containerName);
+        IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>().CreateContainerAsync(containerName);
         ResourceInfo legacy = await container.UploadAsync("a", BinaryData.FromString("hello"));
         await using (SqlConnection connection = await fixture.OpenConnectionAsync())
         await using (SqlCommand command = connection.CreateCommand())

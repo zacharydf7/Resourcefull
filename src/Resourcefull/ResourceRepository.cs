@@ -3,7 +3,7 @@ using System.Runtime.CompilerServices;
 
 [assembly: InternalsVisibleTo("Resourcefull.Tests.Unit")]
 
-namespace Resourcefull;
+namespace Resourcefull.Providers;
 
 /// <summary>
 /// The storage behind Resourcefull: derive from this to add a provider, and register it with
@@ -253,14 +253,14 @@ public abstract class ResourceRepository
     /// <param name="metadata">Its metadata.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <exception cref="ResourceConflictException">A container with the same name already exists.</exception>
-    public abstract Task AddResourceContainerAsync(string resourceContainerName, IReadOnlyDictionary<string, string> metadata,
+    public abstract Task AddContainerAsync(string resourceContainerName, IReadOnlyDictionary<string, string> metadata,
         CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Lists every container, each with its own copy of the stored metadata.
     /// </summary>
     /// <param name="cancellationToken">Cancels the listing.</param>
-    public abstract Task<IReadOnlyList<ResourceContainerInfo>> GetAllResourceContainerInfoAsync(
+    public abstract Task<IReadOnlyList<ContainerInfo>> GetAllContainerInfoAsync(
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -269,7 +269,7 @@ public abstract class ResourceRepository
     /// <param name="resourceContainerName">The container's name.</param>
     /// <param name="cancellationToken">Cancels the lookup.</param>
     /// <returns>The container, or <see langword="null"/> when it does not exist.</returns>
-    public abstract Task<ResourceContainerInfo?> GetResourceContainerInfoAsync(string resourceContainerName,
+    public abstract Task<ContainerInfo?> GetContainerInfoAsync(string resourceContainerName,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -280,11 +280,11 @@ public abstract class ResourceRepository
     /// <param name="resourceContainerName">The container's name.</param>
     /// <param name="cancellationToken">Cancels the delete.</param>
     /// <returns><see langword="true"/> if the container existed and was deleted; otherwise <see langword="false"/>.</returns>
-    public abstract Task<bool> DeleteResourceContainerAsync(string resourceContainerName,
+    public abstract Task<bool> DeleteContainerAsync(string resourceContainerName,
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Replaces a container's <see cref="ResourceContainerInfo.Metadata"/> with a copy of <paramref name="metadata"/>.
+    /// Replaces a container's <see cref="ContainerInfo.Metadata"/> with a copy of <paramref name="metadata"/>.
     /// An import uses it to mark the container it's filling as unfinished, and to clear the mark once it's done. The
     /// default implementation throws <see cref="NotSupportedException"/>, and imports then go unmarked.
     /// </summary>
@@ -293,7 +293,7 @@ public abstract class ResourceRepository
     /// <param name="cancellationToken">Cancels the change.</param>
     /// <returns><see langword="true"/> if the container exists; otherwise <see langword="false"/>.</returns>
     /// <exception cref="NotSupportedException">The provider doesn't change container metadata, as by default.</exception>
-    public virtual Task<bool> SetResourceContainerMetadataAsync(string resourceContainerName,
+    public virtual Task<bool> SetContainerMetadataAsync(string resourceContainerName,
         IReadOnlyDictionary<string, string> metadata, CancellationToken cancellationToken = default)
         => throw new NotSupportedException($"{GetType().Name} doesn't change container metadata.");
 
@@ -429,17 +429,18 @@ public abstract class ResourceRepository
     }
 
     /// <summary>
-    /// Sets one version's <see cref="ResourceInfo.ExpiresAt"/>, or clears it with <see langword="null"/>, changing nothing
-    /// else about it. <see cref="AddResourceAsync"/> and <see cref="CopyResourceAsync"/> store it from the version
-    /// they're given, and every read returns it.
+    /// Sets one version's <see cref="ResourceInfo.ExpiresAt"/>, or the current version's when <paramref name="versionId"/>
+    /// is <see langword="null"/>; an <paramref name="expiresAt"/> of <see langword="null"/> clears it. It changes nothing
+    /// else about the version. <see cref="AddResourceAsync"/> and <see cref="CopyResourceAsync"/> store the expiry from
+    /// the version they're given, and every read returns it.
     /// </summary>
     /// <param name="resource">The resource.</param>
-    /// <param name="versionId">The version.</param>
+    /// <param name="versionId">The version, or <see langword="null"/> for the current one.</param>
     /// <param name="expiresAt">When it expires; <see langword="null"/> never.</param>
     /// <param name="cancellationToken">Cancels the change.</param>
     /// <returns><see langword="true"/> if the version exists; otherwise <see langword="false"/>.</returns>
     /// <exception cref="NotSupportedException">The provider doesn't support expiry, as by default.</exception>
-    public virtual Task<bool> SetExpiryAsync(ResourceLocation resource, string versionId, DateTimeOffset? expiresAt,
+    public virtual Task<bool> SetExpiryAsync(ResourceLocation resource, string? versionId, DateTimeOffset? expiresAt,
         CancellationToken cancellationToken = default)
         => throw new NotSupportedException($"{GetType().Name} doesn't support expiry.");
 

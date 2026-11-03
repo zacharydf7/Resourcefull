@@ -11,7 +11,7 @@ than the web server allows by default.
 ```csharp
 app.MapPut("/files/{container}/{**name}", (string container, string name, HttpRequest request,
     IResourceServiceClient resources, CancellationToken cancellationToken) =>
-    resources.GetResourceContainerClient(container).UploadFromRequestAsync(name, request, null, cancellationToken));
+    resources.GetContainerClient(container).UploadFromRequestAsync(name, request, null, cancellationToken));
 ```
 
 `UploadFromRequestAsync` streams the request body into storage, so nothing is buffered whatever its size. It stores
@@ -58,7 +58,7 @@ app.MapPost("/files/{container}", async (string container, IFormFile file, IReso
     // A name your application chooses: the browser's file name is whatever the uploader says.
     string name = $"uploads/{Guid.NewGuid():N}{Path.GetExtension(file.FileName)}";
     await using Stream content = file.OpenReadStream();
-    ResourceInfo stored = await resources.GetResourceContainerClient(container).UploadAsync(name, content,
+    ResourceInfo stored = await resources.GetContainerClient(container).UploadAsync(name, content,
         new ResourceUploadOptions
         {
             Headers = new ResourceHeaders(file.ContentType, file.Length),

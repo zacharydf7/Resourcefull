@@ -52,7 +52,7 @@ public sealed class SharedResourceHttpResult : IResult, IActionResult
         switch (check)
         {
             case { Status: ResourceLinkStatus.Valid, Link: { } link }:
-                await new ResourceLookupHttpResult(Resources.GetResourceContainerClient(link.ContainerName), link.ResourceName,
+                await new ResourceLookupHttpResult(Resources.GetContainerClient(link.ContainerName), link.ResourceName,
                     new ResourceResultOptions { Inline = link.Inline }, link.VersionId).ExecuteAsync(httpContext);
                 break;
             case { Status: ResourceLinkStatus.Expired }:

@@ -68,7 +68,7 @@ public abstract partial class ResourcefullContractTests
     {
         // Arrange: a missing container is reported as such, not as unmet conditions.
         using ServiceProvider provider = BuildServiceProvider(o => o.UseVersioning());
-        IResourceContainerClient container = ServiceOf(provider).GetResourceContainerClient(NewContainerName());
+        IResourceContainerClient container = ServiceOf(provider).GetContainerClient(NewContainerName());
 
         // Act
         Task act() => container.UploadAsync("report.txt", BinaryData.FromString("x"), IfMatch(Guid.NewGuid().ToString()));

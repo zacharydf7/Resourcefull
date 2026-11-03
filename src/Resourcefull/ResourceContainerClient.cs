@@ -1,11 +1,12 @@
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Resourcefull.Providers;
 
 namespace Resourcefull;
 
 internal partial class ResourceContainerClient(ResourceRepository resourceRepository, IUriProvider? uriProvider,
-    ResourcefullOptions options, ResourceContainerInfo containerInfo, ILogger? logger, ContainerPolicies? policies = null,
+    ResourcefullOptions options, ContainerInfo containerInfo, ILogger? logger, ContainerPolicies? policies = null,
     IResourceCleanupHandler? cleanupHandler = null, TimeProvider? timeProvider = null, ExpirySettings? expiry = null,
     IResourceUploadInspector? uploadInspector = null)
     : IResourceContainerClient
@@ -13,9 +14,9 @@ internal partial class ResourceContainerClient(ResourceRepository resourceReposi
     private readonly ILogger _logger = logger ?? NullLogger.Instance;
     private readonly ClientTelemetry _telemetry = new(Telemetry.ProviderName(resourceRepository), options);
 
-    public ResourceContainerInfo ResourceContainerInfo { get; } = containerInfo;
+    public ContainerInfo Info { get; } = containerInfo;
 
-    private string ContainerName => ResourceContainerInfo.Name;
+    private string ContainerName => Info.Name;
 
     public Task<ResourceInfo> UploadAsync(string resourceName, Stream content, ResourceUploadOptions? options = null,
         CancellationToken cancellationToken = default)
@@ -636,12 +637,11 @@ internal partial class ResourceContainerClient(ResourceRepository resourceReposi
         return content is null ? null : version with { ContentLength = content.Length };
     }
 
-    public Task<bool> SetExpiryAsync(string resourceName, string versionId, DateTimeOffset? expiresAt, CancellationToken cancellationToken = default)
+    public Task<bool> SetExpiryAsync(string resourceName, string? versionId, DateTimeOffset? expiresAt,
+        CancellationToken cancellationToken = default)
         => _telemetry.RunAsync("set_expiry", ContainerName, resourceName, async () =>
         {
             ResourceNames.ThrowIfInvalidResourceName(resourceName);
-            if (string.IsNullOrEmpty(versionId))
-                throw new ArgumentException($"{nameof(versionId)} can't be empty.", nameof(versionId));
             if (policies is not null) await policies.ThrowIfReadOnlyAsync(ContainerName, _telemetry, cancellationToken);
             return await resourceRepository.SetExpiryAsync(new ResourceLocation(ContainerName, resourceName), versionId, expiresAt, cancellationToken);
         });

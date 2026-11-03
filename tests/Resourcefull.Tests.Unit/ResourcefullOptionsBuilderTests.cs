@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using Resourcefull.Providers;
 
 namespace Resourcefull.Tests.Unit;
 
@@ -51,13 +52,13 @@ public class ResourcefullOptionsBuilderTests
     }
 
     [Fact]
-    public void SetUriProvider_ShouldRegisterProvider_WhenCalledOnce()
+    public void UseUriProvider_ShouldRegisterProvider_WhenCalledOnce()
     {
         // Arrange
         var services = new ServiceCollection();
 
         // Act
-        new ResourcefullOptionsBuilder(services).SetUriProvider<FakeUriProvider>();
+        new ResourcefullOptionsBuilder(services).UseUriProvider<FakeUriProvider>();
 
         // Assert
         IUriProvider? provider = services.BuildServiceProvider().GetService<IUriProvider>();
@@ -65,15 +66,15 @@ public class ResourcefullOptionsBuilderTests
     }
 
     [Fact]
-    public void SetUriProvider_ShouldReplaceExistingProvider_WhenCalledTwice()
+    public void UseUriProvider_ShouldReplaceExistingProvider_WhenCalledTwice()
     {
         // Arrange
         var services = new ServiceCollection();
         var builder = new ResourcefullOptionsBuilder(services);
 
         // Act
-        builder.SetUriProvider<FakeUriProvider>();
-        builder.SetUriProvider<FakeUriProvider>();
+        builder.UseUriProvider<FakeUriProvider>();
+        builder.UseUriProvider<FakeUriProvider>();
 
         // Assert
         Assert.NotNull(services.SingleOrDefault(d => d.ServiceType == typeof(IUriProvider)));
@@ -82,9 +83,9 @@ public class ResourcefullOptionsBuilderTests
     /// <summary>A provider defined outside the library, knowing one container and nothing else.</summary>
     private sealed class OneContainerProvider : ResourceRepository
     {
-        public override Task<ResourceContainerInfo?> GetResourceContainerInfoAsync(string resourceContainerName,
+        public override Task<ContainerInfo?> GetContainerInfoAsync(string resourceContainerName,
             CancellationToken cancellationToken = default)
-            => Task.FromResult(resourceContainerName == "custom" ? new ResourceContainerInfo { Name = "custom" } : null);
+            => Task.FromResult(resourceContainerName == "custom" ? new ContainerInfo { Name = "custom" } : null);
 
         public override Task<WrittenContent> AddResourceAsync(NewResourceVersion version, Stream content,
             ResourceWriteCondition? condition = null, CancellationToken cancellationToken = default) => throw new NotSupportedException();
@@ -98,11 +99,11 @@ public class ResourcefullOptionsBuilderTests
             CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public override Task<bool> DeleteResourceAsync(ResourceLocation resource, string? versionId = null,
             ResourceConditions? conditions = null, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public override Task AddResourceContainerAsync(string resourceContainerName, IReadOnlyDictionary<string, string> metadata,
+        public override Task AddContainerAsync(string resourceContainerName, IReadOnlyDictionary<string, string> metadata,
             CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public override Task<IReadOnlyList<ResourceContainerInfo>> GetAllResourceContainerInfoAsync(
+        public override Task<IReadOnlyList<ContainerInfo>> GetAllContainerInfoAsync(
             CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public override Task<bool> DeleteResourceContainerAsync(string resourceContainerName,
+        public override Task<bool> DeleteContainerAsync(string resourceContainerName,
             CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 

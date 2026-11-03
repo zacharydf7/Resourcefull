@@ -16,8 +16,8 @@ version it replaces too. (In 3.1, an upload is create-only when versioning is of
 
 ## `ResourceContainerNotFoundException` on upload
 
-The container doesn't exist. `GetResourceContainerClient` doesn't create or check it; use
-`CreateResourceContainerIfNotExistsAsync` once, for example at startup or before the first upload.
+The container doesn't exist. `GetContainerClient` doesn't create or check it; use
+`CreateContainerIfNotExistsAsync` once, for example at startup or before the first upload.
 
 ## `ResourceContentLengthMismatchException`
 

@@ -68,10 +68,10 @@ public sealed class ScaleTests(SqlServerFixture fixture, ITestOutputHelper outpu
         await container.UploadAsync("warm-up", BinaryData.FromString("x"));
         await service.DeleteExpiredAsync();
         IResourceContainerClient warmUp =
-            await service.CreateResourceContainerAsync($"{container.ResourceContainerInfo.Name}-warm-up");
+            await service.CreateContainerAsync($"{container.Info.Name}-warm-up");
         await warmUp.UploadAsync("r", BinaryData.FromString("x"));
-        await service.ExportContainerAsync(warmUp.ResourceContainerInfo.Name, Stream.Null);
-        await service.DeleteResourceContainerIfExistsAsync(warmUp.ResourceContainerInfo.Name);
+        await service.ExportContainerAsync(warmUp.Info.Name, Stream.Null);
+        await service.DeleteContainerIfExistsAsync(warmUp.Info.Name);
 
         await MeasureAsync($"get-info-of-{rows}", () => container.GetResourceInfoAsync(NameOf(Rows / 2)));
         var middlePage = new ResourceListOptions { Prefix = NameOf(Rows / 2)[..^1], PageSize = 100 };
@@ -82,9 +82,9 @@ public sealed class ScaleTests(SqlServerFixture fixture, ITestOutputHelper outpu
         // Every seeded name shares one content, which an export writes once, so this measures reading the container
         // and writing its manifest.
         await MeasureAsync($"export-of-{rows}",
-            () => service.ExportContainerAsync(container.ResourceContainerInfo.Name, Stream.Null));
+            () => service.ExportContainerAsync(container.Info.Name, Stream.Null));
         await MeasureAsync($"delete-container-of-{rows}",
-            () => service.DeleteResourceContainerIfExistsAsync(container.ResourceContainerInfo.Name));
+            () => service.DeleteContainerIfExistsAsync(container.Info.Name));
     }
 
     public void Dispose()
@@ -124,7 +124,7 @@ public sealed class ScaleTests(SqlServerFixture fixture, ITestOutputHelper outpu
         _provider = services.BuildServiceProvider();
         await _provider.MigrateResourcefullDatabaseAsync();
         return await _provider.GetRequiredService<IResourceServiceClient>()
-            .CreateResourceContainerAsync($"scale-{Guid.NewGuid():N}");
+            .CreateContainerAsync($"scale-{Guid.NewGuid():N}");
     }
 
     /// <summary>
@@ -156,7 +156,7 @@ public sealed class ScaleTests(SqlServerFixture fixture, ITestOutputHelper outpu
             CROSS JOIN [ResourceChunks] c JOIN [Resources] t ON t.[Id] = c.[ResourceId]
             WHERE r.[Id] > @lastId AND t.[ContainerName] = @container AND t.[Name] = 'template';
             """;
-        command.Parameters.Add(new SqlParameter("@container", container.ResourceContainerInfo.Name));
+        command.Parameters.Add(new SqlParameter("@container", container.Info.Name));
         SqlParameter start = command.Parameters.Add(new SqlParameter("@start", System.Data.SqlDbType.Int));
         SqlParameter count = command.Parameters.Add(new SqlParameter("@count", System.Data.SqlDbType.Int));
 

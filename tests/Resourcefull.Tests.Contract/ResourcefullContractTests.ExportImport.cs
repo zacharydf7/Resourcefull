@@ -2,6 +2,7 @@ using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.DependencyInjection;
+using Resourcefull.Providers;
 
 namespace Resourcefull.Tests.Contract;
 
@@ -43,7 +44,7 @@ public abstract partial class ResourcefullContractTests
         using ServiceProvider provider = BuildServiceProvider();
         IResourceServiceClient service = ServiceOf(provider);
         string sourceName = NewContainerName(), restoredName = NewContainerName();
-        IResourceContainerClient source = await service.CreateResourceContainerAsync(sourceName);
+        IResourceContainerClient source = await service.CreateContainerAsync(sourceName);
         for (int i = 0; i <= 1_000; i++) await source.UploadAsync($"r{i:D4}", BinaryData.FromString($"{i}"));
         var export = new MemoryStream();
 
@@ -54,7 +55,7 @@ public abstract partial class ResourcefullContractTests
 
         // Assert
         Assert.Equal(1_001, exported.ResourceCount);
-        IResourceContainerClient restored = service.GetResourceContainerClient(restoredName);
+        IResourceContainerClient restored = service.GetContainerClient(restoredName);
         Assert.Equal(1_001, (await restored.ListResourcesAsync().ToListAsync()).Count);
         Assert.Equal("1000", (await restored.DownloadContentAsync("r1000"))!.Content.ToString());
     }
@@ -66,7 +67,7 @@ public abstract partial class ResourcefullContractTests
         using ServiceProvider provider = BuildServiceProvider(o => o.UseVersioning());
         IResourceServiceClient service = ServiceOf(provider);
         string sourceName = NewContainerName(), restoredName = NewContainerName();
-        IResourceContainerClient source = await service.CreateResourceContainerAsync(sourceName, new Dictionary<string, string> { ["team"] = "billing" });
+        IResourceContainerClient source = await service.CreateContainerAsync(sourceName, new Dictionary<string, string> { ["team"] = "billing" });
         byte[] large = RandomNumberGenerator.GetBytes(150_000);
         await source.UploadAsync("report.pdf", new MemoryStream(large), new ResourceUploadOptions
         {
@@ -84,8 +85,8 @@ public abstract partial class ResourcefullContractTests
         ResourceImportResult imported = await service.ImportContainerAsync(restoredName, await ExportAsync(service, sourceName));
 
         // Assert
-        IResourceContainerClient restored = service.GetResourceContainerClient(restoredName);
-        Assert.Equal(new Dictionary<string, string> { ["team"] = "billing" }, (await service.GetResourceContainerInfoAsync(restoredName))!.Metadata);
+        IResourceContainerClient restored = service.GetContainerClient(restoredName);
+        Assert.Equal(new Dictionary<string, string> { ["team"] = "billing" }, (await service.GetContainerInfoAsync(restoredName))!.Metadata);
         Assert.Equal((2L, 3L), (imported.ResourceCount, imported.VersionCount));
         foreach (string name in new[] { "report.pdf", "copy.pdf" })
         {
@@ -107,7 +108,7 @@ public abstract partial class ResourcefullContractTests
         using ServiceProvider provider = BuildServiceProvider(o => o.UseVersioning());
         IResourceServiceClient service = ServiceOf(provider);
         IResourceContainerClient container = await NewContainerAsync(provider);
-        string name = container.ResourceContainerInfo.Name;
+        string name = container.Info.Name;
         await container.UploadAsync("a", BinaryData.FromString("same"));
         await container.UploadAsync("a", BinaryData.FromString("same"), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace });
         await container.CopyResourceAsync("a", name, "b");
@@ -136,8 +137,8 @@ public abstract partial class ResourcefullContractTests
         await existing.UploadAsync("kept", BinaryData.FromString("y"));
 
         // Act
-        Task act() => service.ImportContainerAsync(existing.ResourceContainerInfo.Name,
-            ExportAsync(service, source.ResourceContainerInfo.Name).GetAwaiter().GetResult());
+        Task act() => service.ImportContainerAsync(existing.Info.Name,
+            ExportAsync(service, source.Info.Name).GetAwaiter().GetResult());
 
         // Assert
         await Assert.ThrowsAsync<ResourceConflictException>(act);
@@ -155,7 +156,7 @@ public abstract partial class ResourcefullContractTests
         IResourceContainerClient source = await NewContainerAsync(provider);
         await source.UploadAsync("a", BinaryData.FromString("original"));
         await source.UploadAsync("b", BinaryData.FromString("intact"));
-        MemoryStream export = await ExportAsync(service, source.ResourceContainerInfo.Name);
+        MemoryStream export = await ExportAsync(service, source.Info.Name);
         await using (ZipArchive zip = await ZipArchive.CreateAsync(export, ZipArchiveMode.Update, leaveOpen: true, entryNameEncoding: null))
         {
             ZipArchiveEntry content = zip.Entries.First(e => e.FullName.StartsWith("content/", StringComparison.Ordinal));
@@ -189,7 +190,7 @@ public abstract partial class ResourcefullContractTests
         IResourceContainerClient source = await NewContainerAsync(provider);
         await source.UploadAsync("a", BinaryData.FromString("x"));
         await source.UploadAsync("b", BinaryData.FromString("y"));
-        MemoryStream export = await ExportAsync(service, source.ResourceContainerInfo.Name);
+        MemoryStream export = await ExportAsync(service, source.Info.Name);
         await EditManifestAsync(export, original, edited);
         string restoredName = NewContainerName();
 
@@ -209,7 +210,7 @@ public abstract partial class ResourcefullContractTests
         IResourceServiceClient service = ServiceOf(provider);
         IResourceContainerClient source = await NewContainerAsync(provider);
         await source.UploadAsync("a", BinaryData.FromString("hello"));
-        MemoryStream export = await ExportAsync(service, source.ResourceContainerInfo.Name);
+        MemoryStream export = await ExportAsync(service, source.Info.Name);
         await EditManifestAsync(export, "\"contentLength\": 5,", "\"contentLength\": 4,");
         string restoredName = NewContainerName();
 
@@ -246,7 +247,7 @@ public abstract partial class ResourcefullContractTests
         using ServiceProvider provider = BuildServiceProvider();
         IResourceContainerClient container = await NewContainerAsync(provider);
         ResourceRepository repository = provider.GetRequiredService<ResourceRepository>();
-        var version = new NewResourceVersion(new ResourceLocation(container.ResourceContainerInfo.Name, "a"), "imported")
+        var version = new NewResourceVersion(new ResourceLocation(container.Info.Name, "a"), "imported")
         {
             LastModified = Past
         };
@@ -289,7 +290,7 @@ public abstract partial class ResourcefullContractTests
         IResourceServiceClient service = ServiceOf(provider);
         IResourceContainerClient source = await NewContainerAsync(provider);
         await source.UploadAsync("a", BinaryData.FromString("x"));
-        MemoryStream export = await ExportAsync(service, source.ResourceContainerInfo.Name);
+        MemoryStream export = await ExportAsync(service, source.Info.Name);
 
         // Act & Assert
         await Assert.ThrowsAsync<ResourceContainerNotFoundException>(() => service.ExportContainerAsync(NewContainerName(), new MemoryStream()));
@@ -310,7 +311,7 @@ public abstract partial class ResourcefullContractTests
         TestPolicyProvider.Policies[restoredName] = new ResourceContainerPolicy { MaxResourceSize = 50 };
 
         // Act
-        Task act() => service.ImportContainerAsync(restoredName, ExportAsync(service, source.ResourceContainerInfo.Name).GetAwaiter().GetResult());
+        Task act() => service.ImportContainerAsync(restoredName, ExportAsync(service, source.Info.Name).GetAwaiter().GetResult());
 
         // Assert
         Assert.Equal(ResourcePolicyRule.MaxResourceSize, (await Assert.ThrowsAsync<ResourcePolicyViolationException>(act)).Rule);
@@ -332,7 +333,7 @@ public abstract partial class ResourcefullContractTests
         await source.UploadAsync("a", new MemoryStream(new byte[10]));
         await source.UploadAsync("a", new MemoryStream(new byte[10]), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace });
         await source.UploadAsync("b", new MemoryStream(new byte[10]));
-        MemoryStream export = await ExportAsync(service, source.ResourceContainerInfo.Name);
+        MemoryStream export = await ExportAsync(service, source.Info.Name);
         string restoredName = NewContainerName();
         TestPolicyProvider.Policies[restoredName] = rule == ResourcePolicyRule.MaxResourceCount
             ? new ResourceContainerPolicy { MaxResourceCount = limit }
@@ -357,7 +358,7 @@ public abstract partial class ResourcefullContractTests
         IResourceContainerClient source = await NewContainerAsync(provider);
         await source.UploadAsync("a", BinaryData.FromString("x"));
         await source.UploadAsync("b", BinaryData.FromString("y"));
-        MemoryStream export = await ExportAsync(service, source.ResourceContainerInfo.Name);
+        MemoryStream export = await ExportAsync(service, source.Info.Name);
         await using (ZipArchive zip = await ZipArchive.CreateAsync(export, ZipArchiveMode.Update, leaveOpen: true, entryNameEncoding: null))
         {
             ZipArchiveEntry manifest = zip.GetEntry("manifest.json")!;
@@ -378,7 +379,7 @@ public abstract partial class ResourcefullContractTests
         ResourceImportResult imported = await service.ImportContainerAsync(restoredName, export);
 
         // Assert
-        Assert.Equal(2, (await service.GetResourceContainerClient(restoredName).GetUsageAsync()).ResourceCount);
+        Assert.Equal(2, (await service.GetContainerClient(restoredName).GetUsageAsync()).ResourceCount);
         Assert.Equal(2, imported.VersionCount);
     }
 
@@ -470,7 +471,7 @@ public abstract partial class ResourcefullContractTests
         int prunedAgain = await service.PruneContainerAsync(name);
 
         // Assert: the older version went; the current one, and the other name's only one, stayed.
-        IResourceContainerClient container = service.GetResourceContainerClient(name);
+        IResourceContainerClient container = service.GetContainerClient(name);
         Assert.Equal((1, 0), (pruned, prunedAgain));
         Assert.Equal(["0193a1b2-0000-7000-8000-000000000002"],
             (await container.GetResourceVersionsAsync("notes.txt")).Select(v => v.VersionId));
@@ -491,7 +492,7 @@ public abstract partial class ResourcefullContractTests
         MemoryStream exported = await ExportAsync(service, name);
 
         // Assert: what was read, and that writing it again gives the same manifest.
-        IResourceContainerClient container = service.GetResourceContainerClient(name);
+        IResourceContainerClient container = service.GetContainerClient(name);
         IReadOnlyList<ResourceInfo> versions = await container.GetResourceVersionsAsync("notes.txt");
         Assert.Equal(["0193a1b2-0000-7000-8000-000000000002", "0193a1b2-0000-7000-8000-000000000001"],
             versions.Select(v => v.VersionId));

@@ -25,7 +25,7 @@ A few words come up on every page:
   switch.
 
 ```csharp
-IResourceContainerClient invoices = await resources.CreateResourceContainerIfNotExistsAsync("invoices");
+IResourceContainerClient invoices = await resources.CreateContainerIfNotExistsAsync("invoices");
 ResourceInfo stored = await invoices.UploadAsync("2026/10/invoice-1042.pdf", pdf);
 ResourceDownloadResult? download = await invoices.DownloadStreamingAsync("2026/10/invoice-1042.pdf");
 ```

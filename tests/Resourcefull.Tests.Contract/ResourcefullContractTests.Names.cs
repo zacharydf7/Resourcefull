@@ -1,5 +1,6 @@
 using System.Text;
 using Microsoft.Extensions.DependencyInjection;
+using Resourcefull.Providers;
 
 namespace Resourcefull.Tests.Contract;
 
@@ -19,7 +20,7 @@ public abstract partial class ResourcefullContractTests
             await Assert.ThrowsAsync<ResourceNameException>(() => container.UploadAsync(name, BinaryData.FromString("x")));
             await Assert.ThrowsAsync<ResourceNameException>(() => container.CopyResourceAsync("source", container.Name, name));
             await Assert.ThrowsAsync<ResourceNameException>(() => container.RenameResourceAsync("source", name));
-            await Assert.ThrowsAsync<ResourceNameException>(() => ServiceOf(provider).CreateResourceContainerAsync(name));
+            await Assert.ThrowsAsync<ResourceNameException>(() => ServiceOf(provider).CreateContainerAsync(name));
         }
         Assert.Equal(["source"], (await container.ListResourcesAsync().ToListAsync()).Select(r => r.Name));
     }
@@ -67,28 +68,28 @@ public abstract partial class ResourcefullContractTests
         await ServiceOf(provider).ImportContainerAsync(restored, export);
 
         // Assert: a backup restores the name as it was.
-        ResourceContent? content = await ServiceOf(provider).GetResourceContainerClient(restored).DownloadContentAsync("tab\tname");
+        ResourceContent? content = await ServiceOf(provider).GetContainerClient(restored).DownloadContentAsync("tab\tname");
         Assert.Equal([1], content!.Content.ToArray());
     }
 
     [SkippableFact]
-    public async Task CreateResourceContainerIfNotExistsAsync_ShouldReturnTheContainer_WhenItsOlderNameBreaksTheRulesForNewNames()
+    public async Task CreateContainerIfNotExistsAsync_ShouldReturnTheContainer_WhenItsOlderNameBreaksTheRulesForNewNames()
     {
         // Arrange: a container an earlier release could have created, put straight into the provider.
         using ServiceProvider provider = BuildServiceProvider();
         string name = NewContainerName() + "\tolder";
-        await provider.GetRequiredService<ResourceRepository>().AddResourceContainerAsync(name, new Dictionary<string, string>());
+        await provider.GetRequiredService<ResourceRepository>().AddContainerAsync(name, new Dictionary<string, string>());
 
         // Act
-        IResourceContainerClient container = await ServiceOf(provider).CreateResourceContainerIfNotExistsAsync(name);
+        IResourceContainerClient container = await ServiceOf(provider).CreateContainerIfNotExistsAsync(name);
 
         // Assert
         Assert.Equal(name, container.Name);
-        await Assert.ThrowsAsync<ResourceNameException>(() => ServiceOf(provider).CreateResourceContainerIfNotExistsAsync(NewContainerName() + "\tnew"));
+        await Assert.ThrowsAsync<ResourceNameException>(() => ServiceOf(provider).CreateContainerIfNotExistsAsync(NewContainerName() + "\tnew"));
     }
 
     [SkippableFact]
-    public async Task CreateResourceContainerAsync_ShouldCreateBoth_WhenNamesDifferOnlyInCase()
+    public async Task CreateContainerAsync_ShouldCreateBoth_WhenNamesDifferOnlyInCase()
     {
         // Arrange
         using ServiceProvider provider = BuildServiceProvider();
@@ -96,8 +97,8 @@ public abstract partial class ResourcefullContractTests
         var suffix = Guid.NewGuid().ToString("N");
 
         // Act
-        await service.CreateResourceContainerAsync($"Docs-{suffix}");
-        await service.CreateResourceContainerAsync($"docs-{suffix}");
+        await service.CreateContainerAsync($"Docs-{suffix}");
+        await service.CreateContainerAsync($"docs-{suffix}");
 
         // Assert
         Assert.True(await service.ContainerExistsAsync($"Docs-{suffix}"));
@@ -132,7 +133,7 @@ public abstract partial class ResourcefullContractTests
         var containerName = Guid.NewGuid().ToString("N").PadRight(ResourceNames.MaxContainerNameLength, 'c');
         var resourceName = new string('r', ResourceNames.MaxResourceNameLength);
         var payload = Encoding.UTF8.GetBytes("longest names");
-        IResourceContainerClient container = await service.CreateResourceContainerAsync(containerName);
+        IResourceContainerClient container = await service.CreateContainerAsync(containerName);
 
         // Act
         await container.UploadAsync(resourceName, new MemoryStream(payload));
@@ -162,7 +163,7 @@ public abstract partial class ResourcefullContractTests
     }
 
     [SkippableFact]
-    public async Task CreateResourceContainerAsync_ShouldKeepContainersApart_WhenNamesLookLikePaths()
+    public async Task CreateContainerAsync_ShouldKeepContainersApart_WhenNamesLookLikePaths()
     {
         // Arrange
         using ServiceProvider provider = BuildServiceProvider();
@@ -172,13 +173,13 @@ public abstract partial class ResourcefullContractTests
 
         // Act
         foreach (string name in names)
-            await (await service.CreateResourceContainerAsync(name)).UploadAsync("r", BinaryData.FromString(name));
+            await (await service.CreateContainerAsync(name)).UploadAsync("r", BinaryData.FromString(name));
 
         // Assert
         foreach (string name in names)
         {
             Assert.True(await service.ContainerExistsAsync(name));
-            ResourceContent? content = await service.GetResourceContainerClient(name).DownloadContentAsync("r");
+            ResourceContent? content = await service.GetContainerClient(name).DownloadContentAsync("r");
             Assert.Equal(name, content!.Content.ToString());
         }
     }
@@ -215,18 +216,18 @@ public abstract partial class ResourcefullContractTests
 
     [SkippableTheory]
     [MemberData(nameof(InvalidContainerNames))]
-    public async Task CreateResourceContainerAsync_ShouldThrowArgumentException_WhenGivenAnInvalidName(string name)
+    public async Task CreateContainerAsync_ShouldThrowArgumentException_WhenGivenAnInvalidName(string name)
     {
         // Arrange
         using ServiceProvider provider = BuildServiceProvider();
         IResourceServiceClient service = ServiceOf(provider);
 
         // Act
-        Task act() => service.CreateResourceContainerAsync(name);
+        Task act() => service.CreateContainerAsync(name);
 
         // Assert
         await Assert.ThrowsAnyAsync<ArgumentException>(act);
-        Assert.DoesNotContain(await service.GetResourceContainersAsync(), c => c.Name == name);
+        Assert.DoesNotContain(await service.GetContainersAsync(), c => c.Name == name);
     }
 
     [SkippableTheory]

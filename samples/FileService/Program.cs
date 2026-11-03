@@ -115,7 +115,7 @@ files.MapPut("/{**name}", async (string name, ClaimsPrincipal user, HttpRequest 
     if (!contentTypes.TryGetContentType(name, out string? contentType))
         return Results.StatusCode(StatusCodes.Status415UnsupportedMediaType);
     IResourceContainerClient container =
-        await resources.CreateResourceContainerIfNotExistsAsync(ContainerOf(user), cancellationToken: cancellationToken);
+        await resources.CreateContainerIfNotExistsAsync(ContainerOf(user), cancellationToken: cancellationToken);
     var upload = new ResourceUploadOptions { Headers = new ResourceHeaders(contentType, request.ContentLength) };
     return await container.UploadFromRequestAsync(name, request, upload, cancellationToken);
 });
@@ -155,4 +155,4 @@ static string ContainerOf(ClaimsPrincipal user) =>
         ?? throw new InvalidOperationException("The token has no user ID."));
 
 static IResourceContainerClient FilesOf(ClaimsPrincipal user, IResourceServiceClient resources) =>
-    resources.GetResourceContainerClient(ContainerOf(user));
+    resources.GetContainerClient(ContainerOf(user));

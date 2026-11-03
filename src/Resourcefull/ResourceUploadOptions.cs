@@ -10,7 +10,7 @@ public class ResourceUploadOptions
     /// default, refuses it, and <see cref="ResourceWriteMode.Replace"/> stores the upload as the new current version.
     /// <para>Coming in 4.0.</para>
     /// </summary>
-    public ResourceWriteMode Mode { get; set; }
+    public ResourceWriteMode Mode { get; init; }
 
     /// <summary>
     /// Store the upload only if the name's current version meets these, decided by the write itself; otherwise
@@ -18,17 +18,17 @@ public class ResourceUploadOptions
     /// <see cref="Mode"/> set to <see cref="ResourceWriteMode.Replace"/>, since a name that meets them has a
     /// current version.
     /// </summary>
-    public ResourceConditions? Conditions { get; set; }
+    public ResourceConditions? Conditions { get; init; }
 
     /// <summary>
     /// <inheritdoc cref="ResourceHeaders(string?, long?)"/>
     /// </summary>
-    public ResourceHeaders? Headers { get; set; }
+    public ResourceHeaders? Headers { get; init; }
 
     /// <summary>
     /// Describes metadata to store with the uploaded resource.
     /// </summary>
-    public IDictionary<string, string> Metadata { get; set; } = new Dictionary<string, string>();
+    public IDictionary<string, string> Metadata { get; init; } = new Dictionary<string, string>();
 
     /// <summary>
     /// When the uploaded version expires: after it, <see cref="ResourcefullOptionsBuilder.UseExpiry"/> deletes it within
@@ -36,5 +36,5 @@ public class ResourceUploadOptions
     /// never expires.
     /// <para>Coming in 4.0.</para>
     /// </summary>
-    public DateTimeOffset? ExpiresAt { get; set; }
+    public DateTimeOffset? ExpiresAt { get; init; }
 }

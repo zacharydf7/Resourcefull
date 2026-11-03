@@ -1,6 +1,6 @@
 using System.Security.Cryptography;
 
-namespace Resourcefull;
+namespace Resourcefull.Providers;
 
 /// <summary>
 /// Passes reads through from another stream while counting and hashing every byte read. Providers read the content

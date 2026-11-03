@@ -20,7 +20,7 @@ public class StreamingIntegrationTests(SqlServerFixture fixture)
 
         // Arrange
         using ServiceProvider provider = fixture.BuildServiceProvider();
-        IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>().CreateResourceContainerAsync($"c-{Guid.NewGuid():N}");
+        IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>().CreateContainerAsync($"c-{Guid.NewGuid():N}");
         await container.ListResourcesAsync().ToListAsync();
         long baseline = GC.GetTotalMemory(forceFullCollection: true);
         var upload = new GeneratedStream(LargePayload, sampleMemory: true);
@@ -48,7 +48,7 @@ public class StreamingIntegrationTests(SqlServerFixture fixture)
         // Arrange
         const long size = 5L * 1024 * 1024 + 123;
         using ServiceProvider provider = fixture.BuildServiceProvider();
-        IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>().CreateResourceContainerAsync($"c-{Guid.NewGuid():N}");
+        IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>().CreateContainerAsync($"c-{Guid.NewGuid():N}");
         ResourceInfo uploaded = await container.UploadAsync("file.bin", new GeneratedStream(size));
         var download = new VerifyingStream();
 
@@ -72,7 +72,7 @@ public class StreamingIntegrationTests(SqlServerFixture fixture)
     private async Task<IResourceContainerClient> StoreLegacyChunksAsync(ServiceProvider provider)
     {
         string containerName = $"c-{Guid.NewGuid():N}";
-        IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>().CreateResourceContainerAsync(containerName);
+        IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>().CreateContainerAsync(containerName);
         await container.UploadAsync("n", new MemoryStream());
         await using SqlConnection connection = await fixture.OpenConnectionAsync();
         await using SqlCommand command = connection.CreateCommand();
@@ -142,7 +142,7 @@ public class StreamingIntegrationTests(SqlServerFixture fixture)
 
         // Arrange: an upload that stops partway through its content until released.
         using ServiceProvider provider = fixture.BuildServiceProvider(o => o.UseVersioning());
-        IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>().CreateResourceContainerAsync($"c-{Guid.NewGuid():N}");
+        IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>().CreateContainerAsync($"c-{Guid.NewGuid():N}");
         var paused = new GeneratedStream(3L * 1024 * 1024, pauseAfter: 1024 * 1024);
         Task<ResourceInfo> slowUpload = container.UploadAsync("report.bin", paused, new ResourceUploadOptions { Mode = ResourceWriteMode.Replace });
         Assert.True(await paused.Paused.WaitAsync(TimeSpan.FromSeconds(30)), "The upload never reached its pause.");

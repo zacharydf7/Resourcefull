@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Options;
+using Resourcefull.Providers;
 
 namespace Resourcefull;
 
@@ -20,7 +21,7 @@ internal sealed class ResourcefullHealthCheck(ResourceRepository repository, Res
     {
         var telemetry = new ClientTelemetry(Telemetry.ProviderName(repository), options);
         await telemetry.RunAsync("health_check", null, null,
-            () => repository.GetResourceContainerInfoAsync(ProbeContainerName, cancellationToken));
+            () => repository.GetContainerInfoAsync(ProbeContainerName, cancellationToken));
         return HealthCheckResult.Healthy($"Resourcefull's storage ({telemetry.Provider}) can be reached.",
             new Dictionary<string, object> { ["provider"] = telemetry.Provider });
     }

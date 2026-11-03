@@ -3,7 +3,7 @@
 /// <summary>
 /// Represents the information about a resource container.
 /// </summary>
-public class ResourceContainerInfo
+public class ContainerInfo
 {
     /// <summary>
     /// The name of the resource container.

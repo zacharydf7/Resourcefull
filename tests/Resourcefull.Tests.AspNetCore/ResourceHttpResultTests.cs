@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Resourcefull.AspNetCore;
+using Resourcefull.Providers;
 
 namespace Resourcefull.Tests.AspNetCore;
 

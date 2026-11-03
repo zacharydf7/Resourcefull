@@ -4,6 +4,7 @@ using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Resourcefull.Providers;
 using Resourcefull.SqlServer;
 using Resourcefull.SqlServer.Utilities;
 
@@ -21,7 +22,7 @@ public class ContainerDeleteIntegrationTests(SqlServerFixture fixture)
     private static readonly byte[] Payload = RandomNumberGenerator.GetBytes(ResourceChunker.ChunkSize + 1);
 
     [SkippableFact]
-    public async Task DeleteResourceContainerAsync_ShouldLeaveTheRestWholeAndFinishWhenCalledAgain_WhenCanceledAfterABatch()
+    public async Task DeleteContainerAsync_ShouldLeaveTheRestWholeAndFinishWhenCalledAgain_WhenCanceledAfterABatch()
     {
         fixture.SkipIfUnavailable();
 
@@ -31,7 +32,7 @@ public class ContainerDeleteIntegrationTests(SqlServerFixture fixture)
 
         // Act
         Exception? cancellation =
-            await Record.ExceptionAsync(() => canceledAfterOneBatch.DeleteResourceContainerAsync(containerName, token));
+            await Record.ExceptionAsync(() => canceledAfterOneBatch.DeleteContainerAsync(containerName, token));
         IReadOnlyList<ResourceInfo> remaining = await repository.GetAllResourceInfoAsync(containerName);
         var remainingContent = new List<byte[]>();
         foreach (ResourceInfo resource in remaining)
@@ -41,19 +42,19 @@ public class ContainerDeleteIntegrationTests(SqlServerFixture fixture)
             await content.CopyToAsync(copy);
             remainingContent.Add(copy.ToArray());
         }
-        bool finished = await repository.DeleteResourceContainerAsync(containerName);
+        bool finished = await repository.DeleteContainerAsync(containerName);
 
         // Assert
         Assert.IsAssignableFrom<OperationCanceledException>(cancellation);
         Assert.Equal(["b", "c"], remaining.Select(r => r.Name).Order());
         Assert.All(remainingContent, content => Assert.Equal(Payload, content));
         Assert.True(finished);
-        Assert.Null(await repository.GetResourceContainerInfoAsync(containerName));
+        Assert.Null(await repository.GetContainerInfoAsync(containerName));
         Assert.Empty(await repository.GetAllResourceInfoAsync(containerName));
     }
 
     [SkippableFact]
-    public async Task DeleteResourceContainerAsync_ShouldKeepTheNameAtItsCurrentVersion_WhenCanceledBetweenVersionsOfOneName()
+    public async Task DeleteContainerAsync_ShouldKeepTheNameAtItsCurrentVersion_WhenCanceledBetweenVersionsOfOneName()
     {
         fixture.SkipIfUnavailable();
 
@@ -64,20 +65,20 @@ public class ContainerDeleteIntegrationTests(SqlServerFixture fixture)
 
         // Act
         Exception? cancellation =
-            await Record.ExceptionAsync(() => canceledAfterOneBatch.DeleteResourceContainerAsync(containerName, token));
+            await Record.ExceptionAsync(() => canceledAfterOneBatch.DeleteContainerAsync(containerName, token));
 
         // Assert
         Assert.IsAssignableFrom<OperationCanceledException>(cancellation);
         ResourceInfo current = Assert.Single(await repository.GetResourceVersionsAsync(new ResourceLocation(containerName, "n")));
         Assert.Equal("a", current.VersionId);
         Assert.True(current.IsLatest);
-        await repository.DeleteResourceContainerAsync(containerName);
+        await repository.DeleteContainerAsync(containerName);
     }
 
     [SkippableTheory]
     [InlineData(0)]
     [InlineData(ResourceSqlRepository.ChunksPerDeleteStatement)] // so many that its chunks go before its row
-    public async Task DeleteResourceContainerAsync_ShouldLeaveAVersionAMoveTookAway_WhenTheMoveLandsAfterItWasListed(
+    public async Task DeleteContainerAsync_ShouldLeaveAVersionAMoveTookAway_WhenTheMoveLandsAfterItWasListed(
         int extraChunks)
     {
         fixture.SkipIfUnavailable();
@@ -86,7 +87,7 @@ public class ContainerDeleteIntegrationTests(SqlServerFixture fixture)
         // has listed it.
         var (repository, _, _, containerName) = await NewRepositoriesAsync();
         string destination = $"c-{Guid.NewGuid():N}";
-        await repository.AddResourceContainerAsync(destination, new Dictionary<string, string>());
+        await repository.AddContainerAsync(destination, new Dictionary<string, string>());
         await AddAsync(repository, containerName, "a", "v1");
         await AddChunksAsync(containerName, "a", extraChunks);
         int chunks = await CountChunksAsync(containerName, "a");
@@ -95,13 +96,13 @@ public class ContainerDeleteIntegrationTests(SqlServerFixture fixture)
                 .AddInterceptors(new MoveAfterListingInterceptor(fixture, containerName, destination)).Options));
 
         // Act
-        await deleting.DeleteResourceContainerAsync(containerName);
+        await deleting.DeleteContainerAsync(containerName);
 
         // Assert
-        Assert.Null(await repository.GetResourceContainerInfoAsync(containerName));
+        Assert.Null(await repository.GetContainerInfoAsync(containerName));
         Assert.Equal(["moved"], (await repository.GetAllResourceInfoAsync(destination)).Select(r => r.Name));
         Assert.Equal(chunks, await CountChunksAsync(destination, "moved"));
-        await repository.DeleteResourceContainerAsync(destination);
+        await repository.DeleteContainerAsync(destination);
     }
 
     /// <summary>Gives a version <paramref name="count"/> more one-byte chunks, written set-based.</summary>
@@ -180,7 +181,7 @@ public class ContainerDeleteIntegrationTests(SqlServerFixture fixture)
             new DbContextOptionsBuilder<ResourceDbContext>().UseSqlServer(fixture.ConnectionString)
                 .AddInterceptors(cancelAfterCommit).Options)) { ChunksPerDeleteBatch = 3 };
         string containerName = $"c-{Guid.NewGuid():N}";
-        await repository.AddResourceContainerAsync(containerName, new Dictionary<string, string>());
+        await repository.AddContainerAsync(containerName, new Dictionary<string, string>());
         return (repository, canceledAfterOneBatch, cancelAfterCommit.Token, containerName);
     }
 

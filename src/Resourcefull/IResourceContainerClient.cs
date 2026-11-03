@@ -8,7 +8,7 @@ namespace Resourcefull;
 
 /// <summary>
 /// A client for working with the resources inside a single container. Obtain one from
-/// <see cref="IResourceServiceClient.GetResourceContainerClient(string)"/>.
+/// <see cref="IResourceServiceClient.GetContainerClient(string)"/>.
 /// </summary>
 /// <remarks>
 /// Every operation that contacts storage takes an optional <see cref="CancellationToken"/> as its last parameter. A
@@ -19,18 +19,17 @@ public interface IResourceContainerClient
 {
     /// <summary>
     /// The attributes of the container this client targets, as known when the client was made: the stored ones for a
-    /// client from <see cref="IResourceServiceClient.CreateResourceContainerAsync"/>
-    /// or <see cref="IResourceServiceClient.CreateResourceContainerIfNotExistsAsync"/>,
-    /// the name and URI but no metadata for one from <see cref="IResourceServiceClient.GetResourceContainerClient(string)"/>.
+    /// client from <see cref="IResourceServiceClient.CreateContainerAsync"/>
+    /// or <see cref="IResourceServiceClient.CreateContainerIfNotExistsAsync"/>,
+    /// the name and URI but no metadata for one from <see cref="IResourceServiceClient.GetContainerClient(string)"/>.
     /// </summary>
-    public ResourceContainerInfo ResourceContainerInfo { get; }
+    public ContainerInfo Info { get; }
 
     /// <summary>
-    /// The name of the container this client targets: <see cref="ResourceContainerInfo"/>'s
-    /// <see cref="ResourceContainerInfo.Name"/>.
+    /// The name of the container this client targets: <see cref="Info"/>'s <see cref="ContainerInfo.Name"/>.
     /// <para>Coming in 4.0.</para>
     /// </summary>
-    public string Name => ResourceContainerInfo.Name;
+    public string Name => Info.Name;
 
     /// <summary>
     /// Uploads a resource to the container.
@@ -338,17 +337,18 @@ public interface IResourceContainerClient
     /// <para>Coming in 4.0.</para>
     /// </summary>
     /// <param name="resourceName">The resource.</param>
-    /// <param name="versionId">The version.</param>
+    /// <param name="versionId">The version, or <see langword="null"/> for the current one.</param>
     /// <param name="expiresAt">When it expires; <see langword="null"/> never. Any time works, a past one included.</param>
     /// <param name="cancellationToken">Cancels the change.</param>
     /// <returns><see langword="true"/> if the version exists, <see langword="false"/> if not, as when expiry deleted it first.</returns>
     /// <exception cref="ResourcePolicyViolationException">The container is read-only.</exception>
-    /// <exception cref="ArgumentException"><paramref name="resourceName"/> breaks the name rules, or <paramref name="versionId"/> is null or empty.</exception>
+    /// <exception cref="ArgumentException"><paramref name="resourceName"/> breaks the name rules.</exception>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
     /// <exception cref="NotSupportedException">
     /// The provider doesn't support expiry, or this is the default implementation.
     /// </exception>
-    public Task<bool> SetExpiryAsync(string resourceName, string versionId, DateTimeOffset? expiresAt, CancellationToken cancellationToken = default)
+    public Task<bool> SetExpiryAsync(string resourceName, string? versionId, DateTimeOffset? expiresAt,
+        CancellationToken cancellationToken = default)
         => throw new NotSupportedException($"{GetType().Name} doesn't support expiry.");
 
     /// <summary>

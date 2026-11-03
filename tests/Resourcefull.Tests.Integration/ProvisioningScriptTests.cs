@@ -172,7 +172,7 @@ public class ProvisioningScriptTests(SqlServerFixture fixture)
         await using ServiceProvider provider = services.BuildServiceProvider();
         await using AsyncServiceScope scope = provider.CreateAsyncScope();
         ResourceDownloadResult? download = await scope.ServiceProvider.GetRequiredService<IResourceServiceClient>()
-            .GetResourceContainerClient(containerName)
+            .GetContainerClient(containerName)
             .DownloadStreamingAsync(resourceName);
         Assert.NotNull(download);
         Assert.NotNull(download.Stream);
@@ -411,8 +411,8 @@ public class ProvisioningScriptTests(SqlServerFixture fixture)
         const string resourceName = "smoke.txt";
         byte[] payload = Encoding.UTF8.GetBytes("written through the library into a database provisioned by script");
 
-        await client.CreateResourceContainerIfNotExistsAsync(containerName, new Dictionary<string, string>());
-        IResourceContainerClient container = client.GetResourceContainerClient(containerName);
+        await client.CreateContainerIfNotExistsAsync(containerName, new Dictionary<string, string>());
+        IResourceContainerClient container = client.GetContainerClient(containerName);
         await using (var upload = new MemoryStream(payload))
         {
             await container.UploadAsync(resourceName, upload, new ResourceUploadOptions

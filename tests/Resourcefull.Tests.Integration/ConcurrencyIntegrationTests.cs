@@ -29,14 +29,14 @@ public class ConcurrencyIntegrationTests(SqlServerFixture fixture)
             var service = scope.ServiceProvider.GetRequiredService<IResourceServiceClient>();
 
             var containerName = $"job-{Guid.NewGuid():N}";
-            await service.CreateResourceContainerAsync(containerName);
-            var container = service.GetResourceContainerClient(containerName);
+            await service.CreateContainerAsync(containerName);
+            var container = service.GetContainerClient(containerName);
 
             var artifactName = $"artifact-{Guid.NewGuid():N}";
             await container.UploadAsync(artifactName, new MemoryStream(payload));
             IReadOnlyList<ResourceInfo> listed = await container.ListResourcesAsync().ToListAsync();
             ResourceContent? downloaded = await container.DownloadContentAsync(artifactName);
-            bool deleted = await service.DeleteResourceContainerIfExistsAsync(containerName);
+            bool deleted = await service.DeleteContainerIfExistsAsync(containerName);
             return new Workflow(containerName, artifactName, listed, downloaded?.Content.ToArray(), deleted);
         });
 

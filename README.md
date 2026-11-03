@@ -66,7 +66,7 @@ public class Reports(IResourceServiceClient resources)
 {
     public async Task<ResourceInfo> SaveAsync(string name, Stream content)
     {
-        IResourceContainerClient reports = await resources.CreateResourceContainerIfNotExistsAsync("reports");
+        IResourceContainerClient reports = await resources.CreateContainerIfNotExistsAsync("reports");
         return await reports.UploadAsync(name, content, new ResourceUploadOptions
         {
             Mode = ResourceWriteMode.Replace,
@@ -75,7 +75,7 @@ public class Reports(IResourceServiceClient resources)
     }
 
     public async Task<ResourceDownloadResult?> OpenAsync(string name)
-        => await resources.GetResourceContainerClient("reports").DownloadStreamingAsync(name);
+        => await resources.GetContainerClient("reports").DownloadStreamingAsync(name);
 }
 ```
 

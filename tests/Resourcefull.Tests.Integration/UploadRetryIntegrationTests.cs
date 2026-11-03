@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage;
+using Resourcefull.Providers;
 using Resourcefull.SqlServer;
 using Resourcefull.SqlServer.Utilities;
 
@@ -177,7 +178,7 @@ public class UploadRetryIntegrationTests(SqlServerFixture fixture)
     }
 
     [SkippableFact]
-    public async Task AddResourceContainerAsync_ShouldCreateTheContainer_WhenTheCommitSucceedsButItsAcknowledgementIsLost()
+    public async Task AddContainerAsync_ShouldCreateTheContainer_WhenTheCommitSucceedsButItsAcknowledgementIsLost()
     {
         fixture.SkipIfUnavailable();
 
@@ -187,15 +188,15 @@ public class UploadRetryIntegrationTests(SqlServerFixture fixture)
         string created = $"c-{Guid.NewGuid():N}";
 
         // Act
-        await repository.AddResourceContainerAsync(created, new Dictionary<string, string>());
+        await repository.AddContainerAsync(created, new Dictionary<string, string>());
 
         // Assert
         Assert.True(failure.Failed);
-        Assert.NotNull(await repository.GetResourceContainerInfoAsync(created));
+        Assert.NotNull(await repository.GetContainerInfoAsync(created));
     }
 
     [SkippableFact]
-    public async Task DeleteResourceContainerAsync_ShouldReportTheDelete_WhenTheCommitSucceedsButItsAcknowledgementIsLost()
+    public async Task DeleteContainerAsync_ShouldReportTheDelete_WhenTheCommitSucceedsButItsAcknowledgementIsLost()
     {
         fixture.SkipIfUnavailable();
 
@@ -204,12 +205,12 @@ public class UploadRetryIntegrationTests(SqlServerFixture fixture)
         (ResourceSqlRepository repository, string c) = await NewRepositoryAsync(failure);
 
         // Act
-        bool deleted = await repository.DeleteResourceContainerAsync(c);
+        bool deleted = await repository.DeleteContainerAsync(c);
 
         // Assert
         Assert.True(failure.Failed);
         Assert.True(deleted);
-        Assert.Null(await repository.GetResourceContainerInfoAsync(c));
+        Assert.Null(await repository.GetContainerInfoAsync(c));
     }
 
     [SkippableFact]
@@ -362,7 +363,7 @@ public class UploadRetryIntegrationTests(SqlServerFixture fixture)
             .Options;
         var repository = new ResourceSqlRepository(new PooledDbContextFactory<ResourceDbContext>(options));
         string containerName = $"c-{Guid.NewGuid():N}";
-        await repository.AddResourceContainerAsync(containerName, new Dictionary<string, string>());
+        await repository.AddContainerAsync(containerName, new Dictionary<string, string>());
         return (repository, containerName);
     }
 
@@ -390,7 +391,7 @@ public class UploadRetryIntegrationTests(SqlServerFixture fixture)
             .Options;
         var repository = new ResourceSqlRepository(new PooledDbContextFactory<ResourceDbContext>(options));
         string containerName = $"c-{Guid.NewGuid():N}";
-        await repository.AddResourceContainerAsync(containerName, new Dictionary<string, string>());
+        await repository.AddContainerAsync(containerName, new Dictionary<string, string>());
         byte[] payload = RandomNumberGenerator.GetBytes(65_535 * 40 + 7);
         await repository.AddResourceAsync(Version(containerName), new MemoryStream(payload));
         await using Stream stream = (await repository.GetResourceStreamAsync(new ResourceLocation(containerName, "n")))!;

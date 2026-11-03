@@ -127,7 +127,7 @@
 
 @code {
     private List<ResourceInfo> _resources = new();
-    private List<ResourceContainerInfo> _resourceContainers = new();
+    private List<ContainerInfo> _resourceContainers = new();
     private List<string> _errorMessages = new();
     private bool _overwrite;
     private string _newContainerName = "";
@@ -148,10 +148,10 @@
     private async Task PopulateResourceContainers()
     {
         _resources.Clear();
-        _resourceContainers = (await ResourceServiceClient.GetResourceContainersAsync()).ToList();
+        _resourceContainers = (await ResourceServiceClient.GetContainersAsync()).ToList();
         foreach (var container in _resourceContainers)
         {
-            var containerClient = ResourceServiceClient.GetResourceContainerClient(container.Name);
+            var containerClient = ResourceServiceClient.GetContainerClient(container.Name);
             _resources.AddRange(await containerClient.ListResourcesAsync().ToListAsync());
         }
         _resourceVersionsMap.Clear();
@@ -171,7 +171,7 @@
             return;
         }
         _openVersionHistories.Add(key);
-        var containerClient = ResourceServiceClient.GetResourceContainerClient(resource.ContainerName);
+        var containerClient = ResourceServiceClient.GetContainerClient(resource.ContainerName);
         var versions = await containerClient.GetResourceVersionsAsync(resource.Name);
         _resourceVersionsMap[key] = versions.Where(v => !v.IsLatest).ToList();
         StateHasChanged();
@@ -179,7 +179,7 @@
 
     public async Task DeleteResource(ResourceInfo resourceInfo, bool isVersionHistory = false)
     {
-        var containerClient = ResourceServiceClient.GetResourceContainerClient(resourceInfo.ContainerName);
+        var containerClient = ResourceServiceClient.GetContainerClient(resourceInfo.ContainerName);
         await containerClient.DeleteResourceIfExistsAsync(resourceInfo.Name, resourceInfo.VersionId);
         if (isVersionHistory)
         {
@@ -210,7 +210,7 @@
             Mode = _overwrite || _options.MaxVersions > 1 ? ResourceWriteMode.Replace : ResourceWriteMode.Create,
             Headers = new(contentType, args.File.Size)
         };
-        var containerClient = ResourceServiceClient.GetResourceContainerClient(containerName);
+        var containerClient = ResourceServiceClient.GetContainerClient(containerName);
         try
         {
             await using Stream content = args.File.OpenReadStream(args.File.Size);
@@ -227,19 +227,19 @@
     public async Task AddContainer()
     {
         if (string.IsNullOrWhiteSpace(_newContainerName)) return;
-        await ResourceServiceClient.CreateResourceContainerIfNotExistsAsync(_newContainerName);
+        await ResourceServiceClient.CreateContainerIfNotExistsAsync(_newContainerName);
         await PopulateResourceContainers();
     }
 
     public async Task<List<ResourceInfo>> GetResourcesFromContainer(string containerName)
     {
-        var containerClient = ResourceServiceClient.GetResourceContainerClient(containerName);
+        var containerClient = ResourceServiceClient.GetContainerClient(containerName);
         return await containerClient.ListResourcesAsync().ToListAsync();
     }
 
     public async Task DeleteContainer(string containerName)
     {
-        await ResourceServiceClient.DeleteResourceContainerIfExistsAsync(containerName);
+        await ResourceServiceClient.DeleteContainerIfExistsAsync(containerName);
         await PopulateResourceContainers();
     }
 
@@ -248,7 +248,7 @@
         if (string.IsNullOrEmpty(resourceInfo.VersionId))
             throw new ArgumentException($"{nameof(resourceInfo.VersionId)} cannot be empty.", nameof(resourceInfo.VersionId));
 
-        var containerClient = ResourceServiceClient.GetResourceContainerClient(resourceInfo.ContainerName);
+        var containerClient = ResourceServiceClient.GetContainerClient(resourceInfo.ContainerName);
         try
         {
             var restored = await containerClient.RestoreVersionAsync(resourceInfo.Name, resourceInfo.VersionId);

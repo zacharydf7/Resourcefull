@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using Resourcefull.Providers;
 
 namespace Resourcefull.Tests.Unit;
 

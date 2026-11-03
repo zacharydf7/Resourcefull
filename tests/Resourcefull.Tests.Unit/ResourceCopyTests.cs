@@ -1,4 +1,5 @@
 using Moq;
+using Resourcefull.Providers;
 
 namespace Resourcefull.Tests.Unit;
 
@@ -58,7 +59,7 @@ public class ResourceCopyTests
             .ReturnsAsync(Written);
         repository.Setup(r => r.GetResourceVersionsAsync(new ResourceLocation("c", "a"), It.IsAny<CancellationToken>())).ReturnsAsync([]);
         var client = new ResourceContainerClient(repository.Object, null, new ResourcefullOptions { MaxVersions = 100 },
-            new ResourceContainerInfo { Name = "c" }, null);
+            new ContainerInfo { Name = "c" }, null);
 
         // Act
         ResourceInfo? restored = await client.RestoreVersionAsync("a", "v1");

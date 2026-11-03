@@ -113,22 +113,22 @@ public abstract partial class ResourcefullContractTests
     }
 
     [SkippableFact]
-    public async Task SetResourceContainerMetadataAsync_ShouldReplaceTheMetadata_WhenTheContainerExists()
+    public async Task SetContainerMetadataAsync_ShouldReplaceTheMetadata_WhenTheContainerExists()
     {
         // Arrange
         using ServiceProvider provider = BuildServiceProvider();
         IResourceServiceClient service = ServiceOf(provider);
         string name = NewContainerName();
-        await service.CreateResourceContainerAsync(name, new Dictionary<string, string> { ["owner"] = "billing" });
+        await service.CreateContainerAsync(name, new Dictionary<string, string> { ["owner"] = "billing" });
 
         // Act
-        bool set = await service.SetResourceContainerMetadataAsync(name, new Dictionary<string, string> { ["owner"] = "finance" });
-        bool missing = await service.SetResourceContainerMetadataAsync(NewContainerName(), new Dictionary<string, string>());
+        bool set = await service.SetContainerMetadataAsync(name, new Dictionary<string, string> { ["owner"] = "finance" });
+        bool missing = await service.SetContainerMetadataAsync(NewContainerName(), new Dictionary<string, string>());
 
         // Assert
         Assert.True(set);
         Assert.False(missing);
         Assert.Equal(new Dictionary<string, string> { ["owner"] = "finance" },
-            (await service.GetResourceContainerInfoAsync(name))!.Metadata);
+            (await service.GetContainerInfoAsync(name))!.Metadata);
     }
 }

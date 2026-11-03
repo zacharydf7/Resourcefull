@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Moq;
 using Resourcefull.InMemory;
+using Resourcefull.Providers;
 
 namespace Resourcefull.Tests.Unit;
 
@@ -31,17 +32,17 @@ public class ResourceServiceClientTests
         var service = NewService(repository.Object);
 
         // Act & Assert
-        Assert.ThrowsAny<ArgumentException>(() => service.GetResourceContainerClient(name!));
-        await Assert.ThrowsAnyAsync<ArgumentException>(() => service.CreateResourceContainerAsync(name!));
-        await Assert.ThrowsAnyAsync<ArgumentException>(() => service.CreateResourceContainerIfNotExistsAsync(name!));
-        await Assert.ThrowsAnyAsync<ArgumentException>(() => service.GetResourceContainerInfoAsync(name!));
+        Assert.ThrowsAny<ArgumentException>(() => service.GetContainerClient(name!));
+        await Assert.ThrowsAnyAsync<ArgumentException>(() => service.CreateContainerAsync(name!));
+        await Assert.ThrowsAnyAsync<ArgumentException>(() => service.CreateContainerIfNotExistsAsync(name!));
+        await Assert.ThrowsAnyAsync<ArgumentException>(() => service.GetContainerInfoAsync(name!));
         await Assert.ThrowsAnyAsync<ArgumentException>(() => service.ContainerExistsAsync(name!));
-        await Assert.ThrowsAnyAsync<ArgumentException>(() => service.DeleteResourceContainerIfExistsAsync(name!));
+        await Assert.ThrowsAnyAsync<ArgumentException>(() => service.DeleteContainerIfExistsAsync(name!));
         repository.VerifyNoOtherCalls();
     }
 
     [Fact]
-    public async Task CreateResourceContainerAsync_ShouldCreateContainer_WhenGivenANameAtTheMaximumLength()
+    public async Task CreateContainerAsync_ShouldCreateContainer_WhenGivenANameAtTheMaximumLength()
     {
         // Arrange
         var name = new string('a', ResourceNames.MaxContainerNameLength);
@@ -49,29 +50,29 @@ public class ResourceServiceClientTests
         var service = NewService(repository.Object);
 
         // Act
-        await service.CreateResourceContainerAsync(name);
+        await service.CreateContainerAsync(name);
 
         // Assert
-        repository.Verify(r => r.AddResourceContainerAsync(name, It.IsAny<IReadOnlyDictionary<string, string>>(), It.IsAny<CancellationToken>()), Times.Once);
+        repository.Verify(r => r.AddContainerAsync(name, It.IsAny<IReadOnlyDictionary<string, string>>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
-    public void GetResourceContainerClient_ShouldNotTouchTheRepository_WhenClientIsCreated()
+    public void GetContainerClient_ShouldNotTouchTheRepository_WhenClientIsCreated()
     {
         // Arrange
         var repository = new Mock<ResourceRepository>(MockBehavior.Strict);
         var service = NewService(repository.Object);
 
         // Act
-        IResourceContainerClient client = service.GetResourceContainerClient("myContainer");
+        IResourceContainerClient client = service.GetContainerClient("myContainer");
 
         // Assert
-        Assert.Equal("myContainer", client.ResourceContainerInfo.Name);
+        Assert.Equal("myContainer", client.Info.Name);
         repository.VerifyNoOtherCalls();
     }
 
     [Fact]
-    public void GetResourceContainerClient_ShouldCarryTheUriProvidersUri_WhenAUriProviderIsConfigured()
+    public void GetContainerClient_ShouldCarryTheUriProvidersUri_WhenAUriProviderIsConfigured()
     {
         // Arrange
         var uriProvider = new Mock<IUriProvider>();
@@ -79,10 +80,10 @@ public class ResourceServiceClientTests
         var service = NewService(new Mock<ResourceRepository>(MockBehavior.Strict).Object, uriProvider.Object);
 
         // Act
-        IResourceContainerClient client = service.GetResourceContainerClient("myContainer");
+        IResourceContainerClient client = service.GetContainerClient("myContainer");
 
         // Assert
-        Assert.Equal("https://resources.test/myContainer", client.ResourceContainerInfo.Uri);
+        Assert.Equal("https://resources.test/myContainer", client.Info.Uri);
     }
 
     private static IUriProvider NewBaseUrlUriProvider()
@@ -96,50 +97,50 @@ public class ResourceServiceClientTests
     private static Mock<ResourceRepository> NewRepositoryWithStoredUris()
     {
         var repository = new Mock<ResourceRepository>();
-        repository.Setup(r => r.GetResourceContainerInfoAsync("stored", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new ResourceContainerInfo { Name = "stored", Uri = "https://old.test/stored" });
-        repository.Setup(r => r.GetAllResourceContainerInfoAsync(It.IsAny<CancellationToken>())).ReturnsAsync(
+        repository.Setup(r => r.GetContainerInfoAsync("stored", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ContainerInfo { Name = "stored", Uri = "https://old.test/stored" });
+        repository.Setup(r => r.GetAllContainerInfoAsync(It.IsAny<CancellationToken>())).ReturnsAsync(
         [
-            new ResourceContainerInfo { Name = "first", Uri = "https://old.test/first" },
-            new ResourceContainerInfo { Name = "second", Uri = "https://old.test/second" }
+            new ContainerInfo { Name = "first", Uri = "https://old.test/first" },
+            new ContainerInfo { Name = "second", Uri = "https://old.test/second" }
         ]);
         return repository;
     }
 
     [Fact]
-    public async Task GetResourceContainerInfoAsync_ShouldReturnTheUriProvidersUri_WhenTheStoredUriIsOutOfDate()
+    public async Task GetContainerInfoAsync_ShouldReturnTheUriProvidersUri_WhenTheStoredUriIsOutOfDate()
     {
         // Arrange
         var service = NewService(NewRepositoryWithStoredUris().Object, NewBaseUrlUriProvider());
 
         // Act
-        ResourceContainerInfo? containerInfo = await service.GetResourceContainerInfoAsync("stored");
+        ContainerInfo? containerInfo = await service.GetContainerInfoAsync("stored");
 
         // Assert
         Assert.Equal("https://new.test/stored", containerInfo!.Uri);
     }
 
     [Fact]
-    public async Task GetResourceContainerInfoAsync_ShouldReturnNoUri_WhenNoUriProviderIsConfigured()
+    public async Task GetContainerInfoAsync_ShouldReturnNoUri_WhenNoUriProviderIsConfigured()
     {
         // Arrange
         var service = NewService(NewRepositoryWithStoredUris().Object);
 
         // Act
-        ResourceContainerInfo? containerInfo = await service.GetResourceContainerInfoAsync("stored");
+        ContainerInfo? containerInfo = await service.GetContainerInfoAsync("stored");
 
         // Assert
         Assert.Null(containerInfo!.Uri);
     }
 
     [Fact]
-    public async Task GetResourceContainersAsync_ShouldReturnTheUriProvidersUris_WhenTheStoredUrisAreOutOfDate()
+    public async Task GetContainersAsync_ShouldReturnTheUriProvidersUris_WhenTheStoredUrisAreOutOfDate()
     {
         // Arrange
         var service = NewService(NewRepositoryWithStoredUris().Object, NewBaseUrlUriProvider());
 
         // Act
-        IReadOnlyList<ResourceContainerInfo> containers = await service.GetResourceContainersAsync();
+        IReadOnlyList<ContainerInfo> containers = await service.GetContainersAsync();
 
         // Assert
         Assert.Equal(["https://new.test/first", "https://new.test/second"], containers.Select(c => c.Uri));
@@ -161,206 +162,206 @@ public class ResourceServiceClientTests
     }
 
     [Fact]
-    public async Task CreateResourceContainerIfNotExistsAsync_ShouldReturnTheUriProvidersUri_WhenTheExistingContainersStoredUriIsOutOfDate()
+    public async Task CreateContainerIfNotExistsAsync_ShouldReturnTheUriProvidersUri_WhenTheExistingContainersStoredUriIsOutOfDate()
     {
         // Arrange
         var service = NewService(NewRepositoryWithStoredUris().Object, NewBaseUrlUriProvider());
 
         // Act
-        IResourceContainerClient client = await service.CreateResourceContainerIfNotExistsAsync("stored");
+        IResourceContainerClient client = await service.CreateContainerIfNotExistsAsync("stored");
 
         // Assert
-        Assert.Equal("https://new.test/stored", client.ResourceContainerInfo.Uri);
+        Assert.Equal("https://new.test/stored", client.Info.Uri);
     }
 
     [Fact]
-    public async Task CreateResourceContainerAsync_ShouldCreateContainer_WhenItDoesNotExist()
+    public async Task CreateContainerAsync_ShouldCreateContainer_WhenItDoesNotExist()
     {
         // Arrange
         var repository = new Mock<ResourceRepository>();
         var service = NewService(repository.Object);
 
         // Act
-        IResourceContainerClient client = await service.CreateResourceContainerAsync("newContainer");
+        IResourceContainerClient client = await service.CreateContainerAsync("newContainer");
 
         // Assert
-        Assert.Equal("newContainer", client.ResourceContainerInfo.Name);
-        repository.Verify(r => r.AddResourceContainerAsync("newContainer", It.IsAny<IReadOnlyDictionary<string, string>>(), It.IsAny<CancellationToken>()), Times.Once);
+        Assert.Equal("newContainer", client.Info.Name);
+        repository.Verify(r => r.AddContainerAsync("newContainer", It.IsAny<IReadOnlyDictionary<string, string>>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
-    public async Task CreateResourceContainerAsync_ShouldThrowConflict_WhenContainerAlreadyExists()
+    public async Task CreateContainerAsync_ShouldThrowConflict_WhenContainerAlreadyExists()
     {
         // Arrange & Act
         var repository = new Mock<ResourceRepository>();
-        repository.Setup(r => r.AddResourceContainerAsync(It.IsAny<string>(), It.IsAny<IReadOnlyDictionary<string, string>>(), It.IsAny<CancellationToken>()))
+        repository.Setup(r => r.AddContainerAsync(It.IsAny<string>(), It.IsAny<IReadOnlyDictionary<string, string>>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new ResourceConflictException("already exists"));
         var service = NewService(repository.Object);
 
         // Assert
-        await Assert.ThrowsAsync<ResourceConflictException>(() => service.CreateResourceContainerAsync("existing"));
+        await Assert.ThrowsAsync<ResourceConflictException>(() => service.CreateContainerAsync("existing"));
     }
 
     [Fact]
-    public async Task CreateResourceContainerIfNotExistsAsync_ShouldNotCreate_WhenContainerExists()
+    public async Task CreateContainerIfNotExistsAsync_ShouldNotCreate_WhenContainerExists()
     {
         // Arrange
         var repository = new Mock<ResourceRepository>();
-        repository.Setup(r => r.GetResourceContainerInfoAsync("existing", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new ResourceContainerInfo { Name = "existing" });
+        repository.Setup(r => r.GetContainerInfoAsync("existing", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ContainerInfo { Name = "existing" });
         var service = NewService(repository.Object);
 
         // Act
-        IResourceContainerClient client = await service.CreateResourceContainerIfNotExistsAsync("existing");
+        IResourceContainerClient client = await service.CreateContainerIfNotExistsAsync("existing");
 
         // Assert
-        Assert.Equal("existing", client.ResourceContainerInfo.Name);
-        repository.Verify(r => r.AddResourceContainerAsync(It.IsAny<string>(), It.IsAny<IReadOnlyDictionary<string, string>>(), It.IsAny<CancellationToken>()), Times.Never);
+        Assert.Equal("existing", client.Info.Name);
+        repository.Verify(r => r.AddContainerAsync(It.IsAny<string>(), It.IsAny<IReadOnlyDictionary<string, string>>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
-    public async Task CreateResourceContainerIfNotExistsAsync_ShouldReturnAClientWithTheStoredInfo_WhenAConcurrentCreateWinsTheAdd()
+    public async Task CreateContainerIfNotExistsAsync_ShouldReturnAClientWithTheStoredInfo_WhenAConcurrentCreateWinsTheAdd()
     {
         // Arrange: absent when checked, then created by someone else, with their metadata, before this add.
         var repository = new Mock<ResourceRepository>();
-        repository.SetupSequence(r => r.GetResourceContainerInfoAsync("existing", It.IsAny<CancellationToken>()))
-            .ReturnsAsync((ResourceContainerInfo?)null)
-            .ReturnsAsync(new ResourceContainerInfo { Name = "existing", Uri = "https://old.test/existing", Metadata = new Dictionary<string, string> { ["owner"] = "them" } });
-        repository.Setup(r => r.AddResourceContainerAsync(It.IsAny<string>(), It.IsAny<IReadOnlyDictionary<string, string>>(), It.IsAny<CancellationToken>()))
+        repository.SetupSequence(r => r.GetContainerInfoAsync("existing", It.IsAny<CancellationToken>()))
+            .ReturnsAsync((ContainerInfo?)null)
+            .ReturnsAsync(new ContainerInfo { Name = "existing", Uri = "https://old.test/existing", Metadata = new Dictionary<string, string> { ["owner"] = "them" } });
+        repository.Setup(r => r.AddContainerAsync(It.IsAny<string>(), It.IsAny<IReadOnlyDictionary<string, string>>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new ResourceConflictException("already exists"));
         var service = NewService(repository.Object, NewBaseUrlUriProvider());
 
         // Act
-        IResourceContainerClient client = await service.CreateResourceContainerIfNotExistsAsync("existing", new Dictionary<string, string> { ["owner"] = "us" });
+        IResourceContainerClient client = await service.CreateContainerIfNotExistsAsync("existing", new Dictionary<string, string> { ["owner"] = "us" });
 
         // Assert
-        Assert.Equal("them", client.ResourceContainerInfo.Metadata["owner"]);
-        Assert.Equal("https://new.test/existing", client.ResourceContainerInfo.Uri);
+        Assert.Equal("them", client.Info.Metadata["owner"]);
+        Assert.Equal("https://new.test/existing", client.Info.Uri);
     }
 
     [Fact]
-    public async Task CreateResourceContainerIfNotExistsAsync_ShouldReturnAClientForTheName_WhenTheConcurrentlyCreatedContainerIsGoneAgain()
+    public async Task CreateContainerIfNotExistsAsync_ShouldReturnAClientForTheName_WhenTheConcurrentlyCreatedContainerIsGoneAgain()
     {
         // Arrange: created by someone else before this add, and deleted again before it can be read.
         var repository = new Mock<ResourceRepository>();
-        repository.Setup(r => r.AddResourceContainerAsync(It.IsAny<string>(), It.IsAny<IReadOnlyDictionary<string, string>>(), It.IsAny<CancellationToken>()))
+        repository.Setup(r => r.AddContainerAsync(It.IsAny<string>(), It.IsAny<IReadOnlyDictionary<string, string>>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new ResourceConflictException("already exists"));
         var service = NewService(repository.Object);
 
         // Act
-        IResourceContainerClient client = await service.CreateResourceContainerIfNotExistsAsync("existing", new Dictionary<string, string> { ["owner"] = "us" });
+        IResourceContainerClient client = await service.CreateContainerIfNotExistsAsync("existing", new Dictionary<string, string> { ["owner"] = "us" });
 
         // Assert
-        Assert.Equal("existing", client.ResourceContainerInfo.Name);
-        Assert.Empty(client.ResourceContainerInfo.Metadata);
+        Assert.Equal("existing", client.Info.Name);
+        Assert.Empty(client.Info.Metadata);
     }
 
     [Fact]
-    public async Task CreateResourceContainerIfNotExistsAsync_ShouldCreate_WhenContainerDoesNotExist()
+    public async Task CreateContainerIfNotExistsAsync_ShouldCreate_WhenContainerDoesNotExist()
     {
         // Arrange
         var repository = new Mock<ResourceRepository>();
         var service = NewService(repository.Object);
 
         // Act
-        await service.CreateResourceContainerIfNotExistsAsync("fresh");
+        await service.CreateContainerIfNotExistsAsync("fresh");
 
         // Assert
-        repository.Verify(r => r.AddResourceContainerAsync("fresh", It.IsAny<IReadOnlyDictionary<string, string>>(), It.IsAny<CancellationToken>()), Times.Once);
+        repository.Verify(r => r.AddContainerAsync("fresh", It.IsAny<IReadOnlyDictionary<string, string>>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
-    public async Task CreateResourceContainerIfNotExistsAsync_ShouldRethrow_WhenTheAddFailsForAnotherReason()
+    public async Task CreateContainerIfNotExistsAsync_ShouldRethrow_WhenTheAddFailsForAnotherReason()
     {
         // Arrange & Act
         var repository = new Mock<ResourceRepository>();
-        repository.Setup(r => r.AddResourceContainerAsync(It.IsAny<string>(), It.IsAny<IReadOnlyDictionary<string, string>>(), It.IsAny<CancellationToken>()))
+        repository.Setup(r => r.AddContainerAsync(It.IsAny<string>(), It.IsAny<IReadOnlyDictionary<string, string>>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("storage down"));
         var service = NewService(repository.Object);
 
         // Assert
         await Assert.ThrowsAsync<InvalidOperationException>(
-            () => service.CreateResourceContainerIfNotExistsAsync("boom"));
+            () => service.CreateContainerIfNotExistsAsync("boom"));
     }
 
     [Fact]
-    public async Task CreateResourceContainerIfNotExistsAsync_ShouldReportCancellation_WhenTheAddIsCanceled()
+    public async Task CreateContainerIfNotExistsAsync_ShouldReportCancellation_WhenTheAddIsCanceled()
     {
         // Arrange & Act
         var repository = new Mock<ResourceRepository>();
-        repository.Setup(r => r.AddResourceContainerAsync(It.IsAny<string>(), It.IsAny<IReadOnlyDictionary<string, string>>(), It.IsAny<CancellationToken>()))
+        repository.Setup(r => r.AddContainerAsync(It.IsAny<string>(), It.IsAny<IReadOnlyDictionary<string, string>>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new OperationCanceledException());
         var service = NewService(repository.Object);
 
         // Assert
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
-            () => service.CreateResourceContainerIfNotExistsAsync("canceled"));
+            () => service.CreateContainerIfNotExistsAsync("canceled"));
     }
 
     [Fact]
-    public async Task GetResourceContainerInfoAsync_ShouldReturnNull_WhenContainerDoesNotExist()
+    public async Task GetContainerInfoAsync_ShouldReturnNull_WhenContainerDoesNotExist()
     {
         // Arrange
         var repository = new Mock<ResourceRepository>();
-        repository.Setup(r => r.GetResourceContainerInfoAsync("missing", It.IsAny<CancellationToken>())).ReturnsAsync((ResourceContainerInfo?)null);
+        repository.Setup(r => r.GetContainerInfoAsync("missing", It.IsAny<CancellationToken>())).ReturnsAsync((ContainerInfo?)null);
         var service = NewService(repository.Object);
 
         // Act
-        ResourceContainerInfo? info = await service.GetResourceContainerInfoAsync("missing");
+        ContainerInfo? info = await service.GetContainerInfoAsync("missing");
 
         // Assert
         Assert.Null(info);
     }
 
     [Fact]
-    public async Task DeleteResourceContainerIfExistsAsync_ShouldReturnFalse_WhenContainerDoesNotExist()
+    public async Task DeleteContainerIfExistsAsync_ShouldReturnFalse_WhenContainerDoesNotExist()
     {
         // Arrange
         var repository = new Mock<ResourceRepository>();
-        repository.Setup(r => r.GetResourceContainerInfoAsync("missing", It.IsAny<CancellationToken>())).ReturnsAsync((ResourceContainerInfo?)null);
+        repository.Setup(r => r.GetContainerInfoAsync("missing", It.IsAny<CancellationToken>())).ReturnsAsync((ContainerInfo?)null);
         var service = NewService(repository.Object);
 
         // Act
-        bool deleted = await service.DeleteResourceContainerIfExistsAsync("missing");
+        bool deleted = await service.DeleteContainerIfExistsAsync("missing");
 
         // Assert
         Assert.False(deleted);
-        repository.Verify(r => r.DeleteResourceContainerAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        repository.Verify(r => r.DeleteContainerAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
-    public async Task DeleteResourceContainerIfExistsAsync_ShouldDelete_WhenContainerExists()
+    public async Task DeleteContainerIfExistsAsync_ShouldDelete_WhenContainerExists()
     {
         // Arrange
         var repository = new Mock<ResourceRepository>();
-        repository.Setup(r => r.GetResourceContainerInfoAsync("existing", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new ResourceContainerInfo { Name = "existing" });
-        repository.Setup(r => r.DeleteResourceContainerAsync("existing", It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        repository.Setup(r => r.GetContainerInfoAsync("existing", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ContainerInfo { Name = "existing" });
+        repository.Setup(r => r.DeleteContainerAsync("existing", It.IsAny<CancellationToken>())).ReturnsAsync(true);
         var service = NewService(repository.Object);
 
         // Act
-        bool deleted = await service.DeleteResourceContainerIfExistsAsync("existing");
+        bool deleted = await service.DeleteContainerIfExistsAsync("existing");
 
         // Assert
         Assert.True(deleted);
     }
 
     [Fact]
-    public async Task CreateResourceContainerAsync_ShouldPassCancellationTokenNone_WhenCalledWithoutAToken()
+    public async Task CreateContainerAsync_ShouldPassCancellationTokenNone_WhenCalledWithoutAToken()
     {
         // Arrange
         var repository = new Mock<ResourceRepository>();
         var service = NewService(repository.Object);
 
         // Act
-        await service.CreateResourceContainerAsync("name");
+        await service.CreateContainerAsync("name");
 
         // Assert
-        repository.Verify(r => r.AddResourceContainerAsync(It.IsAny<string>(), It.IsAny<IReadOnlyDictionary<string, string>>(), CancellationToken.None), Times.Once);
+        repository.Verify(r => r.AddContainerAsync(It.IsAny<string>(), It.IsAny<IReadOnlyDictionary<string, string>>(), CancellationToken.None), Times.Once);
     }
 
     [Fact]
-    public async Task CreateResourceContainerAsync_ShouldPassTheToken_WhenCalledWithOne()
+    public async Task CreateContainerAsync_ShouldPassTheToken_WhenCalledWithOne()
     {
         // Arrange
         using var cts = new CancellationTokenSource();
@@ -368,14 +369,14 @@ public class ResourceServiceClientTests
         var service = NewService(repository.Object);
 
         // Act
-        await service.CreateResourceContainerAsync("name", null, cts.Token);
+        await service.CreateContainerAsync("name", null, cts.Token);
 
         // Assert
-        repository.Verify(r => r.AddResourceContainerAsync(It.IsAny<string>(), It.IsAny<IReadOnlyDictionary<string, string>>(), cts.Token), Times.Once);
+        repository.Verify(r => r.AddContainerAsync(It.IsAny<string>(), It.IsAny<IReadOnlyDictionary<string, string>>(), cts.Token), Times.Once);
     }
 
     [Fact]
-    public async Task CreateResourceContainerIfNotExistsAsync_ShouldPassTheToken_WhenCalledWithOne()
+    public async Task CreateContainerIfNotExistsAsync_ShouldPassTheToken_WhenCalledWithOne()
     {
         // Arrange
         using var cts = new CancellationTokenSource();
@@ -383,14 +384,14 @@ public class ResourceServiceClientTests
         var service = NewService(repository.Object);
 
         // Act
-        await service.CreateResourceContainerIfNotExistsAsync("name", null, cts.Token);
+        await service.CreateContainerIfNotExistsAsync("name", null, cts.Token);
 
         // Assert
-        repository.Verify(r => r.AddResourceContainerAsync(It.IsAny<string>(), It.IsAny<IReadOnlyDictionary<string, string>>(), cts.Token), Times.Once);
+        repository.Verify(r => r.AddContainerAsync(It.IsAny<string>(), It.IsAny<IReadOnlyDictionary<string, string>>(), cts.Token), Times.Once);
     }
 
     [Fact]
-    public async Task GetResourceContainerInfoAsync_ShouldPassTheToken_WhenCalledWithOne()
+    public async Task GetContainerInfoAsync_ShouldPassTheToken_WhenCalledWithOne()
     {
         // Arrange
         using var cts = new CancellationTokenSource();
@@ -398,26 +399,26 @@ public class ResourceServiceClientTests
         var service = NewService(repository.Object);
 
         // Act
-        await service.GetResourceContainerInfoAsync("name", cts.Token);
+        await service.GetContainerInfoAsync("name", cts.Token);
 
         // Assert
-        repository.Verify(r => r.GetResourceContainerInfoAsync("name", cts.Token), Times.Once);
+        repository.Verify(r => r.GetContainerInfoAsync("name", cts.Token), Times.Once);
     }
 
     [Fact]
-    public async Task GetResourceContainersAsync_ShouldPassTheToken_WhenCalledWithOne()
+    public async Task GetContainersAsync_ShouldPassTheToken_WhenCalledWithOne()
     {
         // Arrange
         using var cts = new CancellationTokenSource();
         var repository = new Mock<ResourceRepository>();
-        repository.Setup(r => r.GetAllResourceContainerInfoAsync(cts.Token)).ReturnsAsync([]);
+        repository.Setup(r => r.GetAllContainerInfoAsync(cts.Token)).ReturnsAsync([]);
         var service = NewService(repository.Object);
 
         // Act
-        await service.GetResourceContainersAsync(cts.Token);
+        await service.GetContainersAsync(cts.Token);
 
         // Assert
-        repository.Verify(r => r.GetAllResourceContainerInfoAsync(cts.Token), Times.Once);
+        repository.Verify(r => r.GetAllContainerInfoAsync(cts.Token), Times.Once);
     }
 
     [Fact]
@@ -426,30 +427,30 @@ public class ResourceServiceClientTests
         // Arrange
         using var cts = new CancellationTokenSource();
         var repository = new Mock<ResourceRepository>();
-        repository.Setup(r => r.GetResourceContainerInfoAsync("name", cts.Token)).ReturnsAsync((ResourceContainerInfo?)null);
+        repository.Setup(r => r.GetContainerInfoAsync("name", cts.Token)).ReturnsAsync((ContainerInfo?)null);
         var service = NewService(repository.Object);
 
         // Act
         await service.ContainerExistsAsync("name", cts.Token);
 
         // Assert
-        repository.Verify(r => r.GetResourceContainerInfoAsync("name", cts.Token), Times.Once);
+        repository.Verify(r => r.GetContainerInfoAsync("name", cts.Token), Times.Once);
     }
 
     [Fact]
-    public async Task DeleteResourceContainerIfExistsAsync_ShouldPassTheToken_WhenContainerExists()
+    public async Task DeleteContainerIfExistsAsync_ShouldPassTheToken_WhenContainerExists()
     {
         // Arrange
         using var cts = new CancellationTokenSource();
         var repository = new Mock<ResourceRepository>();
-        repository.Setup(r => r.GetResourceContainerInfoAsync("name", cts.Token)).ReturnsAsync(new ResourceContainerInfo { Name = "name" });
+        repository.Setup(r => r.GetContainerInfoAsync("name", cts.Token)).ReturnsAsync(new ContainerInfo { Name = "name" });
         var service = NewService(repository.Object);
 
         // Act
-        await service.DeleteResourceContainerIfExistsAsync("name", cts.Token);
+        await service.DeleteContainerIfExistsAsync("name", cts.Token);
 
         // Assert
-        repository.Verify(r => r.DeleteResourceContainerAsync("name", cts.Token), Times.Once);
+        repository.Verify(r => r.DeleteContainerAsync("name", cts.Token), Times.Once);
     }
 
     [Fact]
@@ -568,7 +569,7 @@ public class ResourceServiceClientTests
         repository.Setup(r => r.DeleteResourceAsync(new ResourceLocation("c", "n"), null, It.IsAny<ResourceConditions>(),
             It.IsAny<CancellationToken>()))
             .ThrowsAsync(new ResourcePreconditionFailedException("Not met.", null, null));
-        IResourceContainerClient container = NewService(repository.Object).GetResourceContainerClient("c");
+        IResourceContainerClient container = NewService(repository.Object).GetContainerClient("c");
 
         // Act
         Task act() => container.DeleteResourceIfExistsAsync("n", null,
@@ -589,7 +590,7 @@ public class ResourceServiceClientTests
         repository.Setup(r => r.CopyResourceAsync(It.IsAny<ResourceLocation>(), "v1", It.IsAny<NewResourceVersion>(),
             It.IsAny<ResourceWriteCondition?>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new ResourceConflictException("Exists."));
-        IResourceContainerClient container = NewService(repository.Object).GetResourceContainerClient("c");
+        IResourceContainerClient container = NewService(repository.Object).GetContainerClient("c");
 
         // Act
         Task act() => container.CopyResourceAsync("a", "d", "b");
@@ -607,7 +608,7 @@ public class ResourceServiceClientTests
         repository.Setup(r => r.MoveResourceAsync(It.IsAny<ResourceLocation>(), It.IsAny<ResourceLocation>(),
             It.IsAny<ResourceConditions?>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new ResourceContainerNotFoundException("Missing."));
-        IResourceContainerClient container = NewService(repository.Object).GetResourceContainerClient("c");
+        IResourceContainerClient container = NewService(repository.Object).GetContainerClient("c");
 
         // Act
         Task act() => container.MoveResourceAsync("a", "d", "b");
@@ -651,7 +652,7 @@ public class ResourceServiceClientTests
         using var cts = new CancellationTokenSource();
         var repository = new Mock<ResourceRepository>();
         var version = new ResourceInfo { ContainerName = "name", Name = "a", VersionId = "v1" };
-        repository.Setup(r => r.GetResourceContainerInfoAsync("name", It.IsAny<CancellationToken>())).ReturnsAsync(new ResourceContainerInfo { Name = "name" });
+        repository.Setup(r => r.GetContainerInfoAsync("name", It.IsAny<CancellationToken>())).ReturnsAsync(new ContainerInfo { Name = "name" });
         repository.Setup(r => r.GetVersionPageAsync("name", null, It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([version]);
         repository.Setup(r => r.GetVersionPageAsync("name", "a", It.IsAny<int>(), It.IsAny<CancellationToken>()))
@@ -663,7 +664,7 @@ public class ResourceServiceClientTests
         await service.ExportContainerAsync("name", new MemoryStream(), cts.Token);
 
         // Assert: the container, its page of names' versions, and each version's content.
-        repository.Verify(r => r.GetResourceContainerInfoAsync("name", cts.Token), Times.Once);
+        repository.Verify(r => r.GetContainerInfoAsync("name", cts.Token), Times.Once);
         repository.Verify(r => r.GetVersionPageAsync("name", null, It.IsAny<int>(), cts.Token), Times.Once);
         repository.Verify(r => r.GetResourceStreamAsync(new ResourceLocation("name", "a"), "v1", cts.Token), Times.Once);
     }
@@ -674,8 +675,8 @@ public class ResourceServiceClientTests
         // Arrange: a provider whose first page comes back short, as one can when a name is deleted while it's read,
         // and whose next page still has a name.
         var repository = new Mock<ResourceRepository>();
-        repository.Setup(r => r.GetResourceContainerInfoAsync("c", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new ResourceContainerInfo { Name = "c" });
+        repository.Setup(r => r.GetContainerInfoAsync("c", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ContainerInfo { Name = "c" });
         ResourceInfo Version(string name) => new() { ContainerName = "c", Name = name, VersionId = name };
         repository.Setup(r => r.GetVersionPageAsync("c", null, It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([Version("a")]);
@@ -699,7 +700,7 @@ public class ResourceServiceClientTests
     {
         using ServiceProvider services = new ServiceCollection().AddResourcefull(o => o.UseInMemory()).BuildServiceProvider();
         IResourceServiceClient source = services.GetRequiredService<IResourceServiceClient>();
-        IResourceContainerClient container = await source.CreateResourceContainerAsync("c", new Dictionary<string, string> { ["team"] = "billing" });
+        IResourceContainerClient container = await source.CreateContainerAsync("c", new Dictionary<string, string> { ["team"] = "billing" });
         await container.UploadAsync("a", BinaryData.FromString("hello"));
         var export = new MemoryStream();
         await source.ExportContainerAsync("c", export);
@@ -716,7 +717,7 @@ public class ResourceServiceClientTests
         // Arrange: a provider that records what the import does, in order.
         var steps = new List<string>();
         var repository = new Mock<ResourceRepository>();
-        repository.Setup(r => r.SetResourceContainerMetadataAsync("d", It.IsAny<IReadOnlyDictionary<string, string>>(), It.IsAny<CancellationToken>()))
+        repository.Setup(r => r.SetContainerMetadataAsync("d", It.IsAny<IReadOnlyDictionary<string, string>>(), It.IsAny<CancellationToken>()))
             .Callback((string _, IReadOnlyDictionary<string, string> metadata, CancellationToken _) =>
                 steps.Add("metadata: " + string.Join(", ", metadata.OrderBy(e => e.Key).Select(e => $"{e.Key}={e.Value}"))))
             .ReturnsAsync(true);
@@ -738,7 +739,7 @@ public class ResourceServiceClientTests
         // Arrange: an export of a container whose own import hadn't finished.
         using ServiceProvider services = new ServiceCollection().AddResourcefull(o => o.UseInMemory()).BuildServiceProvider();
         IResourceServiceClient service = services.GetRequiredService<IResourceServiceClient>();
-        IResourceContainerClient marked = await service.CreateResourceContainerAsync("marked",
+        IResourceContainerClient marked = await service.CreateContainerAsync("marked",
             new Dictionary<string, string> { ["team"] = "billing", ["resourcefull.import"] = "in-progress" });
         await marked.UploadAsync("a", BinaryData.FromString("hello"));
         var export = new MemoryStream();
@@ -749,13 +750,13 @@ public class ResourceServiceClientTests
         await service.ImportContainerAsync("restored", export);
 
         // Assert
-        Assert.Equal(new Dictionary<string, string> { ["team"] = "billing" }, (await service.GetResourceContainerInfoAsync("restored"))!.Metadata);
+        Assert.Equal(new Dictionary<string, string> { ["team"] = "billing" }, (await service.GetContainerInfoAsync("restored"))!.Metadata);
     }
 
     [Fact]
     public async Task ImportContainerAsync_ShouldImportUnmarked_WhenTheProviderCannotChangeContainerMetadata()
     {
-        // Arrange: SetResourceContainerMetadataAsync keeps its default, which throws NotSupportedException.
+        // Arrange: SetContainerMetadataAsync keeps its default, which throws NotSupportedException.
         var repository = new Mock<ResourceRepository> { CallBase = true };
         repository.Setup(r => r.ImportVersionAsync( It.IsAny<NewResourceVersion>(), It.IsAny<Stream>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Hello);
@@ -766,7 +767,7 @@ public class ResourceServiceClientTests
 
         // Assert
         Assert.Equal(1, imported.VersionCount);
-        repository.Verify(r => r.DeleteResourceContainerAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        repository.Verify(r => r.DeleteContainerAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -778,7 +779,7 @@ public class ResourceServiceClientTests
         var deleting = new InvalidOperationException("The database is unreachable.");
         repository.Setup(r => r.ImportVersionAsync( It.IsAny<NewResourceVersion>(),
             It.IsAny<Stream>(), It.IsAny<CancellationToken>())).ThrowsAsync(storing);
-        repository.Setup(r => r.DeleteResourceContainerAsync("d", It.IsAny<CancellationToken>())).ThrowsAsync(deleting);
+        repository.Setup(r => r.DeleteContainerAsync("d", It.IsAny<CancellationToken>())).ThrowsAsync(deleting);
         var client = new ResourceServiceClient(repository.Object, Options.Create(new ResourcefullOptions()));
         Stream export = await OneFileExportAsync();
 
@@ -797,7 +798,7 @@ public class ResourceServiceClientTests
         // Arrange: an export of one file, and a provider that reads each version twice, as one that retries does.
         using ServiceProvider services = new ServiceCollection().AddResourcefull(o => o.UseInMemory()).BuildServiceProvider();
         IResourceServiceClient source = services.GetRequiredService<IResourceServiceClient>();
-        await (await source.CreateResourceContainerAsync("c")).UploadAsync("a", BinaryData.FromString("hello"));
+        await (await source.CreateContainerAsync("c")).UploadAsync("a", BinaryData.FromString("hello"));
         var export = new MemoryStream();
         await source.ExportContainerAsync("c", export);
         export.Position = 0;
@@ -847,7 +848,7 @@ public class ResourceServiceClientTests
         await service.ImportContainerAsync("name", export, cts.Token);
 
         // Assert: the container, and each version.
-        repository.Verify(r => r.AddResourceContainerAsync("name", It.IsAny<IReadOnlyDictionary<string, string>>(), cts.Token), Times.Once);
+        repository.Verify(r => r.AddContainerAsync("name", It.IsAny<IReadOnlyDictionary<string, string>>(), cts.Token), Times.Once);
         repository.Verify(r => r.ImportVersionAsync(It.Is<NewResourceVersion>(v => v.VersionId == "v1"), It.IsAny<Stream>(), cts.Token), Times.Once);
     }
 }

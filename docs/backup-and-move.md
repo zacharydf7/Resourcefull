@@ -114,10 +114,10 @@ app.MapPost("/admin/containers/{name}/import", async (string name, HttpRequest r
   still has it after the import has stopped didn't finish; delete it and import again. (The mark is set just after the
   container is created, so an import stopped in that moment leaves an empty container without it. With a
   [provider of your own](providers/writing-a-provider.md#importing-versions) that doesn't override
-  `SetResourceContainerMetadataAsync`, imports aren't marked.) This finds them:
+  `SetContainerMetadataAsync`, imports aren't marked.) This finds them:
 
   ```csharp
-  foreach (ResourceContainerInfo container in await resources.GetResourceContainersAsync())
+  foreach (ContainerInfo container in await resources.GetContainersAsync())
   {
       if (container.Metadata.TryGetValue("resourcefull.import", out string? state) && state == "in-progress")
           Console.WriteLine($"{container.Name} is an unfinished import, unless one is running now.");

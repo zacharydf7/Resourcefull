@@ -15,7 +15,7 @@ using Resourcefull.AspNetCore;
 app.MapMethods("/files/{container}/{**name}", ["GET", "HEAD"], async (string container, string name,
     IResourceServiceClient resources, CancellationToken cancellationToken) =>
 {
-    ResourceDownloadResult? download = await resources.GetResourceContainerClient(container)
+    ResourceDownloadResult? download = await resources.GetContainerClient(container)
         .DownloadStreamingAsync(name, cancellationToken: cancellationToken);
     return download is null ? Results.NotFound() : Results.Resource(download);
 });
@@ -70,7 +70,7 @@ and the name instead of a download, and the result looks the resource up itself:
 ```csharp
 app.MapMethods("/files/{container}/{**name}", ["GET", "HEAD"], (string container, string name,
     IResourceServiceClient resources) =>
-    Results.Resource(resources.GetResourceContainerClient(container), name));
+    Results.Resource(resources.GetContainerClient(container), name));
 ```
 
 It sends the same headers and answers the same conditional requests as above, and also:
@@ -92,7 +92,7 @@ doesn't exist gets 404:
 ```csharp
 app.MapMethods("/files/{container}/{**name}", ["GET", "HEAD"], (string container, string name, string? versionId,
     IResourceServiceClient resources) =>
-    Results.Resource(resources.GetResourceContainerClient(container), name, versionId));
+    Results.Resource(resources.GetContainerClient(container), name, versionId));
 ```
 
 Conditional headers are evaluated first, so a matching `If-None-Match` gets 304 even with a `Range`. `TypedResults.Resource`
