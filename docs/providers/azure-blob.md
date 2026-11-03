@@ -27,17 +27,15 @@ inside it, so Resourcefull's container names aren't bound by Azure's rules for n
 
 Uploads, downloads (with ranges), listing, versions, create-only and conditional writes, conditional deletes, copies,
 container and version metadata, [container policies](../container-policies.md),
-[export and import](../backup-and-move.md), and [expiry](../expiry.md). It passes the same contract tests as the other
-providers, apart from those for two features it doesn't support yet:
+[export and import](../backup-and-move.md), [expiry](../expiry.md) and [upload sessions](../uploading-in-parts.md). It
+passes the same contract tests as the other providers, apart from those for one feature it doesn't support yet:
 
 - **Moving and renaming** throw `NotSupportedException`. A move must take every version at once, never leaving them
   in both places or in neither, and Blob Storage can't do that without transactions. Copy, then delete, instead.
   Planned in [#154](https://github.com/zacharydf7/Resourcefull/issues/154).
-- **[Upload sessions](../uploading-in-parts.md)** throw `NotSupportedException`. A single upload of any size works.
-  Planned in [#151](https://github.com/zacharydf7/Resourcefull/issues/151).
 
 Every provider is meant to support every feature, so that switching between them takes only the line that picks the
-provider; these two are the next work planned for this provider.
+provider; moving is the next work planned for this provider.
 
 It works the same way as the [S3-compatible provider](s3.md), and shares its code: only the calls to the store differ.
 
@@ -66,6 +64,13 @@ Keep connection strings and keys out of source control, in user secrets, environ
 Resourcefull only reads, writes, lists and deletes blobs: it never creates or deletes blob containers, or changes the
 account's settings. With Microsoft Entra ID, the narrowest built-in role that allows that is **Storage Blob Data
 Contributor**; give it to the application on the blob container rather than the whole account.
+
+Completing an [upload session](../uploading-in-parts.md) has Azure copy the session's segments into place, reading them
+through a read-only link the provider signs. With an account key, as in a connection string, it signs with that key and
+needs nothing more. With Microsoft Entra ID, it signs with a user delegation key, which needs permission on the storage
+account itself: give the application the **Storage Blob Delegator** role on the account, which allows only that. A
+client made from a URL with a SAS in it reads with that SAS, which then needs read permission too. A client given a SAS
+as an `AzureSasCredential` can't sign links, so it can't complete sessions: put the SAS in the URL instead.
 
 ## Sharing a blob container
 
@@ -114,6 +119,16 @@ You don't need this to use the provider, but it explains its costs and what you'
   old; a younger one may belong to a write still in progress.
 - **Each version's content** is a blob of its own, uploaded before the head names it, and deleted after the head
   stops naming it.
+- **Each [upload session](../uploading-in-parts.md)** has a record, `{prefix}u/{container ID}/{upload ID}!/r`, holding
+  the version's attributes and the list of its segments, and one blob per segment beside it. Sessions are kept apart
+  from the containers' data, so they don't count toward a container's usage. An append stores its content in segments of
+  up to 64 MiB, adding each to the record as soon as it's stored, so an append that fails partway keeps what it stored.
+  Each change to the record is a conditional write, as for heads, so two appends from the same offset can't both land. A
+  last segment shorter than 8 MiB is read back and stored again with the start of the next append, so every segment but
+  the last is at least 8 MiB, which keeps a session's segment count, and so its blocks, down. Completing marks the
+  record sealed, so nothing more can be appended, then has Azure copy each segment into a block of the version's content
+  blob (`Put Block From URL`) and commits the blocks; the bytes don't pass through your application. Then it adds the
+  version to the head and deletes the session.
 
 In blob names, the space, the punctuation from `!` to `/`, `[` and `\` are escaped, and a `!` marks where each name
 ends, so a name such as `../report.pdf` or `a//b` is kept exactly as given. The escaping keeps the names' order, so
@@ -131,8 +146,10 @@ characters beyond U+FFFF, such as emoji, or from U+E000 to U+FFFF, might list in
   then drops them.
 - A write interrupted after its content was uploaded, such as by a crash, leaves that content unnamed. It still counts
   toward the container's stored size until the container is deleted.
-- An upload of 8 MiB or more that fails partway leaves the blocks it sent uncommitted. Azure discards uncommitted
-  blocks on its own after a week.
+- An upload of 8 MiB or more that fails partway leaves the blocks it sent uncommitted, and so does a completion whose
+  join fails. Azure discards uncommitted blocks on its own after a week.
+- A deleted container's upload sessions stay under `{prefix}u/` until the next [expiry](../expiry.md) sweep, which
+  deletes them. So does a session's segment whose delete failed, once it's an hour old.
 
 ## Costs
 
@@ -153,6 +170,15 @@ characters beyond U+FFFF, such as emoji, or from U+E000 to U+FFFF, might list in
   one more small blob, and an upload with an expiry one more write, for its entry. Changing an expiry reads the
   container's record and the head, writes the new entry (none when clearing it), reads and writes the head, then
   deletes the old entry.
+- **An upload session** costs, to start, a read of the container's record and a write of the session's record. Each
+  append reads both, then for each segment it stores (one per 64 MiB) uploads the segment and reads and writes the
+  record. An append that starts after a segment shorter than 8 MiB first reads that segment back, so many small appends
+  each cost up to 8 MiB more, each way. Completing reads the content once to hash it, as with every provider; then it
+  reads and writes the record to seal it, reads the head, has Azure copy each segment into a block of the version's
+  content (several at once) and commits them, and writes the head; then it deletes the session's blobs. A blob holds at
+  most 50,000 blocks, so a session can hold at least 390 GiB, and up to 3 TiB when its appends are each 64 MiB or
+  larger. An append past the limit throws `InvalidOperationException`. The expiry sweep lists every session, and reads
+  the record of each, to find those that nothing was appended to for a day.
 
 ## Health checks
 
@@ -162,7 +188,9 @@ reports whether the account can be reached and the blob container exists and is 
 ## Telemetry
 
 Besides the operations every provider records (see [Telemetry](../telemetry.md)), the provider counts
-`resourcefull.azureblob.retries`: writes to a name's head retried because another writer changed the name first. A few
-are normal when writers share names; a steady rise means many writers are contending for the same names. It also counts
-`resourcefull.azureblob.stale_expiries`: expiry entries a sweep dropped because their version no longer existed or
-had another expiry. The Azure SDK can also trace its own requests; see its documentation for OpenTelemetry.
+`resourcefull.azureblob.retries`: writes to a name's head, or to an upload session's record, retried because another
+writer changed it first. A few are normal when writers share names; a steady rise means many writers are contending for
+the same names. It also counts `resourcefull.azureblob.stale_expiries`: expiry entries a sweep dropped because their
+version no longer existed or had another expiry; and `resourcefull.azureblob.abandoned_uploads`: upload sessions nothing
+was appended to for a day, or whose container was deleted, which the expiry sweep deleted. The Azure SDK can also trace
+its own requests; see its documentation for OpenTelemetry.

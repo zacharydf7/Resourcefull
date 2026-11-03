@@ -56,8 +56,10 @@ also carry `error.type`:
 | `resourcefull.sqlserver.retries` | {retry} | SQL Server calls retried after a transient failure, such as a deadlock or a dropped connection, with `db.response.status_code`: the SQL Server error number, such as `1205` for a deadlock |
 | `resourcefull.postgresql.abandoned_uploads` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | {upload} | as `resourcefull.sqlserver.abandoned_uploads`, for [PostgreSQL](providers/postgresql.md) |
 | `resourcefull.postgresql.retries` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | {retry} | PostgreSQL calls retried after a transient failure, with `db.response.status_code`: the SQLSTATE code, such as `40P01` for a deadlock |
-| `resourcefull.s3.retries` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | {retry} | writes to a name's head retried because another writer changed the name first; see [S3-compatible storage](providers/s3.md#telemetry) |
+| `resourcefull.s3.retries` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | {retry} | writes to a name's head, or to an upload session's record, retried because another writer changed it first; see [S3-compatible storage](providers/s3.md#telemetry) |
 | `resourcefull.azureblob.retries` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | {retry} | the same, with Azure Blob Storage; see [Azure Blob Storage](providers/azure-blob.md#telemetry) |
+| `resourcefull.s3.abandoned_uploads` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | {upload} | [upload sessions](uploading-in-parts.md) nothing was appended to for a day, or whose container was deleted, which the [expiry](expiry.md) sweep deleted |
+| `resourcefull.azureblob.abandoned_uploads` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | {upload} | the same, with Azure Blob Storage |
 | `resourcefull.s3.stale_expiries`, `resourcefull.azureblob.stale_expiries` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | {entry} | expiry entries a sweep dropped because their version no longer existed or had another expiry; see [S3-compatible storage](providers/s3.md#how-it-stores-things) or [Azure Blob Storage](providers/azure-blob.md#how-it-stores-things) |
 
 What to alert on:

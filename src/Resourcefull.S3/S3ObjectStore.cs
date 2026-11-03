@@ -14,6 +14,9 @@ internal sealed class S3ObjectStore(IAmazonS3 s3, string bucket) : IObjectStore
     /// <summary>The most keys one <c>DeleteObjects</c> request takes.</summary>
     private const int DeleteBatchSize = 1000;
 
+    /// <summary>How many parts a join copies in parallel.</summary>
+    private const int ParallelCopies = 16;
+
     public string ConditionalWrites => "If-Match and If-None-Match on PutObject";
 
     public async Task<(byte[]? Body, string? ETag)> GetAsync(string key, CancellationToken cancellationToken)
@@ -92,21 +95,66 @@ internal sealed class S3ObjectStore(IAmazonS3 s3, string bucket) : IObjectStore
             }
             catch
             {
-                try
-                {
-                    await s3.AbortMultipartUploadAsync(bucket, key, upload.UploadId, CancellationToken.None).ConfigureAwait(false);
-                }
-                catch (Exception exception) when (IsStoreFailure(exception))
-                {
-                    // Amazon S3 keeps the parts until a lifecycle rule aborts the upload; some other stores clean them
-                    // up on their own.
-                }
+                await AbortQuietlyAsync(key, upload.UploadId).ConfigureAwait(false);
                 throw;
             }
         }
         finally
         {
             ArrayPool<byte>.Shared.Return(buffer);
+        }
+    }
+
+    /// <summary>A multipart upload's limit on its parts.</summary>
+    public int MaxJoinedParts => 10_000;
+
+    /// <summary>A multipart upload whose parts are copied from the objects with <c>UploadPartCopy</c>.</summary>
+    public async Task JoinAsync(string key, IReadOnlyList<string> parts, CancellationToken cancellationToken)
+    {
+        if (parts.Count == 0)
+        {
+            await s3.PutObjectAsync(new PutObjectRequest { BucketName = bucket, Key = key, InputStream = new MemoryStream() },
+                cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
+        InitiateMultipartUploadResponse upload = await s3.InitiateMultipartUploadAsync(
+            new InitiateMultipartUploadRequest { BucketName = bucket, Key = key }, cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var copied = new PartETag[parts.Count];
+            await Parallel.ForEachAsync(Enumerable.Range(0, parts.Count),
+                new ParallelOptions { MaxDegreeOfParallelism = ParallelCopies, CancellationToken = cancellationToken }, async (i, ct) =>
+                {
+                    CopyPartResponse part = await s3.CopyPartAsync(new CopyPartRequest
+                    {
+                        SourceBucket = bucket, SourceKey = parts[i], DestinationBucket = bucket, DestinationKey = key,
+                        UploadId = upload.UploadId, PartNumber = i + 1
+                    }, ct).ConfigureAwait(false);
+                    copied[i] = new PartETag(i + 1, part.ETag);
+                }).ConfigureAwait(false);
+            await s3.CompleteMultipartUploadAsync(new CompleteMultipartUploadRequest
+            {
+                BucketName = bucket, Key = key, UploadId = upload.UploadId, PartETags = [.. copied]
+            }, cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            await AbortQuietlyAsync(key, upload.UploadId).ConfigureAwait(false);
+            throw;
+        }
+    }
+
+    private async Task AbortQuietlyAsync(string key, string uploadId)
+    {
+        try
+        {
+            await s3.AbortMultipartUploadAsync(bucket, key, uploadId, CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (Exception exception) when (IsStoreFailure(exception))
+        {
+            // Amazon S3 keeps the parts until a lifecycle rule aborts the upload; some other stores clean them up on
+            // their own.
         }
     }
 

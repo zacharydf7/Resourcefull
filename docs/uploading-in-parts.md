@@ -8,10 +8,8 @@ instead. What has arrived stays stored, so after a dropped connection, or even a
 asks how much is stored and carries on from there. Nothing shows the new version until the session is completed,
 and then it becomes the name's current version all at once, as an upload's does.
 
-The SQL Server, PostgreSQL and in-memory providers support sessions. The [S3](providers/s3.md) and
-[Azure Blob](providers/azure-blob.md) providers don't yet: `StartUploadAsync` throws `NotSupportedException` with them,
-and a single upload of any size works instead. Sessions for them are planned in
-[#151](https://github.com/zacharydf7/Resourcefull/issues/151).
+Every built-in provider supports sessions: SQL Server, PostgreSQL, [S3](providers/s3.md),
+[Azure Blob](providers/azure-blob.md) and in-memory.
 
 ## A session from start to finish
 
@@ -44,9 +42,9 @@ ResourceInfo? stored = await container.CompleteUploadAsync("video.mp4", upload.U
 
 ## Resuming after a failure
 
-An append stores its part as it arrives, about a MiB at a time with SQL Server and PostgreSQL, so an append that
-fails partway keeps what it stored. (The in-memory provider stores an append whole or not at all.) To resume, ask the
-session where it ended, and send the rest from there:
+An append stores its part as it arrives, about a MiB at a time with SQL Server and PostgreSQL and up to 64 MiB at a
+time with S3 and Azure Blob, so an append that fails partway keeps what it stored. (The in-memory provider stores an
+append whole or not at all.) To resume, ask the session where it ended, and send the rest from there:
 
 ```csharp
 ResourceUpload? current = await container.GetUploadAsync("video.mp4", uploadId);
@@ -114,6 +112,10 @@ content, the session is deleted, since that content is never to be stored.
   sessions you abandon, or they stay.
 - **A session isn't moved or copied** with its name: moving or renaming the resource leaves a session for the old
   name where it is.
+- **With S3 and Azure Blob, a session holds a limited number of segments,** the pieces of up to 64 MiB it stores:
+  enough for at least 78 GiB with S3 and 390 GiB with Azure Blob, and more with appends of 64 MiB or larger. Appends
+  smaller than 8 MiB each cost more there too, since each reads back the short piece the last one stored. See the
+  providers' pages for the details.
 
 ## What each call returns when there's no session
 

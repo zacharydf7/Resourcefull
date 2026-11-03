@@ -34,6 +34,16 @@ internal interface IObjectStore
     /// </summary>
     Task UploadAsync(string key, Stream content, CancellationToken cancellationToken);
 
+    /// <summary>The most objects <see cref="JoinAsync"/> can join into one.</summary>
+    int MaxJoinedParts { get; }
+
+    /// <summary>
+    /// Writes <paramref name="key"/> as the content of <paramref name="parts"/>, in order, joined in the store so the
+    /// bytes don't pass through the application. Each part but the last is at least <see cref="ObjectParts.PartSize"/>
+    /// long, and none is longer than 64 MiB.
+    /// </summary>
+    Task JoinAsync(string key, IReadOnlyList<string> parts, CancellationToken cancellationToken);
+
     /// <summary>
     /// Opens the bytes from <paramref name="start"/> up to <paramref name="end"/> of an object
     /// <paramref name="length"/> bytes long, asking the store for only that range when it isn't the whole object.

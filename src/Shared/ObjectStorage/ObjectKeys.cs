@@ -91,6 +91,27 @@ internal sealed class ObjectKeys(string prefix)
     /// <summary>The key of a version's content.</summary>
     public string Content(string containerId, string blob) => Contents(containerId) + blob;
 
+    /// <summary>
+    /// The prefix of every upload session, kept apart from the containers' data so a session's content doesn't count
+    /// toward its container's usage.
+    /// </summary>
+    public string Uploads { get; } = prefix + "u/";
+
+    /// <summary>The prefix of everything an upload session holds: its record and its segments.</summary>
+    public string Upload(string containerId, string versionId) => $"{Uploads}{containerId}/{Escape(versionId)}{End}/";
+
+    /// <summary>The key of an upload session's record.</summary>
+    public string UploadRecord(string containerId, string versionId) => Upload(containerId, versionId) + "r";
+
+    /// <summary>The key of one segment of an upload session's content.</summary>
+    public string UploadSegment(string containerId, string versionId, string token) => Upload(containerId, versionId) + "p/" + token;
+
+    /// <summary>
+    /// The prefix of the session a key under <see cref="Uploads"/> belongs to: up to the <c>!/</c> that ends its version
+    /// ID, which an escape never has.
+    /// </summary>
+    internal string UploadOf(string key) => key[..(key.IndexOf(End + "/", Uploads.Length, StringComparison.Ordinal) + 2)];
+
     /// <summary>A name as it goes into a key, before the <c>!</c> that ends it, keeping the order of names.</summary>
     internal static string Escape(string name)
     {

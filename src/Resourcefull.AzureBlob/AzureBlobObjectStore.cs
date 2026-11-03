@@ -6,6 +6,7 @@ using Azure;
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
 using Azure.Storage.Blobs.Specialized;
+using Azure.Storage.Sas;
 using Resourcefull.ObjectStorage;
 
 namespace Resourcefull.AzureBlob;
@@ -13,8 +14,14 @@ namespace Resourcefull.AzureBlob;
 /// <summary>An Azure Blob Storage container, as <see cref="ObjectStoreRepository"/> uses it.</summary>
 internal sealed class AzureBlobObjectStore(BlobContainerClient container) : IObjectStore
 {
-    /// <summary>How many blobs are deleted in parallel.</summary>
-    private const int ParallelDeletes = 16;
+    /// <summary>How many blobs are deleted, or copied into a join, in parallel.</summary>
+    private const int ParallelRequests = 16;
+
+    /// <summary>
+    /// How long the read-only link a join signs stays valid: long enough for the largest join, which is safe since the
+    /// link goes only to Azure.
+    /// </summary>
+    private static readonly TimeSpan JoinReadTime = TimeSpan.FromDays(1);
 
     public string ConditionalWrites => "If-Match and If-None-Match on Put Blob";
 
@@ -74,8 +81,7 @@ internal sealed class AzureBlobObjectStore(BlobContainerClient container) : IObj
             var blocks = new List<string>();
             for (int number = 1; filled > 0; number++)
             {
-                // Azure requires every block ID in a blob to be the same length.
-                string id = Convert.ToBase64String(Encoding.ASCII.GetBytes(number.ToString("D6")));
+                string id = BlockId(number);
                 await blob.StageBlockAsync(id, new MemoryStream(buffer, 0, filled, false), cancellationToken: cancellationToken).ConfigureAwait(false);
                 blocks.Add(id);
                 filled = await ObjectParts.FillAsync(content, buffer, cancellationToken).ConfigureAwait(false);
@@ -86,6 +92,58 @@ internal sealed class AzureBlobObjectStore(BlobContainerClient container) : IObj
         {
             ArrayPool<byte>.Shared.Return(buffer);
         }
+    }
+
+    /// <summary>A block ID: Azure requires every block ID in a blob to be the same length.</summary>
+    private static string BlockId(int number) => Convert.ToBase64String(Encoding.ASCII.GetBytes(number.ToString("D6")));
+
+    /// <summary>A block blob's limit on its blocks.</summary>
+    public int MaxJoinedParts => 50_000;
+
+    /// <summary>
+    /// Blocks staged with <c>Put Block From URL</c>, each from a part, then a block list that commits them. Azure reads
+    /// the parts through a read-only link the store signs.
+    /// </summary>
+    public async Task JoinAsync(string key, IReadOnlyList<string> parts, CancellationToken cancellationToken)
+    {
+        BlockBlobClient blob = container.GetBlockBlobClient(key);
+        if (parts.Count == 0)
+        {
+            await blob.UploadAsync(new MemoryStream(), new BlobUploadOptions(), cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
+        Func<string, Uri> readable = await SignReadsAsync(cancellationToken).ConfigureAwait(false);
+        string[] blocks = [.. parts.Select((_, i) => BlockId(i + 1))];
+        await Parallel.ForEachAsync(Enumerable.Range(0, parts.Count),
+            new ParallelOptions { MaxDegreeOfParallelism = ParallelRequests, CancellationToken = cancellationToken },
+            async (i, ct) => await blob.StageBlockFromUriAsync(readable(parts[i]), blocks[i], cancellationToken: ct).ConfigureAwait(false))
+            .ConfigureAwait(false);
+        await blob.CommitBlockListAsync(blocks, cancellationToken: cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// What makes a link to read a blob: the blob's URL, with the client's SAS, when the client's URL carries one; a link
+    /// signed with the account key when the client has one; and otherwise one signed with a user delegation key, which a
+    /// client signed in with Microsoft Entra ID asks for.
+    /// </summary>
+    private async Task<Func<string, Uri>> SignReadsAsync(CancellationToken cancellationToken)
+    {
+        if (new BlobUriBuilder(container.Uri).Sas?.Signature is { Length: > 0 }) return name => container.GetBlobClient(name).Uri;
+        DateTimeOffset expiresOn = DateTimeOffset.UtcNow + JoinReadTime;
+        if (container.CanGenerateSasUri) return name => container.GetBlobClient(name).GenerateSasUri(BlobSasPermissions.Read, expiresOn);
+
+        BlobServiceClient service = container.GetParentBlobServiceClient();
+        UserDelegationKey key = (await service.GetUserDelegationKeyAsync(null, expiresOn, cancellationToken).ConfigureAwait(false)).Value;
+        return name =>
+        {
+            var sas = new BlobSasBuilder(BlobSasPermissions.Read, expiresOn)
+            {
+                BlobContainerName = container.Name, BlobName = name, Resource = "b"
+            };
+            return new BlobUriBuilder(container.GetBlobClient(name).Uri) { Sas = sas.ToSasQueryParameters(key, service.AccountName) }
+                .ToUri();
+        };
     }
 
     public async Task<ObjectRead?> OpenReadAsync(string key, long start, long end, long length, CancellationToken cancellationToken)
@@ -120,7 +178,7 @@ internal sealed class AzureBlobObjectStore(BlobContainerClient container) : IObj
     }
 
     public Task DeleteAsync(IReadOnlyList<string> keys, CancellationToken cancellationToken) =>
-        Parallel.ForEachAsync(keys, new ParallelOptions { MaxDegreeOfParallelism = ParallelDeletes, CancellationToken = cancellationToken },
+        Parallel.ForEachAsync(keys, new ParallelOptions { MaxDegreeOfParallelism = ParallelRequests, CancellationToken = cancellationToken },
             async (key, ct) => await container.GetBlobClient(key).DeleteIfExistsAsync(cancellationToken: ct).ConfigureAwait(false));
 
     /// <remarks>

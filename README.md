@@ -8,7 +8,7 @@ Resourcefull stores and serves files of any type and size from infrastructure yo
 PostgreSQL database you already have, with nothing new to deploy. Upload, download, list and version **resources** in
 named **containers** through one client API. When you move to the cloud, your code comes with you: change the line that
 picks the provider to keep the bytes in Amazon S3, another S3-compatible store or Azure Blob Storage instead. The
-object-store providers don't support moving or renaming resources, or upload sessions, yet. Tests can keep the bytes
+object-store providers don't support moving or renaming resources yet. Tests can keep the bytes
 in memory, and a storage provider of your own can keep them anywhere else.
 
 | Package | What it's for |

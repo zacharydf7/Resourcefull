@@ -21,7 +21,7 @@ namespace Resourcefull.ObjectStorage;
 /// <param name="keyPrefix">What every key starts with.</param>
 /// <param name="timeProvider">The clock versions are stamped with.</param>
 /// <param name="storeName">The store's name, for telemetry; <see langword="null"/> for the store without one.</param>
-internal sealed class ObjectStoreRepository(IObjectStore store, string keyPrefix, TimeProvider? timeProvider, string? storeName)
+internal sealed partial class ObjectStoreRepository(IObjectStore store, string keyPrefix, TimeProvider? timeProvider, string? storeName)
     : ResourceRepository
 {
     /// <summary>

@@ -5,6 +5,7 @@ using Azure.Core;
 using Azure.Core.Pipeline;
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
+using Azure.Storage.Sas;
 using Microsoft.Extensions.DependencyInjection;
 using Resourcefull.AzureBlob;
 using Resourcefull.ObjectStorage;
@@ -143,6 +144,62 @@ public class AzureBlobIntegrationTests(AzureBlobFixture fixture)
         Assert.Equal(payload.LongLength, stored.ContentLength);
         Assert.Equal(payload, whole);
         Assert.Equal(payload.AsSpan(ObjectParts.PartSize - 2, 3).ToArray(), ranged.ToArray());
+    }
+
+    [Fact]
+    public async Task UploadSession_ShouldJoinItsSegmentsInOrder_WhenItsAppendsSpanSeveral()
+    {
+        fixture.SkipIfUnavailable();
+
+        // Arrange: segments of up to 9 MiB, and appends of 1 MiB and 20 MiB, which store three segments between them.
+        string prefix = $"session-{Guid.NewGuid():N}/";
+        var repository = new ObjectStoreRepository(new AzureBlobObjectStore(fixture.Client.GetBlobContainerClient(fixture.ContainerName)),
+            prefix, null, null) { SegmentSize = 9 * 1024 * 1024 };
+        await repository.AddContainerAsync("c", new Dictionary<string, string>());
+        var location = new ResourceLocation("c", "big.bin");
+        byte[] payload = RandomNumberGenerator.GetBytes(21 * 1024 * 1024);
+        await repository.StartStagedVersionAsync(new NewResourceVersion(location, "v1"));
+        await repository.AppendStagedContentAsync(location, "v1", 0, new MemoryStream(payload, 0, 1024 * 1024));
+        await repository.AppendStagedContentAsync(location, "v1", 1024 * 1024, new MemoryStream(payload, 1024 * 1024, 20 * 1024 * 1024));
+        int sessionBlobs = await CountBlobsAsync(prefix + "u/");
+
+        // Act
+        WrittenContent? written = await repository.CompleteStagedVersionAsync(location, "v1", payload.LongLength, "sha256:test");
+        await using Stream? content = await repository.GetResourceStreamAsync(location);
+        using var stored = new MemoryStream();
+        await content!.CopyToAsync(stored);
+
+        // Assert: the record and three segments; then the content, whole and in order, and nothing left of the session.
+        Assert.Equal(4, sessionBlobs);
+        Assert.Equal(payload.LongLength, written!.ContentLength);
+        Assert.Equal(payload, stored.ToArray());
+        Assert.Equal(0, await CountBlobsAsync(prefix + "u/"));
+    }
+
+    [Fact]
+    public async Task UploadSession_ShouldComplete_WhenTheClientIsSignedWithASasInItsUrl()
+    {
+        fixture.SkipIfUnavailable();
+
+        // Arrange: a client for the blob container from a SAS URL, which can't sign links of its own.
+        BlobContainerClient signed = fixture.Client.GetBlobContainerClient(fixture.ContainerName);
+        var client = new BlobContainerClient(signed.GenerateSasUri(BlobContainerSasPermissions.All, DateTimeOffset.UtcNow.AddHours(1)));
+        var repository = new ObjectStoreRepository(new AzureBlobObjectStore(client), $"sas-{Guid.NewGuid():N}/", null, null);
+        await repository.AddContainerAsync("c", new Dictionary<string, string>());
+        var location = new ResourceLocation("c", "a.txt");
+        await repository.StartStagedVersionAsync(new NewResourceVersion(location, "v1"));
+        await repository.AppendStagedContentAsync(location, "v1", 0, new MemoryStream("a"u8.ToArray()));
+
+        // Act
+        WrittenContent? written = await repository.CompleteStagedVersionAsync(location, "v1", 1, "sha256:test");
+        await using Stream? content = await repository.GetResourceStreamAsync(location);
+        using var stored = new MemoryStream();
+        await content!.CopyToAsync(stored);
+
+        // Assert
+        Assert.False(client.CanGenerateSasUri);
+        Assert.Equal(1, written!.ContentLength);
+        Assert.Equal("a"u8.ToArray(), stored.ToArray());
     }
 
     [Fact]

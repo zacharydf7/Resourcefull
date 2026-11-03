@@ -1,5 +1,6 @@
 using System.Diagnostics.Metrics;
 using System.Reflection;
+using System.Text;
 using System.Text.Json.Nodes;
 using Amazon.S3;
 using Amazon.S3.Model;
@@ -7,6 +8,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Resourcefull.ObjectStorage;
 using Resourcefull.Providers;
 using Resourcefull.S3;
+using ResourceLocation = Resourcefull.Providers.ResourceLocation;
 
 namespace Resourcefull.Tests.S3;
 
@@ -248,6 +250,353 @@ public class S3IntegrationTests(S3Fixture fixture)
         Assert.True(expired);
         Assert.Equal(0, await CountKeysAsync(prefix + "x/"));
         Assert.Equal(2, await CountKeysAsync(prefix + "d/"));
+    }
+
+    /// <summary>A repository on the test bucket under <paramref name="prefix"/>, with a container named c.</summary>
+    private async Task<ObjectStoreRepository> NewRepositoryAsync(string prefix, TimeProvider? realTime = null, int? segmentSize = null,
+        IObjectStore? store = null)
+    {
+        var repository = new ObjectStoreRepository(store ?? new S3ObjectStore(fixture.Client, fixture.BucketName), prefix, null, null)
+        {
+            RealTime = realTime ?? TimeProvider.System, SegmentSize = segmentSize ?? 64 * 1024 * 1024
+        };
+        await repository.AddContainerAsync("c", new Dictionary<string, string>());
+        return repository;
+    }
+
+    private static async Task<byte[]> ReadAllAsync(Stream? stream)
+    {
+        await using Stream content = stream!;
+        using var copy = new MemoryStream();
+        await content.CopyToAsync(copy);
+        return copy.ToArray();
+    }
+
+    [Fact]
+    public async Task UploadSession_ShouldJoinItsSegmentsInOrder_WhenItsAppendsSpanSeveral()
+    {
+        fixture.SkipIfUnavailable();
+
+        // Arrange: segments of up to 9 MiB, and appends of 1 MiB, 20 MiB and 3 bytes. The second is stored with the
+        // first's short segment, in three segments, and the third with the second's short last one.
+        string prefix = $"session-{Guid.NewGuid():N}/";
+        ObjectStoreRepository repository = await NewRepositoryAsync(prefix, segmentSize: 9 * 1024 * 1024);
+        var location = new ResourceLocation("c", "big.bin");
+        byte[] payload = new byte[21 * 1024 * 1024 + 3];
+        new Random(151).NextBytes(payload);
+        await repository.StartStagedVersionAsync(new NewResourceVersion(location, "v1"));
+
+        // Act
+        long offset = 0;
+        foreach (int length in new[] { 1024 * 1024, 20 * 1024 * 1024, 3 })
+        {
+            var part = new MemoryStream(payload, (int)offset, length);
+            offset = (await repository.AppendStagedContentAsync(location, "v1", offset, part))!.Value;
+        }
+        List<long> segments = [.. (await fixture.Client.ListObjectsV2Async(new ListObjectsV2Request
+        {
+            BucketName = fixture.BucketName, Prefix = prefix + "u/"
+        })).S3Objects.Where(o => o.Key.Contains("/p/", StringComparison.Ordinal)).Select(o => o.Size ?? 0).Order()];
+        byte[] staged = await ReadAllAsync(await repository.GetStagedStreamAsync(location, "v1"));
+        WrittenContent? written = await repository.CompleteStagedVersionAsync(location, "v1", offset, "sha256:test");
+        byte[] stored = await ReadAllAsync(await repository.GetResourceStreamAsync(location));
+
+        // Assert: three segments, with no short one but the last; the content, whole and in order, before and after
+        // completing; and nothing left of the session.
+        Assert.Equal([3 * 1024 * 1024 + 3, 9 * 1024 * 1024, 9 * 1024 * 1024], segments);
+        Assert.Equal(payload, staged);
+        Assert.Equal(payload.LongLength, written!.ContentLength);
+        Assert.Equal(payload, stored);
+        Assert.Equal(0, await CountKeysAsync(prefix + "u/"));
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("a")]
+    public async Task AppendStagedContentAsync_ShouldRefuseAndKeepNothing_WhenAnotherAppendFromTheSameOffsetLandsFirst(string stored)
+    {
+        fixture.SkipIfUnavailable();
+
+        // Arrange: a session holding nothing, or a short segment that both appends start by storing again; and an append
+        // whose content holds back its first read until the test lets it go.
+        string prefix = $"race-{Guid.NewGuid():N}/";
+        ObjectStoreRepository repository = await NewRepositoryAsync(prefix);
+        var location = new ResourceLocation("c", "a.txt");
+        await repository.StartStagedVersionAsync(new NewResourceVersion(location, "v1"));
+        if (stored.Length > 0) await repository.AppendStagedContentAsync(location, "v1", 0, new MemoryStream(Encoding.UTF8.GetBytes(stored)));
+        var held = new HeldStream(new MemoryStream("first"u8.ToArray()));
+
+        // Act: the held append has checked the offset; another from the same offset lands; then the held one goes on.
+        Task<long?> first = repository.AppendStagedContentAsync(location, "v1", stored.Length, held);
+        await held.Reading;
+        long? second = await repository.AppendStagedContentAsync(location, "v1", stored.Length, new MemoryStream("second"u8.ToArray()));
+        held.Release();
+        ResourceUploadOffsetException refused = await Assert.ThrowsAsync<ResourceUploadOffsetException>(() => first);
+
+        // Assert: only the second append's content is stored, and the held one left no segment of its own.
+        Assert.Equal(stored.Length + 6, second);
+        Assert.Equal(stored.Length + 6, refused.CurrentOffset);
+        Assert.Equal(Encoding.UTF8.GetBytes(stored + "second"), await ReadAllAsync(await repository.GetStagedStreamAsync(location, "v1")));
+        Assert.Equal(2, await CountKeysAsync(prefix + "u/"));
+    }
+
+    [Fact]
+    public async Task CompleteStagedVersionAsync_ShouldReturnWhatTheOtherAdded_WhenAnotherCompletionOfTheSessionLandsFirst()
+    {
+        fixture.SkipIfUnavailable();
+
+        // Arrange: a session with content, on a store that holds back the first join once it's done, as a slow
+        // completion that a client retried would be.
+        string prefix = $"complete-race-{Guid.NewGuid():N}/";
+        var store = new InterferingStore(new S3ObjectStore(fixture.Client, fixture.BucketName)) { HoldFirstJoin = true };
+        ObjectStoreRepository repository = await NewRepositoryAsync(prefix, store: store);
+        var location = new ResourceLocation("c", "a.txt");
+        await repository.StartStagedVersionAsync(new NewResourceVersion(location, "v1"));
+        await repository.AppendStagedContentAsync(location, "v1", 0, new MemoryStream("a"u8.ToArray()));
+
+        // Act: the held completion has joined; the other completes in full; then the held one goes on.
+        Task<WrittenContent?> first = repository.CompleteStagedVersionAsync(location, "v1", 1, "sha256:test");
+        await store.Joined;
+        WrittenContent? second = await repository.CompleteStagedVersionAsync(location, "v1", 1, "sha256:test");
+        store.Release();
+        WrittenContent? firstResult = await first;
+
+        // Assert: both report the one version, and only its content is left: the name's head and one content object.
+        Assert.NotNull(second);
+        Assert.Equal(second, firstResult);
+        Assert.Single(await repository.GetResourceVersionsAsync(location));
+        Assert.Equal("a"u8.ToArray(), await ReadAllAsync(await repository.GetResourceStreamAsync(location)));
+        Assert.Equal(2, await CountKeysAsync(prefix + "d/"));
+        Assert.Equal(0, await CountKeysAsync(prefix + "u/"));
+    }
+
+    [Fact]
+    public async Task AppendStagedContentAsync_ShouldBeRefusedUntilTheCompletionIsFinished_WhenACompletionStoppedAfterSealing()
+    {
+        fixture.SkipIfUnavailable();
+
+        // Arrange: a session with content, whose record is sealed, as a completion that stopped after sealing leaves it.
+        string prefix = $"sealed-{Guid.NewGuid():N}/";
+        ObjectStoreRepository repository = await NewRepositoryAsync(prefix);
+        var location = new ResourceLocation("c", "a.txt");
+        await repository.StartStagedVersionAsync(new NewResourceVersion(location, "v1"));
+        await repository.AppendStagedContentAsync(location, "v1", 0, new MemoryStream("a"u8.ToArray()));
+        string recordKey = (await fixture.Client.ListObjectsV2Async(new ListObjectsV2Request
+        {
+            BucketName = fixture.BucketName, Prefix = prefix + "u/"
+        })).S3Objects.Single(o => o.Key.EndsWith("/r", StringComparison.Ordinal)).Key;
+        using (GetObjectResponse read = await fixture.Client.GetObjectAsync(fixture.BucketName, recordKey))
+        {
+            JsonNode record = JsonNode.Parse(read.ResponseStream)!;
+            record["s"] = Guid.NewGuid().ToString("N");
+            await fixture.Client.PutObjectAsync(new PutObjectRequest
+            {
+                BucketName = fixture.BucketName, Key = recordKey, ContentBody = record.ToJsonString()
+            });
+        }
+
+        // Act
+        ResourceUploadOffsetException refused = await Assert.ThrowsAsync<ResourceUploadOffsetException>(() =>
+            repository.AppendStagedContentAsync(location, "v1", 1, new MemoryStream("b"u8.ToArray())));
+        WrittenContent? written = await repository.CompleteStagedVersionAsync(location, "v1", 1, "sha256:test");
+
+        // Assert: the append was refused, and completing again finished the completion.
+        Assert.Equal(1, refused.CurrentOffset);
+        Assert.Equal(1, written!.ContentLength);
+        Assert.Equal("a"u8.ToArray(), await ReadAllAsync(await repository.GetResourceStreamAsync(location)));
+    }
+
+    [Fact]
+    public async Task CompleteStagedVersionAsync_ShouldLeaveTheSessionTakingAppends_WhenTheCompletionIsRefused()
+    {
+        fixture.SkipIfUnavailable();
+
+        // Arrange: a name with a current version, and a session for it.
+        string prefix = $"unseal-{Guid.NewGuid():N}/";
+        ObjectStoreRepository repository = await NewRepositoryAsync(prefix);
+        var location = new ResourceLocation("c", "a.txt");
+        await repository.AddResourceAsync(new NewResourceVersion(location, "v0"), new MemoryStream("old"u8.ToArray()));
+        await repository.StartStagedVersionAsync(new NewResourceVersion(location, "v1"));
+        await repository.AppendStagedContentAsync(location, "v1", 0, new MemoryStream("a"u8.ToArray()));
+
+        // Act: a create-only completion, then another append.
+        await Assert.ThrowsAsync<ResourceConflictException>(() => repository.CompleteStagedVersionAsync(location, "v1", 1, "sha256:test",
+            new ResourceWriteCondition { CreateOnly = true }));
+        long? appended = await repository.AppendStagedContentAsync(location, "v1", 1, new MemoryStream("b"u8.ToArray()));
+
+        // Assert: the session took the append, and the refused completion left no content behind: under the container's
+        // data are only the name's head and its old version's content.
+        Assert.Equal(2, appended);
+        Assert.Equal(2, await CountKeysAsync(prefix + "d/"));
+    }
+
+    [Fact]
+    public async Task DeleteAbandonedUploadsAsync_ShouldDeleteADeletedContainersSessionsAndOldOrphanedSegments_WhenCalled()
+    {
+        fixture.SkipIfUnavailable();
+
+        // Arrange: a session in a container that's then deleted, a live session in another, and a segment no record
+        // names, as a cancel whose delete failed leaves.
+        string prefix = $"sweep-{Guid.NewGuid():N}/";
+        var clock = new MovableClock();
+        ObjectStoreRepository repository = await NewRepositoryAsync(prefix, clock);
+        await repository.AddContainerAsync("d", new Dictionary<string, string>());
+        var gone = new ResourceLocation("c", "a.txt");
+        var live = new ResourceLocation("d", "a.txt");
+        foreach (ResourceLocation location in new[] { gone, live })
+        {
+            await repository.StartStagedVersionAsync(new NewResourceVersion(location, "v1"));
+            await repository.AppendStagedContentAsync(location, "v1", 0, new MemoryStream("a"u8.ToArray()));
+        }
+        await repository.DeleteContainerAsync("c");
+        await fixture.Client.PutObjectAsync(new PutObjectRequest
+        {
+            BucketName = fixture.BucketName, Key = $"{prefix}u/{new string('0', 32)}/v9!/p/{new string('0', 32)}", ContentBody = "x"
+        });
+
+        // Act
+        int whileYoung = await repository.DeleteAbandonedUploadsAsync(DateTimeOffset.UtcNow.AddDays(-1));
+        int keysWhileYoung = await CountKeysAsync(prefix + "u/");
+        clock.Now = DateTimeOffset.UtcNow.AddHours(2);
+        int onceOld = await repository.DeleteAbandonedUploadsAsync(DateTimeOffset.UtcNow.AddDays(-1));
+
+        // Assert: the deleted container's session went at once and the orphaned segment once it was an hour old; the
+        // live session stays, its record and its segment.
+        Assert.Equal((1, 3), (whileYoung, keysWhileYoung));
+        Assert.Equal(0, onceOld);
+        Assert.Equal(2, await CountKeysAsync(prefix + "u/"));
+        Assert.NotNull(await repository.GetStagedVersionAsync(live, "v1"));
+    }
+
+    [Fact]
+    public async Task DeleteAbandonedUploadsAsync_ShouldDeleteAndCountTheOthers_WhenOneSessionCantBeRead()
+    {
+        fixture.SkipIfUnavailable();
+
+        // Arrange: two sessions in a container that's then deleted, on a store that then fails every read of one's record.
+        string prefix = $"sweep-failure-{Guid.NewGuid():N}/";
+        var store = new InterferingStore(new S3ObjectStore(fixture.Client, fixture.BucketName));
+        ObjectStoreRepository repository = await NewRepositoryAsync(prefix, store: store);
+        foreach ((string name, string versionId) in new[] { ("a.txt", "v1"), ("b.txt", "v2") })
+        {
+            var location = new ResourceLocation("c", name);
+            await repository.StartStagedVersionAsync(new NewResourceVersion(location, versionId));
+            await repository.AppendStagedContentAsync(location, versionId, 0, new MemoryStream("a"u8.ToArray()));
+        }
+        await repository.DeleteContainerAsync("c");
+        store.FailReads = key => key.EndsWith("/v1!/r", StringComparison.Ordinal);
+        var counted = new List<long>();
+        using var listener = new MeterListener();
+        listener.InstrumentPublished = (instrument, l) =>
+        {
+            if (instrument.Name == "resourcefull.s3.abandoned_uploads") l.EnableMeasurementEvents(instrument);
+        };
+        listener.SetMeasurementEventCallback<long>((_, value, _, _) => counted.Add(value));
+        listener.Start();
+
+        // Act
+        AggregateException failed = await Assert.ThrowsAsync<AggregateException>(() =>
+            repository.DeleteAbandonedUploadsAsync(DateTimeOffset.UtcNow.AddDays(-1)));
+
+        // Assert: the session that could be read was deleted and counted; the other is left for the next sweep, its
+        // record and its segment.
+        Assert.IsType<IOException>(Assert.Single(failed.InnerExceptions));
+        Assert.Equal([1L], counted);
+        Assert.Equal(2, await CountKeysAsync(prefix + "u/"));
+    }
+
+    /// <summary>
+    /// A store that can fail reads of some keys, and whose first join, once done, can wait for <see cref="Release"/>, so
+    /// a test can act meanwhile.
+    /// </summary>
+    private sealed class InterferingStore(IObjectStore inner) : IObjectStore
+    {
+        private readonly TaskCompletionSource _joined = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource _released = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        /// <summary>Whether the first join waits for <see cref="Release"/> once it's done.</summary>
+        public bool HoldFirstJoin { get; init; }
+
+        /// <summary>The keys whose reads fail, as a store that can't be reached fails them.</summary>
+        public Func<string, bool>? FailReads { get; set; }
+
+        /// <summary>Completes when the first join is done.</summary>
+        public Task Joined => _joined.Task;
+
+        public void Release() => _released.TrySetResult();
+
+        public string ConditionalWrites => inner.ConditionalWrites;
+
+        public int MaxJoinedParts => inner.MaxJoinedParts;
+
+        public async Task JoinAsync(string key, IReadOnlyList<string> parts, CancellationToken cancellationToken)
+        {
+            await inner.JoinAsync(key, parts, cancellationToken);
+            if (HoldFirstJoin && _joined.TrySetResult()) await _released.Task.WaitAsync(cancellationToken);
+        }
+
+        public Task<(byte[]? Body, string? ETag)> GetAsync(string key, CancellationToken cancellationToken) =>
+            FailReads?.Invoke(key) == true ? throw new IOException($"Reading {key} failed.") : inner.GetAsync(key, cancellationToken);
+
+        public Task<bool> TryPutAsync(string key, byte[] body, string? etag) => inner.TryPutAsync(key, body, etag);
+
+        public Task UploadAsync(string key, Stream content, CancellationToken cancellationToken) =>
+            inner.UploadAsync(key, content, cancellationToken);
+
+        public Task<ObjectRead?> OpenReadAsync(string key, long start, long end, long length, CancellationToken cancellationToken) =>
+            inner.OpenReadAsync(key, start, end, length, cancellationToken);
+
+        public IAsyncEnumerable<ObjectListing> ListAsync(string prefix, string? startAfter, CancellationToken cancellationToken) =>
+            inner.ListAsync(prefix, startAfter, cancellationToken);
+
+        public Task DeleteAsync(IReadOnlyList<string> keys, CancellationToken cancellationToken) => inner.DeleteAsync(keys, cancellationToken);
+
+        public bool IsStoreFailure(Exception exception) => inner.IsStoreFailure(exception);
+    }
+
+    /// <summary>A stream whose first read waits for <see cref="Release"/>, so a test can act while it's being read.</summary>
+    private sealed class HeldStream(Stream inner) : Stream
+    {
+        private readonly TaskCompletionSource _reading = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource _released = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        /// <summary>Completes when the first read starts.</summary>
+        public Task Reading => _reading.Task;
+
+        public void Release() => _released.TrySetResult();
+
+        public override bool CanRead => true;
+
+        public override bool CanSeek => false;
+
+        public override bool CanWrite => false;
+
+        public override long Length => throw new NotSupportedException();
+
+        public override long Position
+        {
+            get => throw new NotSupportedException();
+            set => throw new NotSupportedException();
+        }
+
+        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+        public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            _reading.TrySetResult();
+            await _released.Task.WaitAsync(cancellationToken);
+            return await inner.ReadAsync(buffer, cancellationToken);
+        }
+
+        public override void Flush()
+        {
+        }
+
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+
+        public override void SetLength(long value) => throw new NotSupportedException();
+
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
     }
 
     /// <summary>A clock the test sets.</summary>

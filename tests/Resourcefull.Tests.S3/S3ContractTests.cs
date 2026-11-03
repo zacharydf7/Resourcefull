@@ -16,8 +16,6 @@ public class S3ContractTests(S3Fixture fixture) : ResourcefullContractTests
     protected override IComparer<string> NameOrder => CodePointOrder.Instance;
 
     protected override bool SupportsMove => false;
-
-    protected override bool SupportsUploadSessions => false;
 }
 
 /// <summary>The order keys list in: their UTF-8 bytes, which is Unicode code point order.</summary>
