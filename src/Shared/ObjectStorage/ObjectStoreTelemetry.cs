@@ -29,6 +29,12 @@ internal static class ObjectStoreTelemetry
         unit: "{upload}",
         description: "Upload sessions nothing was appended to for a day, or whose container was deleted, deleted by the expiry sweep.");
 
+    private static readonly Counter<long> RecoveredMoves = Meter.CreateCounter<long>($"resourcefull.{Provider}.moves_recovered",
+        unit: "{move}", description: "Moves the expiry sweep finished or undid because their mover stopped before it could.");
+
+    /// <summary>Counts a move the sweep finished or undid for a mover that stopped.</summary>
+    public static void CountRecoveredMove(string? storeName) => Count(RecoveredMoves, storeName);
+
     /// <summary>Counts a write of a head or a session's record retried after another writer changed it first.</summary>
     public static void CountRetry(string? storeName) => Count(Retries, storeName);
 

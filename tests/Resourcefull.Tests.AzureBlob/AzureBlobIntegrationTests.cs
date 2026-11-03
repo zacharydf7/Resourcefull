@@ -177,6 +177,33 @@ public class AzureBlobIntegrationTests(AzureBlobFixture fixture)
     }
 
     [Fact]
+    public async Task MoveResourceAsync_ShouldCopyTheContentInParts_WhenMovedToAnotherContainer()
+    {
+        fixture.SkipIfUnavailable();
+
+        // Arrange: copies in parts of 8 MiB, and a version of 17 MiB, which takes three.
+        var repository = new ObjectStoreRepository(new AzureBlobObjectStore(fixture.Client.GetBlobContainerClient(fixture.ContainerName)),
+            $"move-parts-{Guid.NewGuid():N}/", null, null) { CopyPartSize = ObjectParts.PartSize };
+        await repository.AddContainerAsync("c", new Dictionary<string, string>());
+        await repository.AddContainerAsync("d", new Dictionary<string, string>());
+        byte[] payload = RandomNumberGenerator.GetBytes(17 * 1024 * 1024);
+        var from = new ResourceLocation("c", "big.bin");
+        var to = new ResourceLocation("d", "big.bin");
+        await repository.AddResourceAsync(new NewResourceVersion(from, "v1"), new MemoryStream(payload));
+
+        // Act
+        bool moved = await repository.MoveResourceAsync(from, to, null);
+        await using Stream? content = await repository.GetResourceStreamAsync(to);
+        using var stored = new MemoryStream();
+        await content!.CopyToAsync(stored);
+
+        // Assert
+        Assert.True(moved);
+        Assert.Equal(payload, stored.ToArray());
+        Assert.Equal(0, (await repository.GetContainerUsageAsync("c")).VersionCount);
+    }
+
+    [Fact]
     public async Task UploadSession_ShouldComplete_WhenTheClientIsSignedWithASasInItsUrl()
     {
         fixture.SkipIfUnavailable();

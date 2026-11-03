@@ -13,7 +13,7 @@ provider aims for every feature. This page shows, in one place, where each one s
 | [Versions](../versioning.md) and pruning | Yes | Yes | Yes | Yes | Yes |
 | Create-only and [conditional](../concurrency.md) writes and deletes | Yes | Yes | Yes | Yes | Yes |
 | [Copying](../copying-and-moving.md) | Yes | Yes | Yes | Yes | Yes |
-| [Moving and renaming](../copying-and-moving.md) | Yes | Yes | Planned ([#154](https://github.com/zacharydf7/Resourcefull/issues/154)) | Planned ([#154](https://github.com/zacharydf7/Resourcefull/issues/154)) | Yes |
+| [Moving and renaming](../copying-and-moving.md) | Yes | Yes | Yes | Yes | Yes |
 | Container metadata | Yes | Yes | Yes | Yes | Yes |
 | Changing a version's metadata or content type | Yes | Yes | Yes | Yes | Yes |
 | [Expiry](../expiry.md) | Yes | Yes | Yes | Yes | Yes |
@@ -22,16 +22,15 @@ provider aims for every feature. This page shows, in one place, where each one s
 | [Container policies](../container-policies.md) | Yes | Yes | Yes | Yes | Yes |
 | [Health check](../health-checks.md) | Its own | Its own | The generic one | The generic one | The generic one |
 
-Every provider passes the same [contract tests](writing-a-provider.md#testing-a-provider), apart from those for a
-feature marked planned. What the clients do on top of a provider works the same with all of them:
-[upload inspection](../upload-inspection.md), [shared links](../sharing-links.md), the
-[ASP.NET Core endpoints](../aspnet-core/index.md) and the [dashboard](../aspnet-core/dashboard.md). SQL Server and
-PostgreSQL each have a health check of their own, which also checks that the database has every migration the release
-needs; the generic check makes one read through the provider.
+Every provider passes the same [contract tests](writing-a-provider.md#testing-a-provider). What the clients do on top of
+a provider works the same with all of them: [upload inspection](../upload-inspection.md),
+[shared links](../sharing-links.md), the [ASP.NET Core endpoints](../aspnet-core/index.md) and the
+[dashboard](../aspnet-core/dashboard.md). SQL Server and PostgreSQL each have a health check of their own, which also
+checks that the database has every migration the release needs; the generic check makes one read through the provider.
 
-A feature marked planned has an issue, and is the next work for that provider. A provider gives up a feature only after
-careful thought, for a real limitation of its store, and then its page explains why and what to do instead. No
-provider gives one up today.
+A feature a provider doesn't support yet would show here as planned, with its issue, as the next work for that provider;
+there are none today. A provider gives up a feature only after careful thought, for a real limitation of its store, and
+then its page explains why and what to do instead. No provider gives one up today.
 
 ## Differences that aren't gaps
 

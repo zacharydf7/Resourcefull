@@ -92,6 +92,15 @@ internal sealed class ObjectKeys(string prefix)
     public string Content(string containerId, string blob) => Contents(containerId) + blob;
 
     /// <summary>
+    /// The prefix of every move's entry, kept apart from the containers' data so deleting a container doesn't take the
+    /// entry that decides a move into or out of it.
+    /// </summary>
+    public string Moves { get; } = prefix + "m/";
+
+    /// <summary>The key of a move's entry.</summary>
+    public string Move(string moveId) => Moves + moveId;
+
+    /// <summary>
     /// The prefix of every upload session, kept apart from the containers' data so a session's content doesn't count
     /// toward its container's usage.
     /// </summary>

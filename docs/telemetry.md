@@ -60,6 +60,8 @@ also carry `error.type`:
 | `resourcefull.azureblob.retries` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | {retry} | the same, with Azure Blob Storage; see [Azure Blob Storage](providers/azure-blob.md#telemetry) |
 | `resourcefull.s3.abandoned_uploads` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | {upload} | [upload sessions](uploading-in-parts.md) nothing was appended to for a day, or whose container was deleted, which the [expiry](expiry.md) sweep deleted |
 | `resourcefull.azureblob.abandoned_uploads` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | {upload} | the same, with Azure Blob Storage |
+| `resourcefull.s3.moves_recovered` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | {move} | moves the [expiry](expiry.md) sweep finished or undid because their mover stopped first; see [S3-compatible storage](providers/s3.md#telemetry) |
+| `resourcefull.azureblob.moves_recovered` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | {move} | the same, with Azure Blob Storage |
 | `resourcefull.s3.stale_expiries`, `resourcefull.azureblob.stale_expiries` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | {entry} | expiry entries a sweep dropped because their version no longer existed or had another expiry; see [S3-compatible storage](providers/s3.md#how-it-stores-things) or [Azure Blob Storage](providers/azure-blob.md#how-it-stores-things) |
 
 What to alert on:

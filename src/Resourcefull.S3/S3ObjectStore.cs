@@ -109,7 +109,7 @@ internal sealed class S3ObjectStore(IAmazonS3 s3, string bucket) : IObjectStore
     public int MaxJoinedParts => 10_000;
 
     /// <summary>A multipart upload whose parts are copied from the objects with <c>UploadPartCopy</c>.</summary>
-    public async Task JoinAsync(string key, IReadOnlyList<string> parts, CancellationToken cancellationToken)
+    public async Task JoinAsync(string key, IReadOnlyList<ObjectRange> parts, CancellationToken cancellationToken)
     {
         if (parts.Count == 0)
         {
@@ -128,8 +128,9 @@ internal sealed class S3ObjectStore(IAmazonS3 s3, string bucket) : IObjectStore
                 {
                     CopyPartResponse part = await s3.CopyPartAsync(new CopyPartRequest
                     {
-                        SourceBucket = bucket, SourceKey = parts[i], DestinationBucket = bucket, DestinationKey = key,
-                        UploadId = upload.UploadId, PartNumber = i + 1
+                        SourceBucket = bucket, SourceKey = parts[i].Key, DestinationBucket = bucket, DestinationKey = key,
+                        UploadId = upload.UploadId, PartNumber = i + 1, FirstByte = parts[i].Offset,
+                        LastByte = parts[i].Offset + parts[i].Length - 1
                     }, ct).ConfigureAwait(false);
                     copied[i] = new PartETag(i + 1, part.ETag);
                 }).ConfigureAwait(false);

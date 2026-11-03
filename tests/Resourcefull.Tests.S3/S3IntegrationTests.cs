@@ -5,6 +5,7 @@ using System.Text.Json.Nodes;
 using Amazon.S3;
 using Amazon.S3.Model;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Time.Testing;
 using Resourcefull.ObjectStorage;
 using Resourcefull.Providers;
 using Resourcefull.S3;
@@ -490,6 +491,368 @@ public class S3IntegrationTests(S3Fixture fixture)
         Assert.Equal(stored, (await repository.GetStagedVersionAsync(location, "v1"))!.StoredLength);
     }
 
+    /// <summary>Whether a conditional write is of a move's entry, deciding it as <paramref name="state"/>.</summary>
+    private static bool Decides(string prefix, string key, byte[] body, int state) =>
+        key.StartsWith(prefix + "m/", StringComparison.Ordinal) && JsonNode.Parse(body)!["s"]!.GetValue<int>() == state;
+
+    /// <summary>Whether any head under <paramref name="prefix"/> still has a move's mark.</summary>
+    private async Task<bool> AnyHeadMarkedAsync(string prefix)
+    {
+        foreach (S3Object head in (await fixture.Client.ListObjectsV2Async(new ListObjectsV2Request
+        {
+            BucketName = fixture.BucketName, Prefix = prefix + "d/"
+        })).S3Objects ?? [])
+        {
+            using GetObjectResponse read = await fixture.Client.GetObjectAsync(fixture.BucketName, head.Key);
+            if (head.Key.Contains("/h/", StringComparison.Ordinal) && new StreamReader(read.ResponseStream).ReadToEnd().Contains("\"mv\""))
+                return true;
+        }
+        return false;
+    }
+
+    [Fact]
+    public async Task MoveResourceAsync_ShouldCopyTheContentInParts_WhenMovedToAnotherContainer()
+    {
+        fixture.SkipIfUnavailable();
+
+        // Arrange: copies in parts of 8 MiB, and a version of 17 MiB, which takes three.
+        string prefix = $"move-parts-{Guid.NewGuid():N}/";
+        var repository = new ObjectStoreRepository(new S3ObjectStore(fixture.Client, fixture.BucketName), prefix, null, null)
+        {
+            CopyPartSize = ObjectParts.PartSize
+        };
+        await repository.AddContainerAsync("c", new Dictionary<string, string>());
+        await repository.AddContainerAsync("d", new Dictionary<string, string>());
+        byte[] payload = new byte[17 * 1024 * 1024];
+        new Random(154).NextBytes(payload);
+        var from = new ResourceLocation("c", "big.bin");
+        var to = new ResourceLocation("d", "big.bin");
+        await repository.AddResourceAsync(new NewResourceVersion(from, "v1"), new MemoryStream(payload));
+
+        // Act
+        bool moved = await repository.MoveResourceAsync(from, to, null);
+
+        // Assert
+        Assert.True(moved);
+        Assert.Equal(payload, await ReadAllAsync(await repository.GetResourceStreamAsync(to)));
+        Assert.Equal(0, (await repository.GetContainerUsageAsync("c")).VersionCount);
+    }
+
+    [Fact]
+    public async Task MoveResourceAsync_ShouldLeaveTheVersionsAtTheDestinationAndTheSweepFinishIt_WhenTheMoverStopsAfterCommitting()
+    {
+        fixture.SkipIfUnavailable();
+
+        // Arrange: a name with two versions, and a store that fails every write from the moment a move is committed, as
+        // a mover that stops there leaves things.
+        string prefix = $"move-committed-{Guid.NewGuid():N}/";
+        var clock = new MovableClock();
+        var store = new InterferingStore(new S3ObjectStore(fixture.Client, fixture.BucketName));
+        ObjectStoreRepository repository = await NewRepositoryAsync(prefix, clock, store: store);
+        await repository.AddContainerAsync("d", new Dictionary<string, string>());
+        var from = new ResourceLocation("c", "a.txt");
+        var to = new ResourceLocation("d", "b.txt");
+        await repository.AddResourceAsync(new NewResourceVersion(from, "v1"), new MemoryStream("first"u8.ToArray()));
+        await repository.AddResourceAsync(new NewResourceVersion(from, "v2"), new MemoryStream("second"u8.ToArray()));
+        bool committing = false;
+        int writesSinceCommitting = 0;
+        // The commit itself lands; every write after it fails.
+        store.FailWrites = _ => committing && writesSinceCommitting++ > 0;
+        store.BeforePut = (key, body) =>
+        {
+            committing |= Decides(prefix, key, body, 1);
+            return Task.CompletedTask;
+        };
+
+        // Act
+        bool moved = await repository.MoveResourceAsync(from, to, null);
+        IReadOnlyList<ResourceInfo> atSource = await repository.GetResourceVersionsAsync(from);
+        IReadOnlyList<ResourceInfo> atDestination = await repository.GetResourceVersionsAsync(to);
+        bool markedBeforeSweep = await AnyHeadMarkedAsync(prefix);
+        store.FailWrites = null;
+        clock.Now = DateTimeOffset.UtcNow.AddHours(2);
+        var recovered = new List<long>();
+        using var listener = new MeterListener();
+        listener.InstrumentPublished = (instrument, l) =>
+        {
+            if (instrument.Name == "resourcefull.s3.moves_recovered") l.EnableMeasurementEvents(instrument);
+        };
+        listener.SetMeasurementEventCallback<long>((_, value, _, _) => recovered.Add(value));
+        listener.Start();
+        await repository.DeleteAbandonedUploadsAsync(DateTimeOffset.UtcNow.AddDays(-1));
+
+        // Assert: the move happened, and readers see it although both heads were still marked; the sweep then cleared
+        // the marks and the entry, deleted the source's content, and counted the move.
+        Assert.True(moved);
+        Assert.Equal([1L], recovered);
+        Assert.Empty(atSource);
+        Assert.Equal(["v2", "v1"], atDestination.Select(v => v.VersionId));
+        Assert.True(markedBeforeSweep);
+        Assert.False(await AnyHeadMarkedAsync(prefix));
+        Assert.Equal(0, await CountKeysAsync(prefix + "m/"));
+        Assert.Equal((0, 2), ((await repository.GetContainerUsageAsync("c")).VersionCount, (await repository.GetContainerUsageAsync("d")).VersionCount));
+        Assert.Equal("first"u8.ToArray(), await ReadAllAsync(await repository.GetResourceStreamAsync(to, "v1")));
+    }
+
+    [Fact]
+    public async Task MoveResourceAsync_ShouldLeaveTheVersionsAtTheSourceAndTheSweepUndoIt_WhenTheMoverStopsBeforeCommitting()
+    {
+        fixture.SkipIfUnavailable();
+
+        // Arrange: a name, and a store that fails every write from the moment a move is about to be committed.
+        string prefix = $"move-pending-{Guid.NewGuid():N}/";
+        var clock = new MovableClock();
+        var store = new InterferingStore(new S3ObjectStore(fixture.Client, fixture.BucketName));
+        ObjectStoreRepository repository = await NewRepositoryAsync(prefix, clock, store: store);
+        await repository.AddContainerAsync("d", new Dictionary<string, string>());
+        var from = new ResourceLocation("c", "a.txt");
+        var to = new ResourceLocation("d", "b.txt");
+        await repository.AddResourceAsync(new NewResourceVersion(from, "v1"), new MemoryStream("first"u8.ToArray()));
+        bool stopped = false;
+        store.FailWrites = _ => stopped;
+        store.BeforePut = (key, body) =>
+        {
+            if (Decides(prefix, key, body, 1)) stopped = true;
+            return Task.CompletedTask;
+        };
+
+        // Act
+        await Assert.ThrowsAsync<IOException>(() => repository.MoveResourceAsync(from, to, null));
+        IReadOnlyList<ResourceInfo> atSource = await repository.GetResourceVersionsAsync(from);
+        IReadOnlyList<ResourceInfo> atDestination = await repository.GetResourceVersionsAsync(to);
+        bool markedBeforeSweep = await AnyHeadMarkedAsync(prefix);
+        stopped = false;
+        clock.Now = DateTimeOffset.UtcNow.AddHours(2);
+        await repository.DeleteAbandonedUploadsAsync(DateTimeOffset.UtcNow.AddDays(-1));
+
+        // Assert: the move didn't happen, and readers see that although both heads were still marked; the sweep then
+        // abandoned it, cleared the marks and the entry, and deleted the copy of the content.
+        Assert.Equal("v1", Assert.Single(atSource).VersionId);
+        Assert.Empty(atDestination);
+        Assert.True(markedBeforeSweep);
+        Assert.False(await AnyHeadMarkedAsync(prefix));
+        Assert.Equal(0, await CountKeysAsync(prefix + "m/"));
+        Assert.Equal((1, 0), ((await repository.GetContainerUsageAsync("c")).VersionCount, (await repository.GetContainerUsageAsync("d")).VersionCount));
+        Assert.Equal("first"u8.ToArray(), await ReadAllAsync(await repository.GetResourceStreamAsync(from)));
+    }
+
+    [Fact]
+    public async Task MoveResourceAsync_ShouldStartAgainAndMove_WhenTheSweepTakesItWhileItCopies()
+    {
+        fixture.SkipIfUnavailable();
+
+        // Arrange: a name, and a store whose first copy waits while a sweep runs with the clock two hours ahead, as if the
+        // copy took that long.
+        string prefix = $"move-swept-{Guid.NewGuid():N}/";
+        var clock = new MovableClock();
+        var store = new InterferingStore(new S3ObjectStore(fixture.Client, fixture.BucketName));
+        ObjectStoreRepository repository = await NewRepositoryAsync(prefix, clock, store: store);
+        await repository.AddContainerAsync("d", new Dictionary<string, string>());
+        var from = new ResourceLocation("c", "a.txt");
+        var to = new ResourceLocation("d", "a.txt");
+        await repository.AddResourceAsync(new NewResourceVersion(from, "v1"), new MemoryStream("moved"u8.ToArray()));
+        bool swept = false;
+        store.BeforeJoin = async () =>
+        {
+            if (swept) return;
+            swept = true;
+            clock.Now = DateTimeOffset.UtcNow.AddHours(2);
+            await repository.DeleteAbandonedUploadsAsync(DateTimeOffset.UtcNow.AddDays(-1));
+        };
+
+        // Act
+        bool moved = await repository.MoveResourceAsync(from, to, null);
+
+        // Assert: the swept try left nothing behind, and the next one moved the version, with one copy of its content.
+        Assert.True(swept);
+        Assert.True(moved);
+        Assert.Empty(await repository.GetResourceVersionsAsync(from));
+        Assert.Equal("moved"u8.ToArray(), await ReadAllAsync(await repository.GetResourceStreamAsync(to)));
+        Assert.False(await AnyHeadMarkedAsync(prefix));
+        Assert.Equal(0, await CountKeysAsync(prefix + "m/"));
+        Assert.Equal((0, 1), ((await repository.GetContainerUsageAsync("c")).VersionCount, (await repository.GetContainerUsageAsync("d")).VersionCount));
+    }
+
+    [Fact]
+    public async Task MoveResourceAsync_ShouldLeaveNoMarkAndBeRefused_WhenTheSweepTakesItAndAnotherWriterTakesTheDestinationBeforeItMarks()
+    {
+        fixture.SkipIfUnavailable();
+
+        // Arrange: a name, and a store that, just before a move marks the source, runs a sweep with the clock two hours
+        // ahead and uploads to the destination name, as if the mover stalled that long.
+        string prefix = $"move-stalled-{Guid.NewGuid():N}/";
+        var clock = new MovableClock();
+        var store = new InterferingStore(new S3ObjectStore(fixture.Client, fixture.BucketName));
+        ObjectStoreRepository repository = await NewRepositoryAsync(prefix, clock, store: store);
+        var from = new ResourceLocation("c", "a.txt");
+        var to = new ResourceLocation("c", "b.txt");
+        await repository.AddResourceAsync(new NewResourceVersion(from, "v1"), new MemoryStream("first"u8.ToArray()));
+        bool stalled = false;
+        store.BeforePut = async (key, body) =>
+        {
+            if (stalled || JsonNode.Parse(body) is not JsonObject json || json["mv"]?["in"]?.GetValue<bool>() != false) return;
+            stalled = true;
+            clock.Now = DateTimeOffset.UtcNow.AddHours(2);
+            await repository.DeleteAbandonedUploadsAsync(DateTimeOffset.UtcNow.AddDays(-1));
+            await repository.AddResourceAsync(new NewResourceVersion(to, "v9"), new MemoryStream("other"u8.ToArray()));
+        };
+
+        // Act
+        Exception? refused = await Record.ExceptionAsync(() => repository.MoveResourceAsync(from, to, null));
+
+        // Assert: the try marked only the source, which it then cleared; the next try found the destination taken.
+        Assert.True(stalled);
+        Assert.IsType<ResourceConflictException>(refused);
+        Assert.Equal("v1", Assert.Single(await repository.GetResourceVersionsAsync(from)).VersionId);
+        Assert.Equal("first"u8.ToArray(), await ReadAllAsync(await repository.GetResourceStreamAsync(from)));
+        Assert.False(await AnyHeadMarkedAsync(prefix));
+        Assert.Equal(0, await CountKeysAsync(prefix + "m/"));
+    }
+
+    [Fact]
+    public async Task MoveResourceAsync_ShouldKeepTheSourcesVersions_WhenASweptTrysMarkOutlivesItsEntry()
+    {
+        fixture.SkipIfUnavailable();
+
+        // Arrange: a move the sweep takes just before the move marks the source, while another upload takes the
+        // destination name; the store then fails the try's write that clears its mark, so the mark outlives the move's
+        // entry.
+        string prefix = $"move-orphaned-{Guid.NewGuid():N}/";
+        var clock = new MovableClock();
+        var store = new InterferingStore(new S3ObjectStore(fixture.Client, fixture.BucketName));
+        ObjectStoreRepository repository = await NewRepositoryAsync(prefix, clock, store: store);
+        var from = new ResourceLocation("c", "a.txt");
+        var to = new ResourceLocation("c", "b.txt");
+        await repository.AddResourceAsync(new NewResourceVersion(from, "v1"), new MemoryStream("first"u8.ToArray()));
+        bool stalled = false;
+        store.BeforePut = async (key, body) =>
+        {
+            if (stalled || JsonNode.Parse(body) is not JsonObject json || json["mv"]?["in"]?.GetValue<bool>() != false) return;
+            stalled = true;
+            clock.Now = DateTimeOffset.UtcNow.AddHours(2);
+            await repository.DeleteAbandonedUploadsAsync(DateTimeOffset.UtcNow.AddDays(-1));
+            await repository.AddResourceAsync(new NewResourceVersion(to, "v9"), new MemoryStream("other"u8.ToArray()));
+            // The mark itself lands; every later write of the source head fails.
+            int writes = 0;
+            store.FailWrites = k => k == key && writes++ > 0;
+        };
+
+        // Act
+        Exception? refused = await Record.ExceptionAsync(() => repository.MoveResourceAsync(from, to, null));
+        bool markedBeforeUpload = await AnyHeadMarkedAsync(prefix);
+        store.FailWrites = null;
+        await repository.AddResourceAsync(new NewResourceVersion(from, "v2"), new MemoryStream("second"u8.ToArray()));
+
+        // Assert: the mark left behind read as the abandoned try it was, so the upload kept the version already there,
+        // and cleared the mark.
+        Assert.IsType<ResourceConflictException>(refused);
+        Assert.True(markedBeforeUpload);
+        Assert.Equal(["v2", "v1"], (await repository.GetResourceVersionsAsync(from)).Select(v => v.VersionId));
+        Assert.False(await AnyHeadMarkedAsync(prefix));
+    }
+
+    [Fact]
+    public async Task MoveResourceAsync_ShouldWriteItsEntryAgain_WhenACopyTakesAQuarterHour()
+    {
+        fixture.SkipIfUnavailable();
+
+        // Arrange: a move across containers on a clock the test moves on, and a store whose copy moves that clock on a
+        // quarter hour, then waits until the move writes its entry again.
+        string prefix = $"move-refresh-{Guid.NewGuid():N}/";
+        var time = new FakeTimeProvider(DateTimeOffset.UtcNow);
+        var store = new InterferingStore(new S3ObjectStore(fixture.Client, fixture.BucketName));
+        ObjectStoreRepository repository = await NewRepositoryAsync(prefix, time, store: store);
+        await repository.AddContainerAsync("d", new Dictionary<string, string>());
+        var from = new ResourceLocation("c", "a.txt");
+        var to = new ResourceLocation("d", "a.txt");
+        await repository.AddResourceAsync(new NewResourceVersion(from, "v1"), new MemoryStream("moved"u8.ToArray()));
+        var refreshed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        bool copying = false;
+        store.BeforePut = (key, body) =>
+        {
+            if (copying && Decides(prefix, key, body, 0)) refreshed.TrySetResult();
+            return Task.CompletedTask;
+        };
+        store.BeforeJoin = async () =>
+        {
+            copying = true;
+            time.Advance(TimeSpan.FromMinutes(16));
+            await refreshed.Task.WaitAsync(TimeSpan.FromSeconds(30));
+        };
+
+        // Act
+        bool moved = await repository.MoveResourceAsync(from, to, null);
+
+        // Assert: the entry was written again while the copy ran, and the move went through.
+        Assert.True(refreshed.Task.IsCompletedSuccessfully);
+        Assert.True(moved);
+        Assert.Equal("moved"u8.ToArray(), await ReadAllAsync(await repository.GetResourceStreamAsync(to)));
+    }
+
+    [Fact]
+    public async Task MoveResourceAsync_ShouldStartAgainAndMoveEveryVersion_WhenAnotherWriterChangesTheSourceBeforeItCommits()
+    {
+        fixture.SkipIfUnavailable();
+
+        // Arrange: a name, and a store that holds back a move's commit while the test uploads another version to it.
+        string prefix = $"move-source-race-{Guid.NewGuid():N}/";
+        var store = new InterferingStore(new S3ObjectStore(fixture.Client, fixture.BucketName));
+        ObjectStoreRepository repository = await NewRepositoryAsync(prefix, store: store);
+        var from = new ResourceLocation("c", "a.txt");
+        var to = new ResourceLocation("c", "b.txt");
+        await repository.AddResourceAsync(new NewResourceVersion(from, "v1"), new MemoryStream("first"u8.ToArray()));
+        bool raced = false;
+        store.BeforePut = async (key, body) =>
+        {
+            if (raced || !Decides(prefix, key, body, 1)) return;
+            raced = true;
+            await repository.AddResourceAsync(new NewResourceVersion(from, "v2"), new MemoryStream("second"u8.ToArray()));
+        };
+
+        // Act
+        bool moved = await repository.MoveResourceAsync(from, to, null);
+
+        // Assert: the upload abandoned the first try; the next one moved both versions.
+        Assert.True(moved);
+        Assert.Empty(await repository.GetResourceVersionsAsync(from));
+        Assert.Equal(["v2", "v1"], (await repository.GetResourceVersionsAsync(to)).Select(v => v.VersionId));
+        Assert.False(await AnyHeadMarkedAsync(prefix));
+        Assert.Equal(0, await CountKeysAsync(prefix + "m/"));
+    }
+
+    [Fact]
+    public async Task MoveResourceAsync_ShouldBeAbandonedAndRefused_WhenAnotherWriterCreatesTheDestinationBeforeItCommits()
+    {
+        fixture.SkipIfUnavailable();
+
+        // Arrange: a name, and a store that holds back a move's commit while the test uploads to the destination name.
+        string prefix = $"move-race-{Guid.NewGuid():N}/";
+        var store = new InterferingStore(new S3ObjectStore(fixture.Client, fixture.BucketName));
+        ObjectStoreRepository repository = await NewRepositoryAsync(prefix, store: store);
+        var from = new ResourceLocation("c", "a.txt");
+        var to = new ResourceLocation("c", "b.txt");
+        await repository.AddResourceAsync(new NewResourceVersion(from, "v1"), new MemoryStream("moved"u8.ToArray()));
+        bool raced = false;
+        store.BeforePut = async (key, body) =>
+        {
+            if (raced || !Decides(prefix, key, body, 1)) return;
+            raced = true;
+            await repository.AddResourceAsync(new NewResourceVersion(to, "v9"), new MemoryStream("other"u8.ToArray()),
+                new ResourceWriteCondition { CreateOnly = true });
+        };
+
+        // Act
+        Exception? refused = await Record.ExceptionAsync(() => repository.MoveResourceAsync(from, to, null));
+
+        // Assert: the upload abandoned the move, which then found the destination taken; nothing moved, and nothing of
+        // the move is left.
+        Assert.IsType<ResourceConflictException>(refused);
+        Assert.Equal("v1", Assert.Single(await repository.GetResourceVersionsAsync(from)).VersionId);
+        Assert.Equal("v9", Assert.Single(await repository.GetResourceVersionsAsync(to)).VersionId);
+        Assert.False(await AnyHeadMarkedAsync(prefix));
+        Assert.Equal(0, await CountKeysAsync(prefix + "m/"));
+    }
+
     [Fact]
     public async Task DeleteAbandonedUploadsAsync_ShouldDeleteAndCountTheOthers_WhenOneSessionCantBeRead()
     {
@@ -542,6 +905,15 @@ public class S3IntegrationTests(S3Fixture fixture)
         /// <summary>The keys whose reads fail, as a store that can't be reached fails them.</summary>
         public Func<string, bool>? FailReads { get; set; }
 
+        /// <summary>The keys whose writes and deletes fail, as a store that can't be reached fails them.</summary>
+        public Func<string, bool>? FailWrites { get; set; }
+
+        /// <summary>Called before each conditional write, with its key and body; it may throw, as a failed write does.</summary>
+        public Func<string, byte[], Task>? BeforePut { get; set; }
+
+        /// <summary>Called before each join.</summary>
+        public Func<Task>? BeforeJoin { get; set; }
+
         /// <summary>Completes when the first join is done.</summary>
         public Task Joined => _joined.Task;
 
@@ -554,8 +926,10 @@ public class S3IntegrationTests(S3Fixture fixture)
 
         public int MaxJoinedParts => MaxParts ?? inner.MaxJoinedParts;
 
-        public async Task JoinAsync(string key, IReadOnlyList<string> parts, CancellationToken cancellationToken)
+        public async Task JoinAsync(string key, IReadOnlyList<ObjectRange> parts, CancellationToken cancellationToken)
         {
+            if (BeforeJoin is not null) await BeforeJoin();
+            ThrowIfFailing(key);
             await inner.JoinAsync(key, parts, cancellationToken);
             if (HoldFirstJoin && _joined.TrySetResult()) await _released.Task.WaitAsync(cancellationToken);
         }
@@ -563,10 +937,18 @@ public class S3IntegrationTests(S3Fixture fixture)
         public Task<(byte[]? Body, string? ETag)> GetAsync(string key, CancellationToken cancellationToken) =>
             FailReads?.Invoke(key) == true ? throw new IOException($"Reading {key} failed.") : inner.GetAsync(key, cancellationToken);
 
-        public Task<bool> TryPutAsync(string key, byte[] body, string? etag) => inner.TryPutAsync(key, body, etag);
+        public async Task<bool> TryPutAsync(string key, byte[] body, string? etag)
+        {
+            if (BeforePut is not null) await BeforePut(key, body);
+            ThrowIfFailing(key);
+            return await inner.TryPutAsync(key, body, etag);
+        }
 
-        public Task UploadAsync(string key, Stream content, CancellationToken cancellationToken) =>
-            inner.UploadAsync(key, content, cancellationToken);
+        public Task UploadAsync(string key, Stream content, CancellationToken cancellationToken)
+        {
+            ThrowIfFailing(key);
+            return inner.UploadAsync(key, content, cancellationToken);
+        }
 
         public Task<ObjectRead?> OpenReadAsync(string key, long start, long end, long length, CancellationToken cancellationToken) =>
             inner.OpenReadAsync(key, start, end, length, cancellationToken);
@@ -574,9 +956,18 @@ public class S3IntegrationTests(S3Fixture fixture)
         public IAsyncEnumerable<ObjectListing> ListAsync(string prefix, string? startAfter, CancellationToken cancellationToken) =>
             inner.ListAsync(prefix, startAfter, cancellationToken);
 
-        public Task DeleteAsync(IReadOnlyList<string> keys, CancellationToken cancellationToken) => inner.DeleteAsync(keys, cancellationToken);
+        public Task DeleteAsync(IReadOnlyList<string> keys, CancellationToken cancellationToken)
+        {
+            foreach (string key in keys) ThrowIfFailing(key);
+            return inner.DeleteAsync(keys, cancellationToken);
+        }
 
         public bool IsStoreFailure(Exception exception) => inner.IsStoreFailure(exception);
+
+        private void ThrowIfFailing(string key)
+        {
+            if (FailWrites?.Invoke(key) == true) throw new IOException($"Writing {key} failed.");
+        }
     }
 
     /// <summary>A stream whose first read waits for <see cref="Release"/>, so a test can act while it's being read.</summary>

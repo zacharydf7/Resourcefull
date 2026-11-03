@@ -104,7 +104,7 @@ internal sealed class AzureBlobObjectStore(BlobContainerClient container) : IObj
     /// Blocks staged with <c>Put Block From URL</c>, each from a part, then a block list that commits them. Azure reads
     /// the parts through a read-only link the store signs.
     /// </summary>
-    public async Task JoinAsync(string key, IReadOnlyList<string> parts, CancellationToken cancellationToken)
+    public async Task JoinAsync(string key, IReadOnlyList<ObjectRange> parts, CancellationToken cancellationToken)
     {
         BlockBlobClient blob = container.GetBlockBlobClient(key);
         if (parts.Count == 0)
@@ -117,7 +117,8 @@ internal sealed class AzureBlobObjectStore(BlobContainerClient container) : IObj
         string[] blocks = [.. parts.Select((_, i) => BlockId(i + 1))];
         await Parallel.ForEachAsync(Enumerable.Range(0, parts.Count),
             new ParallelOptions { MaxDegreeOfParallelism = ParallelRequests, CancellationToken = cancellationToken },
-            async (i, ct) => await blob.StageBlockFromUriAsync(readable(parts[i]), blocks[i], cancellationToken: ct).ConfigureAwait(false))
+            async (i, ct) => await blob.StageBlockFromUriAsync(readable(parts[i].Key), blocks[i],
+                new StageBlockFromUriOptions { SourceRange = new HttpRange(parts[i].Offset, parts[i].Length) }, ct).ConfigureAwait(false))
             .ConfigureAwait(false);
         await blob.CommitBlockListAsync(blocks, cancellationToken: cancellationToken).ConfigureAwait(false);
     }

@@ -187,12 +187,11 @@ migrations and retries.</p>
 <a class="rf-card" href="docs/providers/s3.md">
 <h3><i class="bi bi-cloud"></i>S3-compatible storage</h3>
 <p><code>Resourcefull.S3</code> for Amazon S3 or another S3-compatible store, when you move to the cloud: change one
-line and keep your code. Moving or renaming files is still to come.</p>
+line and keep your code.</p>
 </a>
 <a class="rf-card" href="docs/providers/azure-blob.md">
 <h3><i class="bi bi-cloud"></i>Azure Blob Storage</h3>
-<p><code>Resourcefull.AzureBlob</code> for Azure Blob Storage, the same way: one line to switch, the same API. Moving
-or renaming files is still to come.</p>
+<p><code>Resourcefull.AzureBlob</code> for Azure Blob Storage, the same way: one line to switch, the same API.</p>
 </a>
 <a class="rf-card" href="docs/providers/in-memory.md">
 <h3><i class="bi bi-cpu"></i>In memory</h3>

@@ -244,7 +244,7 @@ internal sealed partial class ObjectStoreRepository
         try
         {
             // Added by a completion that stopped before deleting the session, or by one that's still running.
-            Head? existing = (await GetAsync<Head>(headKey, cancellationToken).ConfigureAwait(false)).Value;
+            Head? existing = await ReadHeadAsync(headKey, cancellationToken).ConfigureAwait(false);
             if (Completed(existing, versionId) is { } completed)
             {
                 await DeleteUploadQuietlyAsync(container.Id, versionId).ConfigureAwait(false);
@@ -253,7 +253,8 @@ internal sealed partial class ObjectStoreRepository
             // Checked again by the head write; this only spares joining content that would be refused.
             ThrowUnlessAddable(resource, existing, versionId, condition);
 
-            await store.JoinAsync(contentKey, [.. record.Segments.Select(s => _keys.UploadSegment(container.Id, versionId, s.Token))],
+            await store.JoinAsync(contentKey,
+                [.. record.Segments.Select(s => new ObjectRange(_keys.UploadSegment(container.Id, versionId, s.Token), 0, s.Length))],
                 cancellationToken).ConfigureAwait(false);
             if (expiryKey is not null) await PutExpiryAsync(expiryKey, resource, cancellationToken).ConfigureAwait(false);
             bool changed = await ChangeHeadAsync(headKey, head =>
@@ -313,7 +314,7 @@ internal sealed partial class ObjectStoreRepository
     {
         try
         {
-            return Completed((await GetAsync<Head>(headKey, CancellationToken.None).ConfigureAwait(false)).Value, versionId);
+            return Completed(await ReadHeadAsync(headKey, CancellationToken.None).ConfigureAwait(false), versionId);
         }
         catch (Exception exception) when (store.IsStoreFailure(exception))
         {
@@ -410,6 +411,7 @@ internal sealed partial class ObjectStoreRepository
     /// Lists every session, and deletes those nothing was appended to since <paramref name="staleBefore"/>, those whose
     /// container was deleted, and segments no record names once they're an hour old: what a cancel or completion left
     /// when deleting them failed. A session that can't be deleted is left for the next sweep, and the others still are.
+    /// It also finishes the moves whose movers stopped before they could, which are left behind the same way.
     /// </summary>
     public override async Task<int> DeleteAbandonedUploadsAsync(DateTimeOffset staleBefore, CancellationToken cancellationToken = default)
     {
@@ -439,12 +441,13 @@ internal sealed partial class ObjectStoreRepository
             keys.Add(item);
         }
         if (session is not null) await SweepAsync().ConfigureAwait(false);
-
         ObjectStoreTelemetry.CountAbandonedUploads(deleted, storeName);
+        await SweepMovesAsync(failures, cancellationToken).ConfigureAwait(false);
+
         if (failures.Count > 0)
         {
-            throw new AggregateException($"{failures.Count} abandoned upload sessions weren't deleted, and stay for the next " +
-                $"sweep; {deleted} were.", failures);
+            throw new AggregateException($"{failures.Count} abandoned upload sessions or unfinished moves weren't cleaned up, " +
+                $"and stay for the next sweep; {deleted} sessions were deleted.", failures);
         }
         return deleted;
     }

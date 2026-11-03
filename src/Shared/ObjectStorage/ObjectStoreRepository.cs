@@ -85,7 +85,7 @@ internal sealed partial class ObjectStoreRepository(IObjectStore store, string k
         // Checked again by the head write; this only spares uploading content that would be refused.
         if (condition.CreateOnly || condition.Conditions is not null)
         {
-            Head? existing = (await GetAsync<Head>(headKey, cancellationToken).ConfigureAwait(false)).Value;
+            Head? existing = await ReadHeadAsync(headKey, cancellationToken).ConfigureAwait(false);
             ThrowUnlessAddable(location, existing, version.VersionId, condition);
         }
 
@@ -131,14 +131,7 @@ internal sealed partial class ObjectStoreRepository(IObjectStore store, string k
     private static void ThrowUnlessAddable(ResourceLocation location, Head? head, string versionId, ResourceWriteCondition condition)
     {
         StoredVersion? current = head?.Versions[^1];
-        if (condition.CreateOnly && current is not null)
-        {
-            throw new ResourceConflictException(
-                $"The resource {location.ResourceName} already exists in the container {location.ContainerName}.")
-            {
-                ContainerName = location.ContainerName, ResourceName = location.ResourceName
-            };
-        }
+        if (condition.CreateOnly && current is not null) throw ResourceExists(location);
         if (head?.Versions.Any(v => v.VersionId == versionId) == true)
         {
             throw new ResourceConflictException($"The resource {location.ResourceName} in the container " +
@@ -195,9 +188,10 @@ internal sealed partial class ObjectStoreRepository(IObjectStore store, string k
             afterName is null ? null : _keys.Head(container.Id, afterName), item => item.Size > EmptyHeadSize,
             () => pageSize - page.Count, cancellationToken).ConfigureAwait(false))
         {
-            foreach ((string key, Head? head) in await ReadAllAsync<Head>(keys, cancellationToken).ConfigureAwait(false))
+            foreach ((string key, Head? read) in await ReadAllAsync<Head>(keys, cancellationToken).ConfigureAwait(false))
             {
-                // A name whose versions were deleted since it was listed is left out.
+                Head? head = read?.Move is null ? read : await ReadHeadAsync(key, cancellationToken).ConfigureAwait(false);
+                // A name whose versions were deleted, or moved, since it was listed is left out.
                 if (head is not null)
                     page.Add(ToInfo(resourceContainerName, ObjectKeys.Unescape(key[heads.Length..]), head.Versions[^1], true));
             }
@@ -233,7 +227,7 @@ internal sealed partial class ObjectStoreRepository(IObjectStore store, string k
     {
         ContainerRecord? container = await GetContainerAsync(resource.ContainerName, cancellationToken).ConfigureAwait(false);
         if (container is null) return null;
-        Head? head = (await GetAsync<Head>(_keys.Head(container.Id, resource.ResourceName), cancellationToken).ConfigureAwait(false)).Value;
+        Head? head = await ReadHeadAsync(_keys.Head(container.Id, resource.ResourceName), cancellationToken).ConfigureAwait(false);
         StoredVersion? version = versionId is null ? head?.Versions[^1] : head?.Versions.FirstOrDefault(v => v.VersionId == versionId);
         if (version is null) return null;
 
@@ -314,7 +308,8 @@ internal sealed partial class ObjectStoreRepository(IObjectStore store, string k
 
     /// <summary>
     /// Adds up the container's content objects' sizes, and counts the names with versions, from listings alone.
-    /// Content an unfinished write left behind counts until the container is deleted.
+    /// Content an unfinished write left behind counts until the container is deleted, and while a move is being made, a
+    /// name it moves counts in both places.
     /// </summary>
     public override async Task<ResourceContainerUsage> GetContainerUsageAsync(string resourceContainerName,
         CancellationToken cancellationToken = default)
@@ -380,7 +375,7 @@ internal sealed partial class ObjectStoreRepository(IObjectStore store, string k
         if ((await GetAsync<ExpiryEntry>(entry.Key, cancellationToken).ConfigureAwait(false)).Value is not { } named) return null;
         ContainerRecord? container = await GetContainerAsync(named.ContainerName, cancellationToken).ConfigureAwait(false);
         Head? head = container?.Id == containerId
-            ? (await GetAsync<Head>(_keys.Head(containerId, named.ResourceName), cancellationToken).ConfigureAwait(false)).Value
+            ? await ReadHeadAsync(_keys.Head(containerId, named.ResourceName), cancellationToken).ConfigureAwait(false)
             : null;
         StoredVersion? version = head?.Versions.FirstOrDefault(v => v.Blob == blob);
         if (version is not null && version.VersionId == versionId && version.ExpiryToken == token)
@@ -425,7 +420,7 @@ internal sealed partial class ObjectStoreRepository(IObjectStore store, string k
         if (await GetContainerAsync(resource.ContainerName, cancellationToken).ConfigureAwait(false) is not { } container) return false;
         string headKey = _keys.Head(container.Id, resource.ResourceName);
         // A version's blob never changes, so the entry can be written for the version as it's read now.
-        Head? read = (await GetAsync<Head>(headKey, cancellationToken).ConfigureAwait(false)).Value;
+        Head? read = await ReadHeadAsync(headKey, cancellationToken).ConfigureAwait(false);
         StoredVersion? target = versionId is null ? read?.Versions[^1] : read?.Versions.FirstOrDefault(v => v.VersionId == versionId);
         if (target is null) return false;
         string? token = expiresAt is null ? null : Guid.NewGuid().ToString("N");
@@ -564,22 +559,24 @@ internal sealed partial class ObjectStoreRepository(IObjectStore store, string k
 
     private async Task<Head?> GetHeadAsync(ResourceLocation resource, CancellationToken cancellationToken) =>
         await GetContainerAsync(resource.ContainerName, cancellationToken).ConfigureAwait(false) is { } container
-            ? (await GetAsync<Head>(_keys.Head(container.Id, resource.ResourceName), cancellationToken).ConfigureAwait(false)).Value
+            ? await ReadHeadAsync(_keys.Head(container.Id, resource.ResourceName), cancellationToken).ConfigureAwait(false)
             : null;
 
     /// <summary>
     /// Changes a name's head with <paramref name="change"/>, which gets the head (or <see langword="null"/> for a name
     /// with no versions) and returns the new one, or <see langword="null"/> to change nothing. When another writer
-    /// changes the head first, it reads it again and calls <paramref name="change"/> again.
+    /// changes the head first, it reads it again and calls <paramref name="change"/> again. For a head a move marked,
+    /// <paramref name="change"/> gets the head as the move decided it, after abandoning the move if it's still pending.
     /// </summary>
     /// <returns>Whether the head changed.</returns>
     private async Task<bool> ChangeHeadAsync(string key, Func<Head?, Head?> change, CancellationToken cancellationToken)
     {
         for (int attempt = 1; ; attempt++)
         {
-            Stored<Head> current = await GetAsync<Head>(key, cancellationToken).ConfigureAwait(false);
-            if (change(current.Value) is not { } changed) return false;
-            if (await TryPutAsync(key, id => Serialize(changed with { WriteId = id }), current.ETag).ConfigureAwait(false)) return true;
+            (Stored<Head> current, Head? head) = await ReadHeadToChangeAsync(key, cancellationToken).ConfigureAwait(false);
+            if (change(head) is not { } changed) return false;
+            if (await TryPutAsync(key, id => Serialize(changed with { WriteId = id, Move = null }), current.ETag).ConfigureAwait(false))
+                return true;
 
             ObjectStoreTelemetry.CountRetry(storeName);
             await WaitToRetryAsync(key, attempt, cancellationToken).ConfigureAwait(false);
@@ -740,6 +737,12 @@ internal sealed partial class ObjectStoreRepository(IObjectStore store, string k
         Name = name, Metadata = new Dictionary<string, string>(record.Metadata)
     };
 
+    private static ResourceConflictException ResourceExists(ResourceLocation location) =>
+        new($"The resource {location.ResourceName} already exists in the container {location.ContainerName}.")
+        {
+            ContainerName = location.ContainerName, ResourceName = location.ResourceName
+        };
+
     private static ResourceContainerNotFoundException ContainerMissing(string resourceContainerName) =>
         new($"The container {resourceContainerName} doesn't exist.") { ContainerName = resourceContainerName };
 
@@ -760,10 +763,14 @@ internal sealed partial class ObjectStoreRepository(IObjectStore store, string k
         [property: JsonPropertyName("c")] string ContainerName,
         [property: JsonPropertyName("n")] string ResourceName);
 
-    /// <summary>A name's versions, in the order they were stored; the last is current.</summary>
+    /// <summary>
+    /// A name's versions, in the order they were stored; the last is current. A head a move is changing holds the move's
+    /// ID, and the move's entry decides whether the versions are here.
+    /// </summary>
     private sealed record Head(
         [property: JsonPropertyName("v")] List<StoredVersion> Versions,
-        [property: JsonPropertyName("w")] string? WriteId = null);
+        [property: JsonPropertyName("w")] string? WriteId = null,
+        [property: JsonPropertyName("mv"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] HeadMove? Move = null);
 
     /// <summary>One version's attributes, and the key of its content.</summary>
     private sealed record StoredVersion(

@@ -11,6 +11,4 @@ public class AzureBlobContractTests(AzureBlobFixture fixture) : ResourcefullCont
         fixture.SkipIfUnavailable();
         return fixture.BuildServiceProvider(configure);
     }
-
-    protected override bool SupportsMove => false;
 }

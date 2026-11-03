@@ -40,9 +40,9 @@ internal interface IObjectStore
     /// <summary>
     /// Writes <paramref name="key"/> as the content of <paramref name="parts"/>, in order, joined in the store so the
     /// bytes don't pass through the application. Each part but the last is at least <see cref="ObjectParts.PartSize"/>
-    /// long, and none is longer than 64 MiB.
+    /// long, and none is longer than <see cref="ObjectParts.MaxJoinedPartSize"/>.
     /// </summary>
-    Task JoinAsync(string key, IReadOnlyList<string> parts, CancellationToken cancellationToken);
+    Task JoinAsync(string key, IReadOnlyList<ObjectRange> parts, CancellationToken cancellationToken);
 
     /// <summary>
     /// Opens the bytes from <paramref name="start"/> up to <paramref name="end"/> of an object
@@ -70,6 +70,9 @@ internal interface IObjectStore
 /// <summary>An object's bytes as the store sends them, and what to dispose of when they've been read.</summary>
 internal sealed record ObjectRead(Stream Body, IDisposable Owner);
 
+/// <summary>A part of a join: <paramref name="Length"/> bytes of the object at <paramref name="Key"/>, from <paramref name="Offset"/>.</summary>
+internal readonly record struct ObjectRange(string Key, long Offset, long Length);
+
 /// <summary>An object in a listing: its key, its size in bytes, and when it was last written.</summary>
 internal readonly record struct ObjectListing(string Key, long Size, DateTimeOffset LastModified);
 
@@ -80,6 +83,12 @@ internal static class ObjectParts
     /// Content smaller than this goes up in one request; the rest goes in parts of this size, so memory stays bounded.
     /// </summary>
     internal const int PartSize = 8 * 1024 * 1024;
+
+    /// <summary>
+    /// The most one part of a join copies: within what both stores copy in one request (5 GiB for S3's
+    /// <c>UploadPartCopy</c>, 4,000 MiB for Azure's <c>Put Block From URL</c>), and few enough parts for any version.
+    /// </summary>
+    internal const long MaxJoinedPartSize = 1024 * 1024 * 1024;
 
     /// <summary>
     /// The most one read of the content asks for. An upload inspector's refusal stops the upload at the next read, so

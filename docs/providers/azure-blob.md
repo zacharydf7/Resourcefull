@@ -26,17 +26,10 @@ inside it, so Resourcefull's container names aren't bound by Azure's rules for n
 ## What it supports
 
 Uploads, downloads (with ranges), listing, versions, create-only and conditional writes, conditional deletes, copies,
-container and version metadata, [container policies](../container-policies.md),
+moves and renames, container and version metadata, [container policies](../container-policies.md),
 [export and import](../backup-and-move.md), [expiry](../expiry.md) and [upload sessions](../uploading-in-parts.md). It
-passes the same contract tests as the other providers, apart from those for one feature it doesn't support yet:
-
-- **Moving and renaming** throw `NotSupportedException`. A move must take every version at once, never leaving them
-  in both places or in neither, and Blob Storage can't do that without transactions. Copy, then delete, instead.
-  Planned in [#154](https://github.com/zacharydf7/Resourcefull/issues/154).
-
-Every provider is meant to support every feature, so that switching between them takes only the line that picks the
-provider; moving is the next work planned for this provider. [Provider features](features.md) compares the
-providers.
+passes the same contract tests as the other providers, so switching to it, or from it, takes only the line that picks
+the provider. [Provider features](features.md) compares the providers.
 
 It works the same way as the [S3-compatible provider](s3.md), and shares its code: only the calls to the store differ.
 
@@ -120,6 +113,14 @@ You don't need this to use the provider, but it explains its costs and what you'
   old; a younger one may belong to a write still in progress.
 - **Each version's content** is a blob of its own, uploaded before the head names it, and deleted after the head
   stops naming it.
+- **A move** writes an entry for it under `{prefix}m/`, marks both names' heads with its ID, then commits that entry
+  with one conditional write: until then, every read finds the versions at the source, and from then at the destination,
+  so they're never in both places or in neither. Across containers, Azure first copies each version's content under the
+  destination container's ID, in parts of up to 1 GiB, so the destination's usage counts it and deleting the source
+  container doesn't take it; within a container, nothing is copied. Each version that expires gets an expiry entry for
+  its new name. A write to either name while the move is still pending abandons it, so the mover's commit is refused and
+  it starts again. Once a move is decided, the mover clears the marks, deletes the entry and, across containers, the
+  content left behind.
 - **Each [upload session](../uploading-in-parts.md)** has a record, `{prefix}u/{container ID}/{upload ID}!/r`, holding
   the version's attributes and the list of its segments, and one blob per segment beside it. Sessions are kept apart
   from the containers' data, so they don't count toward a container's usage. An append stores its content in segments of
@@ -149,6 +150,11 @@ characters beyond U+FFFF, such as emoji, or from U+E000 to U+FFFF, might list in
   toward the container's stored size until the container is deleted.
 - An upload of 8 MiB or more that fails partway leaves the blocks it sent uncommitted, and so does a completion whose
   join fails. Azure discards uncommitted blocks on its own after a week.
+- A move that stops partway, such as by a crash, leaves its marks and its entry. Every read still finds the versions in
+  one place, at the cost of one more read for a name a move marked, and the first [expiry](../expiry.md) sweep once the
+  move has made no progress for an hour finishes or undoes it. Until then, the resource counts under both names, in each
+  one's container's number of resources. A move across containers writes its entry again every 15 minutes while it
+  copies, so a long copy doesn't make the move look stopped.
 - A deleted container's upload sessions stay under `{prefix}u/` until the next [expiry](../expiry.md) sweep, which
   deletes them. So does a session's segment whose delete failed, once it's an hour old.
 
@@ -171,6 +177,13 @@ characters beyond U+FFFF, such as emoji, or from U+E000 to U+FFFF, might list in
   one more small blob, and an upload with an expiry one more write, for its entry. Changing an expiry reads the
   container's record and the head, writes the new entry (none when clearing it), reads and writes the head, then
   deletes the old entry.
+- **A rename** reads both containers' records and both heads, writes the move's entry, marks the source head, writes the
+  destination's, and commits the entry; then it reads and writes each head again to clear the marks, deletes the entry,
+  and reads the destination container's record: about eight reads, six writes and two deletes. A version with an expiry
+  costs one more write, for its new entry. **A move to another container** also has the store copy each version's
+  content, one request per GiB, and writes the move's entry again every 15 minutes while it copies and after each
+  version; then it deletes the old blobs. While a move is unfinished, a read of either name costs one more read, of the
+  move's entry.
 - **An upload session** costs, to start, a read of the container's record and a write of the session's record. Each
   append reads both, then for each segment it stores (one per 64 MiB) uploads the segment and reads and writes the
   record. An append that starts after a segment shorter than 8 MiB first reads that segment back, so many small appends
@@ -192,7 +205,9 @@ reports whether the account can be reached and the blob container exists and is 
 Besides the operations every provider records (see [Telemetry](../telemetry.md)), the provider counts
 `resourcefull.azureblob.retries`: writes to a name's head, or to an upload session's record, retried because another
 writer changed it first. A few are normal when writers share names; a steady rise means many writers are contending for
-the same names. It also counts `resourcefull.azureblob.stale_expiries`: expiry entries a sweep dropped because their
-version no longer existed or had another expiry; and `resourcefull.azureblob.abandoned_uploads`: upload sessions nothing
-was appended to for a day, or whose container was deleted, which the expiry sweep deleted. The Azure SDK can also trace
-its own requests; see its documentation for OpenTelemetry.
+the same names. It counts `resourcefull.azureblob.moves_recovered`: moves the expiry sweep finished or undid because
+their mover stopped first, such as after a crash or a lost connection. It also counts
+`resourcefull.azureblob.stale_expiries`: expiry entries a sweep dropped because their version no longer existed or had
+another expiry; and `resourcefull.azureblob.abandoned_uploads`: upload sessions nothing was appended to for a day, or
+whose container was deleted, which the expiry sweep deleted. The Azure SDK can also trace its own requests; see its
+documentation for OpenTelemetry.
