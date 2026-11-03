@@ -27,12 +27,12 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
 
     /// <summary>
     /// How many chunks one statement deletes. SQL Server locks the whole chunk table, holding up every upload, once a
-    /// statement holds 5,000 locks on it. That's usually one lock per chunk, but SQL Server 2019 can also lock a chunk's
-    /// content pages, about five for a full one: deleting 999 full chunks took 6,240 locks there once the table held
-    /// other versions' chunks. 500 stays well under, at about 3,100. A version with more chunks than this has them
-    /// deleted this many at a time before it goes; a smaller one takes them with it.
+    /// statement holds 5,000 locks on it. A full chunk keeps its content on five pages of its own. With read committed
+    /// snapshot on, as the migrations set it, SQL Server 2019 locks each of those pages, a row on each, and the chunk's
+    /// key: 11 locks a chunk. Deleting 500 full chunks took 5,512 locks; 250 took 2,760. A version with more chunks than
+    /// this has them deleted this many at a time before it goes; a smaller one takes them with it.
     /// </summary>
-    internal const int ChunksPerDeleteStatement = 500;
+    internal const int ChunksPerDeleteStatement = 250;
 
     /// <summary>
     /// The error a name's lock raises when SQL Server chooses it as a deadlock victim, or it times out: transient, like a
