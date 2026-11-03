@@ -115,7 +115,7 @@ internal sealed class AzureBlobObjectStore(BlobContainerClient container) : IObj
             .ConfigureAwait(false))
         {
             if (item.Name == startAfter) continue;
-            yield return new ObjectListing(item.Name, item.Properties.ContentLength ?? 0);
+            yield return new ObjectListing(item.Name, item.Properties.ContentLength ?? 0, item.Properties.LastModified ?? default);
         }
     }
 

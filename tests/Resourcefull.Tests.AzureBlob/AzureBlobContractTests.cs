@@ -14,7 +14,5 @@ public class AzureBlobContractTests(AzureBlobFixture fixture) : ResourcefullCont
 
     protected override bool SupportsMove => false;
 
-    protected override bool SupportsExpiry => false;
-
     protected override bool SupportsUploadSessions => false;
 }

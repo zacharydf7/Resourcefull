@@ -31,3 +31,6 @@ about moves applies to it too.
   [hash backfill](providers/sql-server-upgrades.md#recording-hashes-for-older-versions) records it.
 - [Container policies](container-policies.md) apply: a copy is checked as an upload to the destination, and a move needs
   a source that isn't read-only and a destination with room for every version it brings.
+- **The [S3](providers/s3.md) and [Azure Blob](providers/azure-blob.md) providers don't move yet:** with them,
+  `MoveResourceAsync` and `RenameResourceAsync` throw `NotSupportedException`, so copy, then delete, instead. Moves for
+  them are planned in [#154](https://github.com/zacharydf7/Resourcefull/issues/154).

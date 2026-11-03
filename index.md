@@ -10,9 +10,10 @@ description: Store and serve files of any type and size from infrastructure you 
 <div class="rf-wrap">
 <div>
 <h1>Files for .NET apps, <span>stored where you choose</span></h1>
-<p class="rf-lede">Resourcefull stores and serves files of any type and size from infrastructure you run yourself.
-Upload, download, list and version them through one client API, and keep the bytes in SQL Server or PostgreSQL, in
-memory for tests, or in a storage provider of your own.</p>
+<p class="rf-lede">Resourcefull stores and serves files of any type and size from infrastructure you run yourself: the
+SQL Server or PostgreSQL database you already have. Upload, download, list and version them through one client API.
+When you move to the cloud, change one line to keep the bytes in Amazon S3, another S3-compatible store or Azure Blob
+Storage instead.</p>
 <div class="rf-actions">
 <a class="rf-btn rf-btn-primary" href="docs/getting-started.md">Get started <i class="bi bi-arrow-right"></i></a>
 <a class="rf-btn rf-btn-secondary" href="docs/index.md">Read the docs</a>
@@ -138,7 +139,8 @@ storage is down.</p>
 <div class="rf-path">
 <h3>Running in production</h3>
 <ul>
-<li><a href="docs/providers/sql-server.md">Setting up SQL Server</a> or <a href="docs/providers/postgresql.md">PostgreSQL</a></li>
+<li><a href="docs/providers/sql-server.md">Setting up SQL Server</a>, <a href="docs/providers/postgresql.md">PostgreSQL</a>,
+<a href="docs/providers/s3.md">S3-compatible storage</a> or <a href="docs/providers/azure-blob.md">Azure Blob Storage</a></li>
 <li><a href="docs/health-checks.md">Health checks</a> and <a href="docs/telemetry.md">telemetry</a></li>
 <li><a href="docs/troubleshooting.md">Troubleshooting</a></li>
 </ul>
@@ -180,6 +182,16 @@ retries built in.</p>
 <h3><i class="bi bi-database"></i>PostgreSQL</h3>
 <p><code>Resourcefull.PostgreSql</code> for production on PostgreSQL: the same chunked streaming, transactions,
 migrations and retries.</p>
+</a>
+<a class="rf-card" href="docs/providers/s3.md">
+<h3><i class="bi bi-cloud"></i>S3-compatible storage</h3>
+<p><code>Resourcefull.S3</code> for Amazon S3 or another S3-compatible store, when you move to the cloud: change one
+line and keep your code. Moving or renaming files and uploading in parts are still to come.</p>
+</a>
+<a class="rf-card" href="docs/providers/azure-blob.md">
+<h3><i class="bi bi-cloud"></i>Azure Blob Storage</h3>
+<p><code>Resourcefull.AzureBlob</code> for Azure Blob Storage, the same way: one line to switch, the same API. Moving
+or renaming files and uploading in parts are still to come.</p>
 </a>
 <a class="rf-card" href="docs/providers/in-memory.md">
 <h3><i class="bi bi-cpu"></i>In memory</h3>

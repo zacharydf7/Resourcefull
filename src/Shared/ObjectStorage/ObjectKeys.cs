@@ -34,6 +34,35 @@ internal sealed class ObjectKeys(string prefix)
 
     private const char End = '!';
 
+    /// <summary>The prefix of the expiry entries, which sort by when their versions expire.</summary>
+    public string Expiries { get; } = prefix + "x/";
+
+    /// <summary>
+    /// The key of a version's expiry entry: its expiry time, fixed-width so keys sort by it, then its version ID, so
+    /// entries that expire at the same time sort as the contract lists them, then the token the version records for the
+    /// entry, so no two writes of an entry share a key, then its container's ID and its blob.
+    /// </summary>
+    public string Expiry(DateTimeOffset expiresAt, string versionId, string token, string containerId, string blob) =>
+        $"{Expiries}{expiresAt.UtcTicks:D19}/{Escape(versionId)}{End}/{token}/{containerId}/{blob}";
+
+    /// <summary>
+    /// What a listing of the entries after <paramref name="expiresAt"/> and <paramref name="versionId"/> starts after:
+    /// past every entry with both, since <c>0</c> sorts after the <c>/</c> that follows them, and before the next
+    /// version ID's, since an escape never ends with the <c>!</c> that ends a version ID.
+    /// </summary>
+    public string ExpiriesAfter(DateTimeOffset expiresAt, string versionId) =>
+        $"{Expiries}{expiresAt.UtcTicks:D19}/{Escape(versionId)}{End}0";
+
+    /// <summary>What an expiry entry's key, after <see cref="Expiries"/>, says.</summary>
+    internal static (DateTimeOffset ExpiresAt, string VersionId, string Token, string ContainerId, string Blob) ParseExpiry(string key)
+    {
+        // An escape of a character is ! and two hex digits, so the version ID ends at the first ! that a / follows.
+        int versionEnd = key.IndexOf(End + "/", 20, StringComparison.Ordinal);
+        string[] ids = key[(versionEnd + 2)..].Split('/');
+        return (new DateTimeOffset(long.Parse(key[..19], System.Globalization.CultureInfo.InvariantCulture), TimeSpan.Zero),
+            Unescape(key[20..versionEnd]), ids[0], ids[1], ids[2]);
+    }
+
     /// <summary>The prefix of every container's record.</summary>
     public string Containers { get; } = prefix + "c/";
 

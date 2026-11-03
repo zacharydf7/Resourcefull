@@ -60,8 +60,8 @@ internal interface IObjectStore
 /// <summary>An object's bytes as the store sends them, and what to dispose of when they've been read.</summary>
 internal sealed record ObjectRead(Stream Body, IDisposable Owner);
 
-/// <summary>An object in a listing: its key and its size in bytes.</summary>
-internal readonly record struct ObjectListing(string Key, long Size);
+/// <summary>An object in a listing: its key, its size in bytes, and when it was last written.</summary>
+internal readonly record struct ObjectListing(string Key, long Size, DateTimeOffset LastModified);
 
 /// <summary>How uploads read their content: in parts, a small slice at a time.</summary>
 internal static class ObjectParts

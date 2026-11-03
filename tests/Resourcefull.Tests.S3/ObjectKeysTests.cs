@@ -34,6 +34,33 @@ public class ObjectKeysTests
     }
 
     [Fact]
+    public void Expiry_ShouldSortByTimeThenVersionIdAndParseBack_WhenGivenVersionsOfAnyId()
+    {
+        // Arrange: version IDs of every kind an import can bring, each at two times a tick apart.
+        var earlier = new DateTimeOffset(2030, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        string[] ids = ["a", "a\u0001", "a!", "a/", "a0", "A", "z", "01a1a141-72ab-7b09-9d8f-161ba268f7e3", "名", "!", "/"];
+        List<(DateTimeOffset ExpiresAt, string VersionId)> entries =
+            [.. ids.SelectMany(id => new[] { (earlier, id), (earlier.AddTicks(1), id) })];
+        string KeyOf((DateTimeOffset ExpiresAt, string VersionId) entry) =>
+            Keys.Expiry(entry.ExpiresAt, entry.VersionId, new string('t', 32), new string('c', 32), new string('b', 32));
+
+        // Act
+        List<(DateTimeOffset, string)> byKey = [.. entries.OrderBy(KeyOf, CodePointOrder.Instance)];
+
+        // Assert: the order the contract lists expired versions in; every key parses back; and a listing after an entry
+        // starts past it and before the next.
+        Assert.Equal([.. entries.OrderBy(e => e.ExpiresAt).ThenBy(e => e.VersionId, StringComparer.Ordinal)], byKey);
+        Assert.All(entries, e => Assert.Equal((e.ExpiresAt, e.VersionId, new string('t', 32), new string('c', 32), new string('b', 32)),
+            ObjectKeys.ParseExpiry(KeyOf(e)[Keys.Expiries.Length..])));
+        for (int i = 0; i < byKey.Count; i++)
+        {
+            string after = Keys.ExpiriesAfter(byKey[i].Item1, byKey[i].Item2);
+            Assert.True(CodePointOrder.Instance.Compare(KeyOf(byKey[i]), after) < 0);
+            if (i + 1 < byKey.Count) Assert.True(CodePointOrder.Instance.Compare(after, KeyOf(byKey[i + 1])) < 0);
+        }
+    }
+
+    [Fact]
     public void Head_ShouldGiveAnUnpairedSurrogateAKeyNoStoredNameHas_WhenGivenOne()
     {
         // Act & Assert: a lookup with a broken name mustn't find the name it would be read as.

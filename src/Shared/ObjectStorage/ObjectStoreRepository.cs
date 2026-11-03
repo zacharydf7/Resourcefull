@@ -24,6 +24,12 @@ namespace Resourcefull.ObjectStorage;
 internal sealed class ObjectStoreRepository(IObjectStore store, string keyPrefix, TimeProvider? timeProvider, string? storeName)
     : ResourceRepository
 {
+    /// <summary>
+    /// The real time, to tell an expiry entry's age by: the store stamps entries with it, while the clock versions are
+    /// stamped with may be set to another time. Tests set it.
+    /// </summary>
+    internal TimeProvider RealTime { get; init; } = TimeProvider.System;
+
     /// <summary>How many heads or records a listing reads at once.</summary>
     private const int ParallelReads = 16;
 
@@ -44,6 +50,12 @@ internal sealed class ObjectStoreRepository(IObjectStore store, string keyPrefix
 
     /// <summary>How many objects a purge lists, then deletes, at a time.</summary>
     private const int PurgeBatchSize = 1000;
+
+    /// <summary>
+    /// How old an expiry entry that names no version with its expiry must be before it's dropped. An entry goes in just
+    /// before the head write that names its version, so a younger one may belong to a write still in progress.
+    /// </summary>
+    private static readonly TimeSpan StaleExpiryAge = TimeSpan.FromHours(1);
 
     private readonly ObjectKeys _keys = new(keyPrefix);
     private readonly TimeProvider _clock = timeProvider ?? TimeProvider.System;
@@ -79,11 +91,14 @@ internal sealed class ObjectStoreRepository(IObjectStore store, string keyPrefix
 
         string blob = Guid.NewGuid().ToString("N");
         string contentKey = _keys.Content(container.Id, blob);
+        string? expiryToken = version.ExpiresAt is null ? null : Guid.NewGuid().ToString("N");
+        string? expiryKey = version.ExpiresAt is { } expiresAt ? _keys.Expiry(expiresAt, version.VersionId, expiryToken!, container.Id, blob) : null;
         using var hashing = new HashingStream(content);
         WrittenContent? written = null;
         try
         {
             await store.UploadAsync(contentKey, hashing, cancellationToken).ConfigureAwait(false);
+            if (expiryKey is not null) await PutExpiryAsync(expiryKey, location, cancellationToken).ConfigureAwait(false);
             await ChangeHeadAsync(headKey, head =>
             {
                 // An earlier try already added this version: it landed, but another writer changed the head before it
@@ -94,12 +109,12 @@ internal sealed class ObjectStoreRepository(IObjectStore store, string keyPrefix
                 written = hashing.Complete(version.DeclaredLength, lastModified ?? _clock.GetUtcNow());
                 return new Head([.. head?.Versions ?? [], new StoredVersion(version.VersionId, blob, written.ContentLength,
                     written.ContentHash, version.ContentType, new Dictionary<string, string>(version.Metadata),
-                    written.LastModified, version.ExpiresAt, version.CopiedFrom)]);
+                    written.LastModified, version.ExpiresAt, version.CopiedFrom, expiryToken)]);
             }, cancellationToken).ConfigureAwait(false);
         }
         catch
         {
-            await DeleteUnnamedContentAsync(headKey, blob, contentKey).ConfigureAwait(false);
+            await DeleteUnnamedContentAsync(headKey, blob, expiryKey is null ? [contentKey] : [contentKey, expiryKey]).ConfigureAwait(false);
             throw;
         }
 
@@ -136,15 +151,15 @@ internal sealed class ObjectStoreRepository(IObjectStore store, string keyPrefix
     }
 
     /// <summary>
-    /// Deletes the content of a write that failed, unless the head names it after all, as it does when the head write
-    /// landed and what failed came after. If the head can't be read, the content stays.
+    /// Deletes the content of a write that failed, and its expiry entry if it has one, unless the head names it after
+    /// all, as it does when the head write landed and what failed came after. If the head can't be read, they stay.
     /// </summary>
-    private async Task DeleteUnnamedContentAsync(string headKey, string blob, string contentKey)
+    private async Task DeleteUnnamedContentAsync(string headKey, string blob, string[] keys)
     {
         try
         {
             Head? head = (await GetAsync<Head>(headKey, CancellationToken.None).ConfigureAwait(false)).Value;
-            if (head?.Versions.Any(v => v.Blob == blob) != true) await DeleteQuietlyAsync([contentKey]).ConfigureAwait(false);
+            if (head?.Versions.Any(v => v.Blob == blob) != true) await DeleteQuietlyAsync(keys).ConfigureAwait(false);
         }
         catch (Exception exception) when (store.IsStoreFailure(exception))
         {
@@ -258,9 +273,22 @@ internal sealed class ObjectStoreRepository(IObjectStore store, string keyPrefix
         }, cancellationToken).ConfigureAwait(false);
         if (!changed) return false;
 
-        await DeleteQuietlyAsync([.. removed.Select(v => _keys.Content(container.Id, v.Blob))]).ConfigureAwait(false);
+        await DeleteQuietlyAsync([.. removed.SelectMany(v => KeysOf(container.Id, v))]).ConfigureAwait(false);
         return true;
     }
+
+    /// <summary>A version's content key, and its expiry entry's key if it has an expiry.</summary>
+    private IEnumerable<string> KeysOf(string containerId, StoredVersion version)
+    {
+        yield return _keys.Content(containerId, version.Blob);
+        if (ExpiryKeyOf(containerId, version) is { } expiryKey) yield return expiryKey;
+    }
+
+    /// <summary>A version's expiry entry's key, or <see langword="null"/> when it has no expiry.</summary>
+    private string? ExpiryKeyOf(string containerId, StoredVersion version) =>
+        version is { ExpiresAt: { } expiresAt, ExpiryToken: { } token }
+            ? _keys.Expiry(expiresAt, version.VersionId, token, containerId, version.Blob)
+            : null;
 
     public override Task<bool> SetResourceMetadataAsync(ResourceLocation resource, string? versionId,
         IReadOnlyDictionary<string, string> metadata, CancellationToken cancellationToken = default) =>
@@ -306,6 +334,128 @@ internal sealed class ObjectStoreRepository(IObjectStore store, string keyPrefix
         }
         return new ResourceContainerUsage(storedBytes, resources, versions);
     }
+
+    // Expiry: an index of the versions that expire, one entry each under {prefix}x/, keyed by expiry time, so a sweep
+    // lists only what's due. An entry goes in before the head write that sets the expiry, so a version never has an
+    // expiry without one. Each entry's key holds a token the version records, so no two writes share a key, and an
+    // entry whose version no longer records its token is stale. Changing the expiry or deleting the version deletes the
+    // old entry; one those deletes miss is dropped when a listing finds it over an hour old.
+
+    public override async Task<IReadOnlyList<ResourceInfo>> GetExpiredAsync(DateTimeOffset now, int maxVersions,
+        (DateTimeOffset ExpiresAt, string VersionId)? after = null, CancellationToken cancellationToken = default)
+    {
+        string? startAfter = after is { } last ? _keys.ExpiriesAfter(last.ExpiresAt, last.VersionId) : null;
+        var expired = new List<ResourceInfo>();
+        var batch = new List<ObjectListing>();
+        await foreach (ObjectListing entry in store.ListAsync(_keys.Expiries, startAfter, cancellationToken).ConfigureAwait(false))
+        {
+            if (ObjectKeys.ParseExpiry(entry.Key[_keys.Expiries.Length..]).ExpiresAt > now) break;
+            batch.Add(entry);
+            if (batch.Count < Math.Min(maxVersions - expired.Count, ParallelReads)) continue;
+            expired.AddRange(await ReadExpiredAsync(batch, cancellationToken).ConfigureAwait(false));
+            batch.Clear();
+            if (expired.Count >= maxVersions) return expired;
+        }
+        expired.AddRange(await ReadExpiredAsync(batch, cancellationToken).ConfigureAwait(false));
+        return expired;
+    }
+
+    /// <summary>The versions a batch of expiry entries name, in the entries' order, leaving out stale entries.</summary>
+    private async Task<IEnumerable<ResourceInfo>> ReadExpiredAsync(List<ObjectListing> entries, CancellationToken cancellationToken)
+    {
+        var versions = new ResourceInfo?[entries.Count];
+        await Parallel.ForEachAsync(Enumerable.Range(0, entries.Count),
+            new ParallelOptions { MaxDegreeOfParallelism = ParallelReads, CancellationToken = cancellationToken },
+            async (i, ct) => versions[i] = await ReadExpiredAsync(entries[i], ct).ConfigureAwait(false)).ConfigureAwait(false);
+        return versions.OfType<ResourceInfo>();
+    }
+
+    /// <summary>
+    /// The version an expiry entry names, if it still has that expiry; otherwise <see langword="null"/>, and an entry old
+    /// enough to belong to no write in progress is dropped.
+    /// </summary>
+    private async Task<ResourceInfo?> ReadExpiredAsync(ObjectListing entry, CancellationToken cancellationToken)
+    {
+        (_, string versionId, string token, string containerId, string blob) = ObjectKeys.ParseExpiry(entry.Key[_keys.Expiries.Length..]);
+        if ((await GetAsync<ExpiryEntry>(entry.Key, cancellationToken).ConfigureAwait(false)).Value is not { } named) return null;
+        ContainerRecord? container = await GetContainerAsync(named.ContainerName, cancellationToken).ConfigureAwait(false);
+        Head? head = container?.Id == containerId
+            ? (await GetAsync<Head>(_keys.Head(containerId, named.ResourceName), cancellationToken).ConfigureAwait(false)).Value
+            : null;
+        StoredVersion? version = head?.Versions.FirstOrDefault(v => v.Blob == blob);
+        if (version is not null && version.VersionId == versionId && version.ExpiryToken == token)
+            return ToInfo(named.ContainerName, named.ResourceName, version, version == head!.Versions[^1]);
+
+        if (entry.LastModified < RealTime.GetUtcNow() - StaleExpiryAge)
+        {
+            await DeleteQuietlyAsync([entry.Key]).ConfigureAwait(false);
+            ObjectStoreTelemetry.CountStaleExpiry(storeName);
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Takes the version off its name's head only if its expiry is still due, checked within the conditional head write,
+    /// then deletes its content and its expiry entry.
+    /// </summary>
+    public override async Task<bool> DeleteExpiredVersionAsync(ResourceLocation resource, string versionId, DateTimeOffset now,
+        CancellationToken cancellationToken = default)
+    {
+        if (await GetContainerAsync(resource.ContainerName, cancellationToken).ConfigureAwait(false) is not { } container) return false;
+        StoredVersion? removed = null;
+        bool changed = await ChangeHeadAsync(_keys.Head(container.Id, resource.ResourceName), head =>
+        {
+            removed = head?.Versions.FirstOrDefault(v => v.VersionId == versionId);
+            if (removed is not { ExpiresAt: { } expiresAt } || expiresAt > now) return null;
+            return new Head([.. head!.Versions.Where(v => v.VersionId != versionId)]);
+        }, cancellationToken).ConfigureAwait(false);
+        if (!changed) return false;
+
+        await DeleteQuietlyAsync([.. KeysOf(container.Id, removed!)]).ConfigureAwait(false);
+        return true;
+    }
+
+    /// <summary>
+    /// Writes an expiry entry for the new time, if there is one, under a new token, then sets both on the version with a
+    /// head write, and deletes the old entry, which nothing names anymore.
+    /// </summary>
+    public override async Task<bool> SetExpiryAsync(ResourceLocation resource, string? versionId, DateTimeOffset? expiresAt,
+        CancellationToken cancellationToken = default)
+    {
+        if (await GetContainerAsync(resource.ContainerName, cancellationToken).ConfigureAwait(false) is not { } container) return false;
+        string headKey = _keys.Head(container.Id, resource.ResourceName);
+        // A version's blob never changes, so the entry can be written for the version as it's read now.
+        Head? read = (await GetAsync<Head>(headKey, cancellationToken).ConfigureAwait(false)).Value;
+        StoredVersion? target = versionId is null ? read?.Versions[^1] : read?.Versions.FirstOrDefault(v => v.VersionId == versionId);
+        if (target is null) return false;
+        string? token = expiresAt is null ? null : Guid.NewGuid().ToString("N");
+        if (expiresAt is { } time)
+        {
+            await PutExpiryAsync(_keys.Expiry(time, target.VersionId, token!, container.Id, target.Blob), resource, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        StoredVersion? replaced = null;
+        bool changed = await ChangeHeadAsync(headKey, head =>
+        {
+            int index = head?.Versions.FindIndex(v => v.Blob == target.Blob) ?? -1;
+            if (index < 0) return null;
+            List<StoredVersion> versions = [.. head!.Versions];
+            replaced = versions[index];
+            versions[index] = replaced with { ExpiresAt = expiresAt, ExpiryToken = token };
+            return new Head(versions);
+        }, cancellationToken).ConfigureAwait(false);
+        if (changed && ExpiryKeyOf(container.Id, replaced!) is { } replacedKey) await DeleteQuietlyAsync([replacedKey]).ConfigureAwait(false);
+        return changed;
+    }
+
+    /// <summary>
+    /// Writes an expiry entry holding the version's container and resource names, since its key has only the container's
+    /// ID and the version's blob.
+    /// </summary>
+    private Task PutExpiryAsync(string key, ResourceLocation resource, CancellationToken cancellationToken) =>
+        store.UploadAsync(key, new MemoryStream(JsonSerializer.SerializeToUtf8Bytes(new ExpiryEntry(resource.ContainerName,
+            resource.ResourceName))), cancellationToken);
 
     // Resource Containers
 
@@ -605,6 +755,11 @@ internal sealed class ObjectStoreRepository(IObjectStore store, string keyPrefix
         [property: JsonPropertyName("deleted")] bool Deleted = false,
         [property: JsonPropertyName("w")] string? WriteId = null);
 
+    /// <summary>What an expiry entry names: the container and resource of the version its key identifies.</summary>
+    private sealed record ExpiryEntry(
+        [property: JsonPropertyName("c")] string ContainerName,
+        [property: JsonPropertyName("n")] string ResourceName);
+
     /// <summary>A name's versions, in the order they were stored; the last is current.</summary>
     private sealed record Head(
         [property: JsonPropertyName("v")] List<StoredVersion> Versions,
@@ -620,5 +775,6 @@ internal sealed class ObjectStoreRepository(IObjectStore store, string keyPrefix
         [property: JsonPropertyName("m")] Dictionary<string, string> Metadata,
         [property: JsonPropertyName("at")] DateTimeOffset LastModified,
         [property: JsonPropertyName("x")] DateTimeOffset? ExpiresAt,
-        [property: JsonPropertyName("o")] ResourceOrigin? CopiedFrom);
+        [property: JsonPropertyName("o")] ResourceOrigin? CopiedFrom,
+        [property: JsonPropertyName("xt")] string? ExpiryToken = null);
 }

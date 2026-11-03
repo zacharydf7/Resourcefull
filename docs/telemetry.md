@@ -41,7 +41,9 @@ Container and resource names aren't metric tags: there can be any number of them
 ### Work that happens out of sight
 
 Some of Resourcefull's work doesn't fail the call that started it, so it would go unnoticed without a counter of its
-own. Each carries `resourcefull.provider`, and all but `resourcefull.client.expired` carry `error.type`:
+own. Each carries `resourcefull.provider`. The four that count a failure in Resourcefull's clients (`prune.failures`,
+`expire.failures`, `policy.last_known_uses` and `cleanup_handler.failures`) and the SQL Server and PostgreSQL `retries`
+also carry `error.type`:
 
 | Instrument | Unit | What it counts |
 |---|---|---|
@@ -56,6 +58,7 @@ own. Each carries `resourcefull.provider`, and all but `resourcefull.client.expi
 | `resourcefull.postgresql.retries` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | {retry} | PostgreSQL calls retried after a transient failure, with `db.response.status_code`: the SQLSTATE code, such as `40P01` for a deadlock |
 | `resourcefull.s3.retries` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | {retry} | writes to a name's head retried because another writer changed the name first; see [S3-compatible storage](providers/s3.md#telemetry) |
 | `resourcefull.azureblob.retries` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | {retry} | the same, with Azure Blob Storage; see [Azure Blob Storage](providers/azure-blob.md#telemetry) |
+| `resourcefull.s3.stale_expiries`, `resourcefull.azureblob.stale_expiries` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | {entry} | expiry entries a sweep dropped because their version no longer existed or had another expiry; see [S3-compatible storage](providers/s3.md#how-it-stores-things) or [Azure Blob Storage](providers/azure-blob.md#how-it-stores-things) |
 
 What to alert on:
 

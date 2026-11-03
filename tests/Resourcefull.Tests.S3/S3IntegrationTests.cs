@@ -5,6 +5,7 @@ using Amazon.S3;
 using Amazon.S3.Model;
 using Microsoft.Extensions.DependencyInjection;
 using Resourcefull.ObjectStorage;
+using Resourcefull.Providers;
 using Resourcefull.S3;
 
 namespace Resourcefull.Tests.S3;
@@ -180,6 +181,81 @@ public class S3IntegrationTests(S3Fixture fixture)
         Assert.True(await resources.ContainerExistsAsync("c"));
         Assert.Equal(0, await CountKeysAsync(prefix + "d/"));
         Assert.Null(proxy.AnotherWrite);
+    }
+
+    [Fact]
+    public async Task GetExpiredAsync_ShouldDropAStaleEntryOnlyOnceItIsAnHourOld_WhenItsVersionHasAnotherToken()
+    {
+        fixture.SkipIfUnavailable();
+
+        // Arrange: an expired version, plus a copy of its entry under another token, like the one an expiry change leaves
+        // when it stops after writing its entry; and a repository on the same keys whose real time the test controls.
+        string prefix = $"expiry-{Guid.NewGuid():N}/";
+        await using ServiceProvider provider = fixture.BuildServiceProvider(keyPrefix: prefix);
+        IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>().CreateContainerAsync("c");
+        var expiresAt = new DateTimeOffset(2020, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        await container.UploadAsync("a.txt", BinaryData.FromString("a"), new ResourceUploadOptions { ExpiresAt = expiresAt });
+        string entry = (await fixture.Client.ListObjectsV2Async(new ListObjectsV2Request
+        {
+            BucketName = fixture.BucketName, Prefix = prefix + "x/"
+        })).S3Objects.Single().Key;
+        string[] parts = entry.Split('/');
+        parts[^3] = new string('0', 32);
+        await fixture.Client.CopyObjectAsync(fixture.BucketName, entry, fixture.BucketName, string.Join('/', parts));
+        var clock = new MovableClock();
+        var repository = new ObjectStoreRepository(new S3ObjectStore(fixture.Client, fixture.BucketName), prefix, null, null) { RealTime = clock };
+
+        // Act
+        clock.Now = DateTimeOffset.UtcNow.AddMinutes(30);
+        IReadOnlyList<ResourceInfo> whileYoung = await repository.GetExpiredAsync(DateTimeOffset.UtcNow, 100);
+        int entriesWhileYoung = await CountKeysAsync(prefix + "x/");
+        clock.Now = DateTimeOffset.UtcNow.AddHours(2);
+        IReadOnlyList<ResourceInfo> onceOld = await repository.GetExpiredAsync(DateTimeOffset.UtcNow, 100);
+        int entriesOnceOld = await CountKeysAsync(prefix + "x/");
+
+        // Assert: the version is listed once, by its own entry; the stale copy stays while it might belong to a write in
+        // progress, then goes.
+        Assert.Equal("a.txt", Assert.Single(whileYoung).Name);
+        Assert.Equal("a.txt", Assert.Single(onceOld).Name);
+        Assert.Equal((2, 1), (entriesWhileYoung, entriesOnceOld));
+    }
+
+    [Fact]
+    public async Task SetExpiryAndDeletes_ShouldLeaveNoEntryBehind_WhenTheVersionMovesOn()
+    {
+        fixture.SkipIfUnavailable();
+
+        // Arrange: two names with an expiry each.
+        string prefix = $"entries-{Guid.NewGuid():N}/";
+        await using ServiceProvider provider = fixture.BuildServiceProvider(keyPrefix: prefix);
+        IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>().CreateContainerAsync("c");
+        var expiresAt = new DateTimeOffset(2020, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        ResourceInfo a = await container.UploadAsync("a.txt", BinaryData.FromString("a"), new ResourceUploadOptions { ExpiresAt = expiresAt });
+        await container.UploadAsync("b.txt", BinaryData.FromString("b"), new ResourceUploadOptions { ExpiresAt = expiresAt });
+        ResourceRepository repository = provider.GetRequiredService<ResourceRepository>();
+
+        // Act
+        await container.SetExpiryAsync("a.txt", null, expiresAt.AddDays(1));
+        int afterChange = await CountKeysAsync(prefix + "x/");
+        await container.DeleteResourceIfExistsAsync("b.txt");
+        int afterDelete = await CountKeysAsync(prefix + "x/");
+        bool expired = await repository.DeleteExpiredVersionAsync(new Resourcefull.Providers.ResourceLocation("c", "a.txt"), a.VersionId,
+            DateTimeOffset.UtcNow);
+
+        // Assert: changing the expiry replaced the entry rather than adding one, and each delete took its version's entry
+        // and content, leaving only the names' empty heads.
+        Assert.Equal((2, 1), (afterChange, afterDelete));
+        Assert.True(expired);
+        Assert.Equal(0, await CountKeysAsync(prefix + "x/"));
+        Assert.Equal(2, await CountKeysAsync(prefix + "d/"));
+    }
+
+    /// <summary>A clock the test sets.</summary>
+    private sealed class MovableClock : TimeProvider
+    {
+        public DateTimeOffset Now { get; set; } = DateTimeOffset.UtcNow;
+
+        public override DateTimeOffset GetUtcNow() => Now;
     }
 
     [Fact]

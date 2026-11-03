@@ -17,8 +17,6 @@ public class S3ContractTests(S3Fixture fixture) : ResourcefullContractTests
 
     protected override bool SupportsMove => false;
 
-    protected override bool SupportsExpiry => false;
-
     protected override bool SupportsUploadSessions => false;
 }
 

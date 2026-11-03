@@ -65,7 +65,8 @@ Your code talks to `IResourceServiceClient`, not to SQL Server, so moving the by
 provider, not the code that uses it. When you move to the cloud, or outgrow your database, change `UseSqlServer` to
 [`UseS3`](providers/s3.md) or [`UseAzureBlobStorage`](providers/azure-blob.md)
 <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>. Every provider is meant to support every feature,
-so that this one line is the only change; the object-store providers don't yet support moving, expiry or upload
-sessions, which are the next work planned for them. A [provider of your own](providers/writing-a-provider.md) can store
-the bytes anywhere else, and [exporting and importing](backup-and-move.md)
+so that this one line is the only change; the object-store providers don't yet support moving or renaming
+resources, or upload sessions, which are the next work planned for them. A
+[provider of your own](providers/writing-a-provider.md) can store the bytes anywhere else, and
+[exporting and importing](backup-and-move.md)
 <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> moves containers between stores.

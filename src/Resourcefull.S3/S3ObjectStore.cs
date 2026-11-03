@@ -133,7 +133,8 @@ internal sealed class S3ObjectStore(IAmazonS3 s3, string bucket) : IObjectStore
         do
         {
             response = await s3.ListObjectsV2Async(request, cancellationToken).ConfigureAwait(false);
-            foreach (S3Object item in response.S3Objects ?? []) yield return new ObjectListing(item.Key, item.Size ?? 0);
+            foreach (S3Object item in response.S3Objects ?? [])
+                yield return new ObjectListing(item.Key, item.Size ?? 0, DateTime.SpecifyKind(item.LastModified ?? default, DateTimeKind.Utc));
             request.ContinuationToken = response.NextContinuationToken;
         }
         while (response.IsTruncated == true);

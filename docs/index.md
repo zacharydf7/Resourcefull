@@ -8,8 +8,8 @@ of your own.
 It's for applications that keep files people upload or download, such as invoices, profile pictures, reports, contract
 scans or video, and want them next to the rest of their data, on servers they run. When an application moves to the
 cloud, its code stays the same apart from the line that picks the provider, which switches to Amazon S3, another
-S3-compatible store or Azure Blob Storage. The object-store providers don't support moving, expiry or upload sessions
-yet.
+S3-compatible store or Azure Blob Storage. The object-store providers don't support moving or renaming
+resources, or upload sessions, yet.
 [When to use Resourcefull](when-to-use.md) compares it with the alternatives.
 
 ## The building blocks

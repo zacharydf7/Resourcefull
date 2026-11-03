@@ -105,8 +105,8 @@ includes a read-only container's expired versions, which the sweep keeps until t
 
 ## With a provider of your own
 
-Expiry needs a provider that stores each version's `ExpiresAt` and can list and delete expired versions. Both built-in
-providers do. With a [provider of your own](providers/writing-a-provider.md) written for 3.1 or earlier, the expiry
+Expiry needs a provider that stores each version's `ExpiresAt` and can list and delete expired versions. Every built-in
+provider does. With a [provider of your own](providers/writing-a-provider.md) written for 3.1 or earlier, the expiry
 service logs a warning that the provider doesn't support it and stops. More importantly, uploads with an expiry are
 still accepted, but the provider drops the expiry, so those versions are never deleted. Check that your provider stores
 `ExpiresAt` before relying on expiry, for example by uploading with an expiry and reading `ResourceInfo.ExpiresAt`

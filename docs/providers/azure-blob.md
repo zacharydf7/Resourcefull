@@ -26,21 +26,18 @@ inside it, so Resourcefull's container names aren't bound by Azure's rules for n
 ## What it supports
 
 Uploads, downloads (with ranges), listing, versions, create-only and conditional writes, conditional deletes, copies,
-container and version metadata, [container policies](../container-policies.md), and
-[export and import](../backup-and-move.md). It passes the same contract tests as the other providers, apart from those
-for three features it doesn't support yet:
+container and version metadata, [container policies](../container-policies.md),
+[export and import](../backup-and-move.md), and [expiry](../expiry.md). It passes the same contract tests as the other
+providers, apart from those for two features it doesn't support yet:
 
 - **Moving and renaming** throw `NotSupportedException`. A move must take every version at once, never leaving them
   in both places or in neither, and Blob Storage can't do that without transactions. Copy, then delete, instead.
   Planned in [#154](https://github.com/zacharydf7/Resourcefull/issues/154).
-- **[Expiry](../expiry.md)** throws `NotSupportedException`. With `UseExpiry`, the background sweep logs a warning
-  that the provider doesn't support it, and stops. Planned in
-  [#150](https://github.com/zacharydf7/Resourcefull/issues/150).
 - **[Upload sessions](../uploading-in-parts.md)** throw `NotSupportedException`. A single upload of any size works.
   Planned in [#151](https://github.com/zacharydf7/Resourcefull/issues/151).
 
 Every provider is meant to support every feature, so that switching between them takes only the line that picks the
-provider; these three are the next work planned for this provider.
+provider; these two are the next work planned for this provider.
 
 It works the same way as the [S3-compatible provider](s3.md), and shares its code: only the calls to the store differ.
 
@@ -108,6 +105,13 @@ You don't need this to use the provider, but it explains its costs and what you'
   only if nobody changed it meanwhile (`If-Match` with the ETag it read, or `If-None-Match: *` for a new name). When
   somebody did, it reads it again and retries. Each write carries a random ID, so when an answer is lost and Azure
   refuses the resent write, Resourcefull can tell its own write landed.
+- **Each version that expires has an entry** in an index under `{prefix}x/`, keyed by when it expires, so the
+  [expiry](../expiry.md) sweep lists only what's due rather than reading every head. The entry goes in just before the
+  head write that sets the expiry, so a version never has an expiry the index doesn't know about. Each entry's key
+  holds a random token that the version records, so no two writes share a key. Changing an expiry writes a new entry,
+  then deletes the old one once the head no longer names it; deleting a version deletes its entry with its content. An
+  entry those deletes miss, such as one a failed write left, is dropped by a sweep that finds it due and over an hour
+  old; a younger one may belong to a write still in progress.
 - **Each version's content** is a blob of its own, uploaded before the head names it, and deleted after the head
   stops naming it.
 
@@ -122,7 +126,9 @@ characters beyond U+FFFF, such as emoji, or from U+E000 to U+FFFF, might list in
 - A deleted container keeps its record, marked deleted, and a name whose versions are all deleted keeps an empty head.
   Both are a few bytes each, and are reused if the name is created again.
 - Deleting a container hides everything in it at once, then deletes its blobs a thousand at a time. If that stops
-  partway, deleting the container again finishes it, and so does creating a container of that name again.
+  partway, deleting the container again finishes it, and so does creating a container of that name again. Its
+  versions' expiry entries are kept apart from it, under `{prefix}x/`, so they stay until they're due, and a sweep
+  then drops them.
 - A write interrupted after its content was uploaded, such as by a crash, leaves that content unnamed. It still counts
   toward the container's stored size until the container is deleted.
 - An upload of 8 MiB or more that fails partway leaves the blocks it sent uncommitted. Azure discards uncommitted
@@ -141,6 +147,12 @@ characters beyond U+FFFF, such as emoji, or from U+E000 to U+FFFF, might list in
 - **Usage**, which [container policies](../container-policies.md) check before each write they limit, comes from
   listings alone: the content blobs' sizes, and the number of non-empty heads. That's one list request per five
   thousand blobs in the container.
+- **An expiry sweep** with nothing due is one list request. Each expired version it finds costs three reads to
+  find it (its index entry, its container's record and its head), two more to delete it (the container's record and
+  the head again), a write of the head, and two deletes, of its content and its entry. A version with an expiry costs
+  one more small blob, and an upload with an expiry one more write, for its entry. Changing an expiry reads the
+  container's record and the head, writes the new entry (none when clearing it), reads and writes the head, then
+  deletes the old entry.
 
 ## Health checks
 
@@ -151,5 +163,6 @@ reports whether the account can be reached and the blob container exists and is 
 
 Besides the operations every provider records (see [Telemetry](../telemetry.md)), the provider counts
 `resourcefull.azureblob.retries`: writes to a name's head retried because another writer changed the name first. A few
-are normal when writers share names; a steady rise means many writers are contending for the same names. The Azure SDK
-can also trace its own requests; see its documentation for OpenTelemetry.
+are normal when writers share names; a steady rise means many writers are contending for the same names. It also counts
+`resourcefull.azureblob.stale_expiries`: expiry entries a sweep dropped because their version no longer existed or
+had another expiry. The Azure SDK can also trace its own requests; see its documentation for OpenTelemetry.

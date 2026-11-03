@@ -8,7 +8,10 @@ instead. What has arrived stays stored, so after a dropped connection, or even a
 asks how much is stored and carries on from there. Nothing shows the new version until the session is completed,
 and then it becomes the name's current version all at once, as an upload's does.
 
-Every built-in provider supports sessions: SQL Server, PostgreSQL and in-memory.
+The SQL Server, PostgreSQL and in-memory providers support sessions. The [S3](providers/s3.md) and
+[Azure Blob](providers/azure-blob.md) providers don't yet: `StartUploadAsync` throws `NotSupportedException` with them,
+and a single upload of any size works instead. Sessions for them are planned in
+[#151](https://github.com/zacharydf7/Resourcefull/issues/151).
 
 ## A session from start to finish
 
