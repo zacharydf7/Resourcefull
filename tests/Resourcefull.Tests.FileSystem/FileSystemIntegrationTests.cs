@@ -159,6 +159,59 @@ public class FileSystemIntegrationTests(FileSystemFixture fixture)
     }
 
     [Fact]
+    public async Task AddResourceAsync_ShouldStoreTheVersion_WhenTheMoveReportsTheFileNotFoundAsAnotherWriterRemakesItsDirectory()
+    {
+        // Arrange: a store whose first move of a version's content into its directory fails as it does when another
+        // writer deletes the directory and makes it again just as the move runs: .NET then reports the file as not found.
+        bool failed = false;
+        var store = new FileSystemObjectStore(fixture.NewRoot())
+        {
+            BeforeMove = path =>
+            {
+                string directory = Path.GetDirectoryName(path)!;
+                if (failed || Path.GetFileName(directory) != "b" || !Directory.Exists(directory)) return;
+                failed = true;
+                throw new FileNotFoundException(null, path);
+            }
+        };
+        var repository = new ObjectStoreRepository(store, "", null, null);
+        var location = new ResourceLocation("c", "a.txt");
+        await repository.AddContainerAsync("c", new Dictionary<string, string>());
+
+        // Act
+        await repository.AddResourceAsync(new NewResourceVersion(location, "v1"), new MemoryStream("a"u8.ToArray()));
+
+        // Assert: the move was tried again, and the content is there.
+        Assert.True(failed);
+        Assert.Equal("a"u8.ToArray(), await ReadAllAsync(await repository.GetResourceStreamAsync(location)));
+    }
+
+    [Fact]
+    public async Task AddResourceAsync_ShouldThrowAtOnce_WhenTheFileBeingMovedIsGone()
+    {
+        // Arrange: a store whose file being written goes missing before it's moved into its directory.
+        string root = fixture.NewRoot();
+        var store = new FileSystemObjectStore(root)
+        {
+            BeforeMove = path =>
+            {
+                if (Path.GetFileName(Path.GetDirectoryName(path)) != "b") return;
+                foreach (string written in Directory.EnumerateFiles(Path.Combine(root, ".tmp"))) File.Delete(written);
+            }
+        };
+        var repository = new ObjectStoreRepository(store, "", null, null);
+        await repository.AddContainerAsync("c", new Dictionary<string, string>());
+        var started = System.Diagnostics.Stopwatch.StartNew();
+
+        // Act
+        await Assert.ThrowsAnyAsync<FileNotFoundException>(() => repository.AddResourceAsync(
+            new NewResourceVersion(new ResourceLocation("c", "a.txt"), "v1"), new MemoryStream("a"u8.ToArray())));
+
+        // Assert: refused without waiting out the half minute the move keeps trying for a directory.
+        Assert.InRange(started.Elapsed, TimeSpan.Zero, TimeSpan.FromSeconds(10));
+    }
+
+    [Fact]
     public async Task Repository_ShouldThrowDirectoryNotFoundAndCreateNothing_WhenTheDirectoryIsMissing()
     {
         // Arrange
@@ -236,5 +289,13 @@ public class FileSystemIntegrationTests(FileSystemFixture fixture)
 
         // Assert: the container's data and the directories that held it are gone; its record stays, marked deleted.
         Assert.Equal([".locks", ".tmp", "c"], Directory.EnumerateFileSystemEntries(root).Select(Path.GetFileName).Order());
+    }
+
+    private static async Task<byte[]> ReadAllAsync(Stream? stream)
+    {
+        await using Stream content = stream!;
+        using var copy = new MemoryStream();
+        await content.CopyToAsync(copy);
+        return copy.ToArray();
     }
 }

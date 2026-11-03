@@ -42,6 +42,12 @@ internal sealed class FileSystemObjectStore(string root) : IObjectStore
     /// </summary>
     internal int MaxPathBytes { get; init; } = OperatingSystem.IsMacOS() ? 1023 : OperatingSystem.IsWindows() ? 32_000 : 4095;
 
+    /// <summary>
+    /// Called with the destination path before each attempt to move a file into place. Tests set it, to change what's on
+    /// disk or to make the move fail.
+    /// </summary>
+    internal Action<string>? BeforeMove { get; init; }
+
     /// <summary>Windows' answers when another process has a file open in a way that keeps it from being replaced.</summary>
     private const int SharingViolation = unchecked((int)0x80070020), LockViolation = unchecked((int)0x80070021);
 
@@ -344,10 +350,16 @@ internal sealed class FileSystemObjectStore(string root) : IObjectStore
             try
             {
                 if (missing) CreateDirectory(Path.GetDirectoryName(path)!);
+                BeforeMove?.Invoke(path);
                 File.Move(temp, path, overwrite: true);
                 return;
             }
-            catch (DirectoryNotFoundException) when (Directory.Exists(root) && Stopwatch.GetElapsedTime(started) < MaxWait)
+            // When the move fails because the directory is gone, .NET reports the file as not found instead if another
+            // writer has made the directory again by the time it checks. Checking that the file being moved is still there
+            // tells that apart from a missing source, which no retry can fix.
+            catch (IOException exception) when ((exception is DirectoryNotFoundException
+                || (exception is FileNotFoundException && File.Exists(temp))) && Directory.Exists(root)
+                && Stopwatch.GetElapsedTime(started) < MaxWait)
             {
                 missing = true;
             }
