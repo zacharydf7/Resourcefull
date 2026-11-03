@@ -7,7 +7,7 @@ public abstract partial class ResourcefullContractTests
     private static ResourceUploadOptions IfMatch(string? versionId = null, string? contentHash = null) =>
         new() { Mode = ResourceWriteMode.Replace, Conditions = new ResourceConditions { IfMatchVersionId = versionId, IfMatchContentHash = contentHash } };
 
-    [SkippableFact]
+    [Fact]
     public async Task UploadAsync_ShouldStoreANewCurrentVersion_WhenIfMatchVersionIdIsTheCurrentVersion()
     {
         // Arrange
@@ -23,7 +23,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Equal(2, (await container.GetResourceVersionsAsync("report.txt")).Count);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task UploadAsync_ShouldThrowPreconditionFailedAndStoreNothing_WhenIfMatchVersionIdIsNotTheCurrentVersion()
     {
         // Arrange
@@ -42,7 +42,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Equal(2, (await container.GetResourceVersionsAsync("report.txt")).Count);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task UploadAsync_ShouldThrowPreconditionFailed_WhenAnotherUploadReplacesTheMatchedVersionWhileItsContentIsRead()
     {
         // Arrange: the competing upload lands after any check made before the content is read, so only the check the
@@ -63,7 +63,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Equal(2, (await container.GetResourceVersionsAsync("report.txt")).Count);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task UploadAsync_ShouldThrowContainerNotFound_WhenAConditionalUploadTargetsAMissingContainer()
     {
         // Arrange: a missing container is reported as such, not as unmet conditions.
@@ -77,7 +77,7 @@ public abstract partial class ResourcefullContractTests
         await Assert.ThrowsAsync<ResourceContainerNotFoundException>(act);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task UploadAsync_ShouldThrowPreconditionFailedAndStoreNothing_WhenTheNameHasNoCurrentVersion()
     {
         // Arrange
@@ -93,7 +93,7 @@ public abstract partial class ResourcefullContractTests
         Assert.False(await container.ExistsAsync("report.txt"));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task UploadAsync_ShouldStoreOrRefuseByTheCurrentContentHash_WhenGivenIfMatchContentHash()
     {
         // Arrange
@@ -111,7 +111,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Equal(second.VersionId, (await container.GetResourceInfoAsync("report.txt"))!.VersionId);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task UploadAsync_ShouldRequireBothConditions_WhenGivenAVersionIdAndAContentHash()
     {
         // Arrange
@@ -127,7 +127,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Single(await container.GetResourceVersionsAsync("report.txt"));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task UploadAsync_ShouldReplaceTheCurrentVersion_WhenItsConditionsHoldWithoutVersioning()
     {
         // Arrange
@@ -143,7 +143,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Single(await container.GetResourceVersionsAsync("report.txt"));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task UploadAsync_ShouldLetExactlyOneSucceed_WhenConcurrentUploadsMatchTheSameCurrentVersion()
     {
         // Arrange: every writer read the same version and tries to replace it.
@@ -161,7 +161,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Equal(2, (await container.GetResourceVersionsAsync("report.txt")).Count);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task DeleteResourceIfExistsAsync_ShouldDelete_WhenTheConditionsHold()
     {
         // Arrange
@@ -178,7 +178,7 @@ public abstract partial class ResourcefullContractTests
         Assert.False(await container.ExistsAsync("report.txt"));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task DeleteResourceIfExistsAsync_ShouldLetExactlyOneSucceed_WhenConcurrentDeletesMatchTheSameCurrentVersion()
     {
         // Arrange
@@ -196,7 +196,7 @@ public abstract partial class ResourcefullContractTests
         Assert.False(await container.ExistsAsync("report.txt"));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task DeleteResourceIfExistsAsync_ShouldThrowPreconditionFailedAndDeleteNothing_WhenTheCurrentVersionDoesNotMatch()
     {
         // Arrange: the version to delete is an older one, but the conditions are on the current version.
@@ -215,7 +215,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Equal(2, (await container.GetResourceVersionsAsync("report.txt")).Count);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task DeleteResourceIfExistsAsync_ShouldThrowPreconditionFailed_WhenTheNameDoesNotExist()
     {
         // Arrange

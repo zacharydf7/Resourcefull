@@ -12,7 +12,7 @@ namespace Resourcefull.Tests.Integration;
 [Collection(SqlServerCollection.Name)]
 public class CancellationIntegrationTests(SqlServerFixture fixture)
 {
-    [SkippableFact]
+    [Fact]
     public async Task UploadAsync_ShouldLeaveTheStoreUnchanged_WhenCanceledMidStream()
     {
         fixture.SkipIfUnavailable();
@@ -47,7 +47,7 @@ public class CancellationIntegrationTests(SqlServerFixture fixture)
         Assert.Equal("v2", current!.Content.ToString());
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task DownloadStreamingAsync_ShouldStopReading_WhenTheStreamIsReadWithACanceledToken()
     {
         fixture.SkipIfUnavailable();
@@ -70,7 +70,7 @@ public class CancellationIntegrationTests(SqlServerFixture fixture)
         await Assert.ThrowsAnyAsync<OperationCanceledException>(act);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task CreateContainerAsync_ShouldCreateNothing_WhenTokenIsAlreadyCanceled()
     {
         fixture.SkipIfUnavailable();

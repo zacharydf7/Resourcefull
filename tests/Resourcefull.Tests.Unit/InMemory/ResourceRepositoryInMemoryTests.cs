@@ -772,7 +772,7 @@ public class ResourceInMemoryRepositoryTests
         await repository.AddContainerAsync("c", new Dictionary<string, string>());
 
         // Act
-        Exception?[] outcomes = await Task.WhenAll(Enumerable.Range(0, 16).Select(i => Task.Run(() => Record.ExceptionAsync(() =>
+        Exception?[] outcomes = await Task.WhenAll(Enumerable.Range(0, 16).Select(i => Task.Run(async () => await Record.ExceptionAsync(() =>
             repository.AddResourceAsync(new NewResourceVersion(new ResourceLocation("c", "n"), $"v{i}"), new MemoryStream([1]), new ResourceWriteCondition { CreateOnly = true })))));
 
         // Assert

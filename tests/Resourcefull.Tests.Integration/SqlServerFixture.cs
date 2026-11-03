@@ -29,7 +29,7 @@ public class SqlServerFixture : IAsyncLifetime
 
     /// <summary>Skips the calling test (rather than failing it) when no SQL Server is available.</summary>
     public void SkipIfUnavailable() =>
-        Skip.IfNot(IsAvailable, $"No SQL Server available. Set {ConnectionEnvVar} or install LocalDB to run integration tests.");
+        Assert.SkipUnless(IsAvailable, $"No SQL Server available. Set {ConnectionEnvVar} or install LocalDB to run integration tests.");
 
     /// <summary>Connection string pointing at the provisioned per-run test database.</summary>
     public string ConnectionString { get; private set; } = string.Empty;
@@ -37,7 +37,7 @@ public class SqlServerFixture : IAsyncLifetime
     /// <summary>The schema given to <c>UseSqlServer</c>; <see langword="null"/> leaves the tables in <c>dbo</c>.</summary>
     public virtual string? Schema => null;
 
-    public async Task InitializeAsync()
+    public async ValueTask InitializeAsync()
     {
         string? envConnection = Environment.GetEnvironmentVariable(ConnectionEnvVar);
         bool fromEnvironment = !string.IsNullOrWhiteSpace(envConnection);
@@ -65,7 +65,7 @@ public class SqlServerFixture : IAsyncLifetime
         IsAvailable = true;
     }
 
-    public async Task DisposeAsync()
+    public async ValueTask DisposeAsync()
     {
         if (_databaseNames.Count == 0) return;
 

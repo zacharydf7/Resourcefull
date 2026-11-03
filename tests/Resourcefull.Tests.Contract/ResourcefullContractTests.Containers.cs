@@ -4,7 +4,7 @@ namespace Resourcefull.Tests.Contract;
 
 public abstract partial class ResourcefullContractTests
 {
-    [SkippableFact]
+    [Fact]
     public async Task CreateContainerAsync_ShouldStoreTheMetadataAndReturnTheUri_WhenAUriProviderIsConfigured()
     {
         // Arrange
@@ -26,7 +26,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Equal($"https://resources.test/{name}/report.txt/{uploaded.VersionId}", (await container.GetResourceInfoAsync("report.txt"))!.Uri);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task CreateContainerIfNotExistsAsync_ShouldReturnAClientWithTheStoredMetadataAndTheProvidersUri_WhenTheContainerExists()
     {
         // Arrange
@@ -43,7 +43,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Equal($"https://resources.test/{name}", container.Info.Uri);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task CreateContainerAsync_ShouldThrowConflict_WhenTheContainerExists()
     {
         // Arrange
@@ -60,7 +60,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Equal((name, null), (exception.ContainerName, exception.ResourceName));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task UploadAsync_ShouldThrowContainerNotFound_WhenContainerWasNeverCreated()
     {
         // Arrange
@@ -74,7 +74,7 @@ public abstract partial class ResourcefullContractTests
         await Assert.ThrowsAsync<ResourceContainerNotFoundException>(act);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task UploadAsync_ShouldThrowContainerNotFound_WhenContainerIsDeletedAfterTheClientIsObtained()
     {
         // Arrange
@@ -92,7 +92,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Null(await container.GetResourceInfoAsync("doc"));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task DeleteContainerIfExistsAsync_ShouldLeaveNothingBehind_WhenTheNameIsReused()
     {
         // Arrange
@@ -113,7 +113,7 @@ public abstract partial class ResourcefullContractTests
     }
 
     // Empty, and at and beyond the SQL Server provider's cap on resources per delete batch.
-    [SkippableTheory]
+    [Theory]
     [InlineData(0)]
     [InlineData(100)]
     [InlineData(250)]

@@ -19,7 +19,7 @@ public sealed class DeleteIntegrationTests(PostgreSqlFixture fixture)
         new byte[ResourceChunker.ChunkSize * ResourcePostgreSqlRepository.ChunksPerUploadBatch * 3];
     private const long PauseAt = ResourceChunker.ChunkSize * (ResourcePostgreSqlRepository.ChunksPerUploadBatch + 1L);
 
-    [SkippableFact]
+    [Fact]
     public async Task DeleteAbandonedUploadsAsync_ShouldDeleteAndCountOnlyWhatStoppedBeforeTheTimeGiven_WhenCalled()
     {
         fixture.SkipIfUnavailable();
@@ -52,7 +52,7 @@ public sealed class DeleteIntegrationTests(PostgreSqlFixture fixture)
 
     public static TheoryData<string> Deletes => ["version", "name", "container", "expire"];
 
-    [SkippableTheory]
+    [Theory]
     [MemberData(nameof(Deletes))]
     public async Task Delete_ShouldDeleteTheVersionAndItsChunks_WhenItHasMoreChunksThanOneStatementDeletes(string what)
     {

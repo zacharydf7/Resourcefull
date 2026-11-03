@@ -13,7 +13,7 @@ public class StreamingIntegrationTests(SqlServerFixture fixture)
     private const long LargePayload = 64L * 1024 * 1024 + 12_345;
     private const long MemoryAllowance = 16L * 1024 * 1024;
 
-    [SkippableFact]
+    [Fact]
     public async Task UploadAndDownload_ShouldKeepLiveMemoryBounded_WhenTheContentIsMuchLargerThanTheAllowance()
     {
         fixture.SkipIfUnavailable();
@@ -40,7 +40,7 @@ public class StreamingIntegrationTests(SqlServerFixture fixture)
         Assert.True(download.PeakMemory - baseline < MemoryAllowance, $"Downloading held {(download.PeakMemory - baseline) / 1024 / 1024} MB.");
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task DownloadStreamingAsync_ShouldReturnTheExactContent_WhenItSpansManyChunksAndEndsMidChunk()
     {
         fixture.SkipIfUnavailable();
@@ -90,7 +90,7 @@ public class StreamingIntegrationTests(SqlServerFixture fixture)
         return container;
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task DownloadStreamingAsync_ShouldReturnTheChunksInIndexOrder_WhenTheyWereStoredOutOfOrderFromZeroAndOfAnySize()
     {
         fixture.SkipIfUnavailable();
@@ -109,7 +109,7 @@ public class StreamingIntegrationTests(SqlServerFixture fixture)
         Assert.Equal(70006, stream.Length);
     }
 
-    [SkippableTheory]
+    [Theory]
     [InlineData(0, 2L)]           // within the first chunk
     [InlineData(1, 4L)]           // across the first boundary
     [InlineData(3, 70_000L)]      // exactly the middle chunk
@@ -135,7 +135,7 @@ public class StreamingIntegrationTests(SqlServerFixture fixture)
         Assert.Equal(70006, download.TotalLength);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task UploadAsync_ShouldNeitherShowTheVersionNorHoldUpOtherWritersOfTheName_WhileItsContentIsStillArriving()
     {
         fixture.SkipIfUnavailable();

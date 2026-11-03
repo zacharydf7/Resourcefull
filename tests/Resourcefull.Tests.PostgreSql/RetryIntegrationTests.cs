@@ -26,7 +26,7 @@ public sealed class RetryIntegrationTests(PostgreSqlFixture fixture)
     private const long PartwayThroughTheSecondBatch =
         ResourceChunker.ChunkSize * (ResourcePostgreSqlRepository.ChunksPerUploadBatch + 4L);
 
-    [SkippableFact]
+    [Fact]
     public async Task AddResourceAsync_ShouldStoreTheContentOnce_WhenABatchIsStoredButItsAcknowledgementIsLost()
     {
         fixture.SkipIfUnavailable();
@@ -46,7 +46,7 @@ public sealed class RetryIntegrationTests(PostgreSqlFixture fixture)
         Assert.Equal(Payload, await ReadAsync(repository, c));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task AddResourceAsync_ShouldKeepItsStagedVersion_WhenItsInsertIsStoredButItsAcknowledgementIsLost()
     {
         fixture.SkipIfUnavailable();
@@ -67,7 +67,7 @@ public sealed class RetryIntegrationTests(PostgreSqlFixture fixture)
         Assert.Equal(Payload, await ReadAsync(repository, c));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task AddResourceAsync_ShouldReturnWhatWasStoredWithoutStoringItAgain_WhenTheCommitSucceedsButItsAcknowledgementIsLost()
     {
         fixture.SkipIfUnavailable();
@@ -88,7 +88,7 @@ public sealed class RetryIntegrationTests(PostgreSqlFixture fixture)
         Assert.Equal(Payload, await ReadAsync(repository, c));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task AddContainerAsync_ShouldCreateTheContainer_WhenTheCommitSucceedsButItsAcknowledgementIsLost()
     {
         fixture.SkipIfUnavailable();
@@ -107,7 +107,7 @@ public sealed class RetryIntegrationTests(PostgreSqlFixture fixture)
         Assert.NotNull(await repository.GetContainerInfoAsync(created));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task CopyResourceAsync_ShouldReturnWhatItStoredWithoutCopyingAgain_WhenTheCommitSucceedsButItsAcknowledgementIsLost()
     {
         fixture.SkipIfUnavailable();
@@ -128,7 +128,7 @@ public sealed class RetryIntegrationTests(PostgreSqlFixture fixture)
         Assert.Equal(["v2"], (await repository.GetResourceVersionsAsync(new ResourceLocation(c, "copy"))).Select(v => v.VersionId));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task UsePostgreSql_ShouldRetryTheWriteAndCountTheRetry_WhenItsNameLockIsADeadlockVictim()
     {
         fixture.SkipIfUnavailable();

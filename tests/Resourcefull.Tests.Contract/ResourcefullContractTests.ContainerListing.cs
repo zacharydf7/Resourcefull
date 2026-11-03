@@ -14,7 +14,7 @@ public abstract partial class ResourcefullContractTests
         foreach (string suffix in suffixes) await service.CreateContainerAsync(prefix + suffix);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task ListContainersAsync_ShouldReturnEachContainerOnceInOrdinalOrder_WhenTheyFillSeveralPages()
     {
         // Arrange
@@ -31,7 +31,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Equal(suffixes.Select(suffix => prefix + suffix).Order(StringComparer.Ordinal), listed.Select(c => c.Name));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task ListContainersAsync_ShouldReturnOnlyNamesThatStartWithThePrefix_WhenGivenAPrefix()
     {
         // Arrange
@@ -47,7 +47,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Equal([prefix + "-user-1", prefix + "-user-2"], listed.Select(c => c.Name));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task GetContainerPageAsync_ShouldReturnNoContinuationToken_WhenThePageIsTheLast()
     {
         // Arrange: containers that fill the pages exactly, so the last page is full.
@@ -68,7 +68,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Null(second.ContinuationToken);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task GetContainerPageAsync_ShouldContinueAfterTheLastName_WhenThatContainerIsDeletedBetweenPages()
     {
         // Arrange
@@ -87,7 +87,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Equal([prefix + "c", prefix + "d"], second.Containers.Select(c => c.Name));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task GetContainerPageAsync_ShouldThrowArgumentException_WhenTheTokenComesFromAListingOfAnotherPrefix()
     {
         // Arrange
@@ -104,7 +104,7 @@ public abstract partial class ResourcefullContractTests
         await Assert.ThrowsAsync<ArgumentException>("continuationToken", act);
     }
 
-    [SkippableTheory]
+    [Theory]
     [InlineData(0)]
     [InlineData(ContainerListOptions.MaxPageSize + 1)]
     public async Task GetContainerPageAsync_ShouldThrowArgumentOutOfRangeException_WhenThePageSizeIsOutOfRange(int pageSize)

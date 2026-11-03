@@ -66,7 +66,7 @@ public class ResourceNamesTests
     }
 
     public static TheoryData<string> NonNullInvalidResourceNames() =>
-        [.. ((IEnumerable<object?[]>)ResourceContainerClientTests.InvalidResourceNames()).Select(row => row[0]).OfType<string>()];
+        [.. ResourceContainerClientTests.InvalidResourceNames().Select(row => row.Data).OfType<string>()];
 
     [Theory]
     [MemberData(nameof(NonNullInvalidResourceNames))]

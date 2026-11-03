@@ -30,7 +30,7 @@ public abstract partial class ResourcefullContractTests
         public static List<ResourceCleanup> In(string containerName) => [.. Cleanups.Where(c => c.Resource.ContainerName == containerName)];
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task SetExpiryAsync_ShouldChangeTheCurrentVersion_WhenGivenNoVersionId()
     {
         // Arrange
@@ -52,7 +52,7 @@ public abstract partial class ResourcefullContractTests
     private static ResourceUploadOptions Expiring(DateTimeOffset expiresAt) =>
         new() { Mode = ResourceWriteMode.Replace, ExpiresAt = expiresAt };
 
-    [SkippableFact]
+    [Fact]
     public async Task DeleteExpiredVersionsAsync_ShouldDeleteOnlyWhatsStillExpired_WhenGivenABatch()
     {
         // Arrange: a name whose expired current version has an older one behind it, a version whose expiry was
@@ -82,7 +82,7 @@ public abstract partial class ResourcefullContractTests
         Assert.True(await container.ExistsAsync("b"));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task DeleteExpiredVersionsAsync_ShouldMakeTheLatestVersionLeftCurrent_WhenItDeletesSeveralOfAName()
     {
         // Arrange: three versions of a name, the two latest of them expired.
@@ -105,7 +105,7 @@ public abstract partial class ResourcefullContractTests
         Assert.True(current.IsLatest);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task DeleteExpiredAsync_ShouldDeleteOnlyExpiredVersions_WhenCalled()
     {
         // Arrange
@@ -124,7 +124,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Null((await container.GetResourceInfoAsync("permanent"))!.ExpiresAt);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task DeleteExpiredAsync_ShouldMakeThePreviousVersionCurrent_WhenTheCurrentVersionExpires()
     {
         // Arrange
@@ -142,7 +142,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Single(await container.GetResourceVersionsAsync("notes.txt"));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task SetExpiryAsync_ShouldChangeOrClearTheExpiry_WhenTheVersionExists()
     {
         // Arrange
@@ -169,7 +169,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Equal(extended.LastModified, (await container.GetResourceInfoAsync("extended"))!.LastModified);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task CopyMoveAndRestore_ShouldSetTheExpiryOnlyWhenAsked_WhenTheSourceExpires()
     {
         // Arrange
@@ -193,7 +193,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Equal(Kept(first.ExpiresAt), (await container.GetResourceInfoAsync("moved", first.VersionId))!.ExpiresAt);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task CleanupHandler_ShouldHearOfEveryExpiredAndPrunedVersionBeforeItIsDeleted_WhenOneIsRegistered()
     {
         // Arrange
@@ -214,7 +214,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Equal(2, cleanups.Count);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task UploadAsync_ShouldKeepAPrunedVersionUntilItsGracePeriodEnds_WhenExpiryIsOn()
     {
         // Arrange
@@ -243,7 +243,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Equal((ResourceCleanupReason.Expired, first.VersionId), (cleanup.Reason, cleanup.Resource.VersionId));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task UploadAsync_ShouldKeepAPrunedVersionsSoonerExpiry_WhenExpiryIsOn()
     {
         // Arrange
@@ -263,7 +263,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Equal(Kept(clock.Now.AddMinutes(1)), (await container.GetResourceInfoAsync("notes.txt", first.VersionId))!.ExpiresAt);
     }
 
-    [SkippableTheory]
+    [Theory]
     [InlineData(false)]
     [InlineData(true)]
     public async Task DeleteResourceIfExistsAsync_ShouldDeleteTheReplacedVersionsToo_WhenTheContainerKeepsOneVersion(bool byPolicy)
@@ -290,7 +290,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Empty(await container.GetResourceVersionsAsync("notes.txt"));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task DeleteExpiredAsync_ShouldDeleteTheReplacedVersionsToo_WhenTheCurrentVersionExpiresWithoutVersioning()
     {
         // Arrange: an overwrite that expires sooner than the grace period of the version it replaced.
@@ -314,7 +314,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Empty(await container.GetResourceVersionsAsync("notes.txt"));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task DownloadStreamingAsync_ShouldFinishReading_WhenAnUploadReplacesTheVersionWhileExpiryIsOn()
     {
         // Arrange: without versioning an upload replaces the version before it; the content spans several pages.
@@ -335,7 +335,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Equal(content, start.Concat(rest.ToArray()).ToArray());
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task CleanupHandler_ShouldKeepTheVersionButNotHoldUpOthers_WhenTheHandlerFailsForIt()
     {
         // Arrange: the handler refuses one container's versions; another container's expire later.
@@ -368,7 +368,7 @@ public abstract partial class ResourcefullContractTests
         }
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task DeleteExpiredVersionAsync_ShouldKeepTheVersion_WhenItsExpiryWasMovedPastTheSweepsTime()
     {
         // Arrange: listed as expired by a sweep, then extended before the sweep deleted it.
@@ -388,7 +388,7 @@ public abstract partial class ResourcefullContractTests
         Assert.True(await container.ExistsAsync("a"));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task DeleteExpiredAsync_ShouldUseTheRegisteredClock_WhenOneIsRegistered()
     {
         // Arrange: an application test's clock, far from the real one.
@@ -409,7 +409,7 @@ public abstract partial class ResourcefullContractTests
         Assert.False(await container.ExistsAsync("a"));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task DeleteExpiredAsync_ShouldKeepAReadOnlyContainersVersionsButNotHoldUpOthers_WhenTheyExpireFirst()
     {
         // Arrange: a frozen container whose version expires before another container's.
@@ -435,7 +435,7 @@ public abstract partial class ResourcefullContractTests
         Assert.False(await frozen.ExistsAsync("a"));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task GetExpiredAsync_ShouldListEachExpiredVersionOnceInOrder_WhenPagedOneAtATimeFromTheLast()
     {
         // Arrange: expiries long before any other test's, two of them equal, so the version ID breaks the tie. Versions
@@ -470,7 +470,7 @@ public abstract partial class ResourcefullContractTests
         await ServiceOf(provider).DeleteExpiredAsync();
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task SetExpiryAsync_ShouldBeRefused_WhenTheContainerIsReadOnly()
     {
         // Arrange

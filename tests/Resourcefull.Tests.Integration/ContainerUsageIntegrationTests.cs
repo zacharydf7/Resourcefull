@@ -10,7 +10,7 @@ namespace Resourcefull.Tests.Integration;
 [Collection(SqlServerCollection.Name)]
 public class ContainerUsageIntegrationTests(SqlServerFixture fixture)
 {
-    [SkippableFact]
+    [Fact]
     public async Task GetUsageAsync_ShouldAddUpTheChunks_WhenAVersionHasNoRecordedLength()
     {
         fixture.SkipIfUnavailable();
@@ -36,7 +36,7 @@ public class ContainerUsageIntegrationTests(SqlServerFixture fixture)
         Assert.Equal(new ResourceContainerUsage(150_010, 1, 2), usage);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task CopyAndMove_ShouldCheckTheStoredSize_WhenAVersionHasNoRecordedLength()
     {
         fixture.SkipIfUnavailable();
@@ -75,7 +75,7 @@ public class ContainerUsageIntegrationTests(SqlServerFixture fixture)
                 : null);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task CopyResourceAsync_ShouldReadAndHashTheContent_WhenTheSourceHasNoRecordedHash()
     {
         fixture.SkipIfUnavailable();

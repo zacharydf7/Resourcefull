@@ -76,7 +76,7 @@ public class ProvisioningScriptTests(SqlServerFixture fixture)
         }
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task FreshInstallScript_ShouldProduceAWorkingDatabase_WhenRunAgainstAnEmptyDatabase()
     {
         fixture.SkipIfUnavailable();
@@ -92,7 +92,7 @@ public class ProvisioningScriptTests(SqlServerFixture fixture)
         await AssertCurrentSchemaAsync(connectionString);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task FreshInstallScript_ShouldChangeNothing_WhenRunASecondTime()
     {
         fixture.SkipIfUnavailable();
@@ -114,7 +114,7 @@ public class ProvisioningScriptTests(SqlServerFixture fixture)
         await AssertCurrentSchemaAsync(connectionString);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task UpgradeScripts_ShouldBringAFirstVersionDatabaseToTheCurrentSchema_WhenRunInOrder()
     {
         fixture.SkipIfUnavailable();
@@ -137,7 +137,7 @@ public class ProvisioningScriptTests(SqlServerFixture fixture)
         await AssertCurrentSchemaAsync(connectionString);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task UpgradeScripts_ShouldCarryExistingResourcesAcross_WhenAFirstVersionDatabaseHoldsData()
     {
         fixture.SkipIfUnavailable();
@@ -200,7 +200,7 @@ public class ProvisioningScriptTests(SqlServerFixture fixture)
         return points;
     }
 
-    [SkippableTheory]
+    [Theory]
     [MemberData(nameof(InterruptionPoints))]
     public async Task Script_ShouldFinishWhenRunAgain_WhenAnEarlierRunStoppedBetweenBatches(string relativePath, int completedBatches)
     {
@@ -226,7 +226,7 @@ public class ProvisioningScriptTests(SqlServerFixture fixture)
         Assert.Equal(ids.Where(id => string.CompareOrdinal(id, target) <= 0), await ReadMigrationHistoryAsync(connectionString));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task Preamble_ShouldMakeAMigrationAllOrNothing_WhenAStatementInItsTransactionFails()
     {
         fixture.SkipIfUnavailable();
@@ -252,7 +252,7 @@ public class ProvisioningScriptTests(SqlServerFixture fixture)
         Assert.Equal(0, await ScalarAsync(connectionString, "SELECT COUNT(*) FROM sys.tables WHERE [name] IN ('BeforeFailure', 'AfterFailure')"));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task MigrateResourcefullDatabaseAsync_ShouldProduceAWorkingDatabaseAndChangeNothingWhenRunAgain_WhenTheDatabaseDoesNotExist()
     {
         fixture.SkipIfUnavailable();
@@ -273,7 +273,7 @@ public class ProvisioningScriptTests(SqlServerFixture fixture)
         await AssertCurrentSchemaAsync(connectionString);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task NameLimitsUpgradeScript_ShouldChangeNothing_WhenAStoredNameIsLongerThanTheNewLimit()
     {
         fixture.SkipIfUnavailable();
@@ -298,7 +298,7 @@ public class ProvisioningScriptTests(SqlServerFixture fixture)
         Assert.Equal(1, await ScalarAsync(connectionString, "SELECT COUNT(*) FROM sys.foreign_keys WHERE [name] = 'FK_Resources_ResourceContainers_ContainerName'"));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task NameLimitsUpgradeScript_ShouldGiveEachNameOneSpellingAndKeepItsCurrentVersion_WhenNamesDifferOnlyInCase()
     {
         fixture.SkipIfUnavailable();
@@ -335,7 +335,7 @@ public class ProvisioningScriptTests(SqlServerFixture fixture)
         Assert.Equal(1, await ScalarAsync(connectionString, "SELECT COUNT(*) FROM sys.foreign_keys WHERE [name] = 'FK_Resources_ResourceContainers_ContainerName'"));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task UniqueLatestVersionUpgradeScript_ShouldKeepTheLastStoredVersionCurrent_WhenANameHasTwoCurrentVersions()
     {
         fixture.SkipIfUnavailable();

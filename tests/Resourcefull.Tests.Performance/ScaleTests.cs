@@ -3,7 +3,6 @@ using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.DependencyInjection;
 using Resourcefull.SqlServer;
 using Resourcefull.Tests.Integration;
-using Xunit.Abstractions;
 
 namespace Resourcefull.Tests.Performance;
 
@@ -30,7 +29,7 @@ public sealed class ScaleTests(SqlServerFixture fixture, ITestOutputHelper outpu
     /// <summary>Every run's measurements, uploaded by the Scale workflow.</summary>
     public static string ResultsPath => Path.Combine(AppContext.BaseDirectory, "scale-results.json");
 
-    [SkippableFact]
+    [Fact]
     public async Task LargeFile_ShouldBeMeasured_WhenUploadedDownloadedAndDeleted()
     {
         IResourceContainerClient container = await NewContainerAsync("large");
@@ -52,7 +51,7 @@ public sealed class ScaleTests(SqlServerFixture fixture, ITestOutputHelper outpu
         await MeasureAsync($"delete-{size}", () => container.DeleteResourceIfExistsAsync("r"));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task ContainerOfManyNames_ShouldBeMeasured_WhenReadListedLimitedSweptAndDeleted()
     {
         // A size limit, so an upload adds up what the container holds.
@@ -109,7 +108,7 @@ public sealed class ScaleTests(SqlServerFixture fixture, ITestOutputHelper outpu
     private async Task<IResourceContainerClient> NewContainerAsync(string database,
         Action<ResourcefullOptionsBuilder>? configure = null)
     {
-        Skip.IfNot(Environment.GetEnvironmentVariable("RESOURCEFULL_SCALE") == "true",
+        Assert.SkipUnless(Environment.GetEnvironmentVariable("RESOURCEFULL_SCALE") == "true",
             "Scale tests run only when RESOURCEFULL_SCALE is true.");
         fixture.SkipIfUnavailable();
 

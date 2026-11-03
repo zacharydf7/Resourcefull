@@ -5,7 +5,7 @@ namespace Resourcefull.Tests.Contract;
 
 public abstract partial class ResourcefullContractTests
 {
-    [SkippableFact]
+    [Fact]
     public async Task UploadAsync_ShouldRoundTripContentAndMetadata_WhenDownloaded()
     {
         // Arrange
@@ -38,7 +38,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Equal(uploaded.ContentHash, Assert.Single(await container.GetResourceVersionsAsync("report.pdf")).ContentHash);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task UploadAsync_ShouldReturnAndStoreTheMeasuredLength_WhenTheDeclaredLengthIsRightOrAbsent()
     {
         // Arrange
@@ -64,7 +64,7 @@ public abstract partial class ResourcefullContractTests
         Assert.False(await container.ExistsAsync("wrong.bin"));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task DownloadStreamingAsync_ShouldReturnAReadOnlyForwardOnlyStream_WhenTheResourceExists()
     {
         // Arrange
@@ -89,7 +89,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Throws<NotSupportedException>(() => stream.SetLength(1));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task UploadAsync_ShouldStampTheTimeTheVersionBecameCurrent_WhenTheClockMovesOnWhileTheContentIsRead()
     {
         // Arrange: the clock moves on as the content is read, as it would during a large or slow upload.
@@ -107,7 +107,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Equal(readFinished, (await container.GetResourceInfoAsync("doc"))!.LastModified);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task UploadAsync_ShouldStoreTheContentFromTheStreamsCurrentPosition_WhenTheStreamHasBeenReadPartway()
     {
         // Arrange: a stream whose 3-byte header the caller has already read past.
@@ -123,7 +123,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Equal([1, 2, 3], (await container.DownloadContentAsync("doc"))!.Content.ToArray());
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task DownloadContentAsync_ShouldReturnNull_WhenTheResourceDoesNotExist()
     {
         // Arrange

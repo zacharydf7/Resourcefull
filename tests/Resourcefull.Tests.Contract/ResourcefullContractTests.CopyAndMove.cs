@@ -5,7 +5,7 @@ namespace Resourcefull.Tests.Contract;
 
 public abstract partial class ResourcefullContractTests
 {
-    [SkippableFact]
+    [Fact]
     public async Task CopyResourceAsync_ShouldStoreANewVersionWithTheSameContentAndItsOrigin_WhenCopiedToAnotherContainer()
     {
         // Arrange: content over several chunks, in providers that store it in pieces.
@@ -34,7 +34,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Null((await source.GetResourceInfoAsync("report.pdf"))!.CopiedFrom);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task CopyResourceAsync_ShouldCopyTheGivenVersion_WhenGivenAVersionId()
     {
         // Arrange
@@ -52,7 +52,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Equal(first.VersionId, copy!.CopiedFrom!.VersionId);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task CopyResourceAsync_ShouldRefuseAnExistingNameUnlessModeIsReplace_WhenVersioningIsOff()
     {
         // Arrange
@@ -74,7 +74,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Single(await container.GetResourceVersionsAsync("b"));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task CopyResourceAsync_ShouldRefuseAnExistingNameButCopyToANewOne_WhenGivenCreateWithVersioning()
     {
         // Arrange
@@ -97,7 +97,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Equal("c", created!.Name);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task CopyResourceAsync_ShouldCopyOnlyIfTheDestinationStillMatches_WhenGivenDestinationConditions()
     {
         // Arrange
@@ -118,7 +118,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Equal("source", (await container.DownloadContentAsync("b"))!.Content.ToString());
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task CopyResourceAsync_ShouldReturnNullOrThrowNotFound_WhenTheSourceOrDestinationContainerIsMissing()
     {
         // Arrange
@@ -136,7 +136,7 @@ public abstract partial class ResourcefullContractTests
         Assert.False(await container.ExistsAsync("b"));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task RestoreVersionAsync_ShouldRecordTheVersionItRestored_WhenCalled()
     {
         // Arrange
@@ -154,7 +154,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Equal(origin, (await container.GetResourceInfoAsync("notes.txt"))!.CopiedFrom);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task MoveResourceAsync_ShouldMoveEveryVersionKeepingTheirIdsAndOrigins_WhenMovedToAnotherContainer()
     {
         // Arrange: two versions, the older one itself a copy.
@@ -179,7 +179,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Equal("v1", (await destination.DownloadContentAsync("moved/doc", first.VersionId))!.Content.ToString());
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task MoveResourceAsync_ShouldRenameTheResource_WhenMovedWithinItsContainer()
     {
         // Arrange
@@ -196,7 +196,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Equal("text", (await container.DownloadContentAsync("final.txt"))!.Content.ToString());
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task CopyResourceAsync_ShouldNameTheDestination_WhenTheDestinationExists()
     {
         // Arrange
@@ -214,7 +214,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Equal((destination.Name, "final.txt"), (exception.ContainerName, exception.ResourceName));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task CopyResourceAsync_ShouldNameOnlyTheContainer_WhenTheDestinationContainerIsMissing()
     {
         // Arrange
@@ -231,7 +231,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Equal((missing, null), (exception.ContainerName, exception.ResourceName));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task RenameResourceAsync_ShouldMoveEveryVersionToTheNewName_WhenCalled()
     {
         // Arrange
@@ -250,7 +250,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Equal(2, (await container.GetResourceVersionsAsync("final.txt")).Count);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task MoveResourceAsync_ShouldChangeNothing_WhenTheDestinationExistsOrItsContainerIsMissingOrConditionsFail()
     {
         // Arrange
@@ -276,7 +276,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Null(await container.MoveResourceAsync("missing", name, "c"));
     }
 
-    [SkippableTheory]
+    [Theory]
     [InlineData("type")]
     [InlineData("size")]
     [InlineData("count")]
@@ -316,7 +316,7 @@ public abstract partial class ResourcefullContractTests
         Assert.False(await destination.ExistsAsync("doc"));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task CopyResourceAsync_ShouldRefuseANewNameButNotANewVersion_WhenTheDestinationHoldsMaxResourceCount()
     {
         // Arrange
@@ -336,7 +336,7 @@ public abstract partial class ResourcefullContractTests
         Assert.NotNull(newVersion);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task CopyAndMove_ShouldBeRefused_WhenAContainersPolicyForbidsThem()
     {
         // Arrange: a destination that takes only images and is nearly full, and a read-only source.

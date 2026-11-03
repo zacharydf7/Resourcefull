@@ -17,7 +17,7 @@ public sealed class TelemetryIntegrationTests(SqlServerFixture fixture)
 {
     private static readonly ActivitySource TestSource = new("Resourcefull.Tests.Integration");
 
-    [SkippableFact]
+    [Fact]
     public async Task SqlServerOperations_ShouldEmitSpansTaggedWithTheProvider_WhenMigratingBackfillingAndUploading()
     {
         fixture.SkipIfUnavailable();
@@ -66,7 +66,7 @@ public sealed class TelemetryIntegrationTests(SqlServerFixture fixture)
         Assert.Equal(ActivityStatusCode.Unset, migrate.Status);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task AddResourcefullSqlServerCheck_ShouldRecordItsSpanWithPendingMigrationsOrItsFailure_WhenCalled()
     {
         fixture.SkipIfUnavailable();

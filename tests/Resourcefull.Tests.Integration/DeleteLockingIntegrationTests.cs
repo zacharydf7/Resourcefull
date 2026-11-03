@@ -62,7 +62,7 @@ public class DeleteLockingIntegrationTests(SqlServerFixture fixture)
         { "expire", ResourceSqlRepository.ChunksPerDeleteStatement - 1, ResourceChunker.ChunkSize },
     };
 
-    [SkippableTheory]
+    [Theory]
     [MemberData(nameof(Cases))]
     public async Task Delete_ShouldNotLockTheWholeChunkTable_WhenTheVersionHasThousandsOfChunks(string what, int chunks, int bytes)
     {
@@ -95,7 +95,7 @@ public class DeleteLockingIntegrationTests(SqlServerFixture fixture)
         Assert.Equal(what is "version" or "expire" ? 1 : 0, (await container.GetResourceVersionsAsync("big")).Count);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task DeleteExpiredVersionsAsync_ShouldLockOnlyTheNamesALaterTransactionDeletes_WhenAPageIsOverTheChunkBudget()
     {
         fixture.SkipIfUnavailable();

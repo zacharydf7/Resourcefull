@@ -18,7 +18,7 @@ public sealed class PostgreSqlIntegrationTests(PostgreSqlFixture fixture)
 
     private static readonly string[] Tables = ["ResourceChunks", "ResourceContainers", "Resources", "__EFMigrationsHistory"];
 
-    [SkippableFact]
+    [Fact]
     public async Task MigrateResourcefullDatabaseAsync_ShouldPutTheTablesAndHistoryInTheSchema_WhenGivenASchema()
     {
         fixture.SkipIfUnavailable();
@@ -35,7 +35,7 @@ public sealed class PostgreSqlIntegrationTests(PostgreSqlFixture fixture)
         Assert.Empty(await TablesAsync(connectionString, "public"));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task GenerateResourcefullScript_ShouldProvisionTheSchema_WhenRunTwiceOnANewDatabase()
     {
         fixture.SkipIfUnavailable();
@@ -56,7 +56,7 @@ public sealed class PostgreSqlIntegrationTests(PostgreSqlFixture fixture)
         Assert.Equal("scripted", (await container.DownloadContentAsync("a.txt"))!.Content.ToString());
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task AddKeyedResourcefull_ShouldKeepEachStoresResourcesApart_WhenTwoStoresShareADatabaseInSchemas()
     {
         fixture.SkipIfUnavailable();
@@ -81,7 +81,7 @@ public sealed class PostgreSqlIntegrationTests(PostgreSqlFixture fixture)
         Assert.Equal(Tables, await TablesAsync(connectionString, "archive"));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task AddResourcefullPostgreSqlCheck_ShouldReportHealthy_WhenTheDatabaseHasEveryMigration()
     {
         fixture.SkipIfUnavailable();
@@ -102,7 +102,7 @@ public sealed class PostgreSqlIntegrationTests(PostgreSqlFixture fixture)
         Assert.Equal("postgresql", entry.Data["provider"]);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task PostgreSqlOperations_ShouldEmitSpansTaggedWithTheProvider_WhenMigratingAndUploading()
     {
         fixture.SkipIfUnavailable();
@@ -132,7 +132,7 @@ public sealed class PostgreSqlIntegrationTests(PostgreSqlFixture fixture)
         Assert.Equal("files", migrate.GetTagItem("resourcefull.schema"));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task Writes_ShouldThrowArgumentExceptionAndStoreNothing_WhenAValueToStoreHasU0000()
     {
         fixture.SkipIfUnavailable();

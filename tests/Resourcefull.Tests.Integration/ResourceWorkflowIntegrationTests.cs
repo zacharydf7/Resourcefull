@@ -7,7 +7,7 @@ public class ResourceWorkflowIntegrationTests(SqlServerFixture fixture)
 {
     private readonly SqlServerFixture _fixture = fixture;
 
-    [SkippableFact]
+    [Fact]
     public async Task DeleteContainerIfExistsAsync_ShouldCascadeDeleteResourcesAndChunks_WhenContainerHoldsAResource()
     {
         _fixture.SkipIfUnavailable();
@@ -45,7 +45,7 @@ public class ResourceWorkflowIntegrationTests(SqlServerFixture fixture)
         return (int)(await command.ExecuteScalarAsync())!;
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task DeleteResourceIfExistsAsync_ShouldDeleteEveryVersionAndItsChunks_WhenNoVersionIsGiven()
     {
         _fixture.SkipIfUnavailable();

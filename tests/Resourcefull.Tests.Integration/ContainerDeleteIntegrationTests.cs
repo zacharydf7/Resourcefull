@@ -21,7 +21,7 @@ public class ContainerDeleteIntegrationTests(SqlServerFixture fixture)
     // Two chunks each, against a budget of three chunks, so a batch holds one resource.
     private static readonly byte[] Payload = RandomNumberGenerator.GetBytes(ResourceChunker.ChunkSize + 1);
 
-    [SkippableFact]
+    [Fact]
     public async Task DeleteContainerAsync_ShouldLeaveTheRestWholeAndFinishWhenCalledAgain_WhenCanceledAfterABatch()
     {
         fixture.SkipIfUnavailable();
@@ -53,7 +53,7 @@ public class ContainerDeleteIntegrationTests(SqlServerFixture fixture)
         Assert.Empty(await repository.GetAllResourceInfoAsync(containerName));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task DeleteContainerAsync_ShouldKeepTheNameAtItsCurrentVersion_WhenCanceledBetweenVersionsOfOneName()
     {
         fixture.SkipIfUnavailable();
@@ -75,7 +75,7 @@ public class ContainerDeleteIntegrationTests(SqlServerFixture fixture)
         await repository.DeleteContainerAsync(containerName);
     }
 
-    [SkippableTheory]
+    [Theory]
     [InlineData(0)]
     [InlineData(ResourceSqlRepository.ChunksPerDeleteStatement)] // so many that its chunks go before its row
     public async Task DeleteContainerAsync_ShouldLeaveAVersionAMoveTookAway_WhenTheMoveLandsAfterItWasListed(

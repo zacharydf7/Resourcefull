@@ -5,7 +5,7 @@ namespace Resourcefull.Tests.Contract;
 
 public abstract partial class ResourcefullContractTests
 {
-    [SkippableFact]
+    [Fact]
     public async Task GetVersionPageAsync_ShouldListEveryVersionOfEachNameInOrder_WhenReadAPageAtATime()
     {
         // Arrange: three names, the middle one with three versions.
@@ -43,7 +43,7 @@ public abstract partial class ResourcefullContractTests
         return names;
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task ListResourcesAsync_ShouldReturnEachCurrentResourceOnceInOrdinalOrder_WhenTheyFillSeveralPages()
     {
         // Arrange: one name with several versions, which lists once, as its current version.
@@ -62,7 +62,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Equal(current.VersionId, resources.Single(r => r.Name == "d").VersionId);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task ListResourcesAsync_ShouldOrderNamesByOrdinalComparison_WhenTheyHoldAnyCharacters()
     {
         // Arrange: case, accents, a character near the top of the Basic Multilingual Plane and one beyond it (stored as
@@ -79,7 +79,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Equal(names.Order(NameOrder), listed);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task ListResourcesAsync_ShouldReturnOnlyNamesThatStartWithThePrefix_WhenGivenAPrefix()
     {
         // Arrange: the prefix is matched ordinally, case-sensitively, and with its characters taken literally.
@@ -94,7 +94,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Equal(["2026/10/C", "2026/10/a", "2026/10/b"], listed);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task ListResourcesAsync_ShouldMatchWildcardCharactersLiterally_WhenThePrefixHoldsThem()
     {
         // Arrange: characters that are wildcards in SQL's LIKE.
@@ -109,7 +109,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Equal([@"a\b"], await ListNamesAsync(container, new ResourceListOptions { Prefix = @"a\" }));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task ListResourcesAsync_ShouldMatchTheWholePrefix_WhenThePrefixIsAsLongAsTheLongestNameOrLonger()
     {
         // Arrange: a prefix escaped for SQL's LIKE grows to about twice its length, past the name column's size.
@@ -123,7 +123,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Empty(await ListNamesAsync(container, new ResourceListOptions { Prefix = longest + "_" }));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task GetResourcePageAsync_ShouldReturnNoContinuationToken_WhenThePageIsTheLast()
     {
         // Arrange: names that fill the pages exactly, so the last page is full.
@@ -143,7 +143,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Null(second.ContinuationToken);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task GetResourcePageAsync_ShouldContinueAfterTheLastName_WhenThatNameIsDeletedBetweenPages()
     {
         // Arrange
@@ -161,7 +161,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Equal(["c", "d"], second.Resources.Select(r => r.Name));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task GetResourcePageAsync_ShouldReturnAnEmptyPage_WhenTheContainerDoesNotExist()
     {
         // Arrange
@@ -176,7 +176,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Null(page.ContinuationToken);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task GetResourcePageAsync_ShouldThrowArgumentException_WhenTheTokenComesFromAListingOfAnotherPrefix()
     {
         // Arrange

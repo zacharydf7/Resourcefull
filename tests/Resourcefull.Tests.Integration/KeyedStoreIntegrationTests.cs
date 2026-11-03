@@ -14,7 +14,7 @@ public sealed class KeyedStoreIntegrationTests(SqlServerFixture fixture)
 {
     private static readonly ActivitySource TestSource = new("Resourcefull.Tests.Integration.KeyedStores");
 
-    [SkippableFact]
+    [Fact]
     public async Task AddKeyedResourcefull_ShouldMigrateAndUseEachStoresOwnDatabase_WhenTwoStoresUseSqlServer()
     {
         fixture.SkipIfUnavailable();

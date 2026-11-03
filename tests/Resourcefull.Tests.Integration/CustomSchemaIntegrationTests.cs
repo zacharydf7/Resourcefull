@@ -15,7 +15,7 @@ public sealed class CustomSchemaIntegrationTests(SqlServerFixture fixture)
 
     private static readonly string[] Tables = ["__EFMigrationsHistory", "ResourceChunks", "ResourceContainers", "Resources"];
 
-    [SkippableFact]
+    [Fact]
     public async Task MigrateResourcefullDatabaseAsync_ShouldCreateTheSchemaWithTheTablesAndHistory_WhenGivenASchema()
     {
         fixture.SkipIfUnavailable();
@@ -43,7 +43,7 @@ public sealed class CustomSchemaIntegrationTests(SqlServerFixture fixture)
         Assert.Equal("files", migrate.GetTagItem("resourcefull.schema"));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task UseSqlServer_ShouldKeepEachStoresResourcesApart_WhenTwoSchemasShareADatabase()
     {
         fixture.SkipIfUnavailable();
@@ -68,7 +68,7 @@ public sealed class CustomSchemaIntegrationTests(SqlServerFixture fixture)
             await ScalarAsync(connectionString, "SELECT COUNT(*) FROM [files].[__EFMigrationsHistory]"));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task GenerateResourcefullScript_ShouldProvisionTheSchema_WhenRunTwiceOnANewDatabase()
     {
         fixture.SkipIfUnavailable();
@@ -89,7 +89,7 @@ public sealed class CustomSchemaIntegrationTests(SqlServerFixture fixture)
         Assert.Equal("scripted", await DownloadAsync(services));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task UseSqlServer_ShouldFindEveryResourceUpToDate_WhenTheTablesWereMovedIntoTheSchemaAsDocumented()
     {
         fixture.SkipIfUnavailable();

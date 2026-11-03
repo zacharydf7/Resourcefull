@@ -15,7 +15,7 @@ namespace Resourcefull.Tests.Integration;
 [Collection(SqlServerCollection.Name)]
 public class RetryPolicyIntegrationTests(SqlServerFixture fixture)
 {
-    [SkippableFact]
+    [Fact]
     public async Task UseSqlServer_ShouldRetryTheWork_WhenItIsChosenAsADeadlockVictim()
     {
         fixture.SkipIfUnavailable();
@@ -89,7 +89,7 @@ public class RetryPolicyIntegrationTests(SqlServerFixture fixture)
         Assert.Equal(22, (int)(await read.ExecuteScalarAsync())!);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task DeleteExpiredVersionsAsync_ShouldRetryTheDeletes_WhenANameLockIsChosenAsADeadlockVictim()
     {
         fixture.SkipIfUnavailable();

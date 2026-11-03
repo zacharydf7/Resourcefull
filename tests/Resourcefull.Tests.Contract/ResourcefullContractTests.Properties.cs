@@ -4,7 +4,7 @@ namespace Resourcefull.Tests.Contract;
 
 public abstract partial class ResourcefullContractTests
 {
-    [SkippableFact]
+    [Fact]
     public async Task SetResourceMetadataAsync_ShouldReplaceOnlyThatVersionsMetadata_WhenGivenAVersion()
     {
         // Arrange
@@ -30,7 +30,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Equal(second.VersionId, (await container.GetResourceInfoAsync("report.pdf"))!.VersionId);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task SetResourceMetadataAsync_ShouldChangeTheCurrentVersion_WhenGivenNoVersion()
     {
         // Arrange
@@ -48,7 +48,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Empty((await container.GetResourceInfoAsync("report.pdf", first.VersionId))!.Metadata);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task SetContentTypeAsync_ShouldChangeTheTypeInPlace_WhenCalled()
     {
         // Arrange
@@ -71,7 +71,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Null((await container.GetResourceInfoAsync("report.pdf"))!.ContentType);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task SetResourceMetadataAndContentType_ShouldReturnFalse_WhenTheVersionDoesNotExist()
     {
         // Arrange
@@ -94,7 +94,7 @@ public abstract partial class ResourcefullContractTests
         Assert.False(await container.ExistsAsync("missing.pdf"));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task SetContentTypeAsync_ShouldBeRefusedAndChangeNothing_WhenTheContainerDoesNotAllowTheType()
     {
         // Arrange
@@ -112,7 +112,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Equal("image/png", (await container.GetResourceInfoAsync("logo.png"))!.ContentType);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task SetContainerMetadataAsync_ShouldReplaceTheMetadata_WhenTheContainerExists()
     {
         // Arrange

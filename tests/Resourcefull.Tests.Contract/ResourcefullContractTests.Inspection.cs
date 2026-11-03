@@ -32,7 +32,7 @@ public abstract partial class ResourcefullContractTests
         return copy.ToArray();
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task UploadAsync_ShouldStoreWhatTheInspectorRead_WhenItAcceptsTheContent()
     {
         // Arrange
@@ -63,7 +63,7 @@ public abstract partial class ResourcefullContractTests
             (seen!.ContainerName, seen.ResourceName, seen.VersionId, seen.ContentType, seen.ContentLength, seen.Metadata["author"]));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task UploadAsync_ShouldNotShowTheVersion_WhenTheInspectorHasReadEverythingButNotYetAnswered()
     {
         // Arrange: a declared length, so a provider that reads only that much never waits for the answer.
@@ -93,7 +93,7 @@ public abstract partial class ResourcefullContractTests
         Assert.True(await container.ExistsAsync("report.pdf"));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task UploadAsync_ShouldStoreNothingAndKeepTheCurrentVersion_WhenTheInspectorRefusesTheContent()
     {
         // Arrange: the inspector reads the whole upload before it refuses, so the provider has read it all too.
@@ -119,7 +119,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Equal(1, (await container.GetUsageAsync()).VersionCount);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task UploadAsync_ShouldStoreNothing_WhenTheInspectorRefusesAfterReadingOnlyTheStart()
     {
         // Arrange
@@ -141,7 +141,7 @@ public abstract partial class ResourcefullContractTests
         Assert.True(content.Position < InspectedSize);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task UploadAsync_ShouldStoreAllOfIt_WhenTheInspectorAcceptsAfterReadingOnlyTheStart()
     {
         // Arrange
@@ -161,7 +161,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Equal(payload, (await container.DownloadContentAsync("report.pdf"))!.Content.ToArray());
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task UploadAsync_ShouldStoreNothingAndPassOnTheException_WhenTheInspectorThrows()
     {
         // Arrange
@@ -178,7 +178,7 @@ public abstract partial class ResourcefullContractTests
         Assert.False(await container.ExistsAsync("report.pdf"));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task ImportContainerAsync_ShouldLeaveNoContainer_WhenTheInspectorRefusesAVersion()
     {
         // Arrange: an export of a container whose uploads were accepted, imported into one whose aren't.
@@ -200,7 +200,7 @@ public abstract partial class ResourcefullContractTests
         Assert.False(await service.ContainerExistsAsync(restoredName));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task RestoreCopyAndMove_ShouldNotBeInspected_WhenTheContentIsAlreadyStored()
     {
         // Arrange: versions stored before the inspector starts refusing everything.

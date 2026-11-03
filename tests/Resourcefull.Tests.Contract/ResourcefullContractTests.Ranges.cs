@@ -20,7 +20,7 @@ public abstract partial class ResourcefullContractTests
         { RangedLength, null, 0 }    // starting at the end
     };
 
-    [SkippableTheory]
+    [Theory]
     [MemberData(nameof(Ranges))]
     public async Task DownloadStreamingAsync_ShouldReturnOnlyTheRange_WhenGivenARange(long offset, long? length, long expectedLength)
     {
@@ -44,7 +44,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Equal(expectedLength, stream.Position);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task DownloadStreamingAsync_ShouldReportTheWholeLengthAndNoRange_WhenGivenNoRange()
     {
         // Arrange
@@ -61,7 +61,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Null(result.Range);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task DownloadStreamingAsync_ShouldThrowRangeNotSatisfiableWithTheLength_WhenTheRangeStartsPastTheEnd()
     {
         // Arrange
@@ -79,7 +79,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Equal((container.Name, "video.mp4"), (exception.ContainerName, exception.ResourceName));
     }
 
-    [SkippableTheory]
+    [Theory]
     [InlineData(-1, 10L)]
     [InlineData(0, -1L)]
     public async Task DownloadStreamingAsync_ShouldThrowArgumentOutOfRange_WhenTheRangeIsNegative(long offset,
@@ -97,7 +97,7 @@ public abstract partial class ResourcefullContractTests
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(act);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task DownloadStreamingAsync_ShouldReturnNull_WhenGivenARangeOfAResourceThatDoesNotExist()
     {
         // Arrange
@@ -111,7 +111,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Null(result);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task DownloadStreamingAsync_ShouldReadTheRangeOfTheGivenVersion_WhenANewerOneWasUploaded()
     {
         // Arrange

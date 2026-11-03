@@ -11,7 +11,7 @@ namespace Resourcefull.Tests.Integration;
 [Collection(SqlServerCollection.Name)]
 public class ConcurrencyIntegrationTests(SqlServerFixture fixture)
 {
-    [SkippableFact]
+    [Fact]
     public async Task ConcurrentContainerWorkflows_ShouldNotSurfaceDeadlocks_WhenManyJobsRunAgainstTheSharedTables()
     {
         fixture.SkipIfUnavailable();

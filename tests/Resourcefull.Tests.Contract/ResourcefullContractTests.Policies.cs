@@ -28,7 +28,7 @@ public abstract partial class ResourcefullContractTests
             throw new InvalidOperationException("The content was read.");
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task EveryWrite_ShouldBeRefusedAndChangeNothing_WhenTheContainerIsReadOnly()
     {
         // Arrange: made read-only after a version is stored, with no caching, so the change applies at once.
@@ -62,7 +62,7 @@ public abstract partial class ResourcefullContractTests
         Assert.False(await frozen.ExistsAsync("other.txt"));
     }
 
-    [SkippableTheory]
+    [Theory]
     [InlineData("image/png", true)]
     [InlineData("IMAGE/JPEG", true)]
     [InlineData("application/pdf; charset=binary", true)]
@@ -89,7 +89,7 @@ public abstract partial class ResourcefullContractTests
         if (!allowed) Assert.Equal(ResourcePolicyRule.AllowedContentTypes, Assert.IsType<ResourcePolicyViolationException>(refused).Rule);
     }
 
-    [SkippableTheory]
+    [Theory]
     [InlineData(100L, true)]     // declared over the limit: refused before any content is read
     [InlineData(null, true)]     // undeclared: refused as the content passes the limit
     [InlineData(64L, false)]
@@ -113,7 +113,7 @@ public abstract partial class ResourcefullContractTests
         }
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task UploadAsync_ShouldRefuseWhatDoesNotFit_WhenTheContainerHasAMaxContainerSize()
     {
         // Arrange: 100 bytes allowed, and 60 stored in two versions of one name.
@@ -138,7 +138,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Equal(new ResourceContainerUsage(100, 2, 3), await container.GetUsageAsync());
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task UploadAsync_ShouldRefuseANewNameButNotANewVersion_WhenTheContainerHoldsMaxResourceCount()
     {
         // Arrange
@@ -159,7 +159,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Equal(2, (await container.GetResourceVersionsAsync("a")).Count);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task RestoreVersionAsync_ShouldBeRefused_WhenTheVersionIsLargerThanMaxResourceSize()
     {
         // Arrange: a version stored before the limit was lowered, with no caching, so the change applies at once.
@@ -179,7 +179,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Equal(2, (await container.GetResourceVersionsAsync("a")).Count);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task UploadAsync_ShouldApplyAContainersOwnPolicyOverTheDefaults_WhenTheProviderGivesOne()
     {
         // Arrange: the defaults allow only text, and limit size; one container's own policy allows images, and sets no
@@ -205,7 +205,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Equal(ResourcePolicyRule.AllowedContentTypes, Assert.IsType<ResourcePolicyViolationException>(png).Rule);
     }
 
-    [SkippableTheory]
+    [Theory]
     [InlineData(0, true)]
     [InlineData(60, false)]
     public async Task UploadAsync_ShouldApplyAChangedPolicyOnlyOnceItsCacheTimeHasPassed_WhenTheProviderChangesIt(int cacheSeconds, bool appliesNow)
@@ -226,7 +226,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Equal(appliesNow, second is ResourcePolicyViolationException);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task GetUsageAsync_ShouldCountEveryVersionsSizeAndTheNames_WhenCalled()
     {
         // Arrange

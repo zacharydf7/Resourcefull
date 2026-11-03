@@ -1,0 +1,4 @@
+# Tests pass CancellationToken only where cancellation is what they test. Threading TestContext.Current.CancellationToken
+# through every other call would add noise without changing a result: a test that hangs fails its CI job either way.
+[*.cs]
+dotnet_diagnostic.xUnit1051.severity = none

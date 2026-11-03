@@ -4,7 +4,7 @@ namespace Resourcefull.Tests.Contract;
 
 public abstract partial class ResourcefullContractTests
 {
-    [SkippableFact]
+    [Fact]
     public async Task UploadAsync_ShouldThrowConflict_WhenTheNameExistsAndNoModeIsGiven()
     {
         // Arrange
@@ -20,7 +20,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Equal("v1", (await container.DownloadContentAsync("doc"))!.Content.ToString());
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task UploadAsync_ShouldReplaceTheOnlyVersion_WhenReplacingWithoutVersioning()
     {
         // Arrange
@@ -37,7 +37,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Equal("v2", (await container.DownloadContentAsync("doc"))!.Content.ToString());
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task UploadAsync_ShouldThrowConflict_WhenTheNameExistsWithVersioningAndNoModeIsGiven()
     {
         // Arrange
@@ -53,7 +53,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Single(await container.GetResourceVersionsAsync("doc"));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task UploadAsync_ShouldKeepEachContainersOwnNumberOfVersions_WhenItsPolicySetsMaxVersions()
     {
         // Arrange: the store keeps three versions of each name; one container keeps one, and another two.
@@ -78,7 +78,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Equal([1, 2, 3], kept);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task UploadAsync_ShouldKeepOneLatestAndTrimToMaxVersions_WhenVersioningIsEnabled()
     {
         // Arrange
@@ -97,7 +97,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Equal("v3", (await container.DownloadContentAsync("doc"))!.Content.ToString());
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task GetResourceVersionsAsync_ShouldListTheCurrentVersionFirstThenNewestToOldest_WhenVersioningIsEnabled()
     {
         // Arrange
@@ -115,7 +115,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Equal([true, false, false], versions.Select(v => v.IsLatest));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task DownloadContentAsync_ShouldReturnTheRequestedVersion_WhenGivenAnEarlierVersionId()
     {
         // Arrange
@@ -133,7 +133,7 @@ public abstract partial class ResourcefullContractTests
         Assert.False(content.ResourceInfo.IsLatest);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task DeleteResourceIfExistsAsync_ShouldMakeThePreviousVersionCurrent_WhenTheCurrentVersionIsDeleted()
     {
         // Arrange
@@ -156,7 +156,7 @@ public abstract partial class ResourcefullContractTests
         Assert.False(await container.DeleteResourceIfExistsAsync("doc", third.VersionId));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task DeleteResourceIfExistsAsync_ShouldKeepTheCurrentVersion_WhenGivenAnOlderVersionId()
     {
         // Arrange
@@ -176,7 +176,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Equal("v2", (await container.DownloadContentAsync("doc"))!.Content.ToString());
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task DeleteResourceIfExistsAsync_ShouldDeleteEveryVersion_WhenNoVersionIsGiven()
     {
         // Arrange
@@ -195,7 +195,7 @@ public abstract partial class ResourcefullContractTests
         Assert.False(await container.DeleteResourceIfExistsAsync("doc"));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task RestoreVersionAsync_ShouldStoreTheEarlierContentAndMetadataAsANewCurrentVersion_WhenGivenAnEarlierVersionId()
     {
         // Arrange
@@ -227,7 +227,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Equal(new Dictionary<string, string> { ["draft"] = "1" }, current.ResourceInfo.Metadata);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task Versions_ShouldBeOrderedAndPromotedByWhenTheyWereStored_WhenTheWritersClocksDisagree()
     {
         // Arrange: "first" is stored by a server whose clock is an hour ahead of the ones storing the later two.

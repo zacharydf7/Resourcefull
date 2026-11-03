@@ -6,7 +6,7 @@ namespace Resourcefull.Tests.Contract;
 
 public abstract partial class ResourcefullContractTests
 {
-    [SkippableFact]
+    [Fact]
     public async Task Writes_ShouldRefuseTheName_WhenANewNameHasAForbiddenCharacter()
     {
         // Arrange: the names are here rather than theory data, which xUnit serializes, replacing an unpaired surrogate.
@@ -25,7 +25,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Equal(["source"], (await container.ListResourcesAsync().ToListAsync()).Select(r => r.Name));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task ExistingName_ShouldStayReadableRenamableAndDeletable_WhenItBreaksTheRulesForNewNames()
     {
         // Arrange: names an earlier release could have stored, put straight into the provider.
@@ -51,7 +51,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Equal(["invoice.pdf"], (await container.ListResourcesAsync().ToListAsync()).Select(r => r.Name));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task ImportContainerAsync_ShouldRestoreAnOlderName_WhenItBreaksTheRulesForNewNames()
     {
         // Arrange: an export of a name an earlier release could have stored, and a container name that's fine.
@@ -72,7 +72,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Equal([1], content!.Content.ToArray());
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task CreateContainerIfNotExistsAsync_ShouldReturnTheContainer_WhenItsOlderNameBreaksTheRulesForNewNames()
     {
         // Arrange: a container an earlier release could have created, put straight into the provider.
@@ -88,7 +88,7 @@ public abstract partial class ResourcefullContractTests
         await Assert.ThrowsAsync<ResourceNameException>(() => ServiceOf(provider).CreateContainerIfNotExistsAsync(NewContainerName() + "\tnew"));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task CreateContainerAsync_ShouldCreateBoth_WhenNamesDifferOnlyInCase()
     {
         // Arrange
@@ -106,7 +106,7 @@ public abstract partial class ResourcefullContractTests
         Assert.False(await service.ContainerExistsAsync($"DOCS-{suffix}"));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task UploadAsync_ShouldKeepBothResources_WhenNamesDifferOnlyInCase()
     {
         // Arrange
@@ -124,7 +124,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Null(await container.GetResourceInfoAsync("REPORT.TXT"));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task UploadAsync_ShouldRoundTripTheResource_WhenNamesAreAtTheMaximumLengths()
     {
         // Arrange
@@ -143,7 +143,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Equal(payload, content!.Content.ToArray());
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task UploadAsync_ShouldKeepEachNameAsGiven_WhenNamesLookLikePaths()
     {
         // Arrange: names are opaque, so a provider that stores them as paths, such as on a file system, mustn't resolve
@@ -162,7 +162,7 @@ public abstract partial class ResourcefullContractTests
             Assert.Equal(name, (await container.DownloadContentAsync(name))!.Content.ToString());
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task CreateContainerAsync_ShouldKeepContainersApart_WhenNamesLookLikePaths()
     {
         // Arrange
@@ -184,7 +184,7 @@ public abstract partial class ResourcefullContractTests
         }
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task ExistsAsync_ShouldFindNothing_WhenGivenAVersionIdThatLooksLikeAPath()
     {
         // Arrange: a provider that stores versions under their name, as paths, mustn't let "../a/<a's version>" reach
@@ -208,7 +208,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Equal("b", (await container.DownloadContentAsync("b"))!.Content.ToString());
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task Lookups_ShouldFindNothing_WhenANameOrVersionIdHasU0000()
     {
         // Arrange: a provider whose storage can't hold U+0000 mustn't fail on a name or version ID that has it.
@@ -239,7 +239,7 @@ public abstract partial class ResourcefullContractTests
     public static TheoryData<string> InvalidResourceNames =>
         ["", " ", " leading", "trailing ", new string('r', ResourceNames.MaxResourceNameLength + 1)];
 
-    [SkippableTheory]
+    [Theory]
     [MemberData(nameof(InvalidContainerNames))]
     public async Task CreateContainerAsync_ShouldThrowArgumentException_WhenGivenAnInvalidName(string name)
     {
@@ -255,7 +255,7 @@ public abstract partial class ResourcefullContractTests
         Assert.DoesNotContain(await service.ListContainersAsync().ToListAsync(), c => c.Name == name);
     }
 
-    [SkippableTheory]
+    [Theory]
     [MemberData(nameof(InvalidResourceNames))]
     public async Task UploadAsync_ShouldThrowArgumentException_WhenGivenAnInvalidName(string name)
     {

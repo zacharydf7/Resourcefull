@@ -16,7 +16,7 @@ public class SchemaIntegrationTests(SqlServerFixture fixture)
         return await command.ExecuteScalarAsync();
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task ResourcesTable_ShouldBeClusteredOnContainerNameNameVersion_WhenMigrationsAreApplied()
     {
         _fixture.SkipIfUnavailable();
@@ -29,7 +29,7 @@ public class SchemaIntegrationTests(SqlServerFixture fixture)
         Assert.Equal("UX_Resources_Container_Name_Version", clusteredIndexName);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task ResourcesTable_ShouldHaveFilteredLatestIndex_WhenMigrationsAreApplied()
     {
         _fixture.SkipIfUnavailable();
@@ -42,7 +42,7 @@ public class SchemaIntegrationTests(SqlServerFixture fixture)
         Assert.Equal(true, hasFilter);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task ResourceChunksTable_ShouldBeClusteredOnResourceIdThenIndex_WhenMigrationsAreApplied()
     {
         _fixture.SkipIfUnavailable();
@@ -59,7 +59,7 @@ public class SchemaIntegrationTests(SqlServerFixture fixture)
         Assert.Equal("ResourceId,Index", keyColumns);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task Database_ShouldHaveReadCommittedSnapshotEnabled_WhenMigrationsAreApplied()
     {
         _fixture.SkipIfUnavailable();

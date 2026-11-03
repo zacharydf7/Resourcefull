@@ -15,7 +15,7 @@ public class ResourceServiceClientTests
 
     public static TheoryData<string?> InvalidContainerNames() =>
     [
-        null,
+        (string?)null,
         "",
         "   ",
         " leading",

@@ -10,7 +10,7 @@ namespace Resourcefull.Tests.Contract;
 /// </summary>
 public abstract partial class ResourcefullContractTests
 {
-    [SkippableTheory]
+    [Theory]
     [InlineData("upload")]
     [InlineData("delete")]
     [InlineData("create container")]
@@ -50,7 +50,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Null(await repository.GetContainerInfoAsync(newContainer));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task AddResourceAsync_ShouldStopReadingThrowOperationCanceledAndStoreNothing_WhenCanceledWhileTheContentIsRead()
     {
         // Arrange: content whose first read cancels the upload's token.
@@ -75,7 +75,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Null(await repository.GetResourceInfoAsync(new ResourceLocation(containerName, "n")));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task Repository_ShouldKeepItsOwnCopyOfContainerMetadata_WhenTheCallersDictionaryChanges()
     {
         // Arrange
@@ -94,7 +94,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Equal("billing", (await repository.GetContainerInfoAsync(containerName))!.Metadata["owner"]);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task Repository_ShouldKeepItsOwnCopyOfResourceMetadata_WhenTheCallersDictionaryChanges()
     {
         // Arrange

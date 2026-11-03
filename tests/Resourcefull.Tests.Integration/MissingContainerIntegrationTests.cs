@@ -12,7 +12,7 @@ namespace Resourcefull.Tests.Integration;
 [Collection(SqlServerCollection.Name)]
 public class MissingContainerIntegrationTests(SqlServerFixture fixture)
 {
-    [SkippableFact]
+    [Fact]
     public async Task UploadAsync_ShouldReportTheWritesForeignKeyViolation_WhenContainerIsDeletedAfterTheClientIsObtained()
     {
         fixture.SkipIfUnavailable();

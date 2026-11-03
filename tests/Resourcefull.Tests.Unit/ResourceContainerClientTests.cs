@@ -32,7 +32,7 @@ public class ResourceContainerClientTests
 
     public static TheoryData<string?> InvalidResourceNames() =>
     [
-        null,
+        (string?)null,
         "",
         "   ",
         " leading",

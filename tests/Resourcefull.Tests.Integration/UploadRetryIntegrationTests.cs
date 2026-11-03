@@ -25,7 +25,7 @@ public class UploadRetryIntegrationTests(SqlServerFixture fixture)
     private const long PartwayThroughTheSecondBatch =
         ResourceChunker.ChunkSize * (ResourceSqlRepository.ChunksPerUploadBatch + 4L);
 
-    [SkippableFact]
+    [Fact]
     public async Task AddResourceAsync_ShouldStoreTheContentOnce_WhenABatchIsStoredButItsAcknowledgementIsLost()
     {
         fixture.SkipIfUnavailable();
@@ -45,7 +45,7 @@ public class UploadRetryIntegrationTests(SqlServerFixture fixture)
         Assert.Equal(Payload, await ReadAsync(repository, c));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task AddResourceAsync_ShouldKeepItsStagedVersion_WhenItsInsertIsStoredButItsAcknowledgementIsLost()
     {
         fixture.SkipIfUnavailable();
@@ -66,7 +66,7 @@ public class UploadRetryIntegrationTests(SqlServerFixture fixture)
         Assert.Equal(Payload, await ReadAsync(repository, c));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task ImportVersionAsync_ShouldRefuseTheVersion_WhenItExistsAndTheFirstInsertFailedTransiently()
     {
         fixture.SkipIfUnavailable();
@@ -88,7 +88,7 @@ public class UploadRetryIntegrationTests(SqlServerFixture fixture)
         Assert.Equal(Payload, await ReadAsync(repository, c));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task AddResourceAsync_ShouldStoreNothingAndLeaveNothingStaged_WhenTheContentFailsPartway()
     {
         fixture.SkipIfUnavailable();
@@ -118,7 +118,7 @@ public class UploadRetryIntegrationTests(SqlServerFixture fixture)
         return (int)(await command.ExecuteScalarAsync())!;
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task AddResourceAsync_ShouldReturnWhatWasStoredWithoutStoringItAgain_WhenTheCommitSucceedsButItsAcknowledgementIsLost()
     {
         fixture.SkipIfUnavailable();
@@ -138,7 +138,7 @@ public class UploadRetryIntegrationTests(SqlServerFixture fixture)
         Assert.Equal(Payload, await ReadAsync(repository, c));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task AddResourceAsync_ShouldRetryAndStoreTheContent_WhenANonSeekableUploadFailsBeforeAnyContentIsRead()
     {
         fixture.SkipIfUnavailable();
@@ -157,7 +157,7 @@ public class UploadRetryIntegrationTests(SqlServerFixture fixture)
         Assert.Equal(Payload, await ReadAsync(repository, c));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task DeleteResourceAsync_ShouldReportTheDelete_WhenAConditionalDeleteCommitsButItsAcknowledgementIsLost()
     {
         fixture.SkipIfUnavailable();
@@ -177,7 +177,7 @@ public class UploadRetryIntegrationTests(SqlServerFixture fixture)
         Assert.Empty(await repository.GetResourceVersionsAsync(new ResourceLocation(c, "n")));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task AddContainerAsync_ShouldCreateTheContainer_WhenTheCommitSucceedsButItsAcknowledgementIsLost()
     {
         fixture.SkipIfUnavailable();
@@ -195,7 +195,7 @@ public class UploadRetryIntegrationTests(SqlServerFixture fixture)
         Assert.NotNull(await repository.GetContainerInfoAsync(created));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task DeleteContainerAsync_ShouldReportTheDelete_WhenTheCommitSucceedsButItsAcknowledgementIsLost()
     {
         fixture.SkipIfUnavailable();
@@ -213,7 +213,7 @@ public class UploadRetryIntegrationTests(SqlServerFixture fixture)
         Assert.Null(await repository.GetContainerInfoAsync(c));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task CopyResourceAsync_ShouldReturnWhatItStoredWithoutCopyingAgain_WhenTheCommitSucceedsButItsAcknowledgementIsLost()
     {
         fixture.SkipIfUnavailable();
@@ -234,7 +234,7 @@ public class UploadRetryIntegrationTests(SqlServerFixture fixture)
         Assert.Equal(["v2"], (await repository.GetResourceVersionsAsync(new ResourceLocation(c, "copy"))).Select(v => v.VersionId));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task CopyResourceAsync_ShouldRetryAndStoreTheCopy_WhenACopyToItsOwnNameFailsPartway()
     {
         fixture.SkipIfUnavailable();
@@ -256,7 +256,7 @@ public class UploadRetryIntegrationTests(SqlServerFixture fixture)
         Assert.Equal(Payload, await ReadAsync(repository, c));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task MoveResourceAsync_ShouldReportTheMove_WhenTheCommitSucceedsButItsAcknowledgementIsLost()
     {
         fixture.SkipIfUnavailable();
@@ -277,7 +277,7 @@ public class UploadRetryIntegrationTests(SqlServerFixture fixture)
         Assert.Equal(["v1"], (await repository.GetResourceVersionsAsync(new ResourceLocation(c, "moved"))).Select(v => v.VersionId));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task SetExpiryAsync_ShouldReportTheChange_WhenTheCommitSucceedsButItsAcknowledgementIsLost()
     {
         fixture.SkipIfUnavailable();
@@ -298,7 +298,7 @@ public class UploadRetryIntegrationTests(SqlServerFixture fixture)
         Assert.Equal(expiresAt, (await repository.GetResourceInfoAsync(new ResourceLocation(c, "n"), "v1"))!.ExpiresAt);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task DeleteExpiredVersionAsync_ShouldReportTheDelete_WhenTheCommitSucceedsButItsAcknowledgementIsLost()
     {
         fixture.SkipIfUnavailable();
@@ -319,7 +319,7 @@ public class UploadRetryIntegrationTests(SqlServerFixture fixture)
         Assert.Empty(await repository.GetResourceVersionsAsync(new ResourceLocation(c, "n")));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task DeleteExpiredVersionsAsync_ShouldReportEveryDelete_WhenALaterTransactionsAcknowledgementIsLost()
     {
         fixture.SkipIfUnavailable();
@@ -377,7 +377,7 @@ public class UploadRetryIntegrationTests(SqlServerFixture fixture)
         return copy.ToArray();
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task GetResourceStreamAsync_ShouldReadThePageAgainAndReturnTheExactContent_WhenReadingAPageFailsOnce()
     {
         fixture.SkipIfUnavailable();

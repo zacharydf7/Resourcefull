@@ -37,7 +37,7 @@ public abstract partial class ResourcefullContractTests
         return export;
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task ExportContainerAsync_ShouldExportEveryName_WhenTheContainerHoldsMoreThanOnePage()
     {
         // Arrange: one more name than an export lists at a time.
@@ -60,7 +60,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Equal("1000", (await restored.DownloadContentAsync("r1000"))!.Content.ToString());
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task ImportContainerAsync_ShouldRestoreEveryVersionAsItWas_WhenGivenAnExport()
     {
         // Arrange: metadata, a history over several chunks, a copy, an expiry, and an older version that's current.
@@ -101,7 +101,7 @@ public abstract partial class ResourcefullContractTests
             string.Join(",", v.Metadata.Select(m => $"{m.Key}={m.Value}")), v.CopiedFrom, v.ExpiresAt);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task ExportContainerAsync_ShouldWriteEachDistinctContentOnce_WhenVersionsShareIt()
     {
         // Arrange: the same content uploaded twice and copied once.
@@ -125,7 +125,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Equal((3L, 4L, 13L), (exported.ResourceCount, exported.VersionCount, exported.ContentSize.Bytes));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task ImportContainerAsync_ShouldBeRefusedAndChangeNothing_WhenTheContainerExists()
     {
         // Arrange
@@ -145,7 +145,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Equal(["kept"], (await existing.ListResourcesAsync().ToListAsync()).Select(r => r.Name));
     }
 
-    [SkippableTheory]
+    [Theory]
     [InlineData("tampered")]
     [InlineData("changed to another length")]
     public async Task ImportContainerAsync_ShouldRefuseAndLeaveNoContainer_WhenTheExportsContentWasChanged(string replacement)
@@ -175,7 +175,7 @@ public abstract partial class ResourcefullContractTests
         Assert.False(await service.ContainerExistsAsync(restoredName));
     }
 
-    [SkippableTheory]
+    [Theory]
     [InlineData("\"name\": \"a\"", "\"name\": \"a \"")]                      // a name the rules refuse
     [InlineData("\"name\": \"b\"", "\"name\": \"a\"")]                       // the same name twice
     [InlineData("\"contentType\": null,", "")]                               // a field left out
@@ -202,7 +202,7 @@ public abstract partial class ResourcefullContractTests
         Assert.False(await service.ContainerExistsAsync(restoredName));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task ImportContainerAsync_ShouldRefuseAndLeaveNoContainer_WhenAFileIsLongerThanItsManifestSays()
     {
         // Arrange: the content and its hash are untouched; only the length the manifest gives it is shorter.
@@ -240,7 +240,7 @@ public abstract partial class ResourcefullContractTests
         export.Position = 0;
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task ImportVersionAsync_ShouldRefuseAVersionIdTheNameAlreadyHas_WhenCalledTwice()
     {
         // Arrange
@@ -262,7 +262,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Equal(("imported", Kept(Past)), (stored.VersionId, stored.LastModified));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task ImportContainerAsync_ShouldRefuseBeforeCreatingAnything_WhenTheFileIsNotAnExport()
     {
         // Arrange
@@ -282,7 +282,7 @@ public abstract partial class ResourcefullContractTests
         Assert.False(await service.ContainerExistsAsync(second));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task ExportAndImport_ShouldThrow_WhenTheContainerIsMissingOrTheSourceCantSeek()
     {
         // Arrange
@@ -297,7 +297,7 @@ public abstract partial class ResourcefullContractTests
         await Assert.ThrowsAsync<ArgumentException>(() => service.ImportContainerAsync(NewContainerName(), new ForwardOnlyStream(export)));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task ImportContainerAsync_ShouldApplyThePolicyAndLeaveNoContainer_WhenItRefusesAVersion()
     {
         // Arrange: the container imported into may hold only small files.
@@ -318,7 +318,7 @@ public abstract partial class ResourcefullContractTests
         Assert.False(await service.ContainerExistsAsync(restoredName));
     }
 
-    [SkippableTheory]
+    [Theory]
     [InlineData(ResourcePolicyRule.MaxResourceCount, 2L, true)]     // "a" twice and "b": two names
     [InlineData(ResourcePolicyRule.MaxResourceCount, 1L, false)]
     [InlineData(ResourcePolicyRule.MaxContainerSize, 30L, true)]    // three versions of 10 bytes
@@ -348,7 +348,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Equal(fits, await service.ContainerExistsAsync(restoredName));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task ImportContainerAsync_ShouldNotCountANameWithNoVersions_WhenTheContainerLimitsNames()
     {
         // Arrange: an export of "a" and "b" whose manifest also lists a name with no versions, which stores nothing.
@@ -457,7 +457,7 @@ public abstract partial class ResourcefullContractTests
         return export;
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task PruneContainerAsync_ShouldPruneTheVersionsAnImportKeptPastTheLimit_WhenCalled()
     {
         // Arrange: the export's notes.txt has two versions; this store keeps one.
@@ -478,7 +478,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Single(await container.GetResourceVersionsAsync("copy.txt"));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task ImportContainerAsync_ShouldReadAFormat1ExportAndExportItAgainUnchanged_WhenGivenOneAs32WroteIt()
     {
         // Arrange

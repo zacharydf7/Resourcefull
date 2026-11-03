@@ -8,9 +8,8 @@ using Resourcefull.SqlServer;
 using Resourcefull.SqlServer.Utilities;
 using Resourcefull.Tests.Contract;
 using Resourcefull.Tests.Integration;
-using Xunit.Abstractions;
 
-[assembly: CollectionBehavior(DisableTestParallelization = true)]
+[assembly: Xunit.v3.Parallelization(Mode = Xunit.Sdk.ParallelMode.None)]
 
 namespace Resourcefull.Tests.Performance;
 
@@ -37,7 +36,7 @@ public sealed class PerformanceTests(SqlServerFixture fixture, ITestOutputHelper
         // allocations comparable with the baseline.
         => AppContext.SetSwitch("Switch.Microsoft.Data.SqlClient.UseManagedNetworkingOnWindows", true);
 
-    [SkippableTheory]
+    [Theory]
     [InlineData(1)]
     [InlineData(16)]
     [InlineData(64)]
@@ -50,7 +49,7 @@ public sealed class PerformanceTests(SqlServerFixture fixture, ITestOutputHelper
             run: iteration => container.UploadAsync($"r{iteration}", new GeneratedStream(length)));
     }
 
-    [SkippableTheory]
+    [Theory]
     [InlineData(1)]
     [InlineData(16)]
     [InlineData(64)]
@@ -68,7 +67,7 @@ public sealed class PerformanceTests(SqlServerFixture fixture, ITestOutputHelper
         });
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task DownloadStreamingAsync_ShouldStayWithinItsBaseline_WhenReadingTheLastMebibyteOf64()
     {
         // A range should cost about what download-1MiB costs, not what reading up to it would.
@@ -85,7 +84,7 @@ public sealed class PerformanceTests(SqlServerFixture fixture, ITestOutputHelper
         });
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task CopyResourceAsync_ShouldStayWithinItsBaseline_WhenCopying16MebibytesToAnotherContainer()
     {
         // The server copies the chunks, so no content goes through the application: compare upload-16MiB.
@@ -98,7 +97,7 @@ public sealed class PerformanceTests(SqlServerFixture fixture, ITestOutputHelper
             run: iteration => source.CopyResourceAsync("r", destination.Info.Name, $"r{iteration}"));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task DeleteExpiredAsync_ShouldStayWithinItsBaseline_WhenNothingHasExpired()
     {
         // What expiry costs every interval on every instance when there's nothing to delete: a read of the index of
@@ -113,7 +112,7 @@ public sealed class PerformanceTests(SqlServerFixture fixture, ITestOutputHelper
         await MeasureAsync("expire-nothing-due", 0, run: _ => service.DeleteExpiredAsync());
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task DownloadStreamingAsync_ShouldCountTheReadsOfItsContent_WhenReadingAMebibyte()
     {
         // The baseline catches reads that grow, not reads that stop being counted: a page query whose reader is
@@ -131,7 +130,7 @@ public sealed class PerformanceTests(SqlServerFixture fixture, ITestOutputHelper
             $"Only {_activity.LogicalReads} logical reads were counted for {fullChunks} full chunks.");
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task UploadAsync_ShouldTakeNoMorePagesThanItsContentFills_WhenGiven16Mebibytes()
     {
         // Content pages hold 8,040 bytes each. In a database of its own, so nothing else's pages are counted.
@@ -153,7 +152,7 @@ public sealed class PerformanceTests(SqlServerFixture fixture, ITestOutputHelper
             $"{pages:#,0} content pages were used for {contentPages:#,0} pages of content.");
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task DownloadStreamingAsync_ShouldStayWithinItsBaseline_WhenEightClientsDownloadDifferentNamesAtOnce()
     {
         IResourceContainerClient container = await NewContainerAsync();
@@ -169,7 +168,7 @@ public sealed class PerformanceTests(SqlServerFixture fixture, ITestOutputHelper
             })));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task UploadAndDownload_ShouldStayWithinTheirBaselines_WhenTelemetryIsListening()
     {
         // The same operations as upload-16MiB and download-16MiB, with every span and measurement recorded, so the
@@ -219,7 +218,7 @@ public sealed class PerformanceTests(SqlServerFixture fixture, ITestOutputHelper
         }
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task GetResourceInfoAsync_ShouldStayWithinItsBaseline_WhenTheResourceExists()
     {
         IResourceContainerClient container = await NewContainerAsync();
@@ -228,7 +227,7 @@ public sealed class PerformanceTests(SqlServerFixture fixture, ITestOutputHelper
         await MeasureAsync("get-info", 0, run: _ => container.GetResourceInfoAsync("r"));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task GetResourcePageAsync_ShouldStayWithinItsBaseline_WhenReadingAPageFromTheMiddleOfFiveHundredResources()
     {
         // A page should cost what its own rows cost, wherever it starts, rather than reading the container up to it.
@@ -241,7 +240,7 @@ public sealed class PerformanceTests(SqlServerFixture fixture, ITestOutputHelper
         await MeasureAsync("list-page-100-of-500", 0, run: _ => container.GetResourcePageAsync(options, middle));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task GetResourceVersionsAsync_ShouldStayWithinItsBaseline_WhenTheResourceHasTwentyVersions()
     {
         IResourceContainerClient container = await NewContainerAsync(ownDatabase: "versions");
@@ -251,7 +250,7 @@ public sealed class PerformanceTests(SqlServerFixture fixture, ITestOutputHelper
         await MeasureAsync("versions-20", 0, run: _ => container.GetResourceVersionsAsync("r"));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task DeleteResourceIfExistsAsync_ShouldStayWithinItsBaseline_WhenDeletingSixteenMebibytes()
     {
         IResourceContainerClient container = await NewContainerAsync();
@@ -260,7 +259,7 @@ public sealed class PerformanceTests(SqlServerFixture fixture, ITestOutputHelper
         await MeasureAsync("delete-16MiB", 0, run: iteration => container.DeleteResourceIfExistsAsync($"r{iteration}"));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task DeleteResourceIfExistsAsync_ShouldStayWithinItsBaseline_WhenDeletingANameWithTwentyVersions()
     {
         // The versions go in batches that each commit, oldest first.
@@ -276,7 +275,7 @@ public sealed class PerformanceTests(SqlServerFixture fixture, ITestOutputHelper
             run: iteration => container.DeleteResourceIfExistsAsync($"r{iteration}"));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task UploadAsync_ShouldStayWithinItsBaseline_WhenReplacingSixteenMebibytesWithoutVersioning()
     {
         // Without versioning, the version replaced is deleted in the same upload: compare upload-16MiB and
@@ -290,7 +289,7 @@ public sealed class PerformanceTests(SqlServerFixture fixture, ITestOutputHelper
             run: _ => container.UploadAsync("r", new GeneratedStream(length), overwrite));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task UploadAsync_ShouldStayWithinItsBaseline_WhenTheContainerHasLimits()
     {
         // What checking a container's limits adds to an upload: compare upload-16MiB.
@@ -308,7 +307,7 @@ public sealed class PerformanceTests(SqlServerFixture fixture, ITestOutputHelper
             run: iteration => container.UploadAsync($"r{iteration}", new GeneratedStream(length)));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task RestoreVersionAsync_ShouldStayWithinItsBaseline_WhenRestoringSixteenMebibytes()
     {
         // A restore copies the old version's chunks in the database: compare copy-16MiB.
@@ -320,7 +319,7 @@ public sealed class PerformanceTests(SqlServerFixture fixture, ITestOutputHelper
         await MeasureAsync("restore-16MiB", length, run: _ => container.RestoreVersionAsync("r", first));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task MoveResourceAsync_ShouldStayWithinItsBaseline_WhenMovingSixteenMebibytes()
     {
         // A move changes only the versions' name, whatever their size.
@@ -332,7 +331,7 @@ public sealed class PerformanceTests(SqlServerFixture fixture, ITestOutputHelper
             run: iteration => container.MoveResourceAsync($"r{iteration}", containerName, $"moved{iteration}"));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task ExportAndImport_ShouldStayWithinTheirBaselines_WhenTheContainerHoldsSixteenMebibytes()
     {
         // In a database of its own, since both list the container's rows. Each resource a byte longer than the last, so
@@ -358,7 +357,7 @@ public sealed class PerformanceTests(SqlServerFixture fixture, ITestOutputHelper
         });
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task DeleteContainerIfExistsAsync_ShouldStayWithinItsBaseline_WhenTheContainerHoldsSixteenMebibytes()
     {
         // In a database of its own, since it lists the container's rows.
@@ -377,7 +376,7 @@ public sealed class PerformanceTests(SqlServerFixture fixture, ITestOutputHelper
             run: iteration => service.DeleteContainerIfExistsAsync(names[iteration]));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task DeleteExpiredAsync_ShouldStayWithinItsBaseline_WhenSixteenVersionsAreDue()
     {
         // Each repetition moves the clock an hour on, so the next group of 16 versions of 1 MiB becomes due. In a
@@ -401,7 +400,7 @@ public sealed class PerformanceTests(SqlServerFixture fixture, ITestOutputHelper
         });
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task UploadAsync_ShouldStayWithinItsBaseline_WhenEightClientsUploadDifferentNamesAtOnce()
     {
         IResourceContainerClient container = await NewContainerAsync();
@@ -412,7 +411,7 @@ public sealed class PerformanceTests(SqlServerFixture fixture, ITestOutputHelper
                 container.UploadAsync($"r{iteration}-{client}", new GeneratedStream(length)))));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task UploadAsync_ShouldStayWithinItsBaseline_WhenEightClientsUploadTheSameNameAtOnce()
     {
         // Each upload waits for the others' turn on the name's lock only to make its version current. A new name for

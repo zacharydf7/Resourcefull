@@ -14,7 +14,7 @@ namespace Resourcefull.Tests.Integration;
 [Collection(SqlServerCollection.Name)]
 public class ContentHashBackfillIntegrationTests(SqlServerFixture fixture)
 {
-    [SkippableFact]
+    [Fact]
     public async Task RunAsync_ShouldRecordEveryMissingHashAndReportWrongLengthsOnEveryRun_WhenRunTwice()
     {
         fixture.SkipIfUnavailable();
@@ -48,7 +48,7 @@ public class ContentHashBackfillIntegrationTests(SqlServerFixture fixture)
         }
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task RunAsync_ShouldKeepWhatItRecordedAndFinishWhenRunAgain_WhenStoppedPartway()
     {
         fixture.SkipIfUnavailable();
@@ -88,7 +88,7 @@ public class ContentHashBackfillIntegrationTests(SqlServerFixture fixture)
         }
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task RunAsync_ShouldSkipAVersionAndFinish_WhenTheVersionIsDeletedAfterTheRunFindsIt()
     {
         fixture.SkipIfUnavailable();

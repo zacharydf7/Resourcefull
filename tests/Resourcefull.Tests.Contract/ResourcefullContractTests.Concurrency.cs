@@ -8,7 +8,7 @@ public abstract partial class ResourcefullContractTests
     // so they genuinely race, then checks the state they leave behind.
     private const int Writers = 16;
 
-    [SkippableFact]
+    [Fact]
     public async Task UploadAsync_ShouldLetExactlyOneSucceed_WhenConcurrentCreateOnlyUploadsTargetOneName()
     {
         // Arrange
@@ -25,7 +25,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Single(await container.GetResourceVersionsAsync("report.txt"));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task UploadAsync_ShouldLetExactlyOneSucceed_WhenConcurrentUploadsWithNoModeTargetOneName()
     {
         // Arrange
@@ -41,7 +41,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Single(await container.ListResourcesAsync().ToListAsync());
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task UploadAsync_ShouldLeaveOneVersion_WhenConcurrentReplacingUploadsTargetOneNameWithoutVersioning()
     {
         // Arrange
@@ -58,7 +58,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Single(await container.ListResourcesAsync().ToListAsync());
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task UploadAsync_ShouldKeepEveryVersionWithOneCurrent_WhenConcurrentUploadsTargetOneName()
     {
         // Arrange
@@ -76,7 +76,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Single(await container.ListResourcesAsync().ToListAsync());
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task UploadAsync_ShouldLeaveMaxVersions_WhenConcurrentUploadsTargetOneName()
     {
         // Arrange
@@ -93,7 +93,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Single(versions, v => v.IsLatest);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task CreateContainerAsync_ShouldLetExactlyOneSucceed_WhenCalledConcurrently()
     {
         // Arrange
@@ -108,7 +108,7 @@ public abstract partial class ResourcefullContractTests
         Assert.All(outcomes.Where(o => o is not null), o => Assert.IsType<ResourceConflictException>(o));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task CreateContainerIfNotExistsAsync_ShouldSucceedForEveryCaller_WhenCalledConcurrently()
     {
         // Arrange

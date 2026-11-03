@@ -19,7 +19,7 @@ public class StagedUploadIntegrationTests(SqlServerFixture fixture)
         new byte[ResourceChunker.ChunkSize * ResourceSqlRepository.ChunksPerUploadBatch * 3];
     private const long PauseAt = ResourceChunker.ChunkSize * (ResourceSqlRepository.ChunksPerUploadBatch + 1L);
 
-    [SkippableFact]
+    [Fact]
     public async Task UploadAsync_ShouldShowNothingAndLockNothing_WhenItsContentIsStillArriving()
     {
         fixture.SkipIfUnavailable();
@@ -50,7 +50,7 @@ public class StagedUploadIntegrationTests(SqlServerFixture fixture)
         Assert.Equal(stored.VersionId, (await container.GetResourceInfoAsync("video.mp4"))!.VersionId);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task DeleteAbandonedUploadsAsync_ShouldDeleteOnlyWhatStoppedBeforeTheTimeGiven_WhenCalled()
     {
         fixture.SkipIfUnavailable();
@@ -78,7 +78,7 @@ public class StagedUploadIntegrationTests(SqlServerFixture fixture)
         Assert.Equal(0, await StoredRowsAsync(container.Name));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task UploadAsync_ShouldSayItsVersionWasDeleted_WhenTheStagedVersionIsDeletedPartway()
     {
         fixture.SkipIfUnavailable();
@@ -101,7 +101,7 @@ public class StagedUploadIntegrationTests(SqlServerFixture fixture)
         Assert.Equal(0, await StoredRowsAsync(container.Name));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task UploadAsync_ShouldLockNothing_WhenTheInspectorHasReadEverythingButNotYetAnswered()
     {
         fixture.SkipIfUnavailable();
@@ -132,7 +132,7 @@ public class StagedUploadIntegrationTests(SqlServerFixture fixture)
         Assert.Equal(Payload.Length, stored.ContentLength);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task UploadAsync_ShouldLeaveNothingBehind_WhenTheInspectorRefusesTheContentAtItsEnd()
     {
         fixture.SkipIfUnavailable();
@@ -153,7 +153,7 @@ public class StagedUploadIntegrationTests(SqlServerFixture fixture)
         Assert.Equal(0, await StoredRowsAsync(container.Name));
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task UploadAsync_ShouldLeaveNothingBehind_WhenCanceledPartway()
     {
         fixture.SkipIfUnavailable();

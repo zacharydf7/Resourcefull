@@ -34,7 +34,7 @@ public class SqlServerHealthCheckIntegrationTests(SqlServerFixture fixture)
         return connectionString;
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task AddResourcefullSqlServerCheck_ShouldReportHealthy_WhenTheDatabaseHasEveryMigration()
     {
         fixture.SkipIfUnavailable();
@@ -49,7 +49,7 @@ public class SqlServerHealthCheckIntegrationTests(SqlServerFixture fixture)
         Assert.Equal(HealthStatus.Healthy, entry.Status);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task AddResourcefullSqlServerCheck_ShouldReportUnhealthyNamingThem_WhenTheDatabaseIsMissingMigrations()
     {
         fixture.SkipIfUnavailable();
@@ -79,7 +79,7 @@ public class SqlServerHealthCheckIntegrationTests(SqlServerFixture fixture)
         await command.ExecuteNonQueryAsync();
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task AddResourcefullSqlServerCheck_ShouldReportDegraded_WhenANewerReleaseUpgradedTheDatabase()
     {
         fixture.SkipIfUnavailable();
@@ -96,7 +96,7 @@ public class SqlServerHealthCheckIntegrationTests(SqlServerFixture fixture)
         Assert.Equal(["29990101000000_Resourcefull_FromANewerRelease"], (string[])entry.Data["unknownMigrations"]);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task AddResourcefullSqlServerCheck_ShouldReportHealthy_WhenTheApplicationsOwnMigrationsShareTheHistory()
     {
         fixture.SkipIfUnavailable();
@@ -127,7 +127,7 @@ public class SqlServerHealthCheckIntegrationTests(SqlServerFixture fixture)
         Assert.Contains(ResourceDbContext.LastUnmarkedMigration, context.Database.GetMigrations());
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task AddResourcefullSqlServerCheck_ShouldReportUnhealthy_WhenTheServerCantBeReachedInTime()
     {
         fixture.SkipIfUnavailable();

@@ -22,7 +22,7 @@ public class PostgreSqlFixture : IAsyncLifetime
 
     /// <summary>Skips the calling test, rather than failing it, when no PostgreSQL server is named.</summary>
     public void SkipIfUnavailable() =>
-        Skip.IfNot(IsAvailable, $"No PostgreSQL server named. Set {ConnectionEnvVar} to run the PostgreSQL tests.");
+        Assert.SkipUnless(IsAvailable, $"No PostgreSQL server named. Set {ConnectionEnvVar} to run the PostgreSQL tests.");
 
     /// <summary>The connection string of the provisioned per-run test database.</summary>
     public string ConnectionString { get; private set; } = string.Empty;
@@ -30,7 +30,7 @@ public class PostgreSqlFixture : IAsyncLifetime
     /// <summary>The schema given to <c>UsePostgreSql</c>; <see langword="null"/> leaves the tables in <c>public</c>.</summary>
     public virtual string? Schema => null;
 
-    public async Task InitializeAsync()
+    public async ValueTask InitializeAsync()
     {
         string? environment = Environment.GetEnvironmentVariable(ConnectionEnvVar);
         if (string.IsNullOrWhiteSpace(environment)) return;
@@ -46,7 +46,7 @@ public class PostgreSqlFixture : IAsyncLifetime
         IsAvailable = true;
     }
 
-    public async Task DisposeAsync()
+    public async ValueTask DisposeAsync()
     {
         if (_databaseNames.Count == 0) return;
         NpgsqlConnection.ClearAllPools();
