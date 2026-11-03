@@ -42,11 +42,12 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
 
     /// <summary>
     /// How many chunks one statement deletes. SQL Server locks the whole chunk table, holding up every upload, once a
-    /// statement holds 5,000 locks on the chunks' rows: one per chunk, since the locks on their content pages don't count
-    /// toward it. A version with more chunks than this has them deleted this many at a time before it goes; a smaller one
-    /// takes them with it.
+    /// statement holds 5,000 locks on it. That's usually one lock per chunk, but SQL Server 2019 can also lock a chunk's
+    /// content pages, about five for a full one: deleting 999 full chunks took 6,240 locks there once the table held
+    /// other versions' chunks. 500 stays well under, at about 3,100. A version with more chunks than this has them
+    /// deleted this many at a time before it goes; a smaller one takes them with it.
     /// </summary>
-    internal const int ChunksPerDeleteStatement = 1_000;
+    internal const int ChunksPerDeleteStatement = 500;
 
     /// <summary>
     /// The error a name's lock raises when SQL Server chooses it as a deadlock victim, or it times out: transient, like a
@@ -1082,7 +1083,8 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
 
     /// <summary>
     /// Deletes a version's chunks a statement at a time, in the caller's transaction, before the version itself goes:
-    /// deleting thousands of chunks in one statement, as the cascade would, locks the whole chunk table.
+    /// deleting more than <see cref="ChunksPerDeleteStatement"/> chunks in one statement, as the cascade would, can lock
+    /// the whole chunk table.
     /// </summary>
     private async Task DeleteChunksAsync(ResourceDbContext dbContext, long resourceId, CancellationToken cancellationToken)
     {

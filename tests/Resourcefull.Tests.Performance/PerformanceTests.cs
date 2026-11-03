@@ -42,7 +42,8 @@ public sealed class PerformanceTests(SqlServerFixture fixture, ITestOutputHelper
     [InlineData(64)]
     public async Task UploadAsync_ShouldStayWithinItsBaseline_WhenGivenContentOfThisManyMebibytes(int mebibytes)
     {
-        IResourceContainerClient container = await NewContainerAsync();
+        // In a database of its own: an upload's reads grow with the chunk table, so they'd depend on the scenarios before it.
+        IResourceContainerClient container = await NewContainerAsync(ownDatabase: $"upload-{mebibytes}");
         long length = (long)mebibytes * Mebibyte;
 
         await MeasureAsync($"upload-{mebibytes}MiB", length,
@@ -172,8 +173,8 @@ public sealed class PerformanceTests(SqlServerFixture fixture, ITestOutputHelper
     public async Task UploadAndDownload_ShouldStayWithinTheirBaselines_WhenTelemetryIsListening()
     {
         // The same operations as upload-16MiB and download-16MiB, with every span and measurement recorded, so the
-        // cost of telemetry while it's in use is held to a budget too.
-        IResourceContainerClient container = await NewContainerAsync();
+        // cost of telemetry while it's in use is held to a budget too. In a database of its own, as upload-16MiB is.
+        IResourceContainerClient container = await NewContainerAsync(ownDatabase: "traced");
         long length = 16L * Mebibyte;
         using TelemetryListeners listening = new();
 
@@ -279,8 +280,8 @@ public sealed class PerformanceTests(SqlServerFixture fixture, ITestOutputHelper
     public async Task UploadAsync_ShouldStayWithinItsBaseline_WhenReplacingSixteenMebibytesWithoutVersioning()
     {
         // Without versioning, the version replaced is deleted in the same upload: compare upload-16MiB and
-        // delete-16MiB.
-        IResourceContainerClient container = await NewContainerAsync(versioned: false);
+        // delete-16MiB. In a database of its own, as upload-16MiB is.
+        IResourceContainerClient container = await NewContainerAsync(ownDatabase: "overwrite", versioned: false);
         long length = 16L * Mebibyte;
         var overwrite = new ResourceUploadOptions { Mode = ResourceWriteMode.Replace };
         await container.UploadAsync("r", new GeneratedStream(length));
@@ -292,7 +293,7 @@ public sealed class PerformanceTests(SqlServerFixture fixture, ITestOutputHelper
     [Fact]
     public async Task UploadAsync_ShouldStayWithinItsBaseline_WhenTheContainerHasLimits()
     {
-        // What checking a container's limits adds to an upload: compare upload-16MiB.
+        // What checking a container's limits adds to an upload: compare upload-16MiB, which has a database of its own too.
         var limits = new ResourceContainerPolicy
         {
             MaxResourceSize = ResourceSize.Megabytes(64),
@@ -300,7 +301,7 @@ public sealed class PerformanceTests(SqlServerFixture fixture, ITestOutputHelper
             MaxResourceCount = 1_000
         };
         IResourceContainerClient container =
-            await NewContainerAsync(configure: options => options.UseContainerPolicies(limits));
+            await NewContainerAsync(ownDatabase: "limits", configure: options => options.UseContainerPolicies(limits));
         long length = 16L * Mebibyte;
 
         await MeasureAsync("upload-16MiB-with-limits", length,
