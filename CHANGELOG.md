@@ -11,6 +11,13 @@
   lists names in Unicode code point order, and refuses U+0000 in the names, version IDs and content types it stores.
   `AddResourcefullPostgreSqlCheck` is its health check, and it counts retries and abandoned uploads in
   `resourcefull.postgresql.*`. It's tested against PostgreSQL 16 and 17. See [PostgreSQL](docs/providers/postgresql.md).
+- **SQLite.** The new `Resourcefull.Sqlite` package stores resources in a SQLite database file, with no server to run,
+  and does everything the other providers do: `UseSqlite(connectionString, configure)` registers it,
+  `MigrateResourcefullDatabaseAsync` provisions it and turns on write-ahead logging, and `AddResourcefullSqliteCheck` is
+  its health check. It's built on the same EF Core code as the SQL Server and PostgreSQL providers. Each write takes the
+  database's write lock as it begins, so writers take turns. Times are stored as UTC ticks, which keeps their full
+  precision. Like PostgreSQL, it lists names in Unicode code point order and refuses U+0000. It counts abandoned uploads
+  in `resourcefull.sqlite.abandoned_uploads`. See [SQLite](docs/providers/sqlite.md).
 - **File-system storage.** The new `Resourcefull.FileSystem` package stores resources as files in a directory, on a
   local disk or a network share, with no database or storage service: `UseFileSystem(rootPath)` registers it. It works
   as the S3 and Azure Blob providers do and shares their code, so it supports everything they do. Each write goes to a

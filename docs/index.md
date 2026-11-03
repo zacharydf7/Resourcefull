@@ -39,6 +39,7 @@ ResourceDownloadResult? download = await invoices.DownloadStreamingAsync("2026/1
 | `Resourcefull` | The client API every application uses. |
 | `Resourcefull.SqlServer` | Stores files in a SQL Server database. Use it in production. |
 | `Resourcefull.PostgreSql` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | Stores files in a PostgreSQL database. Use it in production. |
+| `Resourcefull.Sqlite` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | Stores files in a SQLite database file, with no server to run. |
 | `Resourcefull.FileSystem` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | Stores files in a directory, on a local disk or a network share. Use it in production. |
 | `Resourcefull.S3` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | Stores files in Amazon S3 or another S3-compatible object store. Use it in production. |
 | `Resourcefull.AzureBlob` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | Stores files in Azure Blob Storage. Use it in production. |
@@ -57,6 +58,7 @@ ResourceDownloadResult? download = await invoices.DownloadStreamingAsync("2026/1
 - **Managing storage:** [container policies](container-policies.md) for quotas and file types,
   [expiring resources](expiry.md), and [backing up and moving containers](backup-and-move.md).
 - **Running in production:** setting up [SQL Server](providers/sql-server.md), [PostgreSQL](providers/postgresql.md),
+  [SQLite](providers/sqlite.md),
   [the file system](providers/file-system.md),
   [S3-compatible storage](providers/s3.md) or [Azure Blob Storage](providers/azure-blob.md),
   [health checks](health-checks.md),

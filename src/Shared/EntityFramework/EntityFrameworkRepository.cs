@@ -70,6 +70,20 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
     /// <summary>Whether a failure, or the one it wraps, is the database refusing a row a unique index already has.</summary>
     protected abstract bool IsUniqueViolation(Exception exception);
 
+    /// <summary>
+    /// The versions whose names start with <paramref name="prefix"/>, matched ordinally and case-sensitively, as EF
+    /// Core's <c>LIKE</c> matches them with SQL Server's and PostgreSQL's collations. A provider whose database's
+    /// <c>LIKE</c> ignores case overrides this to narrow the match. The caller also bounds the query by
+    /// <paramref name="afterName"/>, the name a listing continues after, if any.
+    /// </summary>
+    protected virtual IQueryable<ResourceModel> WithNamePrefix(IQueryable<ResourceModel> query, string prefix, string? afterName) =>
+        query.Where(r => r.Name.StartsWith(prefix));
+
+    /// <summary>The containers whose names start with <paramref name="prefix"/>, as <see cref="WithNamePrefix"/> matches names.</summary>
+    protected virtual IQueryable<ResourceContainerModel> WithContainerPrefix(IQueryable<ResourceContainerModel> query, string prefix,
+        string? afterName) =>
+        query.Where(c => c.Name.StartsWith(prefix));
+
     /// <summary>Counts the abandoned uploads' versions a sweep deleted, in the provider's own telemetry.</summary>
     protected abstract void CountAbandonedUploads(int deleted);
 
@@ -947,7 +961,7 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
         // A seek on the current-versions index, which holds (ContainerName, Name) in the names' binary order: the
         // prefix and the name to continue after bound the range, so a page reads only its own rows.
         IQueryable<ResourceModel> current = dbContext.Resources.Where(r => r.ContainerName == resourceContainerName && r.IsLatest);
-        if (prefix is not null) current = current.Where(r => r.Name.StartsWith(prefix));
+        if (prefix is not null) current = WithNamePrefix(current, prefix, afterName);
         if (afterName is not null) current = current.Where(r => string.Compare(r.Name, afterName) > 0);
 
         return await current
@@ -1506,7 +1520,7 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
 
         // Seeks on the primary key, which holds the names in their binary order, as GetResourcePageAsync does.
         IQueryable<ResourceContainerModel> containers = dbContext.ResourceContainers;
-        if (prefix is not null) containers = containers.Where(c => c.Name.StartsWith(prefix));
+        if (prefix is not null) containers = WithContainerPrefix(containers, prefix, afterName);
         if (afterName is not null) containers = containers.Where(c => string.Compare(c.Name, afterName) > 0);
 
         return await containers

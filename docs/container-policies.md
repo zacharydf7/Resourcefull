@@ -166,8 +166,8 @@ IReadOnlyList<ResourceInfo> largest = await container.GetTopVersionsAsync(Resour
 // Each one's Name, VersionId, ContentLength, and IsLatest: false for an older version
 ```
 
-It's meant for an administrator looking now and then, such as on the [dashboard](aspnet-core/dashboard.md), not
-for every request: it reads all of the container's versions, in one query with SQL Server and PostgreSQL.
+It's meant for an administrator looking now and then, such as on the [dashboard](aspnet-core/dashboard.md), not for
+every request: it reads all of the container's versions, in one query with SQL Server, PostgreSQL and SQLite.
 
 ## Over HTTP
 

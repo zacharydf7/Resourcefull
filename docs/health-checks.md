@@ -13,6 +13,10 @@ builder.Services.AddHealthChecks()
 builder.Services.AddHealthChecks()
     .AddResourcefullPostgreSqlCheck(tags: ["ready"]);
 
+// or, with SQLite:
+builder.Services.AddHealthChecks()
+    .AddResourcefullSqliteCheck(tags: ["ready"]);
+
 // or, with any provider:
 builder.Services.AddHealthChecks()
     .AddResourcefullCheck(tags: ["ready"]);

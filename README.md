@@ -16,6 +16,7 @@ anywhere else.
 | `Resourcefull` | The clients and the provider interface. |
 | `Resourcefull.SqlServer` | Stores resources in SQL Server. |
 | `Resourcefull.PostgreSql` | Stores resources in PostgreSQL. |
+| `Resourcefull.Sqlite` | Stores resources in a SQLite database file. |
 | `Resourcefull.FileSystem` | Stores resources in a directory, on a local disk or a network share. |
 | `Resourcefull.S3` | Stores resources in Amazon S3 or another S3-compatible store. |
 | `Resourcefull.AzureBlob` | Stores resources in Azure Blob Storage. |
@@ -106,6 +107,8 @@ you're trying to do, plus the API reference. Deciding between Resourcefull, obje
   and upgrades
 - [PostgreSQL](https://zacharydf7.github.io/Resourcefull/docs/providers/postgresql.html): provisioning, permissions
   and how it differs from SQL Server
+- [SQLite](https://zacharydf7.github.io/Resourcefull/docs/providers/sqlite.html): choosing the file, one writer at a
+  time, provisioning and backups
 - [File system](https://zacharydf7.github.io/Resourcefull/docs/providers/file-system.html): choosing a directory,
   sharing it between servers, backups and costs
 - [S3-compatible storage](https://zacharydf7.github.io/Resourcefull/docs/providers/s3.html): connecting to a store,

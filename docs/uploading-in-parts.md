@@ -8,8 +8,8 @@ instead. What has arrived stays stored, so after a dropped connection, or even a
 asks how much is stored and carries on from there. Nothing shows the new version until the session is completed,
 and then it becomes the name's current version all at once, as an upload's does.
 
-Every built-in provider supports sessions: SQL Server, PostgreSQL, the [file system](providers/file-system.md),
-[S3](providers/s3.md), [Azure Blob](providers/azure-blob.md) and in-memory.
+Every built-in provider supports sessions: SQL Server, PostgreSQL, [SQLite](providers/sqlite.md),
+the [file system](providers/file-system.md), [S3](providers/s3.md), [Azure Blob](providers/azure-blob.md) and in-memory.
 
 ## A session from start to finish
 
@@ -42,9 +42,9 @@ ResourceInfo? stored = await container.CompleteUploadAsync("video.mp4", upload.U
 
 ## Resuming after a failure
 
-An append stores its part as it arrives, about a MiB at a time with SQL Server and PostgreSQL and up to 64 MiB at a time
-with the file system, S3 and Azure Blob, so an append that fails partway keeps what it stored. (The in-memory provider
-stores an append whole or not at all.) To resume, ask the session where it ended, and send the rest from there:
+An append stores its part as it arrives, about a MiB at a time with SQL Server, PostgreSQL and SQLite and up to 64 MiB
+at a time with the file system, S3 and Azure Blob, so an append that fails partway keeps what it stored. (The in-memory
+provider stores an append whole or not at all.) To resume, ask the session where it ended, and send the rest from there:
 
 ```csharp
 ResourceUpload? current = await container.GetUploadAsync("video.mp4", uploadId);

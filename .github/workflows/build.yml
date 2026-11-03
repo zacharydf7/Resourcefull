@@ -31,11 +31,13 @@ jobs:
       run: |
         dotnet test tests/Resourcefull.Tests.Unit --no-build --configuration Release
         dotnet test tests/Resourcefull.Tests.AspNetCore --no-build --configuration Release
+        dotnet test tests/Resourcefull.Tests.Sqlite --no-build --configuration Release
     - name: Create NuGet packages
       run: |
         dotnet pack src/Resourcefull --no-build -c Release --output ./nupkg
         dotnet pack src/Resourcefull.SqlServer --no-build -c Release --output ./nupkg
         dotnet pack src/Resourcefull.PostgreSql --no-build -c Release --output ./nupkg
+        dotnet pack src/Resourcefull.Sqlite --no-build -c Release --output ./nupkg
         dotnet pack src/Resourcefull.S3 --no-build -c Release --output ./nupkg
         dotnet pack src/Resourcefull.AzureBlob --no-build -c Release --output ./nupkg
         dotnet pack src/Resourcefull.FileSystem --no-build -c Release --output ./nupkg

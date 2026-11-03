@@ -95,6 +95,21 @@ public abstract partial class ResourcefullContractTests
     }
 
     [Fact]
+    public async Task ListResourcesAsync_ShouldMatchThePrefixCaseSensitively_WhenNamesDifferFromItOnlyInCase()
+    {
+        // Arrange: names that SQL's LIKE, which ignores the case of ASCII letters in some databases, would take as matches.
+        using ServiceProvider provider = BuildServiceProvider();
+        IResourceContainerClient container = await NewContainerAsync(provider);
+        await UploadAllAsync(container, "a/x", "A/y", "a/Z", "B/a");
+
+        // Act
+        List<string> listed = await ListNamesAsync(container, new ResourceListOptions { Prefix = "a/" });
+
+        // Assert
+        Assert.Equal(["a/Z", "a/x"], listed);
+    }
+
+    [Fact]
     public async Task ListResourcesAsync_ShouldMatchWildcardCharactersLiterally_WhenThePrefixHoldsThem()
     {
         // Arrange: characters that are wildcards in SQL's LIKE.

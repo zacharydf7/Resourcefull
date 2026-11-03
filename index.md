@@ -21,7 +21,7 @@ Storage instead.</p>
 <a class="rf-btn rf-btn-secondary" href="https://github.com/zacharydf7/Resourcefull"><i class="bi bi-github"></i> GitHub</a>
 </div>
 <div class="rf-install">$ <b>dotnet add package</b> <span class="rf-install-name"
-data-packages="Resourcefull.SqlServer Resourcefull.PostgreSql Resourcefull.FileSystem Resourcefull.S3 Resourcefull.AzureBlob Resourcefull.InMemory Resourcefull.AspNetCore">Resourcefull.SqlServer</span></div>
+data-packages="Resourcefull.SqlServer Resourcefull.PostgreSql Resourcefull.Sqlite Resourcefull.FileSystem Resourcefull.S3 Resourcefull.AzureBlob Resourcefull.InMemory Resourcefull.AspNetCore">Resourcefull.SqlServer</span></div>
 </div>
 <div class="rf-code">
 <div class="rf-code-bar"><i></i><i></i><i></i><span>Program.cs</span></div>
@@ -142,6 +142,7 @@ storage is down.</p>
 <h3>Running in production</h3>
 <ul>
 <li><a href="docs/providers/sql-server.md">Setting up SQL Server</a>, <a href="docs/providers/postgresql.md">PostgreSQL</a>,
+<a href="docs/providers/sqlite.md">SQLite</a>,
 <a href="docs/providers/file-system.md">the file system</a>, <a href="docs/providers/s3.md">S3-compatible storage</a> or
 <a href="docs/providers/azure-blob.md">Azure Blob Storage</a></li>
 <li><a href="docs/health-checks.md">Health checks</a> and <a href="docs/telemetry.md">telemetry</a></li>
@@ -185,6 +186,11 @@ retries built in.</p>
 <h3><i class="bi bi-database"></i>PostgreSQL</h3>
 <p><code>Resourcefull.PostgreSql</code> for production on PostgreSQL: the same chunked streaming, transactions,
 migrations and retries.</p>
+</a>
+<a class="rf-card" href="docs/providers/sqlite.md">
+<h3><i class="bi bi-database"></i>SQLite</h3>
+<p><code>Resourcefull.Sqlite</code> for a single database file, with no server to run: desktop and edge applications,
+a single server, and tests.</p>
 </a>
 <a class="rf-card" href="docs/providers/file-system.md">
 <h3><i class="bi bi-folder"></i>File system</h3>

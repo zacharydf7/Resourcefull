@@ -186,10 +186,10 @@ is up to 50 small queries on top of the listing. Usage adds up the container's v
 container holds, the longer its query takes.
 
 The largest and expiring lists read every version in the container, since neither order has an index of its own. With
-SQL Server and PostgreSQL, each list is one query over the container's version rows, much like its usage, without
-reading any content, and the expiry count is one read of the index of versions that expire, the same read the sweep
-starts with. With the in-memory and S3 providers, the lists are built by reading the container's versions a page of
-names at a time.
+SQL Server, PostgreSQL and SQLite, each list is one query over the container's version rows, much like its usage,
+without reading any content, and the expiry count is one read of the index of versions that expire, the same read the
+sweep starts with. With the in-memory and S3 providers, the lists are built by reading the container's versions a page
+of names at a time.
 
 The dashboard is built for someone looking now and then, not for a wall display refreshing every few seconds.
 

@@ -48,6 +48,22 @@ public abstract partial class ResourcefullContractTests
     }
 
     [Fact]
+    public async Task ListContainersAsync_ShouldMatchThePrefixCaseSensitively_WhenNamesDifferFromItOnlyInCase()
+    {
+        // Arrange
+        using ServiceProvider provider = BuildServiceProvider();
+        IResourceServiceClient service = ServiceOf(provider);
+        string prefix = NewContainerName();
+        await CreateAllAsync(service, prefix, "-user-1", "-User-2", "-USER-3");
+
+        // Act
+        List<ContainerInfo> listed = await ListContainersAsync(service, prefix + "-user-");
+
+        // Assert
+        Assert.Equal([prefix + "-user-1"], listed.Select(c => c.Name));
+    }
+
+    [Fact]
     public async Task GetContainerPageAsync_ShouldReturnNoContinuationToken_WhenThePageIsTheLast()
     {
         // Arrange: containers that fill the pages exactly, so the last page is full.

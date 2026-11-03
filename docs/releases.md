@@ -9,8 +9,8 @@ the [changelog](../CHANGELOG.md).
 
 The biggest release so far, documented here already:
 
-- **[Four new places to store files](providers/features.md):** [PostgreSQL](providers/postgresql.md),
-  [a directory on a disk or file share](providers/file-system.md),
+- **[Five new places to store files](providers/features.md):** [PostgreSQL](providers/postgresql.md),
+  [SQLite](providers/sqlite.md), [a directory on a disk or file share](providers/file-system.md),
   [Amazon S3 or another S3-compatible store](providers/s3.md) and [Azure Blob Storage](providers/azure-blob.md), each
   with every feature, so moving from your own servers to the cloud takes changing one line.
 - **[Uploading in parts](uploading-in-parts.md):** a large file arrives over several requests, and what's arrived
@@ -74,7 +74,6 @@ Coming from 1.x or 2.x? See [Upgrading to 3.0](upgrading-to-3.md). See the
 These are plans, not promises: the order can change, and nothing has a date. Each links to its issue on GitHub, where a
 comment saying you need it helps decide what comes first.
 
-- **Another place to store files:** a [SQLite provider](https://github.com/zacharydf7/Resourcefull/issues/118).
 - **Managing files:** [finding files by metadata](https://github.com/zacharydf7/Resourcefull/issues/57),
   [soft delete, retention and legal holds](https://github.com/zacharydf7/Resourcefull/issues/56), and
   [storing identical content once](https://github.com/zacharydf7/Resourcefull/issues/58).
