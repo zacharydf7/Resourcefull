@@ -365,25 +365,9 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : R
         };
 
     private static void ThrowIfNotMet(ResourceConditions conditions, string resourceContainerName, string resourceName,
-        InMemoryResource? current)
-    {
-        if (conditions.IfMatchVersionId is null && conditions.IfMatchContentHash is null) return;
-
-        string? versionId = current?.ResourceInfo.VersionId, contentHash = current?.ResourceInfo.ContentHash;
-        if (current is null
-            || (conditions.IfMatchVersionId is { } id && id != versionId)
-            || (conditions.IfMatchContentHash is { } hash && hash != contentHash))
-        {
-            throw new ResourcePreconditionFailedException(current is null
-                ? $"The resource {resourceName} in the container {resourceContainerName} has no current version to " +
-                    "meet the conditions."
-                : $"The current version {versionId} of the resource {resourceName} in the container " +
-                    $"{resourceContainerName} doesn't meet the conditions.", versionId, contentHash)
-            {
-                ContainerName = resourceContainerName, ResourceName = resourceName
-            };
-        }
-    }
+        InMemoryResource? current) =>
+        conditions.ThrowIfNotMet(new ResourceLocation(resourceContainerName, resourceName), current?.ResourceInfo.VersionId,
+            current?.ResourceInfo.ContentHash);
 
     private List<InMemoryResource> VersionsOf(string resourceContainerName, string resourceName) =>
         _containers.GetValueOrDefault(resourceContainerName)?.Resources.GetValueOrDefault(resourceName) ?? [];

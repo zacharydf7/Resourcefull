@@ -487,8 +487,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
                 if (current is null) return moved;
                 if (sourceConditions is not null)
                 {
-                    ThrowIfNotMet(sourceConditions, source.ContainerName, source.ResourceName, current.VersionId,
-                        current.ContentHash);
+                    sourceConditions.ThrowIfNotMet(source, current.VersionId, current.ContentHash);
                 }
                 if (await attempt.Resources.AnyAsync(r => r.ContainerName == destination.ContainerName && r.Name == destination.ResourceName, ct).ConfigureAwait(false))
                     throw ResourceExists(destination.ContainerName, destination.ResourceName);
@@ -526,7 +525,8 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
         if (condition.Conditions is { } conditions)
         {
             ResourceModel? current = priorLatest.FirstOrDefault();
-            ThrowIfNotMet(conditions, resourceContainerName, resourceName, current?.VersionId, current?.ContentHash);
+            conditions.ThrowIfNotMet(new ResourceLocation(resourceContainerName, resourceName), current?.VersionId,
+                current?.ContentHash);
         }
         return priorLatest;
     }
@@ -698,38 +698,14 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
     private static async Task ThrowIfNotMetAsync(ResourceDbContext dbContext, ResourceConditions conditions,
         string resourceContainerName, string resourceName, CancellationToken cancellationToken)
     {
-        if (conditions.IfMatchVersionId is null && conditions.IfMatchContentHash is null) return;
+        if (conditions.IsEmpty) return;
 
         var current = await dbContext.Resources
             .Where(r => r.ContainerName == resourceContainerName && r.Name == resourceName && r.IsLatest)
             .Select(r => new { r.VersionId, r.ContentHash })
             .FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
-        ThrowIfNotMet(conditions, resourceContainerName, resourceName, current?.VersionId, current?.ContentHash);
-    }
-
-    /// <summary>
-    /// A <see langword="null"/> <paramref name="currentVersionId"/> means the name has no current version, which meets
-    /// no condition; empty conditions are no conditions.
-    /// </summary>
-    private static void ThrowIfNotMet(ResourceConditions conditions, string resourceContainerName, string resourceName,
-        string? currentVersionId, string? currentContentHash)
-    {
-        if (conditions.IfMatchVersionId is null && conditions.IfMatchContentHash is null) return;
-
-        if (currentVersionId is null
-            || (conditions.IfMatchVersionId is { } id && id != currentVersionId)
-            || (conditions.IfMatchContentHash is { } hash && hash != currentContentHash))
-        {
-            throw new ResourcePreconditionFailedException(currentVersionId is null
-                ? $"The resource {resourceName} in the container {resourceContainerName} has no current version to " +
-                    "meet the conditions."
-                : $"The current version {currentVersionId} of the resource {resourceName} in the container " +
-                    $"{resourceContainerName} doesn't meet the conditions.",
-                currentVersionId, currentContentHash)
-            {
-                ContainerName = resourceContainerName, ResourceName = resourceName
-            };
-        }
+        conditions.ThrowIfNotMet(new ResourceLocation(resourceContainerName, resourceName), current?.VersionId,
+            current?.ContentHash);
     }
 
     private static ResourceConflictException ResourceExists(string resourceContainerName, string resourceName) =>

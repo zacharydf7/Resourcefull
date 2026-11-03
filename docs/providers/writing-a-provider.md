@@ -48,7 +48,9 @@ The XML documentation on each member states its contract in full. In short, a pr
   them at the moment the version would become current, or under whatever serializes writes to the name.
 - **Treat a name with no current version as meeting no condition,** and empty conditions as none. A write that fails
   its conditions throws `ResourcePreconditionFailedException` with the current version's ID and content hash, and
-  changes nothing.
+  changes nothing. `ResourceConditions.ThrowIfNotMet(resource, currentVersionId, currentContentHash)`
+  <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> does exactly this check, so call it with the
+  current version the write reads; `IsEmpty` tells you when there's nothing to check.
 - **Measure what it stores.** Read the content through a `HashingStream`, store the length it measured, and return
   `HashingStream.Complete(declaredLength, lastModified)`, which also rejects a wrong declared length. Call it as the
   write makes the version current but before it commits, so a wrong length stores nothing.

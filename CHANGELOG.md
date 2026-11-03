@@ -11,6 +11,11 @@
   lists names in Unicode code point order, and refuses U+0000 in the names, version IDs and content types it stores.
   `AddResourcefullPostgreSqlCheck` is its health check, and it counts retries and abandoned uploads in
   `resourcefull.postgresql.*`. It's tested against PostgreSQL 16 and 17. See [PostgreSQL](docs/providers/postgresql.md).
+- **A conditions check for providers.** `ResourceConditions.ThrowIfNotMet(resource, currentVersionId,
+  currentContentHash)` makes the check every provider must make when a write has conditions: given the current version
+  the write read, it throws `ResourcePreconditionFailedException` if they aren't met. A provider can call it instead of
+  writing its own check, and the built-in providers now do. `ResourceConditions.IsEmpty` is public too. See
+  [Writing a provider](docs/providers/writing-a-provider.md#the-contract).
 - **The contract tests as a package.** `Resourcefull.Testing` holds the tests every provider must pass, as an
   abstract xUnit v3 class (`xunit.v3` 4.0.2 or later): derive from `ResourcefullContractTests`, register your
   provider, and the suite runs against it. For each optional feature a provider leaves out (container metadata,

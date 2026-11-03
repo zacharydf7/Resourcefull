@@ -129,4 +129,72 @@ public class ResourceConditionsTests
         // Assert
         Assert.True(deleted);
     }
+
+    private static readonly ResourceLocation Name = new(Container, "r");
+
+    [Theory]
+    [InlineData("v1", null)]
+    [InlineData(null, "sha256:a")]
+    [InlineData("v1", "sha256:a")]
+    public void ThrowIfNotMet_ShouldReturn_WhenTheCurrentVersionMeetsEverySetCondition(string? versionId, string? hash)
+    {
+        // Arrange
+        var conditions = new ResourceConditions { IfMatchVersionId = versionId, IfMatchContentHash = hash };
+
+        // Act & Assert: it returns rather than throwing.
+        conditions.ThrowIfNotMet(Name, "v1", "sha256:a");
+    }
+
+    [Theory]
+    [InlineData("v2", null)]
+    [InlineData(null, "sha256:b")]
+    [InlineData("v1", "sha256:b")]
+    public void ThrowIfNotMet_ShouldThrowNamingTheCurrentVersion_WhenAConditionIsNotMet(string? versionId, string? hash)
+    {
+        // Arrange
+        var conditions = new ResourceConditions { IfMatchVersionId = versionId, IfMatchContentHash = hash };
+
+        // Act
+        var exception = Assert.Throws<ResourcePreconditionFailedException>(() => conditions.ThrowIfNotMet(Name, "v1", "sha256:a"));
+
+        // Assert
+        Assert.Equal(("v1", "sha256:a"), (exception.CurrentVersionId, exception.CurrentContentHash));
+        Assert.Equal((Container, "r"), (exception.ContainerName, exception.ResourceName));
+    }
+
+    [Fact]
+    public void ThrowIfNotMet_ShouldThrow_WhenTheNameHasNoCurrentVersion()
+    {
+        // Arrange
+        var conditions = new ResourceConditions { IfMatchContentHash = "sha256:a" };
+
+        // Act
+        var exception = Assert.Throws<ResourcePreconditionFailedException>(() => conditions.ThrowIfNotMet(Name, null, null));
+
+        // Assert
+        Assert.Null(exception.CurrentVersionId);
+    }
+
+    [Fact]
+    public void ThrowIfNotMet_ShouldThrow_WhenGivenAHashConditionAndACurrentVersionWithoutAHash()
+    {
+        // Arrange: a version stored before 3.0 has no hash until it's backfilled, so it meets no hash condition.
+        var conditions = new ResourceConditions { IfMatchContentHash = "sha256:a" };
+
+        // Act
+        var exception = Assert.Throws<ResourcePreconditionFailedException>(() => conditions.ThrowIfNotMet(Name, "v1", null));
+
+        // Assert
+        Assert.Equal(("v1", null), (exception.CurrentVersionId, exception.CurrentContentHash));
+    }
+
+    [Fact]
+    public void ThrowIfNotMet_ShouldReturn_WhenTheConditionsAreEmptyAndTheNameHasNoCurrentVersion()
+    {
+        // Arrange
+        var conditions = new ResourceConditions();
+
+        // Act & Assert: it returns rather than throwing.
+        conditions.ThrowIfNotMet(Name, null, null);
+    }
 }
