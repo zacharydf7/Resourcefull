@@ -65,7 +65,9 @@ internal sealed partial class ObjectStoreRepository
 
     /// <summary>
     /// Stores the content in segments of up to <see cref="SegmentSize"/>, adding each to the session's record once it's
-    /// stored. A short last segment is read back and stored again with the start of the content, in its place.
+    /// stored. A short last segment is read back and stored again with the start of the content, in its place. Once the
+    /// segments take as many parts as the store joins, those since the last such join are joined into one in the store,
+    /// so the session holds as much as one upload can.
     /// </summary>
     public override async Task<long?> AppendStagedContentAsync(ResourceLocation resource, string versionId, long offset, Stream content,
         CancellationToken cancellationToken = default)
@@ -83,9 +85,23 @@ internal sealed partial class ObjectStoreRepository
             {
                 Segment? tail = record.Segments is [.., { Length: < ShortestSegment } last] ? last : null;
                 int tailLength = (int)(tail?.Length ?? 0);
-                int peeked = await content.ReadAsync(peek.AsMemory(0, PeekSize), cancellationToken).ConfigureAwait(false);
-                if (peeked == 0) return length;
-                if (tail is null && record.Segments.Count >= store.MaxJoinedParts) throw TooManyParts(resource, versionId);
+                // Take no more than one object holds, so the session can always be completed.
+                long room = store.MaxObjectLength - length;
+                int peeked = room <= 0 ? 0
+                    : await content.ReadAsync(peek.AsMemory(0, (int)Math.Min(PeekSize, room)), cancellationToken).ConfigureAwait(false);
+                if (peeked == 0)
+                {
+                    if (room > 0 || await content.ReadAsync(peek.AsMemory(0, 1), cancellationToken).ConfigureAwait(false) == 0)
+                        return length;
+                    throw SessionFull(resource, versionId, length);
+                }
+                if (tail is null && PartCount(record.Segments) >= store.MaxJoinedParts)
+                {
+                    if (await JoinSegmentsAsync(resource, containerId!, versionId, length, record, cancellationToken).ConfigureAwait(false)
+                        is not { } joined)
+                        return null;
+                    record = joined;
+                }
                 if (tail is not null)
                 {
                     tailBytes ??= ArrayPool<byte>.Shared.Rent(ShortestSegment);
@@ -101,12 +117,12 @@ internal sealed partial class ObjectStoreRepository
                 string token = Guid.NewGuid().ToString("N");
                 string key = _keys.UploadSegment(containerId!, versionId, token);
                 var segment = new SegmentStream(tail is null ? default : tailBytes.AsMemory(0, tailLength), peek.AsMemory(0, peeked),
-                    content, SegmentSize - tailLength - peeked);
+                    content, Math.Min(SegmentSize - tailLength, room) - peeked);
                 await store.UploadAsync(key, segment, cancellationToken).ConfigureAwait(false);
                 long added = peeked + segment.FromContent;
                 try
                 {
-                    record = await AddSegmentAsync(resource, containerId!, versionId, length, tail,
+                    record = await AddSegmentAsync(resource, containerId!, versionId, length, tail is null ? [] : [tail],
                         new Segment(token, tailLength + added)).ConfigureAwait(false);
                 }
                 catch
@@ -147,13 +163,13 @@ internal sealed partial class ObjectStoreRepository
     }
 
     /// <summary>
-    /// Adds a stored segment to the session's record, in place of the short last segment it was stored with, if any,
-    /// provided the session still ends at <paramref name="length"/>. It isn't canceled, since the segment is already
-    /// stored.
+    /// Adds a stored segment to the session's record, in place of the record's last segments, <paramref name="replacing"/>,
+    /// whose content it holds (none when it's simply added), provided the session still ends at
+    /// <paramref name="length"/>. It isn't canceled, since the segment is already stored.
     /// </summary>
     /// <returns>The changed record, or <see langword="null"/> when the session is gone.</returns>
     private async Task<UploadRecord?> AddSegmentAsync(ResourceLocation resource, string containerId, string versionId, long length,
-        Segment? replaced, Segment segment)
+        IReadOnlyList<Segment> replacing, Segment segment)
     {
         string key = _keys.UploadRecord(containerId, versionId);
         for (int attempt = 1; ; attempt++)
@@ -161,9 +177,11 @@ internal sealed partial class ObjectStoreRepository
             Stored<UploadRecord> upload = await GetAsync<UploadRecord>(key, CancellationToken.None).ConfigureAwait(false);
             if (upload.Value is not { } record || record.ResourceName != resource.ResourceName) return null;
             ThrowUnlessAppendable(resource, versionId, record, length);
-            List<Segment> segments = [.. record.Segments];
-            if (replaced is null) segments.Add(segment);
-            else segments[^1] = segment;
+            // Another append from the same offset may have joined these segments first, which leaves the length as it
+            // was, so the segments are checked too.
+            if (!record.Segments.TakeLast(replacing.Count).SequenceEqual(replacing))
+                throw await ChangedWhileReadAsync(resource, versionId).ConfigureAwait(false);
+            List<Segment> segments = [.. record.Segments.SkipLast(replacing.Count), segment];
             UploadRecord changed = record with { Segments = segments, StagedAt = _clock.GetUtcNow() };
             if (await TryPutAsync(key, id => Serialize(changed with { WriteId = id }), upload.ETag).ConfigureAwait(false)) return changed;
 
@@ -184,10 +202,60 @@ internal sealed partial class ObjectStoreRepository
         };
     }
 
-    private ResourceUploadLimitException TooManyParts(ResourceLocation resource, string versionId) =>
-        new($"The upload {versionId} of the resource {resource.ResourceName} in the container {resource.ContainerName} has " +
-            $"{store.MaxJoinedParts} segments, the most the store can join. Start a new upload, and append in parts of " +
-            $"{SegmentSize / 1024 / 1024} MiB or more.")
+    /// <summary>
+    /// Joins the session's last segments that take one part each, which are those since the last such join, into one
+    /// segment in the store, and puts it in their place in the record, provided the session still ends at
+    /// <paramref name="length"/>. Then it deletes the segments it replaced. A segment that takes more than one part, as a
+    /// joined one usually does, is left as it is, so the session's content is copied about once however many joins it
+    /// takes.
+    /// </summary>
+    /// <returns>The changed record, or <see langword="null"/> when the session is gone.</returns>
+    /// <exception cref="ResourceUploadLimitException">The joined segments would still take as many parts as the store joins.</exception>
+    private async Task<UploadRecord?> JoinSegmentsAsync(ResourceLocation resource, string containerId, string versionId, long length,
+        UploadRecord record, CancellationToken cancellationToken)
+    {
+        Segment[] joining = [.. record.Segments.AsEnumerable().Reverse().TakeWhile(s => PartCount([s]) == 1).Reverse()];
+        var segment = new Segment(Guid.NewGuid().ToString("N"), joining.Sum(s => s.Length));
+        if (PartCount(record.Segments) - joining.Length + PartCount([segment]) >= store.MaxJoinedParts)
+            throw SessionFull(resource, versionId, length);
+
+        string key = _keys.UploadSegment(containerId, versionId, segment.Token);
+        string[] keys = [.. joining.Select(s => _keys.UploadSegment(containerId, versionId, s.Token))];
+        try
+        {
+            await store.JoinAsync(key, [.. joining.SelectMany((s, i) => PartsOf(keys[i], s.Length))], cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch
+        {
+            // The segments are gone with their session, or joined and deleted by another append from the same offset.
+            if ((await GetUploadAsync(resource, versionId, CancellationToken.None).ConfigureAwait(false)).Record is not { } current)
+                return null;
+            if (!current.Segments.SequenceEqual(record.Segments))
+                throw await ChangedWhileReadAsync(resource, versionId).ConfigureAwait(false);
+            throw;
+        }
+        UploadRecord? joined;
+        try
+        {
+            joined = await AddSegmentAsync(resource, containerId, versionId, length, joining, segment).ConfigureAwait(false);
+        }
+        catch
+        {
+            await DeleteQuietlyAsync([key]).ConfigureAwait(false);
+            throw;
+        }
+        if (joined is not null) ObjectStoreTelemetry.CountSessionJoin(storeName);
+        await DeleteQuietlyAsync(joined is null ? [key] : keys).ConfigureAwait(false);
+        return joined;
+    }
+
+    /// <summary>How many parts joining <paramref name="segments"/> takes.</summary>
+    private int PartCount(IEnumerable<Segment> segments) => segments.Sum(s => PartsOf("", s.Length).Count());
+
+    private static ResourceUploadLimitException SessionFull(ResourceLocation resource, string versionId, long length) =>
+        new($"The upload {versionId} of the resource {resource.ResourceName} in the container {resource.ContainerName} holds " +
+            $"{length} bytes, as much as the provider can store in one object.")
         {
             ContainerName = resource.ContainerName, ResourceName = resource.ResourceName
         };
@@ -254,7 +322,7 @@ internal sealed partial class ObjectStoreRepository
             ThrowUnlessAddable(resource, existing, versionId, condition);
 
             await store.JoinAsync(contentKey,
-                [.. record.Segments.Select(s => new ObjectRange(_keys.UploadSegment(container.Id, versionId, s.Token), 0, s.Length))],
+                [.. record.Segments.SelectMany(s => PartsOf(_keys.UploadSegment(container.Id, versionId, s.Token), s.Length))],
                 cancellationToken).ConfigureAwait(false);
             if (expiryKey is not null) await PutExpiryAsync(expiryKey, resource, cancellationToken).ConfigureAwait(false);
             bool changed = await ChangeHeadAsync(headKey, head =>

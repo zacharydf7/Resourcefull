@@ -49,7 +49,7 @@ internal interface IObjectStore
     /// <summary>
     /// Writes <paramref name="key"/> as the content of <paramref name="parts"/>, in order, joined in the store so the
     /// bytes don't pass through the application. Each part but the last is at least <see cref="ObjectParts.PartSize"/>
-    /// long, and none is longer than <see cref="ObjectParts.MaxJoinedPartSize"/>.
+    /// long, and none is longer than <see cref="ObjectParts.MaxJoinedPartSize"/> plus <see cref="ObjectParts.PartSize"/>.
     /// </summary>
     Task JoinAsync(string key, IReadOnlyList<ObjectRange> parts, CancellationToken cancellationToken);
 
@@ -94,8 +94,9 @@ internal static class ObjectParts
     internal const int PartSize = 8 * 1024 * 1024;
 
     /// <summary>
-    /// The most one part of a join copies: within what both stores copy in one request (5 GiB for S3's
-    /// <c>UploadPartCopy</c>, 4,000 MiB for Azure's <c>Put Block From URL</c>), and few enough parts for any version.
+    /// The most one part of a join copies, besides a remainder shorter than <see cref="PartSize"/> that goes with it:
+    /// within what both stores copy in one request (5 GiB for S3's <c>UploadPartCopy</c>, 4,000 MiB for Azure's
+    /// <c>Put Block From URL</c>), and few enough parts for any version.
     /// </summary>
     internal const long MaxJoinedPartSize = 1024 * 1024 * 1024;
 

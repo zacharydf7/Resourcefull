@@ -50,10 +50,8 @@ Some behavior follows the store underneath, though every provider meets the same
 - **The largest file.** SQL Server and PostgreSQL store a file in chunks, with no limit of their own. S3 takes a single
   upload of up to 5 TiB, the most it keeps in one object, and Azure Blob one of up to about 48 TiB. A file larger than
   78 GiB on S3 or 390 GiB on Azure, the most one multipart upload or block blob takes in 8 MiB parts, goes up in pieces
-  of that size, which the store then joins. On both, an [upload session](../uploading-in-parts.md) holds less: at least
-  78 GiB with S3 and 390 GiB with Azure Blob, and up to 625 GiB and 3 TiB with appends of 64 MiB or larger. Raising that
-  is planned in [#160](https://github.com/zacharydf7/Resourcefull/issues/160). The in-memory provider holds what memory
-  allows.
+  of that size, which the store then joins. An [upload session](../uploading-in-parts.md) holds as much as one upload.
+  The in-memory provider holds what memory allows.
 - **What a call costs.** Each provider's page says what its calls cost in requests or queries, and what it leaves
   behind when something fails partway.
 

@@ -112,11 +112,12 @@ content, the session is deleted, since that content is never to be stored.
   sessions you abandon, or they stay.
 - **A session isn't moved or copied** with its name: moving or renaming the resource leaves a session for the old
   name where it is.
-- **With S3 and Azure Blob, a session holds a limited number of segments,** the pieces of up to 64 MiB it stores: enough
-  for at least 78 GiB with S3 and 390 GiB with Azure Blob, and more with appends of 64 MiB or larger. An append past the
-  limit throws `ResourceUploadLimitException`; what the session stored stays, but it takes no more content. Appends
-  smaller than 8 MiB each cost more there too, since each reads back the short piece the last one stored. See the
-  providers' pages for the details.
+- **With S3 and Azure Blob, a session holds as much as one upload:** 5 TiB with S3 and about 48 TiB with Azure Blob. An
+  append past that throws `ResourceUploadLimitException`; what the session stored stays, but it takes no more content.
+  The session stores its appends in pieces of up to 64 MiB, and once it holds as many as the store can join, the next
+  append first has the store join those since the last join into one, which takes longer. Appends smaller than 8 MiB
+  each cost more there too, since each reads back the short piece the last one stored. See the providers' pages for the
+  details.
 
 ## What each call returns when there's no session
 

@@ -75,8 +75,6 @@ comment saying you need it helps decide what comes first.
 
 - **More places to store files:** a [file-system provider](https://github.com/zacharydf7/Resourcefull/issues/51) and a
   [SQLite provider](https://github.com/zacharydf7/Resourcefull/issues/118).
-- **Bigger upload sessions in the cloud:** sessions on S3 and Azure Blob as large as the store allows
-  ([#160](https://github.com/zacharydf7/Resourcefull/issues/160)).
 - **Managing files:** [finding files by metadata](https://github.com/zacharydf7/Resourcefull/issues/57),
   [soft delete, retention and legal holds](https://github.com/zacharydf7/Resourcefull/issues/56), and
   [storing identical content once](https://github.com/zacharydf7/Resourcefull/issues/58).

@@ -33,11 +33,18 @@ internal static class ObjectStoreTelemetry
     private static readonly Counter<long> RecoveredMoves = Meter.CreateCounter<long>($"resourcefull.{Provider}.moves_recovered",
         unit: "{move}", description: "Moves the expiry sweep finished or undid because their mover stopped before it could.");
 
+    private static readonly Counter<long> SessionJoins = Meter.CreateCounter<long>($"resourcefull.{Provider}.session_joins",
+        unit: "{join}", description: "Joins of an upload session's segments into one in the store, once they took as many parts "
+            + "as the store joins.");
+
     /// <summary>Counts a move the sweep finished or undid for a mover that stopped.</summary>
     public static void CountRecoveredMove(string? storeName) => Count(RecoveredMoves, storeName);
 
     /// <summary>Counts a write of a head or a session's record retried after another writer changed it first.</summary>
     public static void CountRetry(string? storeName) => Count(Retries, storeName);
+
+    /// <summary>Counts a join of an upload session's segments, made so the session can take more.</summary>
+    public static void CountSessionJoin(string? storeName) => Count(SessionJoins, storeName);
 
     /// <summary>Counts an expiry entry dropped because its version no longer existed or had another expiry.</summary>
     public static void CountStaleExpiry(string? storeName) => Count(StaleExpiries, storeName);

@@ -228,11 +228,21 @@ internal sealed partial class ObjectStoreRepository
     private Task CopyContentAsync(string sourceKey, string destinationKey, long length, CancellationToken cancellationToken) =>
         store.JoinAsync(destinationKey, [.. PartsOf(sourceKey, length)], cancellationToken);
 
-    /// <summary>An object of <paramref name="length"/> bytes as parts to join, of <see cref="CopyPartSize"/> each but the last.</summary>
+    /// <summary>
+    /// An object of <paramref name="length"/> bytes as parts to join, of <see cref="CopyPartSize"/> each but the last. A
+    /// remainder shorter than <see cref="ObjectParts.PartSize"/> goes with the part before it, so no part but a join's
+    /// last is shorter than that.
+    /// </summary>
     private IEnumerable<ObjectRange> PartsOf(string key, long length)
     {
-        for (long offset = 0; offset < length; offset += CopyPartSize)
-            yield return new ObjectRange(key, offset, Math.Min(CopyPartSize, length - offset));
+        long offset = 0;
+        while (offset < length)
+        {
+            long size = Math.Min(CopyPartSize, length - offset);
+            if (length - offset - size is > 0 and < ObjectParts.PartSize) size = length - offset;
+            yield return new ObjectRange(key, offset, size);
+            offset += size;
+        }
     }
 
     /// <summary>

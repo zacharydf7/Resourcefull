@@ -23,13 +23,14 @@
   multipart upload of 8 MiB parts takes, goes up in pieces that the store then joins, so an upload holds up to S3's 5
   TiB; past that, it throws the new `ResourceUploadLimitException` (413 Content Too Large in ASP.NET Core). An upload
   session stores its appends in segments of up to 64 MiB, and completing has the store join them with `UploadPartCopy`,
-  so the bytes don't pass through the application. An append that would need more segments than the store can join
-  throws it too. Names are kept exactly as given, even by stores that keep keys as files, and are listed in Unicode code
-  point order. It counts writes retried after a concurrent change to the same name or session in
+  so the bytes don't pass through the application. Once a session's segments take as many parts as the store joins, the
+  next append first has the store join those since the last join into one, so a session holds up to 5 TiB too; an append
+  past that throws the same exception. Names are kept exactly as given, even by stores that keep keys as files, and are
+  listed in Unicode code point order. It counts writes retried after a concurrent change to the same name or session in
   `resourcefull.s3.retries`, stale expiry entries a sweep dropped in `resourcefull.s3.stale_expiries`, abandoned
-  sessions and unnamed content the sweep deleted in `resourcefull.s3.abandoned_uploads`, and, in
-  `resourcefull.s3.moves_recovered`, moves the sweep finished or undid after their mover stopped. It's tested against
-  SeaweedFS. See [S3-compatible storage](docs/providers/s3.md).
+  sessions and unnamed content the sweep deleted in `resourcefull.s3.abandoned_uploads`, joins of a session's segments
+  in `resourcefull.s3.session_joins`, and, in `resourcefull.s3.moves_recovered`, moves the sweep finished or undid after
+  their mover stopped. It's tested against SeaweedFS. See [S3-compatible storage](docs/providers/s3.md).
 - **Azure Blob Storage.** The new `Resourcefull.AzureBlob` package stores resources in a blob container of an Azure
   Storage account, working as the S3 provider does and sharing its code: conditional writes (`If-None-Match: *` and
   `If-Match`) keep one current version per name, and content of 8 MiB or more goes up in blocks.
@@ -39,9 +40,9 @@
   with the account key or, with Microsoft Entra ID, a user delegation key. It counts writes retried after a concurrent
   change to the same name or session in `resourcefull.azureblob.retries`, stale expiry entries a sweep dropped in
   `resourcefull.azureblob.stale_expiries`, abandoned sessions and unnamed content the sweep deleted in
-  `resourcefull.azureblob.abandoned_uploads`, and, in `resourcefull.azureblob.moves_recovered`, moves the sweep finished
-  or undid after their mover stopped. It's tested against Azurite. See
-  [Azure Blob Storage](docs/providers/azure-blob.md).
+  `resourcefull.azureblob.abandoned_uploads`, joins of a session's segments in `resourcefull.azureblob.session_joins`,
+  and, in `resourcefull.azureblob.moves_recovered`, moves the sweep finished or undid after their mover stopped. It's
+  tested against Azurite. See [Azure Blob Storage](docs/providers/azure-blob.md).
 - **Uploading in parts.** An upload session stores a large file over several appends, and what's stored survives a
   dropped connection or a restart: `StartUploadAsync`, then `AppendUploadAsync` from each part's offset,
   `GetUploadAsync` to find where to resume, and `CompleteUploadAsync`, which makes the version current with the

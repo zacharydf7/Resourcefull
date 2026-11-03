@@ -209,7 +209,7 @@ public class AzureBlobIntegrationTests(AzureBlobFixture fixture)
     {
         fixture.SkipIfUnavailable();
 
-        // Arrange: copies in parts of 8 MiB, and a version of 17 MiB, which takes three.
+        // Arrange: copies in parts of 8 MiB, and a version of 17 MiB, which takes two, the last 1 MiB going with the second.
         var repository = new ObjectStoreRepository(new AzureBlobObjectStore(fixture.Client.GetBlobContainerClient(fixture.ContainerName)),
             $"move-parts-{Guid.NewGuid():N}/", null, null) { CopyPartSize = ObjectParts.PartSize };
         await repository.AddContainerAsync("c", new Dictionary<string, string>());

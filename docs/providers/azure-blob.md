@@ -200,9 +200,12 @@ characters beyond U+FFFF, such as emoji, or from U+E000 to U+FFFF, might list in
   record. An append that starts after a segment shorter than 8 MiB first reads that segment back, so many small appends
   each cost up to 8 MiB more, each way. Completing reads the content once to hash it, as with every provider; then it
   reads and writes the record to seal it, reads the head, has Azure copy each segment into a block of the version's
-  content (several at once) and commits them, and writes the head; then it deletes the session's blobs. A blob holds at
-  most 50,000 blocks, so a session can hold at least 390 GiB, and up to 3 TiB when its appends are each 64 MiB or
-  larger. An append past the limit throws `ResourceUploadLimitException`, which ASP.NET Core's handler answers with 413
+  content (several at once) and commits them, and writes the head; then it deletes the session's blobs. A session holds
+  up to about 48 TiB, as an upload does. A blob holds at most 50,000 blocks, so once a session's segments take that
+  many, the next append first has Azure join those stored since the last such join into one segment. That copies them,
+  though the bytes stay in the store, and each byte is copied about once. With appends in multiples of 64 MiB, the first
+  join comes after about 3 TiB, and later ones sooner, since a joined segment counts as one part for each GiB it holds.
+  An append past about 48 TiB throws `ResourceUploadLimitException`, which ASP.NET Core's handler answers with 413
   Content Too Large. The expiry sweep lists every session, and reads the record of each, to find those that nothing was
   appended to for a day.
 
@@ -217,7 +220,9 @@ Besides the operations every provider records (see [Telemetry](../telemetry.md))
 `resourcefull.azureblob.retries`: writes to a name's head, or to an upload session's record, retried because another
 writer changed it first. A few are normal when writers share names; a steady rise means many writers are contending for
 the same names. It counts `resourcefull.azureblob.moves_recovered`: moves the expiry sweep finished or undid because
-their mover stopped first, such as after a crash or a lost connection. It also counts
+their mover stopped first, such as after a crash or a lost connection. It counts `resourcefull.azureblob.session_joins`:
+joins of an upload session's segments, made once they took as many parts as the store joins, each of which delays an
+append while the store copies what was appended since the last join. It also counts
 `resourcefull.azureblob.stale_expiries`: expiry entries a sweep dropped because their version no longer existed or had
 another expiry; and `resourcefull.azureblob.abandoned_uploads`: upload sessions nothing was appended to for a day, or
 whose container was deleted, and content no head names, which the expiry sweep deleted. The Azure SDK can also trace its
