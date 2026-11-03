@@ -141,6 +141,10 @@
   rest. `ResourcefullOptions.IsVersioningEnabled` is gone. `RestoreVersionAsync` works with versioning off, as long
   as the version exists. The `upload` and `copy` spans gain `resourcefull.write_mode`. `UploadFromRequestAsync` still
   replaces, as a `PUT` does. See [Upgrading to 4.0](docs/upgrading-to-4.md#uploads-say-whether-they-replace).
+- **Provisioning works for any provider.** `MigrateResourcefullDatabaseAsync` moves from `Resourcefull.SqlServer` to
+  `Resourcefull`, beside the new `GenerateResourcefullScript`, and a provider that keeps a database registers a
+  `ResourceDatabase` for them to work on. For a store on the in-memory provider, migrating now does nothing rather than
+  throwing. See [Upgrading to 4.0](docs/upgrading-to-4.md#provisioning-works-for-any-provider).
 - **Adding Resourcefull twice throws.** A second `AddResourcefull` replaced the provider and kept the first call's other
   settings; it now throws `InvalidOperationException`. Add a second store with `AddKeyedResourcefull`. See
   [Upgrading to 4.0](docs/upgrading-to-4.md#adding-resourcefull-twice).

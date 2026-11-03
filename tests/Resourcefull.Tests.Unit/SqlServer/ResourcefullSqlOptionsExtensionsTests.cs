@@ -90,62 +90,19 @@ public class ResourcefullSqlOptionsExtensionsTests
     }
 
     [Fact]
-    public async Task MigrateResourcefullDatabaseAsync_ShouldThrowAndNameUseSqlServer_WhenResourcefullUsesAnotherProvider()
+    public void UseSqlServer_ShouldRegisterTheStoresDatabase_WhenTheStoreHasAName()
     {
         // Arrange
         var services = new ServiceCollection();
-        services.AddResourcefull(options => options.UseInMemory());
-        await using ServiceProvider provider = services.BuildServiceProvider();
-
-        // Act
-        Task act() => provider.MigrateResourcefullDatabaseAsync();
-
-        // Assert
-        InvalidOperationException exception = await Assert.ThrowsAsync<InvalidOperationException>(act);
-        Assert.Contains("UseSqlServer", exception.Message);
-    }
-
-    [Fact]
-    public void GenerateResourcefullScript_ShouldThrowAndNameUseSqlServer_WhenResourcefullUsesAnotherProvider()
-    {
-        // Arrange
-        var services = new ServiceCollection();
-        services.AddResourcefull(options => options.UseInMemory());
+        services.AddKeyedResourcefull("archive", options => options.UseSqlServer("Server=unused;Database=unused"));
         using ServiceProvider provider = services.BuildServiceProvider();
 
         // Act
-        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() => provider.GenerateResourcefullScript());
+        ResourceDatabase database = provider.GetRequiredKeyedService<ResourceDatabase>("archive");
 
         // Assert
-        Assert.Contains("UseSqlServer", exception.Message);
-    }
-
-    [Fact]
-    public async Task MigrateResourcefullDatabaseAsync_ShouldThrowAndNameTheStore_WhenNoStoreOnSqlServerHasTheName()
-    {
-        // Arrange
-        var services = new ServiceCollection();
-        services.AddKeyedResourcefull("archive", options => options.UseInMemory());
-        await using ServiceProvider provider = services.BuildServiceProvider();
-
-        // Act
-        Task act() => provider.MigrateResourcefullDatabaseAsync("archive");
-
-        // Assert
-        InvalidOperationException exception = await Assert.ThrowsAsync<InvalidOperationException>(act);
-        Assert.Contains("archive", exception.Message);
-    }
-
-    [Fact]
-    public void GenerateResourcefullScript_ShouldThrowArgumentException_WhenGivenABlankStoreName()
-    {
-        // Arrange
-        var services = new ServiceCollection();
-        services.AddResourcefull(options => options.UseSqlServer("Server=unused;Database=unused"));
-        using ServiceProvider provider = services.BuildServiceProvider();
-
-        // Act & Assert
-        Assert.Throws<ArgumentException>("storeName", () => provider.GenerateResourcefullScript(" "));
+        Assert.IsType<SqlServerDatabase>(database);
+        Assert.Null(provider.GetService<ResourceDatabase>());
     }
 
     [Fact]

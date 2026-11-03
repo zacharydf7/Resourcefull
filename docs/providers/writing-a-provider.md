@@ -264,6 +264,23 @@ throws `NotSupportedException`.
 store can add up a container's versions in one query, override it. Count every version in `StoredSize` and
 `VersionCount`, and each name once in `ResourceCount`.
 
+## A database to provision
+
+<div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 4.0</span></div>
+
+If your provider keeps a database whose tables it creates and upgrades, derive a class from `ResourceDatabase`, in
+`Resourcefull.Providers`, and register it for the store. `MigrateResourcefullDatabaseAsync` and
+`GenerateResourcefullScript` then work for your provider as they do for SQL Server:
+
+```csharp
+builder.Services.AddKeyedSingleton<ResourceDatabase>(builder.StoreName, (services, _) => new FilesDatabase(root));
+```
+
+`MigrateAsync` brings the database up to date and does nothing when it already is. `GenerateScript` returns a script
+that does the same, for a database administrator to run, and writes it without connecting to the database. A provider
+with nothing to provision registers none; for its stores, `MigrateResourcefullDatabaseAsync` does nothing and
+`GenerateResourcefullScript` throws `NotSupportedException`.
+
 ## Several stores
 
 <div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 4.0</span></div>

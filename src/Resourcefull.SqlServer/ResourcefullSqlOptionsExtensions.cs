@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.Extensions.DependencyInjection;
+using Resourcefull.Providers;
 
 namespace Resourcefull.SqlServer;
 
@@ -15,7 +16,7 @@ public static partial class ResourcefullSqlOptionsExtensions
     /// <summary>
     /// Stores resources in the SQL Server database that <paramref name="connectionString"/> names, retrying transient
     /// failures (including deadlocks). Provision the database with
-    /// <see cref="ResourcefullSqlDatabaseExtensions.MigrateResourcefullDatabaseAsync(IServiceProvider, CancellationToken)"/>
+    /// <see cref="ResourcefullDatabaseExtensions.MigrateResourcefullDatabaseAsync(IServiceProvider, CancellationToken)"/>
     /// or the packaged scripts.
     /// Also registers <see cref="ContentHashBackfill"/>, under the store's name for a store added with
     /// <c>AddKeyedResourcefull</c>.
@@ -94,6 +95,8 @@ public static partial class ResourcefullSqlOptionsExtensions
                 configuration.Configure(services, options);
             return new ResourceDbContextFactory(options.Options);
         });
+        builder.Services.AddKeyedSingleton<ResourceDatabase>(storeName, (services, _) => new SqlServerDatabase(
+            services.GetRequiredStoreService<IDbContextFactory<ResourceDbContext>>(storeName), storeName));
         builder.Services.AddKeyedScoped(storeName, (services, _) => new ContentHashBackfill(
             services.GetRequiredStoreService<IDbContextFactory<ResourceDbContext>>(storeName), storeName));
         return builder;

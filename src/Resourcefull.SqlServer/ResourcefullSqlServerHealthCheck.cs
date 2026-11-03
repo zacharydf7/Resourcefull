@@ -93,7 +93,10 @@ public static class ResourcefullSqlServerHealthChecksBuilderExtensions
         ArgumentNullException.ThrowIfNull(builder);
         return builder.Add(new HealthCheckRegistration(name,
             services => new ResourcefullSqlServerHealthCheck(
-                ResourcefullSqlDatabaseExtensions.DbContextFactoryOf(services, storeName, nameof(AddResourcefullSqlServerCheck)),
+                services.GetStoreService<IDbContextFactory<ResourceDbContext>>(storeName) ?? throw new InvalidOperationException(
+                    storeName is null
+                        ? $"{nameof(AddResourcefullSqlServerCheck)} needs Resourcefull configured with {nameof(ResourcefullSqlOptionsExtensions.UseSqlServer)}."
+                        : $"{nameof(AddResourcefullSqlServerCheck)} needs a store named '{storeName}' configured with {nameof(ResourcefullSqlOptionsExtensions.UseSqlServer)}."),
                 storeName),
             failureStatus, tags, timeout));
     }

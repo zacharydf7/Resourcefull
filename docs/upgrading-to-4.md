@@ -149,6 +149,14 @@ In 3.x, calling `AddResourcefull` a second time replaced the provider but kept t
 throws `InvalidOperationException` instead. To use a second store, add it under a name with `AddKeyedResourcefull`;
 see [Several stores](several-stores.md).
 
+### Provisioning works for any provider
+
+`MigrateResourcefullDatabaseAsync` moves from `Resourcefull.SqlServer` to the `Resourcefull` namespace, beside the new
+`GenerateResourcefullScript`, so one call provisions a store on any provider. A call written as an extension method
+doesn't change, as long as the file has `using Resourcefull;`. A call that names the class uses
+`ResourcefullDatabaseExtensions` instead of `ResourcefullSqlDatabaseExtensions`. For a store on a provider with nothing
+to provision, such as the in-memory one, `MigrateResourcefullDatabaseAsync` now does nothing rather than throwing.
+
 ### Custom providers
 
 A provider now derives from the `ResourceRepository` base class rather than implementing the `IResourceRepository`
