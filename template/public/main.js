@@ -10,7 +10,8 @@ function matchLogoToTheme() {
 // prefix it shares with the next name, then types the rest. Visitors who ask for reduced motion, and those without
 // scripts, see only the first name, with no animation. A button at the end of the line pauses the animation. Copying
 // the line gives the whole command for the name shown, on one line, even partway through typing; without that, the
-// browser would put each item of the line's flex box on a line of its own. Copying just the name gives the whole name too.
+// browser would put each item of the line's flex box on a line of its own. Copying just the name gives the whole name
+// too.
 function typePackageNames() {
   const name = document.querySelector('.rf-install-name')
   if (!name) return
