@@ -74,6 +74,8 @@
   items:
   - name: Going to production
     href: going-to-production.md
+  - name: Provider features
+    href: providers/features.md
   - name: SQL Server
     href: providers/sql-server.md
   - name: Running SQL Server

@@ -35,7 +35,8 @@ passes the same contract tests as the other providers, apart from those for one 
   Planned in [#154](https://github.com/zacharydf7/Resourcefull/issues/154).
 
 Every provider is meant to support every feature, so that switching between them takes only the line that picks the
-provider; moving is the next work planned for this provider.
+provider; moving is the next work planned for this provider. [Provider features](features.md) compares the
+providers.
 
 It works the same way as the [S3-compatible provider](s3.md), and shares its code: only the calls to the store differ.
 

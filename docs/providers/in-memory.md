@@ -15,7 +15,7 @@ builder.Services.AddResourcefull(options => options.UseInMemory());
   the same way, conflicts and missing containers raise the same exceptions, and download streams can't seek either.
   The repository checks this by running one shared test suite against both providers. One difference: a download that
   has started reads its version to the end even if the version is deleted meanwhile, where SQL Server throws
-  `IOException`.
+  `IOException`. [Provider features](features.md) compares it with the others.
 
 ## In tests
 

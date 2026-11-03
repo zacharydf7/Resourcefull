@@ -19,7 +19,7 @@ builder.Services.AddResourcefull(options => options
 
 It does everything the [SQL Server provider](sql-server.md) does, including versions, conditional writes, copies and
 moves, expiry, container policies, and export and import, and it passes the same contract tests. This page covers what's
-particular to PostgreSQL.
+particular to PostgreSQL; [Provider features](features.md) compares the providers.
 
 ## Choosing the database
 

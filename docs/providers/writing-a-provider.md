@@ -22,6 +22,10 @@ public static class ResourcefullFileSystemOptionsExtensions
 }
 ```
 
+Every built-in provider aims to support every feature, and a new one ships with an issue for each feature it doesn't
+support yet; [Provider features](features.md) shows where each stands. A provider of your own can leave features out:
+the clients throw `NotSupportedException` for those, and the contract tests skip them when its test class says so.
+
 `ResourceRepository` follows semantic versioning: it changes incompatibly only in a major release of `Resourcefull`,
 so a provider package can depend on a version range such as `[4.0.0, 5.0.0)`. A minor release adds members only with
 a default implementation, so a provider written for an earlier release keeps compiling.
