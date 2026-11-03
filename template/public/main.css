@@ -466,6 +466,38 @@ body[data-layout="landing"] .next-article {
   font-weight: 500;
 }
 
+/* While main.js types the package names, a cursor follows them. */
+.rf-install-name.rf-typing::after {
+  content: "";
+  display: inline-block;
+  width: calc(1ch - 1px);
+  height: 1.1em;
+  margin-left: 1px;
+  vertical-align: text-bottom;
+  background: var(--rf-link);
+  animation: rf-blink 1s steps(1) infinite;
+}
+
+@keyframes rf-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+.rf-install-pause {
+  border: 0;
+  padding: 0 .15rem;
+  background: none;
+  color: var(--rf-muted);
+  line-height: 1;
+  cursor: pointer;
+}
+
+.rf-install-pause:hover,
+.rf-install-pause:focus-visible {
+  color: var(--rf-link);
+}
+
 .rf-code {
   border-radius: 16px;
   background: var(--rf-raised);

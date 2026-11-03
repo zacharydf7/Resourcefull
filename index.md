@@ -19,7 +19,8 @@ Storage instead.</p>
 <a class="rf-btn rf-btn-secondary" href="docs/index.md">Read the docs</a>
 <a class="rf-btn rf-btn-secondary" href="https://github.com/zacharydf7/Resourcefull"><i class="bi bi-github"></i> GitHub</a>
 </div>
-<div class="rf-install">$ <b>dotnet add package</b> Resourcefull.SqlServer</div>
+<div class="rf-install">$ <b>dotnet add package</b> <span class="rf-install-name"
+data-packages="Resourcefull.SqlServer Resourcefull.PostgreSql Resourcefull.S3 Resourcefull.AzureBlob Resourcefull.InMemory Resourcefull.AspNetCore">Resourcefull.SqlServer</span></div>
 </div>
 <div class="rf-code">
 <div class="rf-code-bar"><i></i><i></i><i></i><span>Program.cs</span></div>
