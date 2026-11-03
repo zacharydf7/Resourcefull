@@ -181,20 +181,20 @@
   },
   "upload-16MiB-traced": {
     "RoundTrips": 25,
-    "LogicalReads": 3816,
-    "LogBytes": 18386944,
-    "AllocatedBytes": 2672272,
+    "LogicalReads": 3397,
+    "LogBytes": 18412339,
+    "AllocatedBytes": 2682272,
     "RetainedBytes": 64,
-    "Seconds": 0.1276,
+    "Seconds": 0.1439,
     "ContentBytes": 16777216
   },
   "upload-16MiB-with-limits": {
     "RoundTrips": 26,
-    "LogicalReads": 3819,
-    "LogBytes": 18391859,
-    "AllocatedBytes": 2785680,
+    "LogicalReads": 3399,
+    "LogBytes": 18406604,
+    "AllocatedBytes": 2798192,
     "RetainedBytes": 64,
-    "Seconds": 0.1287,
+    "Seconds": 0.1644,
     "ContentBytes": 16777216
   },
   "upload-1MiB": {
