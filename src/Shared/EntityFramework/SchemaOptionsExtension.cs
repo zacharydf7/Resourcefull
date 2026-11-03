@@ -1,9 +1,9 @@
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace Resourcefull.SqlServer;
+namespace Resourcefull.EntityFramework;
 
-/// <summary>Carries the schema given to <c>UseSqlServer</c> to the <see cref="ResourceDbContext"/>.</summary>
+/// <summary>Carries the schema given to <c>UseSqlServer</c> or <c>UsePostgreSql</c> to the <see cref="ResourceDbContext"/>.</summary>
 internal sealed class SchemaOptionsExtension(string schema) : IDbContextOptionsExtension
 {
     private DbContextOptionsExtensionInfo? _info;

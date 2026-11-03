@@ -1,8 +1,7 @@
-﻿using Microsoft.EntityFrameworkCore.ChangeTracking;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.ValueGeneration;
-using Resourcefull.SqlServer.Models;
 
-namespace Resourcefull.SqlServer.ValueGenerators;
+namespace Resourcefull.EntityFramework;
 
 internal class VersionIdValueGenerator : ValueGenerator<string>
 {

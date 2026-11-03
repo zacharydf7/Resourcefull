@@ -1,4 +1,4 @@
-﻿namespace Resourcefull.SqlServer;
+namespace Resourcefull.EntityFramework;
 
 /// <summary>
 /// A version's content, fetched a page of chunks at a time as the caller reads, so only one page is held at once.

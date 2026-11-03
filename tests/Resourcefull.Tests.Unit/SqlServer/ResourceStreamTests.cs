@@ -1,3 +1,4 @@
+using Resourcefull.EntityFramework;
 using Resourcefull.SqlServer;
 using System.Text;
 

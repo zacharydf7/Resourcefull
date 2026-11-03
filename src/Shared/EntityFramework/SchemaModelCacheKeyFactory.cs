@@ -1,7 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 
-namespace Resourcefull.SqlServer;
+namespace Resourcefull.EntityFramework;
 
 /// <summary>Builds a model for each schema, so two stores with different schemas in one process don't share one.</summary>
 internal sealed class SchemaModelCacheKeyFactory : IModelCacheKeyFactory

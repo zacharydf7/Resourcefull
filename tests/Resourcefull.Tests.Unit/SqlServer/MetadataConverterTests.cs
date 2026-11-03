@@ -1,4 +1,4 @@
-using Resourcefull.SqlServer.Converters;
+using Resourcefull.EntityFramework;
 
 namespace Resourcefull.Tests.Unit.SqlServer;
 

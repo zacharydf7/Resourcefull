@@ -21,11 +21,15 @@ public sealed class ContentHashBackfill
 
     private readonly IDbContextFactory<ResourceDbContext> _dbContextFactory;
 
+    /// <summary>The repository, whose page reader reads a version's chunks.</summary>
+    private readonly ResourceSqlRepository _repository;
+
     private readonly string? _storeName;
 
     internal ContentHashBackfill(IDbContextFactory<ResourceDbContext> dbContextFactory, string? storeName = null)
     {
         _dbContextFactory = dbContextFactory;
+        _repository = new ResourceSqlRepository(dbContextFactory);
         _storeName = storeName;
     }
 
@@ -71,7 +75,7 @@ public sealed class ContentHashBackfill
                 string contentHash;
                 try
                 {
-                    using var content = new HashingStream(new ResourceStream(ResourceSqlRepository.PageReader(dbContext, version.Id), version.StoredLength));
+                    using var content = new HashingStream(new ResourceStream(_repository.PageReader(dbContext, version.Id), version.StoredLength));
                     await content.CopyToAsync(Stream.Null, cancellationToken).ConfigureAwait(false);
                     contentHash = content.Complete(declaredLength: null, version.LastModified).ContentHash;
                 }

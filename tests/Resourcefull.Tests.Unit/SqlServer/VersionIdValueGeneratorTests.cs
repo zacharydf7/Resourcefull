@@ -1,7 +1,7 @@
+using Resourcefull.EntityFramework;
 using Microsoft.EntityFrameworkCore;
 using Resourcefull.SqlServer;
 using Resourcefull.SqlServer.Models;
-using Resourcefull.SqlServer.ValueGenerators;
 
 namespace Resourcefull.Tests.Unit.SqlServer;
 

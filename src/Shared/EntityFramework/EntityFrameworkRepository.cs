@@ -1,37 +1,34 @@
-using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Resourcefull.Providers;
-using Resourcefull.SqlServer.Models;
-using Resourcefull.SqlServer.Utilities;
 using System.Data;
 using System.Data.Common;
 using System.Diagnostics;
 using System.Linq.Expressions;
-using System.Runtime.CompilerServices;
 using System.Runtime.ExceptionServices;
-using System.Security.Cryptography;
-using System.Text;
 
-[assembly: InternalsVisibleTo("Resourcefull.Tests.Unit")]
-[assembly: InternalsVisibleTo("Resourcefull.Tests.Integration")]
-[assembly: InternalsVisibleTo("Resourcefull.Tests.Performance")]
+namespace Resourcefull.EntityFramework;
 
-namespace Resourcefull.SqlServer;
-
-internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbContextFactory, TimeProvider? timeProvider = null,
-    string? storeName = null) : ResourceRepository
+/// <summary>
+/// Keeps resources in a database through EF Core: each version a row, its content in chunks of
+/// <see cref="ResourceChunker.ChunkSize"/>, and each name's writes in turn under a lock on the name. Each provider derives
+/// its repository from this one, which it compiles from source, and supplies what differs between databases: the lock on
+/// a name, the statements EF Core can't express, how its errors are recognized, how precisely it keeps times, and which
+/// values it can't store.
+/// </summary>
+internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbContext> dbContextFactory, TimeProvider? timeProvider,
+    string? storeName) : ResourceRepository
 {
     private readonly TimeProvider _clock = timeProvider ?? TimeProvider.System;
 
-    private const int SqlForeignKeyViolation = 547;
-    private const int SqlUniqueIndexViolation = 2601;
-    private const int SqlUniqueConstraintViolation = 2627;
+    /// <summary>The store's name, for telemetry; <see langword="null"/> for the store without one.</summary>
+    protected string? StoreName => storeName;
+
     private const int MaxResourcesPerDeleteBatch = 100;
 
     // At least 1 MiB of content per round trip while uploading and downloading.
     internal const int ChunksPerUploadBatch = (1024 * 1024 + ResourceChunker.ChunkSize - 1) / ResourceChunker.ChunkSize;
-    private const int ChunksPerReadPage = ChunksPerUploadBatch;
+    protected const int ChunksPerReadPage = ChunksPerUploadBatch;
 
     /// <summary>
     /// Caps the content one batch of a container or name delete, or of an expiry sweep, removes, counted in chunks, so no
@@ -41,19 +38,40 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
     internal int ChunksPerDeleteBatch { get; init; } = 256;
 
     /// <summary>
-    /// How many chunks one statement deletes. SQL Server locks the whole chunk table, holding up every upload, once a
-    /// statement holds 5,000 locks on it. That's usually one lock per chunk, but SQL Server 2019 can also lock a chunk's
-    /// content pages, about five for a full one: deleting 999 full chunks took 6,240 locks there once the table held
-    /// other versions' chunks. 500 stays well under, at about 3,100. A version with more chunks than this has them
-    /// deleted this many at a time before it goes; a smaller one takes them with it.
+    /// How many chunks one statement deletes: each database's limit keeps a statement from locking too much, or running
+    /// too long, as the cascade could for a large version. A version with more chunks than this has them deleted this
+    /// many at a time before it goes; a smaller one takes them with it, through the cascade.
     /// </summary>
-    internal const int ChunksPerDeleteStatement = 500;
+    protected abstract int ChunksDeletedPerStatement { get; }
 
     /// <summary>
-    /// The error a name's lock raises when SQL Server chooses it as a deadlock victim, or it times out: transient, like a
-    /// deadlock (1205), so the retry policy <c>UseSqlServer</c> sets retries the write.
+    /// The time a version is stamped with: the clock's, cut to the database's precision when it keeps times less
+    /// precisely, so a version's times read back as the write returned them.
     /// </summary>
-    internal const int NameLockNotGrantedError = 50001;
+    protected virtual DateTimeOffset Now() => _clock.GetUtcNow();
+
+    /// <summary>
+    /// The database's name when it can't store U+0000 in text, for the message that refuses a value with one; otherwise
+    /// <see langword="null"/>. If it can't, no stored name, version ID or content type contains one, so a lookup of a
+    /// value with one finds nothing without querying the database, and a write with one is refused before anything is
+    /// stored.
+    /// </summary>
+    protected virtual string? DatabaseRefusingNul => null;
+
+    /// <summary>
+    /// Whether the database may hold versions an early release stored without a length or a hash: their length is then
+    /// added up from their chunks, and a copy reads and hashes their content.
+    /// </summary>
+    protected virtual bool MayHoldUnmeasuredVersions => false;
+
+    /// <summary>Whether a failure, or the one it wraps, is the database refusing a row whose container doesn't exist.</summary>
+    protected abstract bool IsForeignKeyViolation(Exception exception);
+
+    /// <summary>Whether a failure, or the one it wraps, is the database refusing a row a unique index already has.</summary>
+    protected abstract bool IsUniqueViolation(Exception exception);
+
+    /// <summary>Counts the abandoned uploads' versions a sweep deleted, in the provider's own telemetry.</summary>
+    protected abstract void CountAbandonedUploads(int deleted);
 
     /// <summary>
     /// How often an upload moves its staged version's <see cref="ResourceModel.StagedAt"/> forward, as a chunk arrives:
@@ -93,6 +111,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
     private async Task<WrittenContent> AddVersionAsync(NewResourceVersion version, Stream stream,
         ResourceWriteCondition condition, DateTimeOffset? lastModified, CancellationToken cancellationToken)
     {
+        ThrowIfUnstorable(version);
         (string resourceContainerName, string resourceName) = version.Location;
         using ResourceDbContext dbContext = dbContextFactory.CreateDbContext();
         IExecutionStrategy strategy = dbContext.Database.CreateExecutionStrategy();
@@ -139,9 +158,6 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
         }
     }
 
-    private static bool IsForeignKeyViolation(Exception exception) =>
-        (exception as SqlException ?? exception.InnerException as SqlException) is { Number: SqlForeignKeyViolation };
-
     /// <summary>
     /// Inserts the version, staged, after the checks that spare reading the content of an upload that would fail, and
     /// returns it, untracked. Without checks the insert is a statement of its own, which commits as it runs; with them,
@@ -156,9 +172,9 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
         {
             using ResourceDbContext attempt = NewWriteContext();
 
-            // A retry after a commit whose acknowledgement was lost finds its own version staged. A first attempt on SQL
-            // Server skips the look, a round trip on every write: the insert below is refused if the name already has the
-            // version. The in-memory provider the unit tests use doesn't enforce the unique index.
+            // A retry after a commit whose acknowledgement was lost finds its own version staged. A first attempt skips
+            // the look, a round trip on every write: the insert below is refused if the name already has the version.
+            // The in-memory provider the SQL Server unit tests use doesn't enforce the unique index.
             if (committing || !attempt.Database.IsRelational())
             {
                 ResourceModel? existing = await attempt.Resources.IgnoreQueryFilters().AsNoTracking()
@@ -188,10 +204,10 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
 
                 // Inserted first, so a missing container is reported before any content is read.
                 ResourceModel resource = NewVersion(version);
-                resource.StagedAt = _clock.GetUtcNow();
+                resource.StagedAt = Now();
                 // With a hash as long as its real one, so making it current changes the row in place. Inserted
-                // without one, the version index's pages were measured half full after storing 500 names, so a page of
-                // a listing read 12 pages rather than 8. Nothing reads a staged version to see it.
+                // without one, SQL Server's version index's pages were measured half full after storing 500 names, so a
+                // page of a listing read 12 pages rather than 8. Nothing reads a staged version to see it.
                 resource.ContentHash = StagedContentHash;
                 attempt.Resources.Add(resource);
                 // Without a transaction, the insert commits as it runs.
@@ -235,7 +251,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
         Stream content, CancellationToken cancellationToken)
     {
         int batches = 0;
-        DateTimeOffset lastStamped = _clock.GetUtcNow();
+        DateTimeOffset lastStamped = Now();
         var batch = new List<ResourceChunkModel>(ChunksPerUploadBatch);
         // Each batch is stored before the chunker reuses its buffers: it shares ChunksPerUploadBatch of them in turn,
         // and a batch holds at most that many chunks, however early it goes.
@@ -244,12 +260,12 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
         {
             chunk.ResourceId = resourceId;
             batch.Add(chunk);
-            bool stamp = _clock.GetUtcNow() - lastStamped >= StagedStampInterval;
+            bool stamp = Now() - lastStamped >= StagedStampInterval;
             if (batch.Count < ChunksPerUploadBatch && !stamp) continue;
 
             await StoreBatchAsync(dbContext, strategy, batch, stamp, cancellationToken).ConfigureAwait(false);
             batches++;
-            if (stamp) lastStamped = _clock.GetUtcNow();
+            if (stamp) lastStamped = Now();
         }
         if (batch.Count == 0) return batches;
         await StoreBatchAsync(dbContext, strategy, batch, stamp: false, cancellationToken).ConfigureAwait(false);
@@ -279,7 +295,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
 
             // Stamped under the name's lock as the version becomes current, not before its content was read. A wrong
             // declared length throws here, before anything about the name changes.
-            WrittenContent completed = content.Complete(version.DeclaredLength, lastModified ?? _clock.GetUtcNow());
+            WrittenContent completed = content.Complete(version.DeclaredLength, lastModified ?? Now());
 
             // Attached as it was staged, whatever an earlier attempt changed, so only what changes now is saved. Should
             // it be gone, the save throws DbUpdateConcurrencyException, which the caller reports.
@@ -311,12 +327,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
             // Locked as it's read, so an upload can't make it current, or move its stamp forward, before it goes. A retry
             // after a commit whose acknowledgement was lost finds it gone.
             List<int> chunks = attempt.Database.IsRelational()
-                ? await attempt.Database.SqlQuery<int>(attempt.QualifyTables($"""
-                    SELECT (SELECT COUNT(*) FROM [ResourceChunks] c WHERE c.[ResourceId] = r.[Id]) AS [Value]
-                    FROM [Resources] r WITH (UPDLOCK, ROWLOCK)
-                    WHERE r.[Id] = {resourceId} AND r.[StagedAt] IS NOT NULL
-                        AND ({staleBefore} IS NULL OR r.[StagedAt] < {staleBefore})
-                    """)).ToListAsync(ct).ConfigureAwait(false)
+                ? await LockStagedVersionAsync(attempt, resourceId, staleBefore, ct).ConfigureAwait(false)
                 : await attempt.Resources.IgnoreQueryFilters()
                     .Where(r => r.Id == resourceId && r.StagedAt != null
                         && (staleBefore == null || r.StagedAt < staleBefore))
@@ -341,6 +352,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
 
     public override async Task StartStagedVersionAsync(NewResourceVersion version, CancellationToken cancellationToken = default)
     {
+        ThrowIfUnstorable(version);
         using ResourceDbContext dbContext = dbContextFactory.CreateDbContext();
         bool sentBefore = false;
         try
@@ -354,7 +366,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
                 sentBefore = true;
 
                 ResourceModel resource = NewVersion(version);
-                resource.StagedAt = _clock.GetUtcNow();
+                resource.StagedAt = Now();
                 resource.ContentHash = StagedContentHash;
                 resource.ContentLength = 0;
                 resource.DeclaredLength = version.DeclaredLength;
@@ -439,15 +451,10 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
             using ResourceDbContext attempt = NewWriteContext();
             var transaction = await attempt.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
             await using var transactionDisposal = transaction.ConfigureAwait(false);
-            int moved = await attempt.Database.ExecuteSqlAsync(attempt.QualifyTables($"""
-                UPDATE [Resources] SET [ContentLength] = {after}, [StagedAt] = {_clock.GetUtcNow()}
-                WHERE [Id] = {resourceId} AND [StagedAt] IS NOT NULL AND [ContentLength] = {expected}
-                """), ct).ConfigureAwait(false);
+            int moved = await MoveSessionLengthAsync(attempt, resourceId, expected, after, Now(), ct).ConfigureAwait(false);
             if (moved == 0)
             {
-                long? current = (await attempt.Database.SqlQuery<long?>(attempt.QualifyTables($"""
-                    SELECT [ContentLength] AS [Value] FROM [Resources] WHERE [Id] = {resourceId} AND [StagedAt] IS NOT NULL
-                    """)).ToListAsync(ct).ConfigureAwait(false)).FirstOrDefault();
+                long? current = await SessionLengthAsync(attempt, resourceId, ct).ConfigureAwait(false);
                 // A retry after a commit whose acknowledgement was lost finds its own batch stored.
                 if (current is null || (retry && current == after)) return current;
                 throw OffsetNotAtEnd(resource, versionId, expected, current.Value);
@@ -456,7 +463,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
             DbCommand command = NewCommand(attempt);
             await using var commandDisposal = command.ConfigureAwait(false);
             command.Transaction = transaction.GetDbTransaction();
-            command.CommandText = ResourceDbContext.QualifyTables(InsertChunks(command, batch), attempt.Schema);
+            command.CommandText = ResourceDbContext.QualifyTables(InsertChunks(command, batch, null), attempt.Schema);
             await command.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
             await transaction.CommitAsync(ct).ConfigureAwait(false);
             return (long?)after;
@@ -491,17 +498,14 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
         CancellationToken cancellationToken = default)
     {
         (string resourceContainerName, string resourceName) = resource;
+        if (HasNul(resourceContainerName) || HasNul(resourceName) || HasNul(versionId)) return Task.FromResult<WrittenContent?>(null);
         condition ??= new ResourceWriteCondition();
         WrittenContent? written = null;
         long completedId = 0;
         return WriteNameAsync(resourceContainerName, resourceName, async (attempt, ct) =>
         {
             // Locked as it's read, so an append can't store a batch the measured length and hash don't cover.
-            SessionRow? staged = (await attempt.Database.SqlQuery<SessionRow>(attempt.QualifyTables($"""
-                SELECT [Id], [ContentLength], [StagedAt] FROM [Resources] WITH (UPDLOCK, ROWLOCK)
-                WHERE [ContainerName] = {resourceContainerName} AND [Name] = {resourceName} AND [VersionId] = {versionId}
-                    AND [StagedAt] IS NOT NULL AND [ContentLength] IS NOT NULL
-                """)).ToListAsync(ct).ConfigureAwait(false)).FirstOrDefault();
+            SessionRow? staged = await LockSessionAsync(attempt, resource, versionId, ct).ConfigureAwait(false);
             // A retry after a commit whose acknowledgement was lost finds the session gone, made current, which the
             // filter lets it see; one whose earlier attempt rolled back, and that something else deleted, finds nothing.
             if (staged is null)
@@ -514,7 +518,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
 
             List<ResourceModel> priorLatest =
                 await CurrentForWriteAsync(attempt, resourceContainerName, resourceName, condition, ct).ConfigureAwait(false);
-            var completed = new WrittenContent(contentLength, contentHash, _clock.GetUtcNow());
+            var completed = new WrittenContent(contentLength, contentHash, Now());
             ResourceModel current = attempt.Resources.Attach(new ResourceModel
             {
                 Id = staged.Id, ContainerName = resourceContainerName, Name = resourceName, StagedAt = staged.StagedAt
@@ -537,25 +541,14 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
     }
 
     /// <summary>
-    /// Adds the batch's chunks to <paramref name="command"/> as parameters, and returns the statement that inserts them.
+    /// A session's staged version: staged, and with the length a session keeps, which an upload's doesn't. None for a
+    /// name or ID the database can't hold.
     /// </summary>
-    private static string InsertChunks(DbCommand command, List<ResourceChunkModel> batch)
-    {
-        var sql = new StringBuilder("INSERT INTO [ResourceChunks] ([ResourceId], [Index], [Data]) VALUES ");
-        command.Parameters.Add(new SqlParameter("@resourceId", batch[0].ResourceId));
-        for (int i = 0; i < batch.Count; i++)
-        {
-            sql.Append(i == 0 ? "" : ", ").Append($"(@resourceId, @index{i}, @data{i})");
-            command.Parameters.Add(new SqlParameter($"@index{i}", batch[i].Index));
-            command.Parameters.Add(new SqlParameter($"@data{i}", SqlDbType.VarBinary, -1) { Value = batch[i].Data });
-        }
-        return sql.ToString();
-    }
-
-    /// <summary>A session's staged version: staged, and with the length a session keeps, which an upload's doesn't.</summary>
-    private static IQueryable<ResourceModel> Session(ResourceDbContext dbContext, ResourceLocation resource, string versionId) =>
-        dbContext.Resources.IgnoreQueryFilters().Where(r => r.ContainerName == resource.ContainerName
-            && r.Name == resource.ResourceName && r.VersionId == versionId && r.StagedAt != null && r.ContentLength != null);
+    private IQueryable<ResourceModel> Session(ResourceDbContext dbContext, ResourceLocation resource, string versionId) =>
+        HasNul(versionId)
+            ? dbContext.Resources.Where(r => false)
+            : Versions(dbContext.Resources.IgnoreQueryFilters(), resource.ContainerName, resource.ResourceName)
+                .Where(r => r.VersionId == versionId && r.StagedAt != null && r.ContentLength != null);
 
     private static ResourceUploadOffsetException OffsetNotAtEnd(ResourceLocation resource, string versionId, long offset,
         long stored) =>
@@ -607,7 +600,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
             afterId = abandoned[^1];
         }
 
-        SqlTelemetry.CountAbandonedUploads(deleted, storeName);
+        CountAbandonedUploads(deleted);
         if (failures.Count > 0)
         {
             throw new AggregateException($"{failures.Count} abandoned uploads' versions weren't deleted, and stay for " +
@@ -622,7 +615,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
         ContainerName = version.Location.ContainerName,
         Name = version.Location.ResourceName,
         VersionId = version.VersionId,
-        LastModified = _clock.GetUtcNow(),
+        LastModified = Now(),
         IsLatest = false,
         ContentType = version.ContentType,
         Metadata = new Dictionary<string, string>(version.Metadata),
@@ -640,23 +633,45 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
     {
         using ResourceDbContext dbContext = dbContextFactory.CreateDbContext();
         if (!await dbContext.ResourceContainers.AnyAsync(x => x.Name == resourceContainerName, cancellationToken).ConfigureAwait(false))
+            throw ContainerNotFound(resourceContainerName, exception);
+    }
+
+    private static ResourceContainerNotFoundException ContainerNotFound(string resourceContainerName,
+        Exception? innerException = null)
+    {
+        string message = $"The container {resourceContainerName} doesn't exist.";
+        return innerException is null
+            ? new(message) { ContainerName = resourceContainerName }
+            : new(message, innerException) { ContainerName = resourceContainerName };
+    }
+
+    /// <summary>
+    /// Throws, before anything is written, for a version the database can't store: one in a container whose name has
+    /// U+0000, which can't exist, or with U+0000 in its name, version ID, content type or origin.
+    /// </summary>
+    private void ThrowIfUnstorable(NewResourceVersion version)
+    {
+        (string resourceContainerName, string resourceName) = version.Location;
+        if (HasNul(resourceContainerName)) throw ContainerNotFound(resourceContainerName);
+        if (HasNul(resourceName) || HasNul(version.VersionId) || HasNul(version.ContentType)
+            || version.CopiedFrom is { } origin
+                && (HasNul(origin.ContainerName) || HasNul(origin.ResourceName) || HasNul(origin.VersionId)))
         {
-            throw new ResourceContainerNotFoundException($"The container {resourceContainerName} doesn't exist.",
-                exception)
-            {
-                ContainerName = resourceContainerName
-            };
+            throw new ArgumentException($"The version of {resourceName} has U+0000 in its name, version ID, content " +
+                $"type or origin, which {DatabaseRefusingNul} can't store.", nameof(version));
         }
     }
 
     public override async Task<WrittenContent?> CopyResourceAsync(ResourceLocation source, string? sourceVersionId,
         NewResourceVersion destination, ResourceWriteCondition? condition = null, CancellationToken cancellationToken = default)
     {
+        ThrowIfUnstorable(destination);
         (string destinationContainer, string destinationName) = destination.Location;
         condition ??= new ResourceWriteCondition();
         // A version stored before hashes were kept has none to copy, so its content is read, and hashed, as an upload's is.
-        using (ResourceDbContext dbContext = dbContextFactory.CreateDbContext())
+        if (MayHoldUnmeasuredVersions)
         {
+            using ResourceDbContext dbContext = dbContextFactory.CreateDbContext();
             var found = await Version(dbContext.Resources, source.ContainerName, source.ResourceName, sourceVersionId)
                 .Select(r => new { r.ContentHash })
                 .FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
@@ -684,9 +699,8 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
                 }
 
                 // Read under the source name's lock, so the version can't be deleted while its chunks are copied.
-                var from = await Version(attempt.Resources, source.ContainerName, source.ResourceName, sourceVersionId)
-                    .Select(r => new { r.Id, r.ContentHash, Length = r.Chunks!.Sum(c => (long?)c.Data.Length) ?? 0 })
-                    .FirstOrDefaultAsync(ct).ConfigureAwait(false);
+                StoredVersion? from = await StoredVersionAsync(
+                    Version(attempt.Resources, source.ContainerName, source.ResourceName, sourceVersionId), ct).ConfigureAwait(false);
                 if (from is null) return null;
 
                 List<ResourceModel> priorLatest =
@@ -696,16 +710,14 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
                 attempt.Resources.Add(copy);
                 await attempt.SaveChangesAsync(ct).ConfigureAwait(false);
                 // Copied by the server, so no content passes through the application.
-                await attempt.Database.ExecuteSqlAsync(attempt.QualifyTables(
-                    $"INSERT INTO [ResourceChunks] ([ResourceId], [Index], [Data]) SELECT {copy.Id}, [Index], [Data] FROM [ResourceChunks] WHERE [ResourceId] = {from.Id}"),
-                    ct).ConfigureAwait(false);
+                await CopyChunksAsync(attempt, from.Id, copy.Id, ct).ConfigureAwait(false);
 
-                var stored = new WrittenContent(from.Length, from.ContentHash!, _clock.GetUtcNow());
+                var stored = new WrittenContent(from.Length, from.ContentHash!, Now());
                 await MakeCurrentAsync(attempt, priorLatest, copy, stored, ct).ConfigureAwait(false);
                 return written = stored;
             }, cancellationToken).ConfigureAwait(false);
         }
-        catch (DbUpdateException exception) when (exception.InnerException is SqlException { Number: SqlForeignKeyViolation })
+        catch (DbUpdateException exception) when (IsForeignKeyViolation(exception))
         {
             await ThrowIfContainerMissingAsync(destinationContainer, exception, cancellationToken).ConfigureAwait(false);
             throw;
@@ -715,6 +727,8 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
     public override async Task<bool> MoveResourceAsync(ResourceLocation source, ResourceLocation destination, ResourceConditions? sourceConditions,
         CancellationToken cancellationToken = default)
     {
+        if (HasNul(source.ContainerName) || HasNul(source.ResourceName)) return false;
+        if (HasNul(destination.ContainerName)) throw ContainerNotFound(destination.ContainerName);
         bool moved = false;
         try
         {
@@ -740,7 +754,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
                 return moved = true;
             }, cancellationToken).ConfigureAwait(false);
         }
-        catch (Exception exception) when ((exception as SqlException ?? exception.InnerException as SqlException)?.Number == SqlForeignKeyViolation)
+        catch (Exception exception) when (IsForeignKeyViolation(exception))
         {
             await ThrowIfContainerMissingAsync(destination.ContainerName, exception, cancellationToken).ConfigureAwait(false);
             throw;
@@ -793,8 +807,8 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
     /// <paramref name="stamp"/>, the same round trip moves the version's <see cref="ResourceModel.StagedAt"/> forward.
     /// After a transient failure the strategy sends the batch again from the same buffers, and a retry after a commit
     /// whose acknowledgement was lost, refused because the chunks are already stored, has nothing left to do. The
-    /// command is sent straight through SqlClient: tracking each chunk, or sending the command through EF Core's raw SQL,
-    /// more than doubled what an upload allocated.
+    /// command is sent straight through the database's driver: tracking each chunk, or sending the command through EF
+    /// Core's raw SQL, more than doubled what an upload allocated on SQL Server.
     /// </summary>
     private async Task StoreBatchAsync(ResourceDbContext dbContext, IExecutionStrategy strategy,
         List<ResourceChunkModel> batch, bool stamp, CancellationToken cancellationToken)
@@ -805,7 +819,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
             bool retry = sentBefore;
             sentBefore = true;
             long resourceId = batch[0].ResourceId;
-            DateTimeOffset now = _clock.GetUtcNow();
+            DateTimeOffset now = Now();
 
             if (!dbContext.Database.IsRelational())
             {
@@ -825,17 +839,11 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
             {
                 DbCommand command = NewCommand(dbContext);
                 await using var commandDisposal = command.ConfigureAwait(false);
-                var sql = new StringBuilder(InsertChunks(command, batch));
-                if (stamp)
-                {
-                    sql.Append("; UPDATE [Resources] SET [StagedAt] = @now WHERE [Id] = @resourceId");
-                    command.Parameters.Add(new SqlParameter("@now", now));
-                }
-                command.CommandText = ResourceDbContext.QualifyTables(sql.ToString(), dbContext.Schema);
+                command.CommandText = ResourceDbContext.QualifyTables(InsertChunks(command, batch, stamp ? now : null),
+                    dbContext.Schema);
                 await command.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
             }
-            catch (SqlException exception)
-                when (retry && exception.Number is SqlUniqueConstraintViolation or SqlUniqueIndexViolation)
+            catch (DbException exception) when (retry && IsUniqueViolation(exception))
             {
             }
             finally
@@ -889,50 +897,12 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
         return dbContext;
     }
 
-    /// <summary>
-    /// Takes an exclusive application lock on the resource name for the rest of the current transaction. One lock per
-    /// name, rather than key-range locks on its rows, so writers can't deadlock by taking locks in different orders.
-    /// </summary>
-    private static Task LockNameAsync(ResourceDbContext dbContext, string resourceContainerName, string resourceName,
-        CancellationToken cancellationToken) =>
-        LockNamesAsync(dbContext, [new ResourceLocation(resourceContainerName, resourceName)], cancellationToken);
-
-    /// <summary>Locks each name for the transaction, in the order given, in one round trip.</summary>
-    private static async Task LockNamesAsync(ResourceDbContext dbContext, IReadOnlyList<ResourceLocation> names,
-        CancellationToken cancellationToken)
-    {
-        if (names.Count == 0) return;
-        var sql = new StringBuilder("DECLARE @result int;");
-        var parameters = new object[names.Count];
-        for (int i = 0; i < names.Count; i++)
-        {
-            // -3 is a deadlock victim and -1 a timeout, either of which a retry can get past.
-            sql.Append($"EXEC @result = sp_getapplock @Resource = @lock{i}, @LockMode = 'Exclusive', ")
-                .Append("@LockOwner = 'Transaction';")
-                .Append($"IF @result IN (-1, -3) THROW {NameLockNotGrantedError}, ")
-                .Append("'The resource name''s lock was chosen as a deadlock victim or timed out.', 1;")
-                .Append("IF @result < 0 THROW 50000, 'Could not lock the resource name for writing.', 1;");
-            parameters[i] = new SqlParameter($"@lock{i}", NameLockResource(names[i]));
-        }
-        await dbContext.Database.ExecuteSqlRawAsync(sql.ToString(), parameters, cancellationToken).ConfigureAwait(false);
-    }
-
-    /// <summary>
-    /// The application lock resource for a name. Lock resources are limited to 255 characters, so it's hashed. Stores in
-    /// different schemas of the same database share it: a store without a schema uses the database user's default
-    /// schema, which can be the one another store was given, so a single lock across every store is what keeps writers
-    /// of a name taking turns.
-    /// </summary>
-    internal static string NameLockResource(ResourceLocation name) =>
-        "Resourcefull:" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes($"{name.ContainerName}\n{name.ResourceName}")));
-
-    private static async Task ThrowIfNotMetAsync(ResourceDbContext dbContext, ResourceConditions conditions,
+    private async Task ThrowIfNotMetAsync(ResourceDbContext dbContext, ResourceConditions conditions,
         string resourceContainerName, string resourceName, CancellationToken cancellationToken)
     {
         if (conditions.IsEmpty) return;
 
-        var current = await dbContext.Resources
-            .Where(r => r.ContainerName == resourceContainerName && r.Name == resourceName && r.IsLatest)
+        var current = await Version(dbContext.Resources, resourceContainerName, resourceName, null)
             .Select(r => new { r.VersionId, r.ContentHash })
             .FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
         conditions.ThrowIfNotMet(new ResourceLocation(resourceContainerName, resourceName), current?.VersionId,
@@ -955,12 +925,10 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
             : new(message, innerException) { ContainerName = resourceContainerName, ResourceName = resourceName };
     }
 
-    private static bool IsUniqueViolation(DbUpdateException exception) =>
-        exception.InnerException is SqlException { Number: SqlUniqueIndexViolation or SqlUniqueConstraintViolation };
-
     public override async Task<IReadOnlyList<ResourceInfo>> GetAllResourceInfoAsync(string resourceContainerName,
         CancellationToken cancellationToken = default)
     {
+        if (HasNul(resourceContainerName)) return [];
         using ResourceDbContext dbContext = dbContextFactory.CreateDbContext();
 
         return await dbContext.Resources
@@ -972,6 +940,8 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
     public override async Task<IReadOnlyList<ResourceInfo>> GetResourcePageAsync(string resourceContainerName, string? prefix,
         string? afterName, int pageSize, CancellationToken cancellationToken = default)
     {
+        if (HasNul(resourceContainerName) || HasNul(prefix)) return [];
+        afterName = CutAtNul(afterName);
         using ResourceDbContext dbContext = dbContextFactory.CreateDbContext();
 
         // A seek on the current-versions index, which holds (ContainerName, Name) in the names' binary order: the
@@ -993,8 +963,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
         (string resourceContainerName, string resourceName) = resource;
         using ResourceDbContext dbContext = dbContextFactory.CreateDbContext();
 
-        return await dbContext.Resources
-            .Where(r => r.ContainerName == resourceContainerName && r.Name == resourceName)
+        return await Versions(dbContext.Resources, resourceContainerName, resourceName)
             .OrderByDescending(r => r.IsLatest)
             .ThenByDescending(r => r.Id)
             .Select(AsResourceInfo)
@@ -1004,6 +973,8 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
     public override async Task<IReadOnlyList<ResourceInfo>> GetVersionPageAsync(string resourceContainerName, string? afterName,
         int maxNames, CancellationToken cancellationToken = default)
     {
+        if (HasNul(resourceContainerName)) return [];
+        afterName = CutAtNul(afterName);
         using ResourceDbContext dbContext = dbContextFactory.CreateDbContext();
 
         // The page's names, found as GetResourcePageAsync finds them, and every version of each, in one query.
@@ -1067,9 +1038,8 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
         try
         {
             // One statement, so the length belongs to the version found even if it is deleted right after.
-            var existingResource = await Version(dbContext.Resources, resourceContainerName, resourceName, versionId)
-                .Select(r => new { r.Id, Length = r.Chunks!.Sum(c => (long?)c.Data.Length) ?? 0 })
-                .FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
+            StoredVersion? existingResource = await StoredVersionAsync(
+                Version(dbContext.Resources, resourceContainerName, resourceName, versionId), cancellationToken).ConfigureAwait(false);
             if (existingResource == null)
             {
                 await dbContext.DisposeAsync().ConfigureAwait(false);
@@ -1083,13 +1053,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
 
             // Only the chunks the range overlaps, found by adding up their lengths: releases have stored different
             // chunk sizes, so a position can't be turned into an index by division.
-            ChunkSpan chunks = (await dbContext.Database.SqlQuery<ChunkSpan>(dbContext.QualifyTables($"""
-                SELECT MAX(CASE WHEN [End] <= {start} THEN [Index] END) AS [AfterIndex],
-                    MAX(CASE WHEN [End] <= {start} THEN [End] END) AS [Start],
-                    MIN(CASE WHEN [End] >= {end} THEN [Index] END) AS [ThroughIndex]
-                FROM (SELECT [Index], SUM(CAST(DATALENGTH([Data]) AS bigint)) OVER (ORDER BY [Index] ROWS UNBOUNDED PRECEDING) AS [End]
-                    FROM [ResourceChunks] WHERE [ResourceId] = {existingResource.Id}) AS [Chunks]
-                """)).ToListAsync(cancellationToken).ConfigureAwait(false))[0];
+            ChunkSpan chunks = await ChunkSpanAsync(dbContext, existingResource.Id, start, end, cancellationToken).ConfigureAwait(false);
             return new ResourceStream(PageReader(dbContext, existingResource.Id, chunks.AfterIndex, chunks.ThroughIndex),
                 existingResource.Length, dbContext, chunks.Start ?? 0, start, end);
         }
@@ -1106,7 +1070,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
     /// <paramref name="throughIndex"/>. The data streams from the reader into buffers the pages share, rather than a new
     /// array per chunk, so a page's data is valid only until the next page is read.
     /// </summary>
-    internal static Func<CancellationToken, Task<IReadOnlyList<ReadOnlyMemory<byte>>>> PageReader(ResourceDbContext dbContext,
+    internal Func<CancellationToken, Task<IReadOnlyList<ReadOnlyMemory<byte>>>> PageReader(ResourceDbContext dbContext,
         long resourceId, int? afterIndex = null, int? throughIndex = null)
     {
         // No assumption about where indexes start: the first release numbered chunks from zero.
@@ -1128,14 +1092,8 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
                 {
                     DbCommand command = NewCommand(dbContext);
                     await using var commandDisposal = command.ConfigureAwait(false);
-                    command.CommandText = ResourceDbContext.QualifyTables(
-                        $"SELECT TOP ({ChunksPerReadPage}) [Index], DATALENGTH([Data]), [Data] FROM [ResourceChunks] " +
-                        "WHERE [ResourceId] = @resourceId AND (@lastIndex IS NULL OR [Index] > @lastIndex)" +
-                        (throughIndex is null ? "" : " AND [Index] <= @throughIndex") + " ORDER BY [Index]", dbContext.Schema);
-                    command.Parameters.Add(new SqlParameter("@resourceId", resourceId));
-                    command.Parameters.Add(new SqlParameter("@lastIndex", SqlDbType.Int) { Value = (object?)lastIndex ?? DBNull.Value });
-                    if (throughIndex is not null)
-                        command.Parameters.Add(new SqlParameter("@throughIndex", SqlDbType.Int) { Value = throughIndex });
+                    command.CommandText = ResourceDbContext.QualifyTables(ReadChunks(command, resourceId, lastIndex, throughIndex),
+                        dbContext.Schema);
 
                     // Sequential access streams each chunk's data instead of buffering the row first.
                     DbDataReader reader = await command.ExecuteReaderAsync(CommandBehavior.SequentialAccess, ct).ConfigureAwait(false);
@@ -1153,12 +1111,12 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
                         {
                             await data.ReadExactlyAsync(buffer.AsMemory(0, dataLength), ct).ConfigureAwait(false);
                         }
-                        catch (IOException exception) when (exception.InnerException is SqlException sqlException)
+                        catch (IOException exception) when (exception.InnerException is DbException databaseException)
                         {
                             // The column stream wraps a failure to read from the server; unwrapped, the execution
                             // strategy can recognize a transient one and read the page again, and a caller doesn't
                             // mistake it for content cut short by a delete.
-                            ExceptionDispatchInfo.Throw(sqlException);
+                            ExceptionDispatchInfo.Throw(databaseException);
                         }
                         page.Add(buffer.AsMemory(0, dataLength));
                     }
@@ -1231,8 +1189,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
                 if (firstBatch)
                 {
                     await ThrowIfNotMetAsync(dbContext, conditions, resourceContainerName, resourceName, ct).ConfigureAwait(false);
-                    versions = [.. (await dbContext.Resources
-                        .Where(r => r.ContainerName == resourceContainerName && r.Name == resourceName)
+                    versions = [.. (await Versions(dbContext.Resources, resourceContainerName, resourceName)
                         .OrderBy(r => r.IsLatest).ThenBy(r => r.Id)
                         .Select(r => new { r.Id, Chunks = r.Chunks!.Count })
                         .ToListAsync(ct).ConfigureAwait(false)).Select(v => (v.Id, v.Chunks))];
@@ -1276,7 +1233,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
     }
 
     /// <summary>
-    /// Deletes, <see cref="ChunksPerDeleteStatement"/> at a time, the chunks of versions with more than that many, before
+    /// Deletes, <see cref="ChunksDeletedPerStatement"/> at a time, the chunks of versions with more than that many, before
     /// the versions go. Smaller versions' chunks go with them, through the cascade, without a round trip apiece.
     /// </summary>
     private async Task DeleteLargeVersionsChunksAsync(ResourceDbContext dbContext, IEnumerable<(long Id, int Chunks)> versions,
@@ -1284,22 +1241,20 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
     {
         foreach ((long id, int chunks) in versions)
         {
-            if (chunks > ChunksPerDeleteStatement) await DeleteChunksAsync(dbContext, id, cancellationToken).ConfigureAwait(false);
+            if (chunks > ChunksDeletedPerStatement) await DeleteChunksAsync(dbContext, id, cancellationToken).ConfigureAwait(false);
         }
     }
 
     /// <summary>
     /// Deletes a version's chunks a statement at a time, in the caller's transaction, before the version itself goes:
-    /// deleting more than <see cref="ChunksPerDeleteStatement"/> chunks in one statement, as the cascade would, can lock
-    /// the whole chunk table.
+    /// see <see cref="ChunksDeletedPerStatement"/> for why the cascade doesn't take them all at once.
     /// </summary>
     private async Task DeleteChunksAsync(ResourceDbContext dbContext, long resourceId, CancellationToken cancellationToken)
     {
         // The in-memory provider the unit tests use leaves them to the cascade.
         if (!dbContext.Database.IsRelational()) return;
 
-        while (await dbContext.Database.ExecuteSqlAsync(dbContext.QualifyTables(
-            $"DELETE TOP ({ChunksPerDeleteStatement}) FROM [ResourceChunks] WHERE [ResourceId] = {resourceId}"), cancellationToken).ConfigureAwait(false) == ChunksPerDeleteStatement)
+        while (await DeleteSomeChunksAsync(dbContext, resourceId, cancellationToken).ConfigureAwait(false) == ChunksDeletedPerStatement)
         {
         }
     }
@@ -1430,7 +1385,8 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
         string[] batchContainers = [.. versions.Select(v => v.Resource.ContainerName).Distinct()];
         string[] batchNames = [.. versions.Select(v => v.Resource.ResourceName).Distinct()];
         var wanted = versions.ToHashSet();
-        // By container and name first, so it seeks on the clustered index rather than scanning the table.
+        // By container and name first, so it seeks on the index of (ContainerName, Name, VersionId) rather than
+        // scanning the table.
         var found = (await dbContext.Resources
                 .Where(r => batchContainers.Contains(r.ContainerName) && batchNames.Contains(r.Name)
                     && ids.Contains(r.VersionId))
@@ -1493,10 +1449,14 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
     }
 
     public override Task<bool> SetContentTypeAsync(ResourceLocation resource, string? versionId, string? contentType,
-        CancellationToken cancellationToken = default) =>
-        WriteNameAsync(resource.ContainerName, resource.ResourceName, async (dbContext, ct) =>
+        CancellationToken cancellationToken = default)
+    {
+        if (HasNul(contentType))
+            throw new ArgumentException($"The content type has U+0000, which {DatabaseRefusingNul} can't store.", nameof(contentType));
+        return WriteNameAsync(resource.ContainerName, resource.ResourceName, async (dbContext, ct) =>
             await Version(dbContext.Resources, resource.ContainerName, resource.ResourceName, versionId)
                 .ExecuteUpdateAsync(s => s.SetProperty(r => r.ContentType, contentType), ct).ConfigureAwait(false) > 0, cancellationToken);
+    }
 
     public override async Task AddContainerAsync(string resourceContainerName,
         IReadOnlyDictionary<string, string> metadata, CancellationToken cancellationToken = default)
@@ -1530,6 +1490,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
     public override async Task<bool> SetContainerMetadataAsync(string resourceContainerName,
         IReadOnlyDictionary<string, string> metadata, CancellationToken cancellationToken = default)
     {
+        if (HasNul(resourceContainerName)) return false;
         using ResourceDbContext dbContext = dbContextFactory.CreateDbContext();
         IDictionary<string, string> copy = new Dictionary<string, string>(metadata);
         return await dbContext.ResourceContainers.Where(x => x.Name == resourceContainerName)
@@ -1539,6 +1500,8 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
     public override async Task<IReadOnlyList<ContainerInfo>> GetContainerPageAsync(string? prefix, string? afterName, int pageSize,
         CancellationToken cancellationToken = default)
     {
+        if (HasNul(prefix)) return [];
+        afterName = CutAtNul(afterName);
         using ResourceDbContext dbContext = dbContextFactory.CreateDbContext();
 
         // Seeks on the primary key, which holds the names in their binary order, as GetResourcePageAsync does.
@@ -1559,6 +1522,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
     public override async Task<ContainerInfo?> GetContainerInfoAsync(string resourceContainerName,
         CancellationToken cancellationToken = default)
     {
+        if (HasNul(resourceContainerName)) return null;
         using ResourceDbContext dbContext = dbContextFactory.CreateDbContext();
 
         return await dbContext.ResourceContainers.Where(x => x.Name == resourceContainerName).Select(x => new ContainerInfo
@@ -1571,34 +1535,15 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
     public override async Task<ResourceContainerUsage> GetContainerUsageAsync(string resourceContainerName,
         CancellationToken cancellationToken = default)
     {
+        if (HasNul(resourceContainerName)) return new ResourceContainerUsage(0, 0, 0);
         using ResourceDbContext dbContext = dbContextFactory.CreateDbContext();
-
-        // One aggregate over the container's version rows, from their recorded lengths, which doesn't touch the chunks.
-        // Only if an early release stored versions without a length are their chunks' lengths added up, separately.
-        UsageRow usage = (await dbContext.Database.SqlQuery<UsageRow>(dbContext.QualifyTables($"""
-            SELECT COALESCE(SUM(r.[ContentLength]), 0) AS [StoredSize],
-                COUNT_BIG(CASE WHEN r.[IsLatest] = 1 THEN 1 END) AS [ResourceCount],
-                COUNT_BIG(*) AS [VersionCount],
-                COUNT_BIG(CASE WHEN r.[ContentLength] IS NULL THEN 1 END) AS [Unmeasured]
-            FROM [Resources] r
-            WHERE r.[ContainerName] = {resourceContainerName} AND r.[StagedAt] IS NULL
-            """)).ToListAsync(cancellationToken).ConfigureAwait(false))[0];
-        long storedSize = usage.StoredSize;
-        if (usage.Unmeasured > 0)
-        {
-            storedSize += await dbContext.Database.SqlQuery<long>(dbContext.QualifyTables($"""
-                SELECT COALESCE(SUM(CAST(DATALENGTH(ch.[Data]) AS bigint)), 0) AS [Value]
-                FROM [Resources] r JOIN [ResourceChunks] ch ON ch.[ResourceId] = r.[Id]
-                WHERE r.[ContainerName] = {resourceContainerName} AND r.[ContentLength] IS NULL AND r.[StagedAt] IS NULL
-                """)).SingleAsync(cancellationToken).ConfigureAwait(false);
-        }
-
-        return new ResourceContainerUsage(storedSize, usage.ResourceCount, usage.VersionCount);
+        return await MeasureContainerAsync(dbContext, resourceContainerName, cancellationToken).ConfigureAwait(false);
     }
 
     public override async Task<IReadOnlyList<ResourceInfo>> GetTopVersionsAsync(string resourceContainerName,
         ResourceVersionOrder order, int count, CancellationToken cancellationToken = default)
     {
+        if (HasNul(resourceContainerName)) return [];
         using ResourceDbContext dbContext = dbContextFactory.CreateDbContext();
 
         // One query over the container's version rows. Neither order has an index of its own, so it reads them all, as
@@ -1613,6 +1558,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
     public override async Task<bool> DeleteContainerAsync(string resourceContainerName,
         CancellationToken cancellationToken = default)
     {
+        if (HasNul(resourceContainerName)) return false;
         using ResourceDbContext dbContext = dbContextFactory.CreateDbContext();
 
         if (!await dbContext.ResourceContainers.AnyAsync(x => x.Name == resourceContainerName, cancellationToken).ConfigureAwait(false)) return false;
@@ -1659,11 +1605,8 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
             var deleting = new List<(long Id, int Chunks)>();
             foreach (var candidate in candidates.Where(c => batch.Contains(c.Id)))
             {
-                if (candidate.Chunks > ChunksPerDeleteStatement && attempt.Database.IsRelational()
-                    && (await attempt.Database.SqlQuery<int>(attempt.QualifyTables($"""
-                        SELECT 1 AS [Value] FROM [Resources] WITH (UPDLOCK, ROWLOCK)
-                        WHERE [Id] = {candidate.Id} AND [ContainerName] = {resourceContainerName}
-                        """)).ToListAsync(ct).ConfigureAwait(false)).Count == 0)
+                if (candidate.Chunks > ChunksDeletedPerStatement && attempt.Database.IsRelational()
+                    && !await LockVersionInContainerAsync(attempt, candidate.Id, resourceContainerName, ct).ConfigureAwait(false))
                     continue;
                 deleting.Add((candidate.Id, candidate.Chunks));
             }
@@ -1671,25 +1614,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
             await DeleteLargeVersionsChunksAsync(attempt, deleting, ct).ConfigureAwait(false);
             if (attempt.Database.IsRelational())
             {
-                // A statement per version, in one round trip, rather than loading and tracking each to delete it: SQL
-                // Server removes each version's chunks through the cascade with a seek. One statement for the whole
-                // batch, or one that also matches the container, cascades with a scan of the chunk table instead,
-                // which locks all of it. So the versions still in the container are locked and listed first, by ID, and
-                // only those are deleted: a version a move took to another container since it was listed stays there.
-                var ids = string.Join(", ", batch.Select((_, i) => $"@id{i}"));
-                var sql = new StringBuilder("DECLARE @here TABLE ([Id] bigint PRIMARY KEY); " +
-                    "INSERT INTO @here SELECT [Id] FROM [Resources] WITH (UPDLOCK, ROWLOCK, INDEX([PK_Resources])) " +
-                    $"WHERE [Id] IN ({ids}) AND [ContainerName] = @container;");
-                var parameters = new object[batch.Count + 1];
-                parameters[0] = new SqlParameter("@container", resourceContainerName);
-                for (int i = 0; i < batch.Count; i++)
-                {
-                    sql.Append($"IF EXISTS (SELECT 1 FROM @here WHERE [Id] = @id{i}) ")
-                        .Append($"DELETE FROM [Resources] WHERE [Id] = @id{i};");
-                    parameters[i + 1] = new SqlParameter($"@id{i}", batch[i]);
-                }
-                await attempt.Database.ExecuteSqlRawAsync(ResourceDbContext.QualifyTables(sql.ToString(), attempt.Schema), parameters,
-                    ct).ConfigureAwait(false);
+                await DeleteVersionsInContainerAsync(attempt, resourceContainerName, batch, ct).ConfigureAwait(false);
             }
             else
             {
@@ -1716,7 +1641,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
 
     /// <summary>
     /// A command on the context's connection, with the command timeout its options give: a command made directly keeps
-    /// SqlClient's default of 30 seconds.
+    /// the driver's default of 30 seconds.
     /// </summary>
     internal static DbCommand NewCommand(ResourceDbContext dbContext)
     {
@@ -1725,21 +1650,28 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
         return command;
     }
 
-    private static Task<ResourceModel?> ResolveAsync(IQueryable<ResourceModel> query,
+    private Task<ResourceModel?> ResolveAsync(IQueryable<ResourceModel> query,
         string resourceContainerName, string resourceName, string? versionId, CancellationToken cancellationToken) =>
         Version(query, resourceContainerName, resourceName, versionId).FirstOrDefaultAsync(cancellationToken);
 
     /// <summary>As <see cref="ResolveAsync"/>, with how many chunks the version has, for deleting it.</summary>
-    private static async Task<(ResourceModel Version, int Chunks)?> ResolveWithChunksAsync(IQueryable<ResourceModel> query,
+    private async Task<(ResourceModel Version, int Chunks)?> ResolveWithChunksAsync(IQueryable<ResourceModel> query,
         string resourceContainerName, string resourceName, string? versionId, CancellationToken cancellationToken) =>
         await Version(query, resourceContainerName, resourceName, versionId)
             .Select(r => new { Version = r, Chunks = r.Chunks!.Count })
             .FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false) is { } found ? (found.Version, found.Chunks) : null;
 
+    /// <summary>Every version of a name.</summary>
+    private IQueryable<ResourceModel> Versions(IQueryable<ResourceModel> query, string resourceContainerName, string resourceName) =>
+        HasNul(resourceContainerName) || HasNul(resourceName)
+            ? query.Where(r => false)
+            : query.Where(r => r.ContainerName == resourceContainerName && r.Name == resourceName);
+
     /// <summary>The named version, or the current one when <paramref name="versionId"/> is null.</summary>
-    private static IQueryable<ResourceModel> Version(IQueryable<ResourceModel> query, string resourceContainerName, string resourceName, string? versionId)
+    private IQueryable<ResourceModel> Version(IQueryable<ResourceModel> query, string resourceContainerName, string resourceName, string? versionId)
     {
-        query = query.Where(r => r.ContainerName == resourceContainerName && r.Name == resourceName);
+        if (HasNul(versionId)) return query.Where(r => false);
+        query = Versions(query, resourceContainerName, resourceName);
 
         // A current version is never staged, so the filter on staged versions goes. With its condition, SQL Server
         // was measured caching a scan for this query in some runs, rather than a seek.
@@ -1748,14 +1680,105 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
             : query.Where(r => r.VersionId == versionId);
     }
 
-    /// <summary>What <see cref="GetContainerUsageAsync"/> reads, named as its query's columns.</summary>
-    internal sealed class UsageRow
-    {
-        public long StoredSize { get; set; }
-        public long ResourceCount { get; set; }
-        public long VersionCount { get; set; }
-        public long Unmeasured { get; set; }
-    }
+    /// <summary>
+    /// Whether <paramref name="value"/> has U+0000 and the database can't store it, so no stored name or version ID has
+    /// one. A lookup of such a value finds nothing without asking the server, which would refuse it with an error.
+    /// </summary>
+    private bool HasNul(string? value) => DatabaseRefusingNul is not null && value?.Contains('\0') == true;
+
+    /// <summary>
+    /// The name a listing continues after, cut at its first U+0000 when the database can't store one. No stored name has
+    /// one then, and it sorts before every other character, so the names after the cut are exactly the names after the
+    /// whole.
+    /// </summary>
+    private string? CutAtNul(string? afterName) =>
+        HasNul(afterName) ? afterName![..afterName!.IndexOf('\0')] : afterName;
+
+    /// <summary>
+    /// A stored version's ID, hash and length, read in one statement, so the length belongs to the version found even if
+    /// it's deleted right after. When the database may hold unmeasured versions, every version's length is added up from
+    /// its chunks.
+    /// </summary>
+    private async Task<StoredVersion?> StoredVersionAsync(IQueryable<ResourceModel> version, CancellationToken cancellationToken) =>
+        MayHoldUnmeasuredVersions
+            ? await version.Select(r => new StoredVersion(r.Id, r.ContentHash, r.Chunks!.Sum(c => (long?)c.Data.Length) ?? 0))
+                .FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false)
+            : await version.Select(r => new StoredVersion(r.Id, r.ContentHash, r.ContentLength!.Value))
+                .FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
+
+    private sealed record StoredVersion(long Id, string? ContentHash, long Length);
+
+    // What each database does its own way.
+
+    /// <summary>
+    /// How many chunks a staged version has, locking its row, so an upload can't make it current or move its stamp
+    /// forward before it goes; none when it's no longer staged, or, given <paramref name="staleBefore"/>, was stamped since.
+    /// </summary>
+    protected abstract Task<List<int>> LockStagedVersionAsync(ResourceDbContext attempt, long resourceId, DateTimeOffset? staleBefore,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Moves a session's length from <paramref name="expected"/> to <paramref name="after"/>, and its stamp to
+    /// <paramref name="now"/>, if it's still staged with that length.
+    /// </summary>
+    /// <returns>How many rows changed: 1, or 0 when the session isn't as expected.</returns>
+    protected abstract Task<int> MoveSessionLengthAsync(ResourceDbContext attempt, long resourceId, long expected, long after,
+        DateTimeOffset now, CancellationToken cancellationToken);
+
+    /// <summary>A session's length, or <see langword="null"/> once it's no longer staged.</summary>
+    protected abstract Task<long?> SessionLengthAsync(ResourceDbContext attempt, long resourceId, CancellationToken cancellationToken);
+
+    /// <summary>A session's staged version, locking its row, so an append can't store a batch the completion doesn't cover.</summary>
+    protected abstract Task<SessionRow?> LockSessionAsync(ResourceDbContext attempt, ResourceLocation resource, string versionId,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Adds the batch's chunks to <paramref name="command"/> as parameters, and returns the statement that inserts them;
+    /// given <paramref name="stampedAt"/>, it also moves their version's <see cref="ResourceModel.StagedAt"/> to then.
+    /// </summary>
+    protected abstract string InsertChunks(DbCommand command, List<ResourceChunkModel> batch, DateTimeOffset? stampedAt);
+
+    /// <summary>Copies a version's chunks to another version, in the database.</summary>
+    protected abstract Task CopyChunksAsync(ResourceDbContext attempt, long fromId, long toId, CancellationToken cancellationToken);
+
+    /// <summary>The chunks of a version that the range from <paramref name="start"/> to <paramref name="end"/> overlaps.</summary>
+    protected abstract Task<ChunkSpan> ChunkSpanAsync(ResourceDbContext dbContext, long resourceId, long start, long end,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Adds the parameters for reading a page of a version's chunks to <paramref name="command"/>, and returns the
+    /// statement: up to <see cref="ChunksPerReadPage"/> chunks after <paramref name="lastIndex"/> (from the first, when
+    /// null) through <paramref name="throughIndex"/> (to the last, when null), in index order, each as its index, its
+    /// data's length and its data.
+    /// </summary>
+    protected abstract string ReadChunks(DbCommand command, long resourceId, int? lastIndex, int? throughIndex);
+
+    /// <summary>Deletes up to <see cref="ChunksDeletedPerStatement"/> of a version's chunks.</summary>
+    /// <returns>How many it deleted.</returns>
+    protected abstract Task<int> DeleteSomeChunksAsync(ResourceDbContext dbContext, long resourceId, CancellationToken cancellationToken);
+
+    /// <summary>A container's usage, from its stored versions.</summary>
+    protected abstract Task<ResourceContainerUsage> MeasureContainerAsync(ResourceDbContext dbContext, string resourceContainerName,
+        CancellationToken cancellationToken);
+
+    /// <summary>Locks a version's row, provided it's still in the container.</summary>
+    /// <returns>Whether it is.</returns>
+    protected abstract Task<bool> LockVersionInContainerAsync(ResourceDbContext attempt, long resourceId, string resourceContainerName,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Deletes the versions still in the container, with their chunks; one moved to another container since it was
+    /// listed is left there.
+    /// </summary>
+    protected abstract Task DeleteVersionsInContainerAsync(ResourceDbContext attempt, string resourceContainerName, List<long> ids,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Locks each name for the rest of the transaction, in the order given, in one round trip. One lock per name, rather
+    /// than locks on its rows, so writers can't deadlock by taking locks in different orders.
+    /// </summary>
+    protected abstract Task LockNamesAsync(ResourceDbContext dbContext, IReadOnlyList<ResourceLocation> names,
+        CancellationToken cancellationToken);
 
     /// <summary>
     /// The chunks a range overlaps: those after <see cref="AfterIndex"/> (from the first, when null) through

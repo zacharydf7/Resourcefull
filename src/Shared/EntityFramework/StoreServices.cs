@@ -1,6 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 
-namespace Resourcefull.SqlServer;
+namespace Resourcefull.EntityFramework;
 
 /// <summary>
 /// Resolves a store's services, as the core package's own copy does: by its name for a named store, and with the plain

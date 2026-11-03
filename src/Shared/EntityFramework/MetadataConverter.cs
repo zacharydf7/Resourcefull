@@ -1,7 +1,7 @@
-﻿using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
+using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using System.Text.Json;
 
-namespace Resourcefull.SqlServer.Converters;
+namespace Resourcefull.EntityFramework;
 internal class MetadataConverter : ValueConverter<IDictionary<string, string>?, string>
 {
     private static readonly JsonSerializerOptions _options = new();

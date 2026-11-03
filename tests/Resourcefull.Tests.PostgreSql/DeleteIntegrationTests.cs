@@ -1,8 +1,8 @@
+using Resourcefull.EntityFramework;
 using System.Diagnostics.Metrics;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 using Resourcefull.PostgreSql;
-using Resourcefull.PostgreSql.Utilities;
 using Resourcefull.Providers;
 
 namespace Resourcefull.Tests.PostgreSql;

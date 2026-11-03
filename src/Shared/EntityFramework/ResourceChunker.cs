@@ -1,14 +1,15 @@
 using System.Runtime.CompilerServices;
-using Resourcefull.SqlServer.Models;
 
-namespace Resourcefull.SqlServer.Utilities;
+namespace Resourcefull.EntityFramework;
 
 internal class ResourceChunker
 {
     /// <summary>
     /// The size of every chunk but a version's last: five of SQL Server's content pages, which hold 8,040 bytes each,
     /// exactly. A value over five pages also takes a page of pointers to them, so the 65,535-byte chunks of earlier
-    /// releases took nine pages for eight pages of content.
+    /// releases took nine pages for eight pages of content. PostgreSQL stores a value this large out of line (TOAST), in
+    /// pieces of about 2 KB, so the size doesn't need to fit its 8 KB pages. Each page of chunks a read fetches, about 1
+    /// MiB, holds some 26 of them.
     /// </summary>
     public const int ChunkSize = 40_200;
 

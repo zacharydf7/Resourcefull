@@ -1,3 +1,4 @@
+using Resourcefull.EntityFramework;
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
 using System.Runtime.CompilerServices;
@@ -5,7 +6,6 @@ using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Resourcefull.SqlServer;
-using Resourcefull.SqlServer.Utilities;
 using Resourcefull.Testing;
 using Resourcefull.Tests.Integration;
 

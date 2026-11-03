@@ -1,7 +1,7 @@
+using Resourcefull.EntityFramework;
 using Microsoft.Extensions.DependencyInjection;
 using System.Text;
 using Resourcefull.SqlServer;
-using Resourcefull.SqlServer.Utilities;
 
 namespace Resourcefull.Tests.Integration;
 

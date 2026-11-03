@@ -1,8 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
-using Resourcefull.PostgreSql.Converters;
 using Resourcefull.PostgreSql.Models;
-using Resourcefull.PostgreSql.ValueGenerators;
 
 namespace Resourcefull.PostgreSql.Configuration;
 internal class ResourceConfiguration : IEntityTypeConfiguration<ResourceModel>

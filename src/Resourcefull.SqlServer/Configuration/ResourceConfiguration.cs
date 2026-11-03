@@ -1,8 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
-using Resourcefull.SqlServer.Converters;
 using Resourcefull.SqlServer.Models;
-using Resourcefull.SqlServer.ValueGenerators;
 
 namespace Resourcefull.SqlServer.Configuration;
 internal class ResourceConfiguration : IEntityTypeConfiguration<ResourceModel>

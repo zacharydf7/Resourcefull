@@ -1,8 +1,8 @@
+using Resourcefull.EntityFramework;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.DependencyInjection;
 using Resourcefull.Providers;
 using Resourcefull.SqlServer;
-using Resourcefull.SqlServer.Utilities;
 using Resourcefull.Testing;
 
 namespace Resourcefull.Tests.Integration;

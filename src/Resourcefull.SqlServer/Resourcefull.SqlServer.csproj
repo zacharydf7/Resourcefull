@@ -25,9 +25,13 @@
 	  <ProjectReference Include="..\Resourcefull\Resourcefull.csproj" />
 	</ItemGroup>
 
-  <!-- The repository and its helpers, compiled from source; shared with Resourcefull.PostgreSql next. -->
+  <!-- The repository logic shared with Resourcefull.PostgreSql, compiled from source. Its code names the context and models
+       unqualified, so these usings bind it to this provider's own. -->
   <ItemGroup>
     <Compile Include="..\Shared\EntityFramework\*.cs" Link="EntityFramework\%(Filename)%(Extension)" />
+    <Using Include="Resourcefull.EntityFramework" />
+    <Using Include="Resourcefull.SqlServer" />
+    <Using Include="Resourcefull.SqlServer.Models" />
   </ItemGroup>
 
   <!-- The provisioning and upgrade scripts ship in the package's scripts folder for operators to run; they are not

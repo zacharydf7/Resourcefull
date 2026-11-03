@@ -1,5 +1,5 @@
-﻿using Resourcefull.SqlServer.Models;
-using Resourcefull.SqlServer.Utilities;
+﻿using Resourcefull.EntityFramework;
+using Resourcefull.SqlServer.Models;
 
 namespace Resourcefull.Tests.Unit.SqlServer;
 public class ResourceChunkerTests

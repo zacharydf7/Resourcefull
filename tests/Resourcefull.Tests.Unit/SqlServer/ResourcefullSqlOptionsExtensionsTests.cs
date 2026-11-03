@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
 using Resourcefull.InMemory;
 using Resourcefull.Providers;
+using Resourcefull.EntityFramework;
 using Resourcefull.SqlServer;
 using Resourcefull.SqlServer.Models;
 

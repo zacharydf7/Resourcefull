@@ -1,7 +1,7 @@
 using System.Text;
 using Microsoft.EntityFrameworkCore.Storage;
 
-namespace Resourcefull.SqlServer;
+namespace Resourcefull.EntityFramework;
 
 /// <summary>
 /// Qualifies Resourcefull's tables with <paramref name="schema"/> wherever the migrations name them without one, and

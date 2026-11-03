@@ -1,6 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 
-namespace Resourcefull.SqlServer;
+namespace Resourcefull.EntityFramework;
 
 /// <summary>
 /// Makes one store's contexts. <c>AddDbContextFactory</c> registers a single factory for the context type, so each

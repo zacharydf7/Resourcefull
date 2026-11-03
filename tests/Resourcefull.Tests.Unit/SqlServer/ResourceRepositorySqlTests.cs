@@ -1,3 +1,4 @@
+using Resourcefull.EntityFramework;
 using System.Security.Cryptography;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
@@ -5,7 +6,6 @@ using Microsoft.EntityFrameworkCore.Infrastructure;
 using Resourcefull.Providers;
 using Resourcefull.SqlServer;
 using Resourcefull.SqlServer.Models;
-using Resourcefull.SqlServer.Utilities;
 using Resourcefull.Testing;
 using System.Text;
 

@@ -24,4 +24,13 @@
     <ProjectReference Include="..\Resourcefull\Resourcefull.csproj" />
   </ItemGroup>
 
+  <!-- The repository logic shared with Resourcefull.SqlServer, compiled from source. Its code names the context and models
+       unqualified, so these usings bind it to this provider's own. -->
+  <ItemGroup>
+    <Compile Include="..\Shared\EntityFramework\*.cs" Link="EntityFramework\%(Filename)%(Extension)" />
+    <Using Include="Resourcefull.EntityFramework" />
+    <Using Include="Resourcefull.PostgreSql" />
+    <Using Include="Resourcefull.PostgreSql.Models" />
+  </ItemGroup>
+
 </Project>
