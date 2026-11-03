@@ -88,7 +88,7 @@ public abstract partial class ResourcefullContractTests
         // Act: change the dictionary given, and the ones a read and a listing return.
         given["owner"] = "changed";
         (await repository.GetContainerInfoAsync(containerName))!.Metadata["owner"] = "changed";
-        (await repository.GetAllContainerInfoAsync()).Single(c => c.Name == containerName).Metadata["owner"] = "changed";
+        (await repository.GetContainerPageAsync(containerName, null, 10)).Single(c => c.Name == containerName).Metadata["owner"] = "changed";
 
         // Assert
         Assert.Equal("billing", (await repository.GetContainerInfoAsync(containerName))!.Metadata["owner"]);

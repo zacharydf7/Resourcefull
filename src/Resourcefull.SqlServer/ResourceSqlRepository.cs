@@ -1326,16 +1326,24 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
             .ExecuteUpdateAsync(s => s.SetProperty(c => c.Metadata, copy), cancellationToken).ConfigureAwait(false) > 0;
     }
 
-    public override async Task<IReadOnlyList<ContainerInfo>> GetAllContainerInfoAsync(
+    public override async Task<IReadOnlyList<ContainerInfo>> GetContainerPageAsync(string? prefix, string? afterName, int pageSize,
         CancellationToken cancellationToken = default)
     {
         using ResourceDbContext dbContext = dbContextFactory.CreateDbContext();
 
-        return await dbContext.ResourceContainers.Select(x => new ContainerInfo
-        {
-            Name = x.Name,
-            Metadata = x.Metadata
-        }).ToListAsync(cancellationToken).ConfigureAwait(false);
+        // Seeks on the primary key, which holds the names in their binary order, as GetResourcePageAsync does.
+        IQueryable<ResourceContainerModel> containers = dbContext.ResourceContainers;
+        if (prefix is not null) containers = containers.Where(c => c.Name.StartsWith(prefix));
+        if (afterName is not null) containers = containers.Where(c => string.Compare(c.Name, afterName) > 0);
+
+        return await containers
+            .OrderBy(c => c.Name)
+            .Take(pageSize)
+            .Select(x => new ContainerInfo
+            {
+                Name = x.Name,
+                Metadata = x.Metadata
+            }).ToListAsync(cancellationToken).ConfigureAwait(false);
     }
 
     public override async Task<ContainerInfo?> GetContainerInfoAsync(string resourceContainerName,

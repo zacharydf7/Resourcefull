@@ -20,7 +20,7 @@ public abstract partial class ResourcefullContractTests
         ContainerInfo? stored = await service.GetContainerInfoAsync(name);
         Assert.Equal($"https://resources.test/{name}", stored!.Uri);
         Assert.Equal("ops", stored.Metadata["owner"]);
-        ContainerInfo listed = Assert.Single(await service.GetContainersAsync(), c => c.Name == name);
+        ContainerInfo listed = Assert.Single(await ListContainersAsync(service, name), c => c.Name == name);
         Assert.Equal(stored.Uri, listed.Uri);
         Assert.Equal("ops", listed.Metadata["owner"]);
         Assert.Equal($"https://resources.test/{name}/report.txt/{uploaded.VersionId}", (await container.GetResourceInfoAsync("report.txt"))!.Uri);

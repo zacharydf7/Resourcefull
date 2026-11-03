@@ -4,6 +4,12 @@
 
 ### Added
 
+- **Listing containers a page at a time.** `ListContainersAsync` enumerates every container, or those whose names start
+  with a prefix, fetching a page at a time, so it holds only one page in memory, even in a store with a container for
+  each user. `GetContainerPageAsync` returns one page and a continuation token, for an API that pages for its own
+  callers. Providers implement `GetContainerPageAsync` in place of `GetAllResourceContainerInfoAsync`, which returned
+  every container. Each page records a `list_containers` span with `resourcefull.page_size`. See
+  [Listing containers](docs/containers.md#listing-containers).
 - **A schema for SQL Server's tables.** `UseSqlServer(connectionString, configure, schema: "resourcefull")` puts
   Resourcefull's tables, and its own migration history, in a schema of their own, so they don't mix with an
   application's tables in `dbo`. `MigrateResourcefullDatabaseAsync` creates the schema, and the new
@@ -129,9 +135,10 @@
   as the version exists. The `upload` and `copy` spans gain `resourcefull.write_mode`. `UploadFromRequestAsync` still
   replaces, as a `PUT` does. See [Upgrading to 4.0](docs/upgrading-to-4.md#uploads-say-whether-they-replace).
 - **Consistent names.** The container methods drop "Resource": `CreateContainerAsync`,
-  `CreateContainerIfNotExistsAsync`, `GetContainerInfoAsync`, `GetContainersAsync`, `DeleteContainerIfExistsAsync` and
-  `GetContainerClient`, beside the existing `ContainerExistsAsync`. `ResourceContainerInfo` is `ContainerInfo`, and
-  `IResourceContainerClient.ResourceContainerInfo` is `Info`. `SetUriProvider` is `UseUriProvider`.
+  `CreateContainerIfNotExistsAsync`, `GetContainerInfoAsync`, `DeleteContainerIfExistsAsync` and
+  `GetContainerClient`, beside the existing `ContainerExistsAsync`. `GetResourceContainersAsync`, which read every
+  container into memory, is replaced by `ListContainersAsync`, which lists a page at a time. `ResourceContainerInfo`
+  is `ContainerInfo`, and `IResourceContainerClient.ResourceContainerInfo` is `Info`. `SetUriProvider` is `UseUriProvider`.
   `ResourceUploadOptions` has `init` properties. The provider types move to `Resourcefull.Providers`,
   and the provider's container members are renamed to match. Telemetry's operation names don't change. See
   [Upgrading to 4.0](docs/upgrading-to-4.md#consistent-names).

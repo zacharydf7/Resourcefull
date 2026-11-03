@@ -315,10 +315,14 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : R
             return true;
         }, cancellationToken);
 
-    public override Task<IReadOnlyList<ContainerInfo>> GetAllContainerInfoAsync(
+    public override Task<IReadOnlyList<ContainerInfo>> GetContainerPageAsync(string? prefix, string? afterName, int pageSize,
         CancellationToken cancellationToken = default) =>
-        UnderLockAsync<IReadOnlyList<ContainerInfo>>(() => [.. _containers.Values.Select(ToContainerInfo)],
-            cancellationToken);
+        UnderLockAsync<IReadOnlyList<ContainerInfo>>(() => [.. _containers
+            .Where(pair => (prefix is null || pair.Key.StartsWith(prefix, StringComparison.Ordinal))
+                && (afterName is null || string.CompareOrdinal(pair.Key, afterName) > 0))
+            .OrderBy(pair => pair.Key, StringComparer.Ordinal)
+            .Take(pageSize)
+            .Select(pair => ToContainerInfo(pair.Value))], cancellationToken);
 
     public override Task<ContainerInfo?> GetContainerInfoAsync(string resourceContainerName,
         CancellationToken cancellationToken = default) =>

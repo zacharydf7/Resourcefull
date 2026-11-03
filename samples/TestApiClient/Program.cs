@@ -44,10 +44,17 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.MapGet("/api/containers", async (IResourceServiceClient resourceServiceClient) =>
+app.MapGet("/api/containers", async (string? continuationToken, IResourceServiceClient resourceServiceClient) =>
 {
-    IReadOnlyList<ContainerInfo> containers = await resourceServiceClient.GetContainersAsync();
-    return Results.Ok(containers);
+    try
+    {
+        ContainerPage page = await resourceServiceClient.GetContainerPageAsync(continuationToken: continuationToken);
+        return Results.Ok(page);
+    }
+    catch (ArgumentException)
+    {
+        return Results.BadRequest("The continuation token isn't one this listing returned. Leave it out to start from the first page.");
+    }
 });
 
 app.MapGet("/api/containers/{containerName}", async (string containerName, IResourceServiceClient resourceServiceClient) =>

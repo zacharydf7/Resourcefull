@@ -99,7 +99,7 @@ public class ResourceServiceClientTests
         var repository = new Mock<ResourceRepository>();
         repository.Setup(r => r.GetContainerInfoAsync("stored", It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ContainerInfo { Name = "stored", Uri = "https://old.test/stored" });
-        repository.Setup(r => r.GetAllContainerInfoAsync(It.IsAny<CancellationToken>())).ReturnsAsync(
+        repository.Setup(r => r.GetContainerPageAsync(null, null, It.IsAny<int>(), It.IsAny<CancellationToken>())).ReturnsAsync(
         [
             new ContainerInfo { Name = "first", Uri = "https://old.test/first" },
             new ContainerInfo { Name = "second", Uri = "https://old.test/second" }
@@ -134,16 +134,16 @@ public class ResourceServiceClientTests
     }
 
     [Fact]
-    public async Task GetContainersAsync_ShouldReturnTheUriProvidersUris_WhenTheStoredUrisAreOutOfDate()
+    public async Task GetContainerPageAsync_ShouldReturnTheUriProvidersUris_WhenTheStoredUrisAreOutOfDate()
     {
         // Arrange
         var service = NewService(NewRepositoryWithStoredUris().Object, NewBaseUrlUriProvider());
 
         // Act
-        IReadOnlyList<ContainerInfo> containers = await service.GetContainersAsync();
+        ContainerPage page = await service.GetContainerPageAsync();
 
         // Assert
-        Assert.Equal(["https://new.test/first", "https://new.test/second"], containers.Select(c => c.Uri));
+        Assert.Equal(["https://new.test/first", "https://new.test/second"], page.Containers.Select(c => c.Uri));
     }
 
     [Fact]
@@ -406,19 +406,19 @@ public class ResourceServiceClientTests
     }
 
     [Fact]
-    public async Task GetContainersAsync_ShouldPassTheToken_WhenCalledWithOne()
+    public async Task GetContainerPageAsync_ShouldPassTheToken_WhenCalledWithOne()
     {
         // Arrange
         using var cts = new CancellationTokenSource();
         var repository = new Mock<ResourceRepository>();
-        repository.Setup(r => r.GetAllContainerInfoAsync(cts.Token)).ReturnsAsync([]);
+        repository.Setup(r => r.GetContainerPageAsync(null, null, It.IsAny<int>(), cts.Token)).ReturnsAsync([]);
         var service = NewService(repository.Object);
 
         // Act
-        await service.GetContainersAsync(cts.Token);
+        await service.GetContainerPageAsync(cancellationToken: cts.Token);
 
         // Assert
-        repository.Verify(r => r.GetAllContainerInfoAsync(cts.Token), Times.Once);
+        repository.Verify(r => r.GetContainerPageAsync(null, null, It.IsAny<int>(), cts.Token), Times.Once);
     }
 
     [Fact]

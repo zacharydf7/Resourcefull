@@ -117,7 +117,7 @@ app.MapPost("/admin/containers/{name}/import", async (string name, HttpRequest r
   `SetContainerMetadataAsync`, imports aren't marked.) This finds them:
 
   ```csharp
-  foreach (ContainerInfo container in await resources.GetContainersAsync())
+  await foreach (ContainerInfo container in resources.ListContainersAsync())
   {
       if (container.Metadata.TryGetValue("resourcefull.import", out string? state) && state == "in-progress")
           Console.WriteLine($"{container.Name} is an unfinished import, unless one is running now.");

@@ -411,7 +411,7 @@ public class ResourceSqlRepositoryTests
         await resourceRepository.AddContainerAsync(containerName, new Dictionary<string, string>());
 
         // Assert
-        Assert.NotEmpty(await resourceRepository.GetAllContainerInfoAsync());
+        Assert.NotEmpty(await resourceRepository.GetContainerPageAsync(null, null, 100));
     }
 
     [Fact]
@@ -427,7 +427,7 @@ public class ResourceSqlRepositoryTests
         await resourceRepository.DeleteContainerAsync(containerName);
 
         // Assert
-        Assert.Empty(await resourceRepository.GetAllContainerInfoAsync());
+        Assert.Empty(await resourceRepository.GetContainerPageAsync(null, null, 100));
     }
 
     [Fact]
@@ -448,7 +448,7 @@ public class ResourceSqlRepositoryTests
 
         // Assert
         Assert.True(result);
-        Assert.Empty(await resourceRepository.GetAllContainerInfoAsync());
+        Assert.Empty(await resourceRepository.GetContainerPageAsync(null, null, 100));
         Assert.Empty(resourceDbContext.Resources.Where(r => r.ContainerName == container));
     }
 
@@ -466,7 +466,7 @@ public class ResourceSqlRepositoryTests
 
         // Assert
         Assert.False(result);
-        Assert.NotEmpty(await resourceRepository.GetAllContainerInfoAsync());
+        Assert.NotEmpty(await resourceRepository.GetContainerPageAsync(null, null, 100));
     }
 
     [Fact]
@@ -502,7 +502,7 @@ public class ResourceSqlRepositoryTests
     }
 
     [Fact]
-    public async Task GetAllContainerInfoAsync_ShouldReturnAllContainers_WhenMultipleContainersExist()
+    public async Task GetContainerPageAsync_ShouldReturnAllContainers_WhenMultipleContainersExist()
     {
         // Arrange
         (_, var dbContextFactory) = NewDatabase();
@@ -513,7 +513,7 @@ public class ResourceSqlRepositoryTests
         await resourceRepository.AddContainerAsync("container2", new Dictionary<string, string>());
 
         // Assert
-        Assert.Equal(2, (await resourceRepository.GetAllContainerInfoAsync()).Count);
+        Assert.Equal(2, (await resourceRepository.GetContainerPageAsync(null, null, 100)).Count);
     }
 
     [Fact]

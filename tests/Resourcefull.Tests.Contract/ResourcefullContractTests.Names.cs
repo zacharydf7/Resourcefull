@@ -227,7 +227,7 @@ public abstract partial class ResourcefullContractTests
 
         // Assert
         await Assert.ThrowsAnyAsync<ArgumentException>(act);
-        Assert.DoesNotContain(await service.GetContainersAsync(), c => c.Name == name);
+        Assert.DoesNotContain(await service.ListContainersAsync().ToListAsync(), c => c.Name == name);
     }
 
     [SkippableTheory]

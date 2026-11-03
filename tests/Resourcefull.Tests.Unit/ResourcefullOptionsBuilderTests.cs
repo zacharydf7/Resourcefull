@@ -101,7 +101,7 @@ public class ResourcefullOptionsBuilderTests
             ResourceConditions? conditions = null, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public override Task AddContainerAsync(string resourceContainerName, IReadOnlyDictionary<string, string> metadata,
             CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public override Task<IReadOnlyList<ContainerInfo>> GetAllContainerInfoAsync(
+        public override Task<IReadOnlyList<ContainerInfo>> GetContainerPageAsync(string? prefix, string? afterName, int pageSize,
             CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public override Task<bool> DeleteContainerAsync(string resourceContainerName,
             CancellationToken cancellationToken = default) => throw new NotSupportedException();

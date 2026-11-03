@@ -120,7 +120,7 @@ public abstract partial class ResourcefullContractTests
 
         // Assert
         Assert.All(outcomes, Assert.Null);
-        Assert.Single(await ServiceOf(provider).GetContainersAsync(), c => c.Name == name);
+        Assert.Single(await ListContainersAsync(ServiceOf(provider), name), c => c.Name == name);
     }
 
     private static Task<Exception?[]> RaceAsync(ServiceProvider provider, Func<int, Task> write) =>

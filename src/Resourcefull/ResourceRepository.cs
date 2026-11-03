@@ -257,10 +257,18 @@ public abstract class ResourceRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Lists every container, each with its own copy of the stored metadata.
+    /// Lists up to <paramref name="pageSize"/> containers, each with its own copy of the stored metadata, ordered by name
+    /// in ordinal order (<see cref="StringComparer.Ordinal"/>). As with <see cref="GetResourcePageAsync"/>, a provider
+    /// may use its storage's binary order instead, as long as its ordering and its <paramref name="afterName"/>
+    /// comparison agree, and should answer without reading every container.
+    /// <para>Coming in 4.0.</para>
     /// </summary>
+    /// <param name="prefix">Only names that start with this, ordinally; <see langword="null"/> for every name.</param>
+    /// <param name="afterName">Only names after this one, in the listing's order; <see langword="null"/> to start from the first.</param>
+    /// <param name="pageSize">The most containers to return.</param>
     /// <param name="cancellationToken">Cancels the listing.</param>
-    public abstract Task<IReadOnlyList<ContainerInfo>> GetAllContainerInfoAsync(
+    /// <returns>The containers; empty when there are no more.</returns>
+    public abstract Task<IReadOnlyList<ContainerInfo>> GetContainerPageAsync(string? prefix, string? afterName, int pageSize,
         CancellationToken cancellationToken = default);
 
     /// <summary>

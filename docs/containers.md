@@ -30,3 +30,24 @@ Metadata dictionaries are copied in both directions: changing one you passed in 
 stored. `SetContainerMetadataAsync` replaces the whole dictionary, including the `resourcefull.import` entry
 that marks an [unfinished import](backup-and-move.md), so carry it over if it's there; an import still running
 replaces the metadata again when it finishes.
+
+## Listing containers
+
+<div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 4.0</span></div>
+
+Enumerate `ListContainersAsync` to list every container, or those whose names start with a prefix, ordered by name. It
+fetches a page at a time as you go, so it suits a store with a container for each user:
+
+```csharp
+await foreach (ContainerInfo container in resources.ListContainersAsync(new ContainerListOptions { Prefix = "user-" }))
+{
+    Console.WriteLine(container.Name);
+}
+```
+
+An API that pages for its own callers fetches one page per request with `GetContainerPageAsync` and hands back the
+continuation token. Ordering, prefix matching, page sizes and continuation tokens work as they do when
+[listing resources](listing.md), and as there, each page is a query of its own, with no snapshot.
+
+In 3.x, `GetResourceContainersAsync` returned every container in one list; 4.0 removes it. For a small store,
+`await resources.ListContainersAsync().ToListAsync()` still gives you them all in one list.

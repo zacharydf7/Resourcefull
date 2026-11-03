@@ -95,13 +95,32 @@ internal class ResourceServiceClient(ResourceRepository resourceRepository, IOpt
             return containerInfo is null ? null : WithUri(containerInfo);
         });
 
-    public Task<IReadOnlyList<ContainerInfo>> GetContainersAsync(CancellationToken cancellationToken = default)
-        => _telemetry.RunAsync<IReadOnlyList<ContainerInfo>>("list_containers", null, null, async () =>
+    public Task<ContainerPage> GetContainerPageAsync(ContainerListOptions? options = null, string? continuationToken = null,
+        CancellationToken cancellationToken = default)
+        => _telemetry.RunAsync("list_containers", null, null, () => GetContainerPageCoreAsync(options, continuationToken, cancellationToken),
+            "resourcefull.page_size", options?.PageSize ?? ContainerListOptions.DefaultPageSize);
+
+    private async Task<ContainerPage> GetContainerPageCoreAsync(ContainerListOptions? options, string? continuationToken,
+        CancellationToken cancellationToken)
+    {
+        options ??= new ContainerListOptions();
+        ArgumentOutOfRangeException.ThrowIfLessThan(options.PageSize, 1, nameof(options));
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(options.PageSize, ContainerListOptions.MaxPageSize, nameof(options));
+        string? prefix = string.IsNullOrEmpty(options.Prefix) ? null : options.Prefix;
+        string? afterName = continuationToken is null ? null : ResourcePageToken.Decode(continuationToken, prefix, nameof(continuationToken));
+
+        // One more than a page, to tell whether another page follows without returning an empty last page.
+        IReadOnlyList<ContainerInfo> containers = await resourceRepository.GetContainerPageAsync(prefix, afterName,
+            options.PageSize + 1, cancellationToken).ConfigureAwait(false);
+        string? next = null;
+        if (containers.Count > options.PageSize)
         {
-            IReadOnlyList<ContainerInfo> containers = await resourceRepository.GetAllContainerInfoAsync(cancellationToken).ConfigureAwait(false);
-            foreach (ContainerInfo containerInfo in containers) WithUri(containerInfo);
-            return containers;
-        });
+            containers = [.. containers.Take(options.PageSize)];
+            next = ResourcePageToken.Encode(prefix, containers[^1].Name);
+        }
+        foreach (ContainerInfo containerInfo in containers) WithUri(containerInfo);
+        return new ContainerPage(containers, next);
+    }
 
     public Task<bool> ContainerExistsAsync(string resourceContainerName, CancellationToken cancellationToken = default)
         => _telemetry.RunAsync("container_exists", resourceContainerName, null, async () =>

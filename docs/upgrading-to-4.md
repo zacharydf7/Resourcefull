@@ -48,7 +48,7 @@ Check these, even where your code compiles:
 | 3.x | 4.0 |
 |---|---|
 | `CreateResourceContainerAsync`, `CreateResourceContainerIfNotExistsAsync` | `CreateContainerAsync`, `CreateContainerIfNotExistsAsync` |
-| `GetResourceContainerInfoAsync`, `GetResourceContainersAsync` | `GetContainerInfoAsync`, `GetContainersAsync` |
+| `GetResourceContainerInfoAsync`, `GetResourceContainersAsync` | `GetContainerInfoAsync`, and `ListContainersAsync`, which lists a page at a time: see [Listing containers](containers.md#listing-containers) |
 | `DeleteResourceContainerIfExistsAsync`, `GetResourceContainerClient` | `DeleteContainerIfExistsAsync`, `GetContainerClient` |
 | `ResourceContainerInfo`, and `IResourceContainerClient.ResourceContainerInfo` | `ContainerInfo`, and `IResourceContainerClient.Info` |
 | `SetUriProvider` | `UseUriProvider`, like the other `Use…` methods |
@@ -57,8 +57,10 @@ Check these, even where your code compiles:
 
 Some methods already had the shorter names and keep them, such as `ContainerExistsAsync` and `ExportContainerAsync`.
 For a provider of your own, the container members are renamed the same way: `AddContainerAsync`,
-`GetAllContainerInfoAsync`, `GetContainerInfoAsync` and `DeleteContainerAsync`. Add `using Resourcefull.Providers;`
-where you use the provider types. Telemetry's operation names, such as `create_container`, don't change.
+`GetContainerInfoAsync` and `DeleteContainerAsync`. `GetAllResourceContainerInfoAsync`, which returned every
+container, is replaced by `GetContainerPageAsync`, which returns one page; see
+[Writing a provider](providers/writing-a-provider.md). Add `using Resourcefull.Providers;` where you use the provider
+types. Telemetry's operation names, such as `create_container`, don't change.
 
 ### Names are stricter
 
@@ -71,7 +73,7 @@ and an export of them can be imported. `ResourceNames.IsValidContainerName` and 
 `false` for these names, so you can use them to find any already stored:
 
 ```csharp
-foreach (ContainerInfo container in await resources.GetContainersAsync())
+await foreach (ContainerInfo container in resources.ListContainersAsync())
 {
     if (!ResourceNames.IsValidContainerName(container.Name)) Console.WriteLine($"Container: {container.Name}");
     await foreach (ResourceInfo resource in resources.GetContainerClient(container.Name).ListResourcesAsync())

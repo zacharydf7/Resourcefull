@@ -1,3 +1,5 @@
+using System.Runtime.CompilerServices;
+
 namespace Resourcefull;
 
 /// <summary>
@@ -58,12 +60,50 @@ public interface IResourceServiceClient
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Lists the attributes of all resource containers.
+    /// Lists every container, or those whose names start with <see cref="ContainerListOptions.Prefix"/>, ordered by
+    /// name, fetching a page at a time as you enumerate. A container that exists for the whole listing appears exactly
+    /// once; one created or deleted during it may or may not.
+    /// <para>Coming in 4.0.</para>
     /// </summary>
+    /// <param name="options">The prefix and page size; <see langword="null"/> lists everything, 1,000 at a time.</param>
     /// <param name="cancellationToken">Cancels the listing.</param>
-    /// <returns>A (possibly empty) list of container attributes.</returns>
+    /// <returns>The containers, ordered by name.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><see cref="ContainerListOptions.PageSize"/> is outside 1 to <see cref="ContainerListOptions.MaxPageSize"/>.</exception>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
-    public Task<IReadOnlyList<ContainerInfo>> GetContainersAsync(CancellationToken cancellationToken = default);
+    /// <remarks>
+    /// The default implementation fetches the pages through <see cref="GetContainerPageAsync"/>.
+    /// </remarks>
+    public async IAsyncEnumerable<ContainerInfo> ListContainersAsync(ContainerListOptions? options = null,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        string? continuationToken = null;
+        do
+        {
+            ContainerPage page = await GetContainerPageAsync(options, continuationToken, cancellationToken).ConfigureAwait(false);
+            foreach (ContainerInfo container in page.Containers) yield return container;
+            continuationToken = page.ContinuationToken;
+        }
+        while (continuationToken is not null);
+    }
+
+    /// <summary>
+    /// Gets one page of the containers, ordered by name, for an API that hands the continuation token to its own
+    /// callers. Each page is a query of its own, so there's no snapshot: a container that exists for the whole listing
+    /// appears exactly once, and one created or deleted during it may or may not.
+    /// <para>Coming in 4.0.</para>
+    /// </summary>
+    /// <param name="options">The prefix and page size; <see langword="null"/> lists everything, 1,000 at a time.</param>
+    /// <param name="continuationToken">
+    /// The previous page's <see cref="ContainerPage.ContinuationToken"/>, or <see langword="null"/> for the first page.
+    /// It must come from a listing with the same prefix; the page size can change.
+    /// </param>
+    /// <param name="cancellationToken">Cancels the listing.</param>
+    /// <returns>The page, and the token for the next one if there is one.</returns>
+    /// <exception cref="ArgumentException"><paramref name="continuationToken"/> is malformed or comes from a listing of another prefix.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><see cref="ContainerListOptions.PageSize"/> is outside 1 to <see cref="ContainerListOptions.MaxPageSize"/>.</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
+    public Task<ContainerPage> GetContainerPageAsync(ContainerListOptions? options = null, string? continuationToken = null,
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Checks whether a container exists.

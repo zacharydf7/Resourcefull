@@ -91,8 +91,8 @@ public sealed class TelemetryTests : IDisposable
             await Record.ExceptionAsync(async () =>
             {
                 object? result = method.Invoke(client, arguments);
-                if (result is IAsyncEnumerable<ResourceInfo> listing)
-                    await foreach (ResourceInfo _ in listing) { }
+                if (result is IAsyncEnumerable<object> listing)
+                    await foreach (object _ in listing) { }
                 else
                     await (Task)result!;
             });
@@ -741,7 +741,8 @@ public sealed class TelemetryTests : IDisposable
     {
         // Arrange
         using ServiceProvider provider = NewServices();
-        IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>().CreateContainerAsync("c");
+        var service = provider.GetRequiredService<IResourceServiceClient>();
+        IResourceContainerClient container = await service.CreateContainerAsync("c");
         ResourceInfo version = await container.UploadAsync("report.txt", BinaryData.FromString("x"));
         using Activity root = TestSource.StartActivity("test")!;
 
@@ -749,10 +750,12 @@ public sealed class TelemetryTests : IDisposable
         await container.UploadAsync("report.txt", BinaryData.FromString("y"),
             new ResourceUploadOptions { Mode = ResourceWriteMode.Replace, Conditions = new ResourceConditions { IfMatchVersionId = version.VersionId } });
         await container.GetResourcePageAsync(new ResourceListOptions { PageSize = 7 });
+        await service.GetContainerPageAsync(new ContainerListOptions { PageSize = 9 });
 
         // Assert
         Assert.Equal(true, SpansIn(root).Single(s => s.OperationName == "resourcefull upload").GetTagItem("resourcefull.conditional"));
         Assert.Equal(7, SpansIn(root).Single(s => s.OperationName == "resourcefull list_page").GetTagItem("resourcefull.page_size"));
+        Assert.Equal(9, SpansIn(root).Single(s => s.OperationName == "resourcefull list_containers").GetTagItem("resourcefull.page_size"));
     }
 
     private sealed class FailingCleanupHandler : IResourceCleanupHandler

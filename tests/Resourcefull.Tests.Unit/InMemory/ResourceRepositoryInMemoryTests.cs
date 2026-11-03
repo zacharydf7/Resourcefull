@@ -289,7 +289,7 @@ public class ResourceInMemoryRepositoryTests
         await repository.AddContainerAsync(containerName, new Dictionary<string, string>());
 
         // Assert
-        Assert.NotEmpty(await repository.GetAllContainerInfoAsync());
+        Assert.NotEmpty(await repository.GetContainerPageAsync(null, null, 100));
     }
 
     [Fact]
@@ -304,7 +304,7 @@ public class ResourceInMemoryRepositoryTests
         await repository.DeleteContainerAsync(containerName);
 
         // Assert
-        Assert.Empty(await repository.GetAllContainerInfoAsync());
+        Assert.Empty(await repository.GetContainerPageAsync(null, null, 100));
     }
 
     [Fact]
@@ -319,7 +319,7 @@ public class ResourceInMemoryRepositoryTests
         await repository.DeleteContainerAsync("nonExistentContainer");
 
         // Assert
-        Assert.NotEmpty(await repository.GetAllContainerInfoAsync());
+        Assert.NotEmpty(await repository.GetContainerPageAsync(null, null, 100));
     }
 
     [Fact]
@@ -354,7 +354,7 @@ public class ResourceInMemoryRepositoryTests
     }
 
     [Fact]
-    public async Task GetAllContainerInfoAsync_ShouldReturnAllContainers_WhenMultipleContainersExist()
+    public async Task GetContainerPageAsync_ShouldReturnAllContainers_WhenMultipleContainersExist()
     {
         // Arrange
         var repository = new ResourceInMemoryRepository();
@@ -364,7 +364,7 @@ public class ResourceInMemoryRepositoryTests
         await repository.AddContainerAsync("container2", new Dictionary<string, string>());
 
         // Assert
-        Assert.Equal(2, (await repository.GetAllContainerInfoAsync()).Count);
+        Assert.Equal(2, (await repository.GetContainerPageAsync(null, null, 100)).Count);
     }
 
     [Fact]
@@ -524,7 +524,7 @@ public class ResourceInMemoryRepositoryTests
         // Act
         ContainerInfo? first = await repository.GetContainerInfoAsync("c");
         first!.Metadata["key"] = "changed by a reader";
-        ContainerInfo listed = Assert.Single(await repository.GetAllContainerInfoAsync());
+        ContainerInfo listed = Assert.Single(await repository.GetContainerPageAsync(null, null, 100));
 
         // Assert
         Assert.Equal("original", listed.Metadata["key"]);
@@ -649,7 +649,7 @@ public class ResourceInMemoryRepositoryTests
 
         // Assert
         await Assert.ThrowsAsync<ResourceConflictException>(act);
-        Assert.Single(await repository.GetAllContainerInfoAsync());
+        Assert.Single(await repository.GetContainerPageAsync(null, null, 100));
     }
 
     [Fact]

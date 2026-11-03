@@ -148,7 +148,7 @@
     private async Task PopulateResourceContainers()
     {
         _resources.Clear();
-        _resourceContainers = (await ResourceServiceClient.GetContainersAsync()).ToList();
+        _resourceContainers = await ResourceServiceClient.ListContainersAsync().ToListAsync();
         foreach (var container in _resourceContainers)
         {
             var containerClient = ResourceServiceClient.GetContainerClient(container.Name);

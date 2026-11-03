@@ -105,7 +105,7 @@ metrics. It also has:
 | `create_container` | `CreateContainerAsync`, `CreateContainerIfNotExistsAsync` | |
 | `get_container` | `GetContainerInfoAsync` | |
 | `container_exists` | `ContainerExistsAsync` | |
-| `list_containers` | `GetContainersAsync` | |
+| `list_containers` | `GetContainerPageAsync` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>, and each page `ListContainersAsync` fetches | `resourcefull.page_size` |
 | `delete_container` | `DeleteContainerIfExistsAsync` | |
 | `migrate` | `MigrateResourcefullDatabaseAsync` (SQL Server) | span only; `resourcefull.schema` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>: the [schema](providers/sql-server.md#choosing-a-schema) given to `UseSqlServer`, when there is one |
 | `backfill` | `ContentHashBackfill.RunAsync` (SQL Server) | span only; `resourcefull.hashed`, `resourcefull.mismatches` |

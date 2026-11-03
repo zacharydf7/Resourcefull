@@ -93,9 +93,10 @@ public sealed class FileSystemRepository(FileSystemOptions options, TimeProvider
         // ResourceConflictException, decided by the write itself, not by a check before it.
         => throw new NotImplementedException();
 
-    public override Task<IReadOnlyList<ContainerInfo>> GetAllContainerInfoAsync(
-        CancellationToken cancellationToken = default)
-        // Every container, each with its own copy of the metadata.
+    public override Task<IReadOnlyList<ContainerInfo>> GetContainerPageAsync(string? prefix, string? afterName,
+        int pageSize, CancellationToken cancellationToken = default)
+        // Up to pageSize containers whose names start with prefix and come after afterName, ordered by name, each
+        // with its own copy of the metadata. Seek on the name rather than reading every container.
         => throw new NotImplementedException();
 
     public override Task<ContainerInfo?> GetContainerInfoAsync(string resourceContainerName,
