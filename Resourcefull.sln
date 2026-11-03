@@ -24,7 +24,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "docs", "docs", "{D9B97653-C
 		docs\docs-v2-reference.md = docs\docs-v2-reference.md
 	EndProjectSection
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Resourcefull.Tests.Contract", "tests\Resourcefull.Tests.Contract\Resourcefull.Tests.Contract.csproj", "{36CA369C-3723-4A01-AE17-391E767BF1FE}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Resourcefull.Testing", "src\Resourcefull.Testing\Resourcefull.Testing.csproj", "{36CA369C-3723-4A01-AE17-391E767BF1FE}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Resourcefull.Tests.Performance", "tests\Resourcefull.Tests.Performance\Resourcefull.Tests.Performance.csproj", "{D928AC20-B9CF-453E-B0A9-97AE4E577755}"
 EndProject

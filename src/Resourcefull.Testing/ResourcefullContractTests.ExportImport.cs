@@ -4,7 +4,7 @@ using System.Text.Json.Nodes;
 using Microsoft.Extensions.DependencyInjection;
 using Resourcefull.Providers;
 
-namespace Resourcefull.Tests.Contract;
+namespace Resourcefull.Testing;
 
 public abstract partial class ResourcefullContractTests
 {

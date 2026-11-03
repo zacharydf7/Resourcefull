@@ -1,4 +1,4 @@
-namespace Resourcefull.Tests.Contract;
+namespace Resourcefull.Testing;
 
 /// <summary>A clock that reads whatever it was last set to, so a test can decide when each write happens.</summary>
 public sealed class ManualTimeProvider : TimeProvider

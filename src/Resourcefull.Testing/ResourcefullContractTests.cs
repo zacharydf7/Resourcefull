@@ -1,6 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 
-namespace Resourcefull.Tests.Contract;
+namespace Resourcefull.Testing;
 
 /// <summary>
 /// Behavior every provider must share, driven through the public clients. Each provider's test project derives a

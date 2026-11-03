@@ -2,7 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using Resourcefull.InMemory;
 using Resourcefull.Providers;
-using Resourcefull.Tests.Contract;
+using Resourcefull.Testing;
 
 namespace Resourcefull.Tests.Unit.InMemory;
 

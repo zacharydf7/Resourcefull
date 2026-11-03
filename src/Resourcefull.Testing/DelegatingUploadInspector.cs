@@ -1,6 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 
-namespace Resourcefull.Tests.Contract;
+namespace Resourcefull.Testing;
 
 /// <summary>An upload inspector that answers as the delegate registered with it does.</summary>
 public sealed class DelegatingUploadInspector(

@@ -305,7 +305,7 @@ same code works for named and unnamed stores.
 
 ## Testing a provider
 
-The repository's contract test suite, `tests/Resourcefull.Tests.Contract`, is an abstract xUnit class that runs the
+The repository's contract test suite, `src/Resourcefull.Testing`, is an abstract xUnit class that runs the
 same tests against any provider; both built-in providers pass it. To check your provider, copy the suite into your
 test project and derive a class that registers your provider:
 

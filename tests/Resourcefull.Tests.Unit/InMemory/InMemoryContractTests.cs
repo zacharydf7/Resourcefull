@@ -1,6 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Resourcefull.InMemory;
-using Resourcefull.Tests.Contract;
+using Resourcefull.Testing;
 
 namespace Resourcefull.Tests.Unit.InMemory;
 

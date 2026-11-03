@@ -3,7 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Resourcefull.Providers;
 using Resourcefull.SqlServer;
 using Resourcefull.SqlServer.Utilities;
-using Resourcefull.Tests.Contract;
+using Resourcefull.Testing;
 
 namespace Resourcefull.Tests.Integration;
 

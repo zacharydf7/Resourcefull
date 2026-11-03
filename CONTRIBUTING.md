@@ -86,7 +86,7 @@ RESOURCEFULL_SCALE=true RESOURCEFULL_SCALE_GIB=1 RESOURCEFULL_SCALE_ROWS=1000000
 
 ### How the tests are organized
 
-- `tests/Resourcefull.Tests.Contract` is one suite of behavior every provider must share. It runs against the
+- `src/Resourcefull.Testing` is one suite of behavior every provider must share. It runs against the
   in-memory provider in the unit tests and against SQL Server in the integration tests, so a behavior added to one
   provider should get a contract test.
 - `tests/Resourcefull.Tests.Unit` covers the clients and each provider's internals.

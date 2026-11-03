@@ -7,6 +7,8 @@
 
     <IsPackable>false</IsPackable>
     <IsTestProject>false</IsTestProject>
+    <!-- The test methods are public for xUnit and named for what they check, so they carry no XML docs. -->
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
@@ -17,7 +19,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\Resourcefull\Resourcefull.csproj" />
+    <ProjectReference Include="..\Resourcefull\Resourcefull.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -3,7 +3,7 @@ using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Headers;
 using Resourcefull.AspNetCore;
-using Resourcefull.Tests.Contract;
+using Resourcefull.Testing;
 
 namespace Resourcefull.Tests.AspNetCore;
 

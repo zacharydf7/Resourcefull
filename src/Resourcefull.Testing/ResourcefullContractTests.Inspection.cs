@@ -2,7 +2,7 @@ using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace Resourcefull.Tests.Contract;
+namespace Resourcefull.Testing;
 
 public abstract partial class ResourcefullContractTests
 {

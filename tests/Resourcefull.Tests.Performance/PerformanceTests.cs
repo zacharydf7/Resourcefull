@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Resourcefull.SqlServer;
 using Resourcefull.SqlServer.Utilities;
-using Resourcefull.Tests.Contract;
+using Resourcefull.Testing;
 using Resourcefull.Tests.Integration;
 
 [assembly: Xunit.v3.Parallelization(Mode = Xunit.Sdk.ParallelMode.None)]

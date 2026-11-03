@@ -3,7 +3,7 @@ using System.Security.Cryptography;
 using Microsoft.Extensions.DependencyInjection;
 using Resourcefull.Providers;
 
-namespace Resourcefull.Tests.Contract;
+namespace Resourcefull.Testing;
 
 /// <remarks>
 /// A sweep deletes expired versions in every container, so tests that share a store sweep each other's too: each checks

@@ -2,7 +2,7 @@ using System.Text;
 using Microsoft.Extensions.DependencyInjection;
 using Resourcefull.Providers;
 
-namespace Resourcefull.Tests.Contract;
+namespace Resourcefull.Testing;
 
 public abstract partial class ResourcefullContractTests
 {

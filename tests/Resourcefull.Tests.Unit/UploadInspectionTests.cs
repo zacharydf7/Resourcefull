@@ -3,7 +3,7 @@ using Microsoft.Extensions.Options;
 using Moq;
 using Resourcefull.InMemory;
 using Resourcefull.Providers;
-using Resourcefull.Tests.Contract;
+using Resourcefull.Testing;
 
 namespace Resourcefull.Tests.Unit;
 

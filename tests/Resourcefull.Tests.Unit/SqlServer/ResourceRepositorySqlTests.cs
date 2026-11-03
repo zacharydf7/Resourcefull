@@ -6,7 +6,7 @@ using Resourcefull.Providers;
 using Resourcefull.SqlServer;
 using Resourcefull.SqlServer.Models;
 using Resourcefull.SqlServer.Utilities;
-using Resourcefull.Tests.Contract;
+using Resourcefull.Testing;
 using System.Text;
 
 namespace Resourcefull.Tests.Unit.SqlServer;

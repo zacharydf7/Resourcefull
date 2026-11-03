@@ -1,0 +1,6 @@
+# This project lives under src/ but holds tests, not library code. xUnit runs them on its own synchronization context,
+# so they await without ConfigureAwait(false), as xUnit recommends, and they pass CancellationToken only where
+# cancellation is what they test.
+[*.cs]
+dotnet_diagnostic.CA2007.severity = none
+dotnet_diagnostic.xUnit1051.severity = none

@@ -1,5 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
-using Resourcefull.Tests.Contract;
+using Resourcefull.Testing;
 
 namespace Resourcefull.Tests.Integration;
 

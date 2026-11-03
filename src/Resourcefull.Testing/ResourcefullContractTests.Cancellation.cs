@@ -1,7 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Resourcefull.Providers;
 
-namespace Resourcefull.Tests.Contract;
+namespace Resourcefull.Testing;
 
 /// <summary>
 /// What a provider must do with a canceled token, and with the dictionaries it's given and returns, checked on the
