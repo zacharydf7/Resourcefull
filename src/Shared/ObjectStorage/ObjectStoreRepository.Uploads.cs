@@ -184,10 +184,13 @@ internal sealed partial class ObjectStoreRepository
         };
     }
 
-    private InvalidOperationException TooManyParts(ResourceLocation resource, string versionId) =>
+    private ResourceUploadLimitException TooManyParts(ResourceLocation resource, string versionId) =>
         new($"The upload {versionId} of the resource {resource.ResourceName} in the container {resource.ContainerName} has " +
             $"{store.MaxJoinedParts} segments, the most the store can join. Start a new upload, and append in parts of " +
-            $"{SegmentSize / 1024 / 1024} MiB or more.");
+            $"{SegmentSize / 1024 / 1024} MiB or more.")
+        {
+            ContainerName = resource.ContainerName, ResourceName = resource.ResourceName
+        };
 
     public override async Task<Stream?> GetStagedStreamAsync(ResourceLocation resource, string versionId,
         CancellationToken cancellationToken = default)

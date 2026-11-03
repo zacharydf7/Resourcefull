@@ -256,13 +256,14 @@ while its content arrives.
 - **`StartStagedVersionAsync`** stages a version with no content, keeping its content type, metadata, expiry and
   declared length. A missing container throws `ResourceContainerNotFoundException`.
 - **`GetStagedVersionAsync`** returns the version as it was staged and how many bytes are stored, or `null`.
-- **`AppendStagedContentAsync`** appends content, provided the stored content ends at the offset it's given;
-  otherwise it throws `ResourceUploadOffsetException` with the stored length, and stores nothing. It may store the
-  content as it arrives, so an append that fails partway keeps what it stored. Make the check and the store one step,
-  as SQL Server's provider does by moving the stored length forward only from the length it expects, in the
-  transaction that stores each batch, so two appends from the same offset can't both succeed. When your provider
-  retries a batch after a transient failure, and the earlier attempt's commit succeeded but its acknowledgement was
-  lost, the retry must recognize its own stored batch rather than refuse it.
+- **`AppendStagedContentAsync`** appends content, provided the stored content ends at the offset it's given; otherwise
+  it throws `ResourceUploadOffsetException` with the stored length, and stores nothing. A provider that can hold only so
+  much in one session throws `ResourceUploadLimitException` once the session is full. It may store the content as it
+  arrives, so an append that fails partway keeps what it stored. Make the check and the store one step, as SQL Server's
+  provider does by moving the stored length forward only from the length it expects, in the transaction that stores each
+  batch, so two appends from the same offset can't both succeed. When your provider retries a batch after a transient
+  failure, and the earlier attempt's commit succeeded but its acknowledgement was lost, the retry must recognize its own
+  stored batch rather than refuse it.
 - **`GetStagedStreamAsync`** reads the staged content from the start. The clients read it once, to measure, hash and
   inspect it, before they complete the session.
 - **`CompleteStagedVersionAsync`** makes the version current with the length and hash it's given, deciding the write

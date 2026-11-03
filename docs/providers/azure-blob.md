@@ -177,8 +177,9 @@ characters beyond U+FFFF, such as emoji, or from U+E000 to U+FFFF, might list in
   reads and writes the record to seal it, reads the head, has Azure copy each segment into a block of the version's
   content (several at once) and commits them, and writes the head; then it deletes the session's blobs. A blob holds at
   most 50,000 blocks, so a session can hold at least 390 GiB, and up to 3 TiB when its appends are each 64 MiB or
-  larger. An append past the limit throws `InvalidOperationException`. The expiry sweep lists every session, and reads
-  the record of each, to find those that nothing was appended to for a day.
+  larger. An append past the limit throws `ResourceUploadLimitException`, which ASP.NET Core's handler answers with 413
+  Content Too Large. The expiry sweep lists every session, and reads the record of each, to find those that nothing was
+  appended to for a day.
 
 ## Health checks
 

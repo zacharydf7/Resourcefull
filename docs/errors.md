@@ -58,6 +58,7 @@ All of them derive from `ResourcefullException`, so one `catch` handles any of t
 | `ResourceRangeNotSatisfiableException` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | The download range starts past the end of the content; `ContentLength` says how long it is. | 416 Range Not Satisfiable |
 | `ResourceContentRefusedException` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | The [upload inspector](upload-inspection.md) refused the content; `Reason` says why. | 422 Unprocessable Content |
 | `ResourceUploadOffsetException` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | An append to an [upload session](uploading-in-parts.md) didn't start where its stored content ends; `CurrentOffset` says where to resume. | 409 Conflict |
+| `ResourceUploadLimitException` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | An append would take an [upload session](uploading-in-parts.md) past what its provider can store in one session. | 413 Content Too Large |
 
 `ResourceNameException` derives from `ArgumentException` rather than `ResourcefullException`, so existing
 `catch (ArgumentException)` code still catches it; it maps to 400 Bad Request. Its `Name` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> is the name that

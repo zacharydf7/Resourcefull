@@ -458,6 +458,9 @@ public abstract class ResourceRepository
     /// <param name="cancellationToken">Cancels the append; what's already stored stays stored.</param>
     /// <returns>The stored length after the append, or <see langword="null"/> if there's no such staged version.</returns>
     /// <exception cref="ResourceUploadOffsetException">The stored content doesn't end at <paramref name="offset"/>.</exception>
+    /// <exception cref="ResourceUploadLimitException">
+    /// The session already holds as much as the provider can store; what it stored stays.
+    /// </exception>
     /// <exception cref="NotSupportedException">The provider doesn't support upload sessions, as by default.</exception>
     public virtual Task<long?> AppendStagedContentAsync(ResourceLocation resource, string versionId, long offset, Stream content,
         CancellationToken cancellationToken = default)

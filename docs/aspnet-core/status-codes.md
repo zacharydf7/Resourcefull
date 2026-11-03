@@ -12,6 +12,7 @@ app.UseExceptionHandler();
 |---|---|
 | `ResourceConflictException` | 409 Conflict |
 | `ResourceUploadOffsetException` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>, for an append to an [upload session](../uploading-in-parts.md) that doesn't start where its content ends | 409 Conflict |
+| `ResourceUploadLimitException` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>, for an append past what an [upload session](../uploading-in-parts.md) can hold with its provider | 413 Content Too Large |
 | `ResourceContainerNotFoundException` | 404 Not Found |
 | `ResourceContentLengthMismatchException` | 400 Bad Request |
 | `ResourceNameException`, for a name that breaks the [name rules](../names.md) | 400 Bad Request |

@@ -18,6 +18,7 @@ public class ResourcefullExceptionHandlerTests
         { new ResourceContentRefusedException("Refused: it looks like malware.", "It looks like malware."), HttpStatusCode.UnprocessableContent },
         { new ResourcePolicyViolationException("Too large.", ResourcePolicyRule.MaxResourceSize, 10), HttpStatusCode.RequestEntityTooLarge },
         { new ResourcePolicyViolationException("No room.", ResourcePolicyRule.MaxContainerSize, 10), HttpStatusCode.RequestEntityTooLarge },
+        { new ResourceUploadLimitException("The upload has as many parts as the store can join."), HttpStatusCode.RequestEntityTooLarge },
         { new ResourcePolicyViolationException("Too many.", ResourcePolicyRule.MaxResourceCount, 10), HttpStatusCode.Conflict },
         { new ResourcePolicyViolationException("Not that type.", ResourcePolicyRule.AllowedContentTypes), HttpStatusCode.UnsupportedMediaType },
         { new ResourcePolicyViolationException("Read-only.", ResourcePolicyRule.ReadOnly), HttpStatusCode.Forbidden }

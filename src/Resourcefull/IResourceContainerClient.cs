@@ -525,6 +525,10 @@ public interface IResourceContainerClient
     /// The content would take the version past the container's <see cref="ResourceContainerPolicy.MaxResourceSize"/>, or
     /// past what the whole container may hold. Part of what arrived before the limit may stay stored.
     /// </exception>
+    /// <exception cref="ResourceUploadLimitException">
+    /// The session already holds as much as its provider can store. Part of what arrived before the limit may stay
+    /// stored.
+    /// </exception>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
     /// <exception cref="NotSupportedException">
     /// The provider doesn't support upload sessions, or this is the default implementation.

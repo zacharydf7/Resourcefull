@@ -156,6 +156,19 @@ public sealed class ResourceUploadOffsetException : ResourcefullException
 }
 
 /// <summary>
+/// Thrown when an append would take an upload session past what its provider can store in one session, as the
+/// S3 and Azure Blob providers' limit on the pieces they join. What the session stored before the limit stays stored,
+/// but it takes no more content: start a new session, and append in larger parts. Maps naturally to an HTTP 413.
+/// <para>Coming in 4.0.</para>
+/// </summary>
+public sealed class ResourceUploadLimitException : ResourcefullException
+{
+    /// <summary>Creates the exception with a message.</summary>
+    /// <param name="message">The message that describes the error.</param>
+    public ResourceUploadLimitException(string message) : base(message) { }
+}
+
+/// <summary>
 /// Thrown when an upload declares a content length that differs from the bytes it supplies. Nothing is
 /// stored. Maps naturally to an HTTP 400.
 /// </summary>

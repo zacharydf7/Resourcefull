@@ -10,7 +10,7 @@ namespace Resourcefull.AspNetCore;
 /// <see cref="ResourceContainerNotFoundException"/> into 404, <see cref="ResourceContentLengthMismatchException"/> and
 /// <see cref="ResourceNameException"/> into 400, <see cref="ResourcePreconditionFailedException"/> into 412,
 /// <see cref="ResourceRangeNotSatisfiableException"/> into 416 with the content's length in <c>Content-Range</c>,
-/// <see cref="ResourceContentRefusedException"/> into 422, and
+/// <see cref="ResourceContentRefusedException"/> into 422, <see cref="ResourceUploadLimitException"/> into 413, and
 /// <see cref="ResourcePolicyViolationException"/> into 413 for content too large for the size limits, 409 for a
 /// container that holds as many resources as it may, 403 for a read-only container, and 415 for a content type it
 /// doesn't allow. Their
@@ -49,7 +49,7 @@ public sealed class ResourcefullExceptionHandler(IProblemDetailsService problemD
         ResourceRangeNotSatisfiableException => StatusCodes.Status416RangeNotSatisfiable,
         ResourceContentRefusedException => StatusCodes.Status422UnprocessableEntity,
         ResourcePolicyViolationException { Rule: ResourcePolicyRule.MaxResourceSize or ResourcePolicyRule.MaxContainerSize }
-            => StatusCodes.Status413PayloadTooLarge,
+            or ResourceUploadLimitException => StatusCodes.Status413PayloadTooLarge,
         ResourcePolicyViolationException { Rule: ResourcePolicyRule.MaxResourceCount } => StatusCodes.Status409Conflict,
         ResourcePolicyViolationException { Rule: ResourcePolicyRule.ReadOnly } => StatusCodes.Status403Forbidden,
         ResourcePolicyViolationException { Rule: ResourcePolicyRule.AllowedContentTypes } => StatusCodes.Status415UnsupportedMediaType,

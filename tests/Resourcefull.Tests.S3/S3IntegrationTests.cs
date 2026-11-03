@@ -469,6 +469,28 @@ public class S3IntegrationTests(S3Fixture fixture)
     }
 
     [Fact]
+    public async Task AppendStagedContentAsync_ShouldThrowUploadLimitException_WhenTheSessionHasAsManySegmentsAsTheStoreJoins()
+    {
+        fixture.SkipIfUnavailable();
+
+        // Arrange: a store that joins at most two parts, and a session holding two full segments of 9 MiB.
+        string prefix = $"limit-{Guid.NewGuid():N}/";
+        var store = new InterferingStore(new S3ObjectStore(fixture.Client, fixture.BucketName)) { MaxParts = 2 };
+        ObjectStoreRepository repository = await NewRepositoryAsync(prefix, segmentSize: 9 * 1024 * 1024, store: store);
+        var location = new ResourceLocation("c", "big.bin");
+        await repository.StartStagedVersionAsync(new NewResourceVersion(location, "v1"));
+        long stored = (await repository.AppendStagedContentAsync(location, "v1", 0, new MemoryStream(new byte[18 * 1024 * 1024])))!.Value;
+
+        // Act
+        ResourceUploadLimitException refused = await Assert.ThrowsAsync<ResourceUploadLimitException>(() =>
+            repository.AppendStagedContentAsync(location, "v1", stored, new MemoryStream("a"u8.ToArray())));
+
+        // Assert: refused, naming the resource, with what the session stored kept.
+        Assert.Equal(("c", "big.bin"), (refused.ContainerName, refused.ResourceName));
+        Assert.Equal(stored, (await repository.GetStagedVersionAsync(location, "v1"))!.StoredLength);
+    }
+
+    [Fact]
     public async Task DeleteAbandonedUploadsAsync_ShouldDeleteAndCountTheOthers_WhenOneSessionCantBeRead()
     {
         fixture.SkipIfUnavailable();
@@ -527,7 +549,10 @@ public class S3IntegrationTests(S3Fixture fixture)
 
         public string ConditionalWrites => inner.ConditionalWrites;
 
-        public int MaxJoinedParts => inner.MaxJoinedParts;
+        /// <summary>The most parts a join takes, in place of the store's own limit.</summary>
+        public int? MaxParts { get; init; }
+
+        public int MaxJoinedParts => MaxParts ?? inner.MaxJoinedParts;
 
         public async Task JoinAsync(string key, IReadOnlyList<string> parts, CancellationToken cancellationToken)
         {
