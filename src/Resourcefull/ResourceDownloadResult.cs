@@ -38,7 +38,7 @@ public record ResourceDownloadResult(ResourceInfo ResourceInfo, Stream Stream) :
     /// </summary>
     public async ValueTask DisposeAsync()
     {
-        await Stream.DisposeAsync();
+        await Stream.DisposeAsync().ConfigureAwait(false);
         GC.SuppressFinalize(this);
     }
 }

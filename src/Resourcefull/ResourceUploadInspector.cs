@@ -130,7 +130,7 @@ internal sealed class InspectedContentStream : Stream
         Exception? failure = null;
         try
         {
-            ResourceInspectionResult result = await inspector.InspectAsync(upload, cancellationToken);
+            ResourceInspectionResult result = await inspector.InspectAsync(upload, cancellationToken).ConfigureAwait(false);
             outcome = result.IsAccepted ? "accepted" : "refused";
             return result;
         }
@@ -148,7 +148,7 @@ internal sealed class InspectedContentStream : Stream
         finally
         {
             // Whatever the inspector didn't read is no longer fed to it.
-            await _pipe.Reader.CompleteAsync();
+            await _pipe.Reader.CompleteAsync().ConfigureAwait(false);
             telemetry.RecordInspection(activity, operation, outcome, failure, start);
         }
     }
@@ -193,8 +193,8 @@ internal sealed class InspectedContentStream : Stream
     public async Task ThrowIfStoredUnansweredAsync(CancellationToken cancellationToken)
     {
         if (_ended) return;
-        await _pipe.Writer.CompleteAsync();
-        await ThrowIfRefusedAsync(cancellationToken);
+        await _pipe.Writer.CompleteAsync().ConfigureAwait(false);
+        await ThrowIfRefusedAsync(cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>Waits for the inspector's answer, throwing its exception, or one for a refusal.</summary>
@@ -217,19 +217,19 @@ internal sealed class InspectedContentStream : Stream
     {
         if (!_inspection.IsCompleted)
         {
-            await _stop.CancelAsync();
-            await _pipe.Writer.CompleteAsync(new OperationCanceledException("The upload failed before the inspector answered."));
+            await _stop.CancelAsync().ConfigureAwait(false);
+            await _pipe.Writer.CompleteAsync(new OperationCanceledException("The upload failed before the inspector answered.")).ConfigureAwait(false);
         }
         try
         {
-            await _inspection;
+            await _inspection.ConfigureAwait(false);
         }
         catch
         {
             // Already recorded on the inspection's span, and the upload has failed or been told why.
         }
         _stop.Dispose();
-        await base.DisposeAsync();
+        await base.DisposeAsync().ConfigureAwait(false);
     }
 
     public override void Flush() { }

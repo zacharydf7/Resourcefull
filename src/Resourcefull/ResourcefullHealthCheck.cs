@@ -21,7 +21,7 @@ internal sealed class ResourcefullHealthCheck(ResourceRepository repository, Res
     {
         var telemetry = new ClientTelemetry(Telemetry.ProviderName(repository), options);
         await telemetry.RunAsync("health_check", null, null,
-            () => repository.GetContainerInfoAsync(ProbeContainerName, cancellationToken));
+            () => repository.GetContainerInfoAsync(ProbeContainerName, cancellationToken)).ConfigureAwait(false);
         return HealthCheckResult.Healthy($"Resourcefull's storage ({telemetry.Provider}) can be reached.",
             new Dictionary<string, object> { ["provider"] = telemetry.Provider });
     }

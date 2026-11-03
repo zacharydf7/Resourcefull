@@ -49,7 +49,7 @@ public sealed class ResourcefullExceptionHandler(IProblemDetailsService problemD
             HttpContext = httpContext,
             Exception = exception,
             ProblemDetails = { Status = status, Title = exception.Message }
-        });
+        }).ConfigureAwait(false);
     }
 }
 

@@ -34,14 +34,15 @@ public sealed class ResourceHttpResult : IResult, IActionResult
     public async Task ExecuteAsync(HttpContext httpContext)
     {
         ArgumentNullException.ThrowIfNull(httpContext);
-        await using Stream content = Download.Stream;
+        Stream content = Download.Stream;
+        await using var contentDisposal = content.ConfigureAwait(false);
         ResourceInfo resource = Download.ResourceInfo;
 
         int status = ValidateAndEvaluate(httpContext, resource, Options);
         httpContext.Response.StatusCode = status;
         if (status != StatusCodes.Status200OK) return;
 
-        await SendAsync(httpContext, content, resource, Options);
+        await SendAsync(httpContext, content, resource, Options).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -78,7 +79,7 @@ public sealed class ResourceHttpResult : IResult, IActionResult
         response.GetTypedHeaders().ContentDisposition = disposition;
 
         if (HttpMethods.IsHead(httpContext.Request.Method)) return;
-        await content.CopyToAsync(response.Body, httpContext.RequestAborted);
+        await content.CopyToAsync(response.Body, httpContext.RequestAborted).ConfigureAwait(false);
     }
 
     /// <summary>

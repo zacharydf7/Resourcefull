@@ -28,7 +28,7 @@ internal class ResourceServiceClient(ResourceRepository resourceRepository, IOpt
         => _telemetry.RunAsync("create_container", resourceContainerName, null, async () =>
         {
             ResourceNames.ThrowIfInvalidNewContainerName(resourceContainerName);
-            return await CreateContainerCoreAsync(resourceContainerName, metadata, cancellationToken);
+            return await CreateContainerCoreAsync(resourceContainerName, metadata, cancellationToken).ConfigureAwait(false);
         });
 
     public Task<IResourceContainerClient> CreateContainerIfNotExistsAsync(string resourceContainerName, IDictionary<string, string>? metadata = null,
@@ -41,20 +41,20 @@ internal class ResourceServiceClient(ResourceRepository resourceRepository, IOpt
         ResourceNames.ThrowIfInvalidContainerName(resourceContainerName);
 
         // The usual case is a container that already exists; finding it with a read avoids a failed insert each time.
-        if (await resourceRepository.GetContainerInfoAsync(resourceContainerName, cancellationToken) is { } existing)
+        if (await resourceRepository.GetContainerInfoAsync(resourceContainerName, cancellationToken).ConfigureAwait(false) is { } existing)
             return NewContainerClient(existing);
 
         ResourceNames.ThrowIfInvalidNewContainerName(resourceContainerName);
 
         try
         {
-            return await CreateContainerCoreAsync(resourceContainerName, metadata, cancellationToken);
+            return await CreateContainerCoreAsync(resourceContainerName, metadata, cancellationToken).ConfigureAwait(false);
         }
         catch (ResourceConflictException)
         {
             // Created concurrently; the caller gets a client for it all the same, with what was stored (or, should it
             // already be gone again, what a client made without a read has).
-            return await resourceRepository.GetContainerInfoAsync(resourceContainerName, cancellationToken) is { } stored
+            return await resourceRepository.GetContainerInfoAsync(resourceContainerName, cancellationToken).ConfigureAwait(false) is { } stored
                 ? NewContainerClient(stored)
                 : GetContainerClient(resourceContainerName);
         }
@@ -69,7 +69,7 @@ internal class ResourceServiceClient(ResourceRepository resourceRepository, IOpt
         });
 
         await resourceRepository.AddContainerAsync(resourceContainerName,
-            new Dictionary<string, string>(containerInfo.Metadata), cancellationToken);
+            new Dictionary<string, string>(containerInfo.Metadata), cancellationToken).ConfigureAwait(false);
         return new ResourceContainerClient(resourceRepository, uriProvider, _options, containerInfo, containerLogger, policies, cleanupHandler,
             timeProvider, expiry, uploadInspector);
     }
@@ -91,14 +91,14 @@ internal class ResourceServiceClient(ResourceRepository resourceRepository, IOpt
         => _telemetry.RunAsync("get_container", resourceContainerName, null, async () =>
         {
             ResourceNames.ThrowIfInvalidContainerName(resourceContainerName);
-            ContainerInfo? containerInfo = await resourceRepository.GetContainerInfoAsync(resourceContainerName, cancellationToken);
+            ContainerInfo? containerInfo = await resourceRepository.GetContainerInfoAsync(resourceContainerName, cancellationToken).ConfigureAwait(false);
             return containerInfo is null ? null : WithUri(containerInfo);
         });
 
     public Task<IReadOnlyList<ContainerInfo>> GetContainersAsync(CancellationToken cancellationToken = default)
         => _telemetry.RunAsync<IReadOnlyList<ContainerInfo>>("list_containers", null, null, async () =>
         {
-            IReadOnlyList<ContainerInfo> containers = await resourceRepository.GetAllContainerInfoAsync(cancellationToken);
+            IReadOnlyList<ContainerInfo> containers = await resourceRepository.GetAllContainerInfoAsync(cancellationToken).ConfigureAwait(false);
             foreach (ContainerInfo containerInfo in containers) WithUri(containerInfo);
             return containers;
         });
@@ -107,14 +107,14 @@ internal class ResourceServiceClient(ResourceRepository resourceRepository, IOpt
         => _telemetry.RunAsync("container_exists", resourceContainerName, null, async () =>
         {
             ResourceNames.ThrowIfInvalidContainerName(resourceContainerName);
-            return await resourceRepository.GetContainerInfoAsync(resourceContainerName, cancellationToken) != null;
+            return await resourceRepository.GetContainerInfoAsync(resourceContainerName, cancellationToken).ConfigureAwait(false) != null;
         });
 
     public Task<int> PruneContainerAsync(string resourceContainerName, CancellationToken cancellationToken = default)
         => _telemetry.RunAsync("prune_container", resourceContainerName, null, async activity =>
         {
             ResourceNames.ThrowIfInvalidContainerName(resourceContainerName);
-            return await NewContainerClient(new ContainerInfo { Name = resourceContainerName }).PruneAllAsync(activity, cancellationToken);
+            return await NewContainerClient(new ContainerInfo { Name = resourceContainerName }).PruneAllAsync(activity, cancellationToken).ConfigureAwait(false);
         });
 
     public Task<bool> SetContainerMetadataAsync(string resourceContainerName, IDictionary<string, string> metadata,
@@ -123,9 +123,9 @@ internal class ResourceServiceClient(ResourceRepository resourceRepository, IOpt
         {
             ResourceNames.ThrowIfInvalidContainerName(resourceContainerName);
             ArgumentNullException.ThrowIfNull(metadata);
-            if (policies is not null) await policies.ThrowIfReadOnlyAsync(resourceContainerName, _telemetry, cancellationToken);
+            if (policies is not null) await policies.ThrowIfReadOnlyAsync(resourceContainerName, _telemetry, cancellationToken).ConfigureAwait(false);
             return await resourceRepository.SetContainerMetadataAsync(resourceContainerName,
-                new Dictionary<string, string>(metadata), cancellationToken);
+                new Dictionary<string, string>(metadata), cancellationToken).ConfigureAwait(false);
         });
 
     public async Task<int> DeleteExpiredAsync(CancellationToken cancellationToken = default)
@@ -138,7 +138,7 @@ internal class ResourceServiceClient(ResourceRepository resourceRepository, IOpt
         Exception? abandonedFailure = null;
         try
         {
-            abandoned = await resourceRepository.DeleteAbandonedUploadsAsync(now - AbandonedUploadAge, cancellationToken);
+            abandoned = await resourceRepository.DeleteAbandonedUploadsAsync(now - AbandonedUploadAge, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception exception)
             when (exception is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
@@ -148,7 +148,7 @@ internal class ResourceServiceClient(ResourceRepository resourceRepository, IOpt
 
         // Most sweeps find nothing expired, and record nothing. One that does is an operation, even when every version it
         // finds is in a read-only container, which keeps them.
-        if ((await resourceRepository.GetExpiredAsync(now, 1, null, cancellationToken)).Count == 0)
+        if ((await resourceRepository.GetExpiredAsync(now, 1, null, cancellationToken).ConfigureAwait(false)).Count == 0)
         {
             if (abandonedFailure is not null) ExceptionDispatchInfo.Throw(abandonedFailure);
             return 0;
@@ -169,7 +169,7 @@ internal class ResourceServiceClient(ResourceRepository resourceRepository, IOpt
             // Whether a version is gone, by whatever deleted it: a batch that failed partway may have.
             async Task<bool> GoneAsync(ResourceInfo version) =>
                 await resourceRepository.GetResourceInfoAsync(new ResourceLocation(version.ContainerName, version.Name),
-                    version.VersionId, CancellationToken.None) is null;
+                    version.VersionId, CancellationToken.None).ConfigureAwait(false) is null;
 
             static (ResourceLocation, string) Key(ResourceInfo version) =>
                 (new ResourceLocation(version.ContainerName, version.Name), version.VersionId);
@@ -182,7 +182,7 @@ internal class ResourceServiceClient(ResourceRepository resourceRepository, IOpt
                 {
                     HashSet<(ResourceLocation, string)> deletedTogether =
                         [.. await resourceRepository.DeleteExpiredVersionsAsync([.. versions.Select(Key)], now,
-                            cancellationToken)];
+                            cancellationToken).ConfigureAwait(false)];
                     batches++;
                     return [.. versions.Where(v => deletedTogether.Contains(Key(v)))];
                 }
@@ -200,7 +200,7 @@ internal class ResourceServiceClient(ResourceRepository resourceRepository, IOpt
                             // One the failed batch deleted before it failed counts as deleted, so what waited
                             // behind it is cleaned up.
                             if (await resourceRepository.DeleteExpiredVersionAsync(location, version.VersionId, now,
-                                cancellationToken) || await GoneAsync(version))
+                                cancellationToken).ConfigureAwait(false) || await GoneAsync(version).ConfigureAwait(false))
                                 deletedOneByOne.Add(version);
                         }
                         catch (Exception oneFailure) when (oneFailure is not OperationCanceledException
@@ -217,7 +217,7 @@ internal class ResourceServiceClient(ResourceRepository resourceRepository, IOpt
             (DateTimeOffset ExpiresAt, string VersionId)? after = null;
             while (true)
             {
-                IReadOnlyList<ResourceInfo> expired = await resourceRepository.GetExpiredAsync(now, ExpiredPerBatch, after, cancellationToken);
+                IReadOnlyList<ResourceInfo> expired = await resourceRepository.GetExpiredAsync(now, ExpiredPerBatch, after, cancellationToken).ConfigureAwait(false);
                 // The versions the handler has been told about, each with the replaced versions waiting behind it.
                 var ready = new List<(ResourceInfo Version, IReadOnlyList<ResourceInfo> Waiting)>();
                 foreach (ResourceInfo version in expired)
@@ -225,18 +225,18 @@ internal class ResourceServiceClient(ResourceRepository resourceRepository, IOpt
                     try
                     {
                         // A read-only container keeps its versions, expired or not, until it's writable again.
-                        if (policies is not null && await policies.IsReadOnlyAsync(version.ContainerName, _telemetry, cancellationToken))
+                        if (policies is not null && await policies.IsReadOnlyAsync(version.ContainerName, _telemetry, cancellationToken).ConfigureAwait(false))
                             continue;
 
                         // Told first, so a handler that fails leaves the version for the next sweep rather than deleted unreported.
                         if (cleanupHandler is not null)
                         {
                             await _telemetry.NotifyCleanupAsync(cleanupHandler, new ResourceCleanup(version, ResourceCleanupReason.Expired, now),
-                                cancellationToken);
+                                cancellationToken).ConfigureAwait(false);
                         }
                         IReadOnlyList<ResourceInfo> waiting = version.IsLatest
                             ? await NewContainerClient(new ContainerInfo { Name = version.ContainerName })
-                                .WaitingBehindAsync(version.Name, version.VersionId, cancellationToken)
+                                .WaitingBehindAsync(version.Name, version.VersionId, cancellationToken).ConfigureAwait(false)
                             : [];
                         ready.Add((version, waiting));
                     }
@@ -253,7 +253,7 @@ internal class ResourceServiceClient(ResourceRepository resourceRepository, IOpt
                     List<ResourceInfo> gone;
                     try
                     {
-                        gone = await DeleteBatchAsync([.. ready.Select(r => r.Version)]);
+                        gone = await DeleteBatchAsync([.. ready.Select(r => r.Version)]).ConfigureAwait(false);
                     }
                     catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
                     {
@@ -262,10 +262,10 @@ internal class ResourceServiceClient(ResourceRepository resourceRepository, IOpt
                         foreach ((ResourceInfo version, IReadOnlyList<ResourceInfo> waiting) in
                             ready.Where(r => r.Waiting.Count > 0))
                         {
-                            if (await GoneAsync(version))
+                            if (await GoneAsync(version).ConfigureAwait(false))
                             {
                                 await NewContainerClient(new ContainerInfo { Name = version.ContainerName })
-                                    .DeleteWaitingAsync(version.Name, waiting);
+                                    .DeleteWaitingAsync(version.Name, waiting).ConfigureAwait(false);
                             }
                         }
                         throw;
@@ -276,7 +276,7 @@ internal class ResourceServiceClient(ResourceRepository resourceRepository, IOpt
                         deleted++;
                         _telemetry.CountExpired();
                         await NewContainerClient(new ContainerInfo { Name = version.ContainerName })
-                            .DeleteWaitingAsync(version.Name, waiting);
+                            .DeleteWaitingAsync(version.Name, waiting).ConfigureAwait(false);
                     }
                 }
 
@@ -303,7 +303,7 @@ internal class ResourceServiceClient(ResourceRepository resourceRepository, IOpt
             }
             if (abandonedFailure is not null) ExceptionDispatchInfo.Throw(abandonedFailure);
             return deleted;
-        });
+        }).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -327,14 +327,14 @@ internal class ResourceServiceClient(ResourceRepository resourceRepository, IOpt
         {
             ResourceNames.ThrowIfInvalidContainerName(resourceContainerName);
             ArgumentNullException.ThrowIfNull(destination);
-            ContainerInfo container = await resourceRepository.GetContainerInfoAsync(resourceContainerName, cancellationToken)
+            ContainerInfo container = await resourceRepository.GetContainerInfoAsync(resourceContainerName, cancellationToken).ConfigureAwait(false)
                 ?? throw new ResourceContainerNotFoundException($"The container {resourceContainerName} doesn't exist.")
                 {
                     ContainerName = resourceContainerName
                 };
 
             ResourceExportResult exported = await ContainerArchive.ExportAsync(resourceRepository, container,
-                destination, activity, cancellationToken);
+                destination, activity, cancellationToken).ConfigureAwait(false);
             activity?.SetTag("resourcefull.resources", exported.ResourceCount);
             activity?.SetTag("resourcefull.versions", exported.VersionCount);
             return exported;
@@ -349,30 +349,31 @@ internal class ResourceServiceClient(ResourceRepository resourceRepository, IOpt
             if (!source.CanSeek)
                 throw new ArgumentException("An import reads the zip's directory at its end, so it needs a stream that can seek, such as a file.", nameof(source));
 
-            await using ZipArchive zip = await ZipArchive.CreateAsync(source, ZipArchiveMode.Read, leaveOpen: true,
-                entryNameEncoding: null, cancellationToken);
-            ContainerArchive.Manifest manifest = await ContainerArchive.ReadManifestAsync(zip, cancellationToken);
+            ZipArchive zip = await ZipArchive.CreateAsync(source, ZipArchiveMode.Read, leaveOpen: true, entryNameEncoding: null,
+                cancellationToken).ConfigureAwait(false);
+            await using var zipDisposal = zip.ConfigureAwait(false);
+            ContainerArchive.Manifest manifest = await ContainerArchive.ReadManifestAsync(zip, cancellationToken).ConfigureAwait(false);
             // Without the mark of an import the exported container may have been in the middle of.
             var metadata = new Dictionary<string, string>(manifest.Metadata);
             metadata.Remove(ImportMarkerKey);
-            await CreateContainerCoreAsync(resourceContainerName, metadata, cancellationToken);
+            await CreateContainerCoreAsync(resourceContainerName, metadata, cancellationToken).ConfigureAwait(false);
             ResourceImportResult imported;
             try
             {
                 // Marked while it fills, so a container whose import never finished, such as when the application
                 // stopped partway, can be told from a finished one. A provider that can't change metadata goes unmarked.
                 bool marked = await TrySetMetadataAsync(resourceContainerName,
-                    new Dictionary<string, string>(metadata) { [ImportMarkerKey] = ImportMarkerValue }, cancellationToken);
+                    new Dictionary<string, string>(metadata) { [ImportMarkerKey] = ImportMarkerValue }, cancellationToken).ConfigureAwait(false);
                 imported = await ContainerArchive.ImportAsync(zip, manifest, resourceContainerName, resourceRepository, policies,
-                    _telemetry, uploadInspector, cancellationToken);
-                if (marked) await resourceRepository.SetContainerMetadataAsync(resourceContainerName, metadata, cancellationToken);
+                    _telemetry, uploadInspector, cancellationToken).ConfigureAwait(false);
+                if (marked) await resourceRepository.SetContainerMetadataAsync(resourceContainerName, metadata, cancellationToken).ConfigureAwait(false);
             }
             catch (Exception failure)
             {
                 // Nothing is left half-imported; the caller's token may be what stopped it, so it isn't used here.
                 try
                 {
-                    await resourceRepository.DeleteContainerAsync(resourceContainerName, CancellationToken.None);
+                    await resourceRepository.DeleteContainerAsync(resourceContainerName, CancellationToken.None).ConfigureAwait(false);
                 }
                 catch (Exception cleanupFailure)
                 {
@@ -398,7 +399,7 @@ internal class ResourceServiceClient(ResourceRepository resourceRepository, IOpt
         try
         {
             return await resourceRepository.SetContainerMetadataAsync(resourceContainerName, metadata,
-                cancellationToken);
+                cancellationToken).ConfigureAwait(false);
         }
         catch (NotSupportedException)
         {
@@ -411,13 +412,13 @@ internal class ResourceServiceClient(ResourceRepository resourceRepository, IOpt
         => _telemetry.RunAsync("delete_container", resourceContainerName, null, async () =>
         {
             ResourceNames.ThrowIfInvalidContainerName(resourceContainerName);
-            if (policies is not null) await policies.ThrowIfReadOnlyAsync(resourceContainerName, _telemetry, cancellationToken);
+            if (policies is not null) await policies.ThrowIfReadOnlyAsync(resourceContainerName, _telemetry, cancellationToken).ConfigureAwait(false);
 
             // Through the repository rather than ContainerExistsAsync, so the delete records one operation, not two.
-            if (await resourceRepository.GetContainerInfoAsync(resourceContainerName, cancellationToken) is null)
+            if (await resourceRepository.GetContainerInfoAsync(resourceContainerName, cancellationToken).ConfigureAwait(false) is null)
             {
                 return false;
             }
-            return await resourceRepository.DeleteContainerAsync(resourceContainerName, cancellationToken);
+            return await resourceRepository.DeleteContainerAsync(resourceContainerName, cancellationToken).ConfigureAwait(false);
         });
 }

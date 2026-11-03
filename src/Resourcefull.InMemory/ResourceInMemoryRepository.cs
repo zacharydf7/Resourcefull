@@ -43,12 +43,12 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : R
                     ThrowIfNotMet(conditions, resourceContainerName, resourceName,
                         VersionsOf(resourceContainerName, resourceName).MaxBy(r => r.Sequence));
                 return true;
-            }, cancellationToken);
+            }, cancellationToken).ConfigureAwait(false);
         }
 
         using var buffer = new MemoryStream();
         using var content = new HashingStream(stream);
-        await content.CopyToAsync(buffer, cancellationToken);
+        await content.CopyToAsync(buffer, cancellationToken).ConfigureAwait(false);
         byte[] bytes = buffer.ToArray();
 
         return await UnderLockAsync(() =>
@@ -78,7 +78,7 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : R
             WrittenContent written = content.Complete(version.DeclaredLength, lastModified ?? _clock.GetUtcNow());
             AddVersion(container, version, bytes, written);
             return written;
-        }, cancellationToken);
+        }, cancellationToken).ConfigureAwait(false);
     }
 
     public override Task<WrittenContent?> CopyResourceAsync(ResourceLocation source, string? sourceVersionId,
@@ -339,7 +339,7 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : R
 
     private async Task<T> UnderLockAsync<T>(Func<T> action, CancellationToken cancellationToken)
     {
-        await _gate.WaitAsync(cancellationToken);
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             return action();

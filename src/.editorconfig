@@ -1,0 +1,4 @@
+# The library never needs its caller's synchronization context, and resuming on it can deadlock a caller that
+# blocks on a task, so every await uses ConfigureAwait(false).
+[*.cs]
+dotnet_diagnostic.CA2007.severity = warning

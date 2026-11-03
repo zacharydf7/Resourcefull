@@ -122,7 +122,7 @@ internal sealed class ClientTelemetry(string provider, ResourcefullOptions optio
         string? errorType = null;
         try
         {
-            return await body(activity);
+            return await body(activity).ConfigureAwait(false);
         }
         catch (Exception exception)
         {
@@ -219,7 +219,7 @@ internal sealed class ClientTelemetry(string provider, ResourcefullOptions optio
     {
         try
         {
-            await handler.OnCleanupAsync(cleanup, cancellationToken);
+            await handler.OnCleanupAsync(cleanup, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception exception) when (exception is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
@@ -274,10 +274,10 @@ internal sealed class DownloadCountingStream(Stream inner, string provider) : St
     public override int Read(Span<byte> buffer) => Counted(inner.Read(buffer));
 
     public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default) =>
-        Counted(await inner.ReadAsync(buffer, cancellationToken));
+        Counted(await inner.ReadAsync(buffer, cancellationToken).ConfigureAwait(false));
 
     public override async Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) =>
-        Counted(await inner.ReadAsync(buffer.AsMemory(offset, count), cancellationToken));
+        Counted(await inner.ReadAsync(buffer.AsMemory(offset, count), cancellationToken).ConfigureAwait(false));
 
     private int Counted(int read)
     {

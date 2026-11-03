@@ -28,7 +28,7 @@ public sealed class ContentHashBackfill
         using Activity? activity = SqlTelemetry.Start("backfill");
         try
         {
-            ContentHashBackfillResult result = await RunCoreAsync(cancellationToken);
+            ContentHashBackfillResult result = await RunCoreAsync(cancellationToken).ConfigureAwait(false);
             activity?.SetTag("resourcefull.hashed", result.Hashed);
             activity?.SetTag("resourcefull.mismatches", result.Mismatches.Count);
             return result;
@@ -52,7 +52,7 @@ public sealed class ContentHashBackfill
                 .OrderBy(r => r.Id)
                 .Select(r => new { r.Id, r.LastModified, StoredLength = r.Chunks!.Sum(c => (long?)c.Data.Length) ?? 0 })
                 .Take(VersionsPerQuery)
-                .ToListAsync(cancellationToken);
+                .ToListAsync(cancellationToken).ConfigureAwait(false);
             if (versions.Count == 0) break;
 
             foreach (var version in versions)
@@ -63,7 +63,7 @@ public sealed class ContentHashBackfill
                 try
                 {
                     using var content = new HashingStream(new ResourceStream(ResourceSqlRepository.PageReader(dbContext, version.Id), version.StoredLength));
-                    await content.CopyToAsync(Stream.Null, cancellationToken);
+                    await content.CopyToAsync(Stream.Null, cancellationToken).ConfigureAwait(false);
                     contentHash = content.Complete(declaredLength: null, version.LastModified).ContentHash;
                 }
                 catch (IOException)
@@ -74,7 +74,7 @@ public sealed class ContentHashBackfill
 
                 hashed += await dbContext.Resources
                     .Where(r => r.Id == version.Id && r.ContentHash == null)
-                    .ExecuteUpdateAsync(s => s.SetProperty(r => r.ContentHash, contentHash), cancellationToken);
+                    .ExecuteUpdateAsync(s => s.SetProperty(r => r.ContentHash, contentHash), cancellationToken).ConfigureAwait(false);
             }
         }
 
@@ -89,7 +89,7 @@ public sealed class ContentHashBackfill
                     StoredLength = r.Chunks!.Sum(c => (long?)c.Data.Length) ?? 0
                 })
                 .Where(r => r.ContentLength != null && r.ContentLength != r.StoredLength)
-                .ToListAsync(cancellationToken);
+                .ToListAsync(cancellationToken).ConfigureAwait(false);
 
             return new ContentHashBackfillResult(hashed,
                 [.. mismatches.Select(m => new ContentLengthMismatch(m.ContainerName, m.Name, m.VersionId!, m.ContentLength!.Value, m.StoredLength))]);

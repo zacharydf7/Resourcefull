@@ -33,19 +33,19 @@ internal sealed class ContainerPolicies(ContainerPolicySettings settings, Resour
     IResourcePolicyProvider? provider = null)
 {
     public async Task ThrowIfReadOnlyAsync(string containerName, ClientTelemetry telemetry, CancellationToken cancellationToken)
-        => ThrowIfReadOnly(containerName, await GetAsync(containerName, telemetry, cancellationToken));
+        => ThrowIfReadOnly(containerName, await GetAsync(containerName, telemetry, cancellationToken).ConfigureAwait(false));
 
     /// <summary>Checks a change to a stored version's content type: the container must be writable and allow the type.</summary>
     public async Task CheckContentTypeAsync(string containerName, string? contentType, ClientTelemetry telemetry,
         CancellationToken cancellationToken)
     {
-        ResourceContainerPolicy policy = await GetAsync(containerName, telemetry, cancellationToken);
+        ResourceContainerPolicy policy = await GetAsync(containerName, telemetry, cancellationToken).ConfigureAwait(false);
         ThrowIfReadOnly(containerName, policy);
         ThrowIfTypeNotAllowed(containerName, policy, contentType);
     }
 
     public async Task<bool> IsReadOnlyAsync(string containerName, ClientTelemetry telemetry, CancellationToken cancellationToken)
-        => (await GetAsync(containerName, telemetry, cancellationToken)).ReadOnly == true;
+        => (await GetAsync(containerName, telemetry, cancellationToken).ConfigureAwait(false)).ReadOnly == true;
 
     /// <summary>
     /// Checks a new version against the policy before its content is read: an upload or a copy, or a restore, which
@@ -57,15 +57,15 @@ internal sealed class ContainerPolicies(ContainerPolicySettings settings, Resour
     public async Task<ContentLimit?> CheckNewVersionAsync(string containerName, string resourceName, bool restore, string? contentType,
         long? declaredLength, ClientTelemetry telemetry, CancellationToken cancellationToken, ResourceContainerUsage? knownUsage = null)
     {
-        ResourceContainerPolicy policy = await GetAsync(containerName, telemetry, cancellationToken);
+        ResourceContainerPolicy policy = await GetAsync(containerName, telemetry, cancellationToken).ConfigureAwait(false);
         ThrowIfReadOnly(containerName, policy);
         if (!restore) ThrowIfTypeNotAllowed(containerName, policy, contentType);
 
         ResourceContainerUsage? usage = policy.MaxContainerSize is not null || (!restore && policy.MaxResourceCount is not null)
-            ? knownUsage ?? await repository.GetContainerUsageAsync(containerName, cancellationToken)
+            ? knownUsage ?? await repository.GetContainerUsageAsync(containerName, cancellationToken).ConfigureAwait(false)
             : null;
         if (!restore && policy.MaxResourceCount is { } maxCount && usage!.ResourceCount >= maxCount
-            && await repository.GetResourceInfoAsync(new ResourceLocation(containerName, resourceName), null, cancellationToken) is null)
+            && await repository.GetResourceInfoAsync(new ResourceLocation(containerName, resourceName), null, cancellationToken).ConfigureAwait(false) is null)
         {
             throw CountExceeded(containerName, usage, maxCount);
         }
@@ -100,15 +100,15 @@ internal sealed class ContainerPolicies(ContainerPolicySettings settings, Resour
     public async Task CheckMoveAsync(string sourceContainer, string destinationContainer, IReadOnlyList<ResourceInfo> versions,
         ClientTelemetry telemetry, CancellationToken cancellationToken)
     {
-        ThrowIfReadOnly(sourceContainer, await GetAsync(sourceContainer, telemetry, cancellationToken));
+        ThrowIfReadOnly(sourceContainer, await GetAsync(sourceContainer, telemetry, cancellationToken).ConfigureAwait(false));
         if (destinationContainer == sourceContainer) return;
 
-        ResourceContainerPolicy policy = await GetAsync(destinationContainer, telemetry, cancellationToken);
+        ResourceContainerPolicy policy = await GetAsync(destinationContainer, telemetry, cancellationToken).ConfigureAwait(false);
         ThrowIfReadOnly(destinationContainer, policy);
         foreach (string? contentType in versions.Select(v => v.ContentType).Distinct())
             ThrowIfTypeNotAllowed(destinationContainer, policy, contentType);
         ResourceContainerUsage? usage = policy.MaxContainerSize is not null || policy.MaxResourceCount is not null
-            ? await repository.GetContainerUsageAsync(destinationContainer, cancellationToken)
+            ? await repository.GetContainerUsageAsync(destinationContainer, cancellationToken).ConfigureAwait(false)
             : null;
         if (policy.MaxResourceCount is { } maxCount && usage!.ResourceCount >= maxCount)
             throw CountExceeded(destinationContainer, usage, maxCount);
@@ -170,7 +170,7 @@ internal sealed class ContainerPolicies(ContainerPolicySettings settings, Resour
             using Activity? activity = telemetry.StartSpan("get_policy", containerName);
             try
             {
-                own = await provider.GetPolicyAsync(containerName, cancellationToken);
+                own = await provider.GetPolicyAsync(containerName, cancellationToken).ConfigureAwait(false);
             }
             catch (Exception exception)
             {
@@ -267,10 +267,10 @@ internal sealed class LimitedContentStream(Stream content, ContentLimit limit) :
     public override int Read(Span<byte> buffer) => Counted(content.Read(buffer));
 
     public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default) =>
-        Counted(await content.ReadAsync(buffer, cancellationToken));
+        Counted(await content.ReadAsync(buffer, cancellationToken).ConfigureAwait(false));
 
     public override async Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) =>
-        Counted(await content.ReadAsync(buffer.AsMemory(offset, count), cancellationToken));
+        Counted(await content.ReadAsync(buffer.AsMemory(offset, count), cancellationToken).ConfigureAwait(false));
 
     private int Counted(int read)
     {

@@ -168,7 +168,7 @@ public interface IResourceContainerClient
         string? continuationToken = null;
         do
         {
-            ResourcePage page = await GetResourcePageAsync(options, continuationToken, cancellationToken);
+            ResourcePage page = await GetResourcePageAsync(options, continuationToken, cancellationToken).ConfigureAwait(false);
             foreach (ResourceInfo resource in page.Resources) yield return resource;
             continuationToken = page.ContinuationToken;
         }

@@ -99,7 +99,7 @@ public abstract class ResourceRepository
     /// <returns>The versions; empty when there are no more, or the container does not exist.</returns>
     public virtual async Task<IReadOnlyList<ResourceInfo>> GetResourcePageAsync(string resourceContainerName, string? prefix,
         string? afterName, int pageSize, CancellationToken cancellationToken = default) =>
-        [.. (await GetAllResourceInfoAsync(resourceContainerName, cancellationToken))
+        [.. (await GetAllResourceInfoAsync(resourceContainerName, cancellationToken).ConfigureAwait(false))
             .Where(r => (prefix is null || r.Name.StartsWith(prefix, StringComparison.Ordinal))
                 && (afterName is null || string.CompareOrdinal(r.Name, afterName) > 0))
             .OrderBy(r => r.Name, StringComparer.Ordinal)
@@ -142,12 +142,12 @@ public abstract class ResourceRepository
         {
             int wanted = maxNames - names;
             IReadOnlyList<ResourceInfo> page = await GetResourcePageAsync(resourceContainerName, null, afterName, wanted,
-                cancellationToken);
+                cancellationToken).ConfigureAwait(false);
             foreach (ResourceInfo current in page)
             {
                 // A name deleted since it was listed has no versions left, and the next name takes its place.
                 IReadOnlyList<ResourceInfo> ofName = await GetResourceVersionsAsync(
-                    new ResourceLocation(resourceContainerName, current.Name), cancellationToken);
+                    new ResourceLocation(resourceContainerName, current.Name), cancellationToken).ConfigureAwait(false);
                 if (ofName.Count > 0) names++;
                 versions.AddRange(ofName);
                 afterName = current.Name;
@@ -199,7 +199,7 @@ public abstract class ResourceRepository
     public virtual async Task<Stream?> GetResourceStreamAsync(ResourceLocation resource, string? versionId, long offset,
         long? length, CancellationToken cancellationToken = default)
     {
-        Stream? content = await GetResourceStreamAsync(resource, versionId, cancellationToken);
+        Stream? content = await GetResourceStreamAsync(resource, versionId, cancellationToken).ConfigureAwait(false);
         if (content is null) return null;
         try
         {
@@ -207,7 +207,7 @@ public abstract class ResourceRepository
             try
             {
                 for (long skipped = 0, read = 1; skipped < offset && read > 0; skipped += read)
-                    read = await content.ReadAsync(buffer.AsMemory(0, (int)Math.Min(buffer.Length, offset - skipped)), cancellationToken);
+                    read = await content.ReadAsync(buffer.AsMemory(0, (int)Math.Min(buffer.Length, offset - skipped)), cancellationToken).ConfigureAwait(false);
             }
             finally
             {
@@ -218,7 +218,7 @@ public abstract class ResourceRepository
         }
         catch
         {
-            await content.DisposeAsync();
+            await content.DisposeAsync().ConfigureAwait(false);
             throw;
         }
     }
@@ -313,8 +313,10 @@ public abstract class ResourceRepository
     public virtual async Task<WrittenContent?> CopyResourceAsync(ResourceLocation source, string? sourceVersionId,
         NewResourceVersion destination, ResourceWriteCondition? condition = null, CancellationToken cancellationToken = default)
     {
-        await using Stream? content = await GetResourceStreamAsync(source, sourceVersionId, cancellationToken);
-        return content is null ? null : await AddResourceAsync(destination, content, condition, cancellationToken);
+        Stream? content = await GetResourceStreamAsync(source, sourceVersionId, cancellationToken).ConfigureAwait(false);
+        if (content is null) return null;
+        await using var contentDisposal = content.ConfigureAwait(false);
+        return await AddResourceAsync(destination, content, condition, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -422,7 +424,7 @@ public abstract class ResourceRepository
         var deleted = new List<(ResourceLocation, string)>();
         foreach ((ResourceLocation resource, string versionId) in versions)
         {
-            if (await DeleteExpiredVersionAsync(resource, versionId, now, cancellationToken))
+            if (await DeleteExpiredVersionAsync(resource, versionId, now, cancellationToken).ConfigureAwait(false))
                 deleted.Add((resource, versionId));
         }
         return deleted;
@@ -484,12 +486,12 @@ public abstract class ResourceRepository
     public virtual async Task<ResourceContainerUsage> GetContainerUsageAsync(string resourceContainerName,
         CancellationToken cancellationToken = default)
     {
-        IReadOnlyList<ResourceInfo> resources = await GetAllResourceInfoAsync(resourceContainerName, cancellationToken);
+        IReadOnlyList<ResourceInfo> resources = await GetAllResourceInfoAsync(resourceContainerName, cancellationToken).ConfigureAwait(false);
         long storedBytes = 0, versionCount = 0;
         foreach (ResourceInfo resource in resources)
         {
             foreach (ResourceInfo version in await GetResourceVersionsAsync(
-                new ResourceLocation(resourceContainerName, resource.Name), cancellationToken))
+                new ResourceLocation(resourceContainerName, resource.Name), cancellationToken).ConfigureAwait(false))
             {
                 storedBytes += version.ContentLength ?? 0;
                 versionCount++;

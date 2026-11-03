@@ -61,7 +61,7 @@ public static class ResourceContainerClientHttpExtensions
         {
             // Evaluated against the current version, then pinned to it, so the write goes ahead only if that version
             // is still current.
-            ResourceInfo? current = await container.GetResourceInfoAsync(resourceName, null, cancellationToken);
+            ResourceInfo? current = await container.GetResourceInfoAsync(resourceName, null, cancellationToken).ConfigureAwait(false);
             existed = current is not null;
             if (hasPreconditions)
             {
@@ -84,7 +84,7 @@ public static class ResourceContainerClientHttpExtensions
         ResourceInfo stored;
         try
         {
-            stored = await container.UploadAsync(resourceName, request.Body, upload, cancellationToken);
+            stored = await container.UploadAsync(resourceName, request.Body, upload, cancellationToken).ConfigureAwait(false);
         }
         catch (ResourcePreconditionFailedException exception) when (hasPreconditions)
         {

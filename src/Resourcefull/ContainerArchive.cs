@@ -94,9 +94,10 @@ internal static class ContainerArchive
         };
         if (!OperatingSystem.IsWindows())
             manifestOptions.UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite;
-        await using var manifestFile = new FileStream(Path.Combine(Path.GetTempPath(), Path.GetRandomFileName()),
-            manifestOptions);
-        await using var manifest = new Utf8JsonWriter(manifestFile, new JsonWriterOptions { Indented = true });
+        var manifestFile = new FileStream(Path.Combine(Path.GetTempPath(), Path.GetRandomFileName()), manifestOptions);
+        await using var manifestFileDisposal = manifestFile.ConfigureAwait(false);
+        var manifest = new Utf8JsonWriter(manifestFile, new JsonWriterOptions { Indented = true });
+        await using var manifestDisposal = manifest.ConfigureAwait(false);
         manifest.WriteStartObject();
         manifest.WriteNumber("format", Format);
         manifest.WritePropertyName("metadata");
@@ -104,14 +105,15 @@ internal static class ContainerArchive
         manifest.WriteStartArray("resources");
 
         var output = new AsyncWriteStream(destination);
-        await using (ZipArchive zip = await ZipArchive.CreateAsync(output, ZipArchiveMode.Create, leaveOpen: true,
-            entryNameEncoding: null, cancellationToken))
+        ZipArchive zip = await ZipArchive.CreateAsync(output, ZipArchiveMode.Create, leaveOpen: true, entryNameEncoding: null,
+            cancellationToken).ConfigureAwait(false);
+        await using (zip.ConfigureAwait(false))
         {
             string? afterName = null;
             while (true)
             {
                 IReadOnlyList<ResourceInfo> page = await repository.GetVersionPageAsync(container.Name, afterName, NamesPerPage,
-                    cancellationToken);
+                    cancellationToken).ConfigureAwait(false);
                 // Only an empty page ends it: a page can hold fewer names than asked for, as when one is deleted while
                 // it's read, and more still follow.
                 if (page.Count == 0) break;
@@ -129,15 +131,17 @@ internal static class ContainerArchive
                                 : version.VersionId);
                         if (!written.TryGetValue(entryName, out WrittenContent? content))
                         {
-                            await using Stream? source = await repository.GetResourceStreamAsync(
-                                new ResourceLocation(container.Name, name.Key), version.VersionId, cancellationToken);
+                            Stream? source = await repository.GetResourceStreamAsync(
+                                new ResourceLocation(container.Name, name.Key), version.VersionId, cancellationToken).ConfigureAwait(false);
                             // Deleted while the container was exported.
                             if (source is null) continue;
+                            await using var sourceDisposal = source.ConfigureAwait(false);
 
                             using var hashing = new HashingStream(source);
                             ZipArchiveEntry entry = zip.CreateEntry(entryName, CompressionLevel.Fastest);
-                            await using (Stream target = await entry.OpenAsync(cancellationToken))
-                                await hashing.CopyToAsync(target, cancellationToken);
+                            Stream target = await entry.OpenAsync(cancellationToken).ConfigureAwait(false);
+                            await using (target.ConfigureAwait(false))
+                                await hashing.CopyToAsync(target, cancellationToken).ConfigureAwait(false);
                             // Measured, rather than the recorded length, which an early release may have taken from
                             // its caller.
                             content = hashing.Complete(null, version.LastModified);
@@ -161,7 +165,7 @@ internal static class ContainerArchive
 
                     if (versions.Count == 0) continue;
                     JsonSerializer.Serialize(manifest, new ManifestResource(name.Key, versions), Json);
-                    await manifest.FlushAsync(cancellationToken);
+                    await manifest.FlushAsync(cancellationToken).ConfigureAwait(false);
                     resourceCount++;
                     versionCount += versions.Count;
                 }
@@ -169,16 +173,17 @@ internal static class ContainerArchive
 
             manifest.WriteEndArray();
             manifest.WriteEndObject();
-            await manifest.FlushAsync(cancellationToken);
+            await manifest.FlushAsync(cancellationToken).ConfigureAwait(false);
 
             // Last, so it describes only what was written.
             manifestFile.Position = 0;
             ZipArchiveEntry manifestEntry = zip.CreateEntry(ManifestEntry, CompressionLevel.Optimal);
-            await using Stream manifestTarget = await manifestEntry.OpenAsync(cancellationToken);
-            await manifestFile.CopyToAsync(manifestTarget, cancellationToken);
+            Stream manifestTarget = await manifestEntry.OpenAsync(cancellationToken).ConfigureAwait(false);
+            await using var manifestTargetDisposal = manifestTarget.ConfigureAwait(false);
+            await manifestFile.CopyToAsync(manifestTarget, cancellationToken).ConfigureAwait(false);
         }
 
-        await output.FlushAsync(cancellationToken);
+        await output.FlushAsync(cancellationToken).ConfigureAwait(false);
         activity?.SetTag("resourcefull.pages", pages);
         return new ResourceExportResult(resourceCount, versionCount, contentSize);
     }
@@ -212,20 +217,33 @@ internal static class ContainerArchive
 
                 // Able to go back to its start, so a provider that retries a transient failure can read it again, unless
                 // an upload inspector reads it too: the content is then read once.
-                await using Stream content = new RewindableEntryStream(entry, await entry.OpenAsync(cancellationToken),
+                Stream content = new RewindableEntryStream(entry, await entry.OpenAsync(cancellationToken).ConfigureAwait(false),
                     version.ContentLength);
+                await using var contentDisposal = content.ConfigureAwait(false);
                 var usage = new ResourceContainerUsage(contentSize, resourceCount, versionCount);
                 Stream checkedContent = policies is not null && await policies.CheckNewVersionAsync(containerName, resource.Name, restore: false,
-                    version.ContentType, version.ContentLength, telemetry, cancellationToken, usage) is { } limit
+                    version.ContentType, version.ContentLength, telemetry, cancellationToken, usage).ConfigureAwait(false) is { } limit
                     ? new LimitedContentStream(content, limit)
                     : content;
-                await using InspectedContentStream? inspected = inspector is null
+                // Disposed in a finally rather than with await using, since ConfigureAwait's wrapper can't dispose
+                // null.
+                InspectedContentStream? inspected = inspector is null
                     ? null
                     : InspectedContentStream.Start(inspector, info, version.ContentLength, checkedContent, telemetry, "import",
                         cancellationToken);
-                WrittenContent stored = await repository.ImportVersionAsync(info, inspected ?? checkedContent, cancellationToken);
-                // A refusal fails the import, which deletes the container, so a version stored before the answer goes too.
-                if (inspected is not null) await inspected.ThrowIfStoredUnansweredAsync(cancellationToken);
+                WrittenContent stored;
+                try
+                {
+                    stored = await repository.ImportVersionAsync(info, inspected ?? checkedContent, cancellationToken).ConfigureAwait(false);
+                    // A refusal fails the import, which deletes the container, so a version stored before the answer
+                    // goes too.
+                    if (inspected is not null) await inspected.ThrowIfStoredUnansweredAsync(cancellationToken).ConfigureAwait(false);
+                }
+                finally
+                {
+                    if (inspected is not null) await inspected.DisposeAsync().ConfigureAwait(false);
+                }
+
                 if (stored.ContentHash != version.ContentHash)
                 {
                     throw new InvalidDataException(
@@ -252,11 +270,12 @@ internal static class ContainerArchive
         ZipArchiveEntry entry = zip.GetEntry(ManifestEntry)
             ?? throw new InvalidDataException("This isn't a container export: it has no manifest.json.");
         Manifest? manifest;
-        await using (Stream stream = await entry.OpenAsync(cancellationToken))
+        Stream stream = await entry.OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using (stream.ConfigureAwait(false))
         {
             try
             {
-                manifest = await JsonSerializer.DeserializeAsync<Manifest>(stream, Json, cancellationToken);
+                manifest = await JsonSerializer.DeserializeAsync<Manifest>(stream, Json, cancellationToken).ConfigureAwait(false);
             }
             catch (JsonException exception)
             {
@@ -341,8 +360,8 @@ internal sealed class RewindableEntryStream(ZipArchiveEntry entry, Stream opened
 
     public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
     {
-        _content ??= await entry.OpenAsync(cancellationToken);
-        return Counted(await _content.ReadAsync(buffer, cancellationToken));
+        _content ??= await entry.OpenAsync(cancellationToken).ConfigureAwait(false);
+        return Counted(await _content.ReadAsync(buffer, cancellationToken).ConfigureAwait(false));
     }
 
     private int Counted(int read)
@@ -372,7 +391,7 @@ internal sealed class RewindableEntryStream(ZipArchiveEntry entry, Stream opened
 
     public override async ValueTask DisposeAsync()
     {
-        if (_content is not null) await _content.DisposeAsync();
-        await base.DisposeAsync();
+        if (_content is not null) await _content.DisposeAsync().ConfigureAwait(false);
+        await base.DisposeAsync().ConfigureAwait(false);
     }
 }

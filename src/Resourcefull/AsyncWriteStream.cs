@@ -21,8 +21,8 @@ internal sealed class AsyncWriteStream(Stream destination) : Stream
 
     public override async ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default)
     {
-        await PassOnHeldAsync(cancellationToken);
-        await destination.WriteAsync(buffer, cancellationToken);
+        await PassOnHeldAsync(cancellationToken).ConfigureAwait(false);
+        await destination.WriteAsync(buffer, cancellationToken).ConfigureAwait(false);
     }
 
     public override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) =>
@@ -33,14 +33,14 @@ internal sealed class AsyncWriteStream(Stream destination) : Stream
 
     public override async Task FlushAsync(CancellationToken cancellationToken)
     {
-        await PassOnHeldAsync(cancellationToken);
-        await destination.FlushAsync(cancellationToken);
+        await PassOnHeldAsync(cancellationToken).ConfigureAwait(false);
+        await destination.FlushAsync(cancellationToken).ConfigureAwait(false);
     }
 
     private async Task PassOnHeldAsync(CancellationToken cancellationToken)
     {
         if (_held.Length == 0) return;
-        await destination.WriteAsync(_held.GetBuffer().AsMemory(0, (int)_held.Length), cancellationToken);
+        await destination.WriteAsync(_held.GetBuffer().AsMemory(0, (int)_held.Length), cancellationToken).ConfigureAwait(false);
         _held.SetLength(0);
     }
 

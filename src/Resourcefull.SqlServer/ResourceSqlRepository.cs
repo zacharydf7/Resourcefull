@@ -98,9 +98,9 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
         bool stored = false;
         try
         {
-            staged = await StartVersionAsync(strategy, version, condition, cancellationToken);
+            staged = await StartVersionAsync(strategy, version, condition, cancellationToken).ConfigureAwait(false);
             using var content = new HashingStream(stream);
-            int batches = await StoreContentAsync(dbContext, strategy, staged.Id, content, cancellationToken);
+            int batches = await StoreContentAsync(dbContext, strategy, staged.Id, content, cancellationToken).ConfigureAwait(false);
             // On the client's span only, never an application's own; added to, so an import's counts every version's.
             if (Activity.Current is { } activity && activity.Source.Name == ResourcefullTelemetry.ActivitySourceName)
             {
@@ -108,7 +108,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
                 activity.SetTag("resourcefull.batches", before + batches);
             }
             WrittenContent written = await FinishVersionAsync(version, staged, content, condition, lastModified,
-                cancellationToken);
+                cancellationToken).ConfigureAwait(false);
             stored = true;
             return written;
         }
@@ -116,7 +116,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
         {
             // Its container was deleted meanwhile, taking the staged version with it; or the staged version alone is
             // gone, as the sweep of abandoned uploads takes one whose upload stored nothing for an hour.
-            await ThrowIfContainerMissingAsync(resourceContainerName, exception, cancellationToken);
+            await ThrowIfContainerMissingAsync(resourceContainerName, exception, cancellationToken).ConfigureAwait(false);
             if (staged is null) throw;
             throw new InvalidOperationException($"The resource {resourceName} wasn't stored in the container " +
                 $"{resourceContainerName}: its version was deleted before it was complete.", exception);
@@ -127,7 +127,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
             {
                 try
                 {
-                    await DeleteStagedVersionAsync(strategy, staged.Id, null, CancellationToken.None);
+                    await DeleteStagedVersionAsync(strategy, staged.Id, null, CancellationToken.None).ConfigureAwait(false);
                 }
                 catch (Exception)
                 {
@@ -161,7 +161,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
             {
                 ResourceModel? existing = await attempt.Resources.IgnoreQueryFilters().AsNoTracking()
                     .FirstOrDefaultAsync(r => r.ContainerName == resourceContainerName && r.Name == resourceName
-                        && r.VersionId == version.VersionId, ct);
+                        && r.VersionId == version.VersionId, ct).ConfigureAwait(false);
                 if (existing is not null)
                 {
                     // Its own only while staged: a stored version with the ID, which an import names, is another's.
@@ -171,49 +171,56 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
             }
 
             // Conditions are checked after the insert, so a version that fails them mustn't stay; create-only is
-            // checked before it, so needs no transaction.
-            await using IDbContextTransaction? transaction = condition.Conditions is not null
-                ? await attempt.Database.BeginTransactionAsync(ct)
+            // checked before it, so needs no transaction. Disposed in a finally rather than with await using, since
+            // ConfigureAwait's wrapper can't dispose null.
+            IDbContextTransaction? transaction = condition.Conditions is not null
+                ? await attempt.Database.BeginTransactionAsync(ct).ConfigureAwait(false)
                 : null;
-
-            // Checked again as the version becomes current; this only spares reading the content of an upload that will
-            // fail.
-            if (condition.CreateOnly && await attempt.Resources.AnyAsync(r => r.ContainerName == resourceContainerName
-                && r.Name == resourceName && r.IsLatest, ct))
-                throw ResourceExists(resourceContainerName, resourceName);
-
-            // Inserted first, so a missing container is reported before any content is read.
-            ResourceModel resource = NewVersion(version);
-            resource.StagedAt = _clock.GetUtcNow();
-            // With a hash as long as its real one, so making it current changes the row in place. Inserted without
-            // one, the version index's pages were measured half full after storing 500 names, so a page of a listing
-            // read 12 pages rather than 8. Nothing reads a staged version to see it.
-            resource.ContentHash = StagedContentHash;
-            attempt.Resources.Add(resource);
-            // Without a transaction, the insert commits as it runs.
-            committing = transaction is null;
             try
             {
-                await attempt.SaveChangesAsync(ct);
-            }
-            catch (DbUpdateException exception) when (IsUniqueViolation(exception))
-            {
-                throw VersionExists(resourceContainerName, resourceName, version.VersionId, exception);
-            }
+                // Checked again as the version becomes current; this only spares reading the content of an upload that
+                // will fail.
+                if (condition.CreateOnly && await attempt.Resources.AnyAsync(r => r.ContainerName == resourceContainerName
+                    && r.Name == resourceName && r.IsLatest, ct).ConfigureAwait(false))
+                    throw ResourceExists(resourceContainerName, resourceName);
 
-            // Checked again as the version becomes current, like create-only. After the insert, so a missing container
-            // is reported rather than unmet conditions.
-            if (condition.Conditions is { } conditions)
-                await ThrowIfNotMetAsync(attempt, conditions, resourceContainerName, resourceName, ct);
+                // Inserted first, so a missing container is reported before any content is read.
+                ResourceModel resource = NewVersion(version);
+                resource.StagedAt = _clock.GetUtcNow();
+                // With a hash as long as its real one, so making it current changes the row in place. Inserted
+                // without one, the version index's pages were measured half full after storing 500 names, so a page of
+                // a listing read 12 pages rather than 8. Nothing reads a staged version to see it.
+                resource.ContentHash = StagedContentHash;
+                attempt.Resources.Add(resource);
+                // Without a transaction, the insert commits as it runs.
+                committing = transaction is null;
+                try
+                {
+                    await attempt.SaveChangesAsync(ct).ConfigureAwait(false);
+                }
+                catch (DbUpdateException exception) when (IsUniqueViolation(exception))
+                {
+                    throw VersionExists(resourceContainerName, resourceName, version.VersionId, exception);
+                }
 
-            if (transaction is not null)
-            {
-                committing = true;
-                await transaction.CommitAsync(ct);
+                // Checked again as the version becomes current, like create-only. After the insert, so a missing
+                // container is reported rather than unmet conditions.
+                if (condition.Conditions is { } conditions)
+                    await ThrowIfNotMetAsync(attempt, conditions, resourceContainerName, resourceName, ct).ConfigureAwait(false);
+
+                if (transaction is not null)
+                {
+                    committing = true;
+                    await transaction.CommitAsync(ct).ConfigureAwait(false);
+                }
+                attempt.Entry(resource).State = EntityState.Detached;
+                return resource;
             }
-            attempt.Entry(resource).State = EntityState.Detached;
-            return resource;
-        }, cancellationToken);
+            finally
+            {
+                if (transaction is not null) await transaction.DisposeAsync().ConfigureAwait(false);
+            }
+        }, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -231,19 +238,19 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
         // Each batch is stored before the chunker reuses its buffers: it shares ChunksPerUploadBatch of them in turn,
         // and a batch holds at most that many chunks, however early it goes.
         await foreach (ResourceChunkModel chunk in
-            ResourceChunker.ChunksAsync(content, ChunksPerUploadBatch, cancellationToken))
+            ResourceChunker.ChunksAsync(content, ChunksPerUploadBatch, cancellationToken).ConfigureAwait(false))
         {
             chunk.ResourceId = resourceId;
             batch.Add(chunk);
             bool stamp = _clock.GetUtcNow() - lastStamped >= StagedStampInterval;
             if (batch.Count < ChunksPerUploadBatch && !stamp) continue;
 
-            await StoreBatchAsync(dbContext, strategy, batch, stamp, cancellationToken);
+            await StoreBatchAsync(dbContext, strategy, batch, stamp, cancellationToken).ConfigureAwait(false);
             batches++;
             if (stamp) lastStamped = _clock.GetUtcNow();
         }
         if (batch.Count == 0) return batches;
-        await StoreBatchAsync(dbContext, strategy, batch, stamp: false, cancellationToken);
+        await StoreBatchAsync(dbContext, strategy, batch, stamp: false, cancellationToken).ConfigureAwait(false);
         return batches + 1;
     }
 
@@ -260,13 +267,13 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
         {
             // A retry after a commit whose acknowledgement was lost finds it current, which the filter lets it see.
             if (written is not null && await attempt.Resources.AsNoTracking()
-                .FirstOrDefaultAsync(r => r.Id == staged.Id, ct) is { } stored)
+                .FirstOrDefaultAsync(r => r.Id == staged.Id, ct).ConfigureAwait(false) is { } stored)
             {
                 return new WrittenContent(stored.ContentLength!.Value, stored.ContentHash!, stored.LastModified);
             }
 
             List<ResourceModel> priorLatest =
-                await CurrentForWriteAsync(attempt, resourceContainerName, resourceName, condition, ct);
+                await CurrentForWriteAsync(attempt, resourceContainerName, resourceName, condition, ct).ConfigureAwait(false);
 
             // Stamped under the name's lock as the version becomes current, not before its content was read. A wrong
             // declared length throws here, before anything about the name changes.
@@ -279,7 +286,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
                 Id = staged.Id, ContainerName = staged.ContainerName, Name = staged.Name, StagedAt = staged.StagedAt
             }).Entity;
             current.StagedAt = null;
-            await MakeCurrentAsync(attempt, priorLatest, current, completed, ct);
+            await MakeCurrentAsync(attempt, priorLatest, current, completed, ct).ConfigureAwait(false);
             return written = completed;
         }, cancellationToken);
     }
@@ -296,7 +303,8 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
         return await strategy.ExecuteAsync(async ct =>
         {
             using ResourceDbContext attempt = NewWriteContext();
-            await using var transaction = await attempt.Database.BeginTransactionAsync(ct);
+            var transaction = await attempt.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
+            await using var transactionDisposal = transaction.ConfigureAwait(false);
 
             // Locked as it's read, so an upload can't make it current, or move its stamp forward, before it goes. A retry
             // after a commit whose acknowledgement was lost finds it gone.
@@ -306,22 +314,22 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
                     FROM [Resources] r WITH (UPDLOCK, ROWLOCK)
                     WHERE r.[Id] = {resourceId} AND r.[StagedAt] IS NOT NULL
                         AND ({staleBefore} IS NULL OR r.[StagedAt] < {staleBefore})
-                    """).ToListAsync(ct)
+                    """).ToListAsync(ct).ConfigureAwait(false)
                 : await attempt.Resources.IgnoreQueryFilters()
                     .Where(r => r.Id == resourceId && r.StagedAt != null
                         && (staleBefore == null || r.StagedAt < staleBefore))
                     .Select(r => r.Chunks!.Count)
-                    .ToListAsync(ct);
+                    .ToListAsync(ct).ConfigureAwait(false);
             if (chunks.Count == 0) return deletedInAnEarlierAttempt;
 
-            await DeleteLargeVersionsChunksAsync(attempt, [(resourceId, chunks[0])], ct);
+            await DeleteLargeVersionsChunksAsync(attempt, [(resourceId, chunks[0])], ct).ConfigureAwait(false);
             attempt.Resources.Remove(attempt.Resources.Attach(
                 new ResourceModel { Id = resourceId, ContainerName = "", Name = "" }).Entity);
-            await attempt.SaveChangesAsync(ct);
+            await attempt.SaveChangesAsync(ct).ConfigureAwait(false);
             deletedInAnEarlierAttempt = true;
-            await transaction.CommitAsync(ct);
+            await transaction.CommitAsync(ct).ConfigureAwait(false);
             return true;
-        }, cancellationToken);
+        }, cancellationToken).ConfigureAwait(false);
     }
 
     public override async Task<int> DeleteAbandonedUploadsAsync(DateTimeOffset staleBefore,
@@ -341,12 +349,12 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
                 .OrderBy(r => r.Id)
                 .Select(r => r.Id)
                 .Take(MaxResourcesPerDeleteBatch)
-                .ToListAsync(cancellationToken);
+                .ToListAsync(cancellationToken).ConfigureAwait(false);
             foreach (long resourceId in abandoned)
             {
                 try
                 {
-                    if (await DeleteStagedVersionAsync(strategy, resourceId, staleBefore, cancellationToken)) deleted++;
+                    if (await DeleteStagedVersionAsync(strategy, resourceId, staleBefore, cancellationToken).ConfigureAwait(false)) deleted++;
                 }
                 catch (Exception exception)
                     when (exception is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
@@ -390,7 +398,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
     private async Task ThrowIfContainerMissingAsync(string resourceContainerName, Exception exception, CancellationToken cancellationToken)
     {
         using ResourceDbContext dbContext = dbContextFactory.CreateDbContext();
-        if (!await dbContext.ResourceContainers.AnyAsync(x => x.Name == resourceContainerName, cancellationToken))
+        if (!await dbContext.ResourceContainers.AnyAsync(x => x.Name == resourceContainerName, cancellationToken).ConfigureAwait(false))
         {
             throw new ResourceContainerNotFoundException($"The container {resourceContainerName} doesn't exist.",
                 exception)
@@ -410,12 +418,14 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
         {
             var found = await Version(dbContext.Resources, source.ContainerName, source.ResourceName, sourceVersionId)
                 .Select(r => new { r.ContentHash })
-                .FirstOrDefaultAsync(cancellationToken);
+                .FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
             if (found is null) return null;
             if (found.ContentHash is null)
             {
-                await using Stream? content = await GetResourceStreamAsync(source, sourceVersionId, cancellationToken);
-                return content is null ? null : await AddResourceAsync(destination, content, condition, cancellationToken);
+                Stream? content = await GetResourceStreamAsync(source, sourceVersionId, cancellationToken).ConfigureAwait(false);
+                if (content is null) return null;
+                await using var contentDisposal = content.ConfigureAwait(false);
+                return await AddResourceAsync(destination, content, condition, cancellationToken).ConfigureAwait(false);
             }
         }
 
@@ -426,7 +436,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
             {
                 // A retry after a commit whose acknowledgement was lost finds the copy already stored.
                 if (await attempt.Resources.AnyAsync(r => r.ContainerName == destinationContainer && r.Name == destinationName
-                    && r.VersionId == destination.VersionId, ct))
+                    && r.VersionId == destination.VersionId, ct).ConfigureAwait(false))
                 {
                     return written
                         ?? throw VersionExists(destinationContainer, destinationName, destination.VersionId);
@@ -435,28 +445,28 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
                 // Read under the source name's lock, so the version can't be deleted while its chunks are copied.
                 var from = await Version(attempt.Resources, source.ContainerName, source.ResourceName, sourceVersionId)
                     .Select(r => new { r.Id, r.ContentHash, Length = r.Chunks!.Sum(c => (long?)c.Data.Length) ?? 0 })
-                    .FirstOrDefaultAsync(ct);
+                    .FirstOrDefaultAsync(ct).ConfigureAwait(false);
                 if (from is null) return null;
 
                 List<ResourceModel> priorLatest =
-                    await CurrentForWriteAsync(attempt, destinationContainer, destinationName, condition, ct);
+                    await CurrentForWriteAsync(attempt, destinationContainer, destinationName, condition, ct).ConfigureAwait(false);
 
                 ResourceModel copy = NewVersion(destination);
                 attempt.Resources.Add(copy);
-                await attempt.SaveChangesAsync(ct);
+                await attempt.SaveChangesAsync(ct).ConfigureAwait(false);
                 // Copied by the server, so no content passes through the application.
                 await attempt.Database.ExecuteSqlAsync(
                     $"INSERT INTO [ResourceChunks] ([ResourceId], [Index], [Data]) SELECT {copy.Id}, [Index], [Data] FROM [ResourceChunks] WHERE [ResourceId] = {from.Id}",
-                    ct);
+                    ct).ConfigureAwait(false);
 
                 var stored = new WrittenContent(from.Length, from.ContentHash!, _clock.GetUtcNow());
-                await MakeCurrentAsync(attempt, priorLatest, copy, stored, ct);
+                await MakeCurrentAsync(attempt, priorLatest, copy, stored, ct).ConfigureAwait(false);
                 return written = stored;
-            }, cancellationToken);
+            }, cancellationToken).ConfigureAwait(false);
         }
         catch (DbUpdateException exception) when (exception.InnerException is SqlException { Number: SqlForeignKeyViolation })
         {
-            await ThrowIfContainerMissingAsync(destinationContainer, exception, cancellationToken);
+            await ThrowIfContainerMissingAsync(destinationContainer, exception, cancellationToken).ConfigureAwait(false);
             throw;
         }
     }
@@ -470,7 +480,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
             return await WriteNamesAsync([source, destination], async (attempt, ct) =>
             {
                 ResourceModel? current = await attempt.Resources.AsNoTracking().FirstOrDefaultAsync(r => r.ContainerName == source.ContainerName
-                    && r.Name == source.ResourceName && r.IsLatest, ct);
+                    && r.Name == source.ResourceName && r.IsLatest, ct).ConfigureAwait(false);
                 // A retry after a commit whose acknowledgement was lost finds the resource already moved.
                 if (current is null) return moved;
                 if (sourceConditions is not null)
@@ -478,7 +488,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
                     ThrowIfNotMet(sourceConditions, source.ContainerName, source.ResourceName, current.VersionId,
                         current.ContentHash);
                 }
-                if (await attempt.Resources.AnyAsync(r => r.ContainerName == destination.ContainerName && r.Name == destination.ResourceName, ct))
+                if (await attempt.Resources.AnyAsync(r => r.ContainerName == destination.ContainerName && r.Name == destination.ResourceName, ct).ConfigureAwait(false))
                     throw ResourceExists(destination.ContainerName, destination.ResourceName);
 
                 // Only the versions' container and name change: their chunks hang off their IDs, so no content is copied.
@@ -486,13 +496,13 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
                     .Where(r => r.ContainerName == source.ContainerName && r.Name == source.ResourceName)
                     .ExecuteUpdateAsync(s => s
                         .SetProperty(r => r.ContainerName, destination.ContainerName)
-                        .SetProperty(r => r.Name, destination.ResourceName), ct);
+                        .SetProperty(r => r.Name, destination.ResourceName), ct).ConfigureAwait(false);
                 return moved = true;
-            }, cancellationToken);
+            }, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception exception) when ((exception as SqlException ?? exception.InnerException as SqlException)?.Number == SqlForeignKeyViolation)
         {
-            await ThrowIfContainerMissingAsync(destination.ContainerName, exception, cancellationToken);
+            await ThrowIfContainerMissingAsync(destination.ContainerName, exception, cancellationToken).ConfigureAwait(false);
             throw;
         }
     }
@@ -508,7 +518,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
     {
         List<ResourceModel> priorLatest = await attempt.Resources
             .Where(r => r.ContainerName == resourceContainerName && r.Name == resourceName && r.IsLatest)
-            .ToListAsync(cancellationToken);
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
         if (condition.CreateOnly && priorLatest.Count > 0)
             throw ResourceExists(resourceContainerName, resourceName);
         if (condition.Conditions is { } conditions)
@@ -528,13 +538,13 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
         ResourceModel version, WrittenContent written, CancellationToken cancellationToken)
     {
         foreach (ResourceModel prior in priorLatest) prior.IsLatest = false;
-        await attempt.SaveChangesAsync(cancellationToken);
+        await attempt.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         version.IsLatest = true;
         version.ContentLength = written.ContentLength;
         version.ContentHash = written.ContentHash;
         version.LastModified = written.LastModified;
-        await attempt.SaveChangesAsync(cancellationToken);
+        await attempt.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -561,18 +571,19 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
                 dbContext.ResourceChunks.AddRange(batch);
                 if (stamp)
                 {
-                    (await dbContext.Resources.IgnoreQueryFilters().SingleAsync(r => r.Id == resourceId, ct)).StagedAt =
+                    (await dbContext.Resources.IgnoreQueryFilters().SingleAsync(r => r.Id == resourceId, ct).ConfigureAwait(false)).StagedAt =
                         now;
                 }
-                await dbContext.SaveChangesAsync(ct);
+                await dbContext.SaveChangesAsync(ct).ConfigureAwait(false);
                 dbContext.ChangeTracker.Clear();
                 return;
             }
 
-            await dbContext.Database.OpenConnectionAsync(ct);
+            await dbContext.Database.OpenConnectionAsync(ct).ConfigureAwait(false);
             try
             {
-                await using DbCommand command = NewCommand(dbContext);
+                DbCommand command = NewCommand(dbContext);
+                await using var commandDisposal = command.ConfigureAwait(false);
                 var sql = new StringBuilder("INSERT INTO [ResourceChunks] ([ResourceId], [Index], [Data]) VALUES ");
                 command.Parameters.Add(new SqlParameter("@resourceId", resourceId));
                 for (int i = 0; i < batch.Count; i++)
@@ -588,7 +599,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
                     command.Parameters.Add(new SqlParameter("@now", now));
                 }
                 command.CommandText = sql.ToString();
-                await command.ExecuteNonQueryAsync(ct);
+                await command.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
             }
             catch (SqlException exception)
                 when (retry && exception.Number is SqlUniqueConstraintViolation or SqlUniqueIndexViolation)
@@ -596,9 +607,9 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
             }
             finally
             {
-                await dbContext.Database.CloseConnectionAsync();
+                await dbContext.Database.CloseConnectionAsync().ConfigureAwait(false);
             }
-        }, cancellationToken);
+        }, cancellationToken).ConfigureAwait(false);
         batch.Clear();
     }
 
@@ -622,15 +633,16 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
         return await dbContext.Database.CreateExecutionStrategy().ExecuteAsync(async ct =>
         {
             using ResourceDbContext attempt = NewWriteContext();
-            await using var transaction = await attempt.Database.BeginTransactionAsync(ct);
+            var transaction = await attempt.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
+            await using var transactionDisposal = transaction.ConfigureAwait(false);
 
             // The in-memory provider the unit tests use has no locks.
-            if (attempt.Database.IsRelational()) await LockNamesAsync(attempt, ordered, ct);
+            if (attempt.Database.IsRelational()) await LockNamesAsync(attempt, ordered, ct).ConfigureAwait(false);
 
-            T result = await write(attempt, ct);
-            await transaction.CommitAsync(ct);
+            T result = await write(attempt, ct).ConfigureAwait(false);
+            await transaction.CommitAsync(ct).ConfigureAwait(false);
             return result;
-        }, cancellationToken);
+        }, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -669,7 +681,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
                 .Append("IF @result < 0 THROW 50000, 'Could not lock the resource name for writing.', 1;");
             parameters[i] = new SqlParameter($"@lock{i}", NameLockResource(names[i]));
         }
-        await dbContext.Database.ExecuteSqlRawAsync(sql.ToString(), parameters, cancellationToken);
+        await dbContext.Database.ExecuteSqlRawAsync(sql.ToString(), parameters, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>The application lock resource for a name: lock resources are limited to 255 characters, so it's hashed.</summary>
@@ -684,7 +696,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
         var current = await dbContext.Resources
             .Where(r => r.ContainerName == resourceContainerName && r.Name == resourceName && r.IsLatest)
             .Select(r => new { r.VersionId, r.ContentHash })
-            .FirstOrDefaultAsync(cancellationToken);
+            .FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
         ThrowIfNotMet(conditions, resourceContainerName, resourceName, current?.VersionId, current?.ContentHash);
     }
 
@@ -740,7 +752,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
         return await dbContext.Resources
             .Where(r => r.ContainerName == resourceContainerName && r.IsLatest)
             .Select(AsResourceInfo)
-            .ToListAsync(cancellationToken);
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
     }
 
     public override async Task<IReadOnlyList<ResourceInfo>> GetResourcePageAsync(string resourceContainerName, string? prefix,
@@ -758,7 +770,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
             .OrderBy(r => r.Name)
             .Take(pageSize)
             .Select(AsResourceInfo)
-            .ToListAsync(cancellationToken);
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
     }
 
     public override async Task<IReadOnlyList<ResourceInfo>> GetResourceVersionsAsync(ResourceLocation resource,
@@ -772,7 +784,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
             .OrderByDescending(r => r.IsLatest)
             .ThenByDescending(r => r.Id)
             .Select(AsResourceInfo)
-            .ToListAsync(cancellationToken);
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
     }
 
     public override async Task<IReadOnlyList<ResourceInfo>> GetVersionPageAsync(string resourceContainerName, string? afterName,
@@ -792,7 +804,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
             .ThenByDescending(r => r.IsLatest)
             .ThenByDescending(r => r.Id)
             .Select(AsResourceInfo)
-            .ToListAsync(cancellationToken);
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
     }
 
     public override async Task<ResourceInfo?> GetResourceInfoAsync(ResourceLocation resource, string? versionId = null,
@@ -801,7 +813,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
         (string resourceContainerName, string resourceName) = resource;
         using ResourceDbContext dbContext = dbContextFactory.CreateDbContext();
 
-        ResourceModel? existingResource = await ResolveAsync(dbContext.Resources, resourceContainerName, resourceName, versionId, cancellationToken);
+        ResourceModel? existingResource = await ResolveAsync(dbContext.Resources, resourceContainerName, resourceName, versionId, cancellationToken).ConfigureAwait(false);
 
         if (existingResource is null) return null;
 
@@ -843,10 +855,10 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
             // One statement, so the length belongs to the version found even if it is deleted right after.
             var existingResource = await Version(dbContext.Resources, resourceContainerName, resourceName, versionId)
                 .Select(r => new { r.Id, Length = r.Chunks!.Sum(c => (long?)c.Data.Length) ?? 0 })
-                .FirstOrDefaultAsync(cancellationToken);
+                .FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
             if (existingResource == null)
             {
-                await dbContext.DisposeAsync();
+                await dbContext.DisposeAsync().ConfigureAwait(false);
                 return null;
             }
 
@@ -863,13 +875,13 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
                     MIN(CASE WHEN [End] >= {end} THEN [Index] END) AS [ThroughIndex]
                 FROM (SELECT [Index], SUM(CAST(DATALENGTH([Data]) AS bigint)) OVER (ORDER BY [Index] ROWS UNBOUNDED PRECEDING) AS [End]
                     FROM [ResourceChunks] WHERE [ResourceId] = {existingResource.Id}) AS [Chunks]
-                """).ToListAsync(cancellationToken))[0];
+                """).ToListAsync(cancellationToken).ConfigureAwait(false))[0];
             return new ResourceStream(PageReader(dbContext, existingResource.Id, chunks.AfterIndex, chunks.ThroughIndex),
                 existingResource.Length, dbContext, chunks.Start ?? 0, start, end);
         }
         catch
         {
-            await dbContext.DisposeAsync();
+            await dbContext.DisposeAsync().ConfigureAwait(false);
             throw;
         }
     }
@@ -900,7 +912,8 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
                 await dbContext.Database.OpenConnectionAsync(ct).ConfigureAwait(false);
                 try
                 {
-                    await using DbCommand command = NewCommand(dbContext);
+                    DbCommand command = NewCommand(dbContext);
+                    await using var commandDisposal = command.ConfigureAwait(false);
                     command.CommandText =
                         $"SELECT TOP ({ChunksPerReadPage}) [Index], DATALENGTH([Data]), [Data] FROM [ResourceChunks] " +
                         "WHERE [ResourceId] = @resourceId AND (@lastIndex IS NULL OR [Index] > @lastIndex)" +
@@ -911,8 +924,8 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
                         command.Parameters.Add(new SqlParameter("@throughIndex", SqlDbType.Int) { Value = throughIndex });
 
                     // Sequential access streams each chunk's data instead of buffering the row first.
-                    await using DbDataReader reader = await command.ExecuteReaderAsync(CommandBehavior.SequentialAccess, ct)
-                        .ConfigureAwait(false);
+                    DbDataReader reader = await command.ExecuteReaderAsync(CommandBehavior.SequentialAccess, ct).ConfigureAwait(false);
+                    await using var readerDisposal = reader.ConfigureAwait(false);
                     while (await reader.ReadAsync(ct).ConfigureAwait(false))
                     {
                         pageLastIndex = reader.GetInt32(0);
@@ -920,7 +933,8 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
                         byte[] buffer = buffers[page.Count] is { } existing && existing.Length >= dataLength
                             ? existing
                             : buffers[page.Count] = new byte[Math.Max(dataLength, ResourceChunker.ChunkSize)];
-                        await using Stream data = reader.GetStream(2);
+                        Stream data = reader.GetStream(2);
+                        await using var dataDisposal = data.ConfigureAwait(false);
                         try
                         {
                             await data.ReadExactlyAsync(buffer.AsMemory(0, dataLength), ct).ConfigureAwait(false);
@@ -969,12 +983,12 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
             // A retry after a commit whose acknowledgement was lost finds what it deleted gone. The conditions it met
             // no longer hold then, and it mustn't report that nothing was deleted.
             if (deletedInAnEarlierAttempt && !await dbContext.Resources.AnyAsync(r => r.ContainerName == resourceContainerName
-                && r.Name == resourceName && r.VersionId == versionId, ct))
+                && r.Name == resourceName && r.VersionId == versionId, ct).ConfigureAwait(false))
                 return true;
 
-            await ThrowIfNotMetAsync(dbContext, conditions, resourceContainerName, resourceName, ct);
-            deletedInAnEarlierAttempt = await ResolveWithChunksAsync(dbContext.Resources, resourceContainerName, resourceName, versionId, ct) is { } found
-                && await DeleteVersionAsync(dbContext, found.Version, found.Chunks, ct);
+            await ThrowIfNotMetAsync(dbContext, conditions, resourceContainerName, resourceName, ct).ConfigureAwait(false);
+            deletedInAnEarlierAttempt = await ResolveWithChunksAsync(dbContext.Resources, resourceContainerName, resourceName, versionId, ct).ConfigureAwait(false) is { } found
+                && await DeleteVersionAsync(dbContext, found.Version, found.Chunks, ct).ConfigureAwait(false);
             return deletedInAnEarlierAttempt;
         }, cancellationToken);
     }
@@ -1002,12 +1016,12 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
                 bool firstBatch = versions.Count == 0;
                 if (firstBatch)
                 {
-                    await ThrowIfNotMetAsync(dbContext, conditions, resourceContainerName, resourceName, ct);
+                    await ThrowIfNotMetAsync(dbContext, conditions, resourceContainerName, resourceName, ct).ConfigureAwait(false);
                     versions = [.. (await dbContext.Resources
                         .Where(r => r.ContainerName == resourceContainerName && r.Name == resourceName)
                         .OrderBy(r => r.IsLatest).ThenBy(r => r.Id)
                         .Select(r => new { r.Id, Chunks = r.Chunks!.Count })
-                        .ToListAsync(ct)).Select(v => (v.Id, v.Chunks))];
+                        .ToListAsync(ct).ConfigureAwait(false)).Select(v => (v.Id, v.Chunks))];
                 }
 
                 List<(long Id, int Chunks)> batch = [];
@@ -1033,14 +1047,14 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
                 {
                     found = await dbContext.Resources
                         .Where(r => ids.Contains(r.Id) && r.ContainerName == resourceContainerName && r.Name == resourceName)
-                        .ToListAsync(ct);
+                        .ToListAsync(ct).ConfigureAwait(false);
                 }
-                await DeleteLargeVersionsChunksAsync(dbContext, found.Select(r => (r.Id, batch.First(v => v.Id == r.Id).Chunks)), ct);
+                await DeleteLargeVersionsChunksAsync(dbContext, found.Select(r => (r.Id, batch.First(v => v.Id == r.Id).Chunks)), ct).ConfigureAwait(false);
                 dbContext.Resources.RemoveRange(found);
                 deletedAny |= found.Count > 0;
-                await dbContext.SaveChangesAsync(ct);
+                await dbContext.SaveChangesAsync(ct).ConfigureAwait(false);
                 return batch.Count;
-            }, cancellationToken);
+            }, cancellationToken).ConfigureAwait(false);
         }
         while (deleted < versions.Count);
 
@@ -1056,7 +1070,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
     {
         foreach ((long id, int chunks) in versions)
         {
-            if (chunks > ChunksPerDeleteStatement) await DeleteChunksAsync(dbContext, id, cancellationToken);
+            if (chunks > ChunksPerDeleteStatement) await DeleteChunksAsync(dbContext, id, cancellationToken).ConfigureAwait(false);
         }
     }
 
@@ -1070,7 +1084,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
         if (!dbContext.Database.IsRelational()) return;
 
         while (await dbContext.Database.ExecuteSqlAsync(
-            $"DELETE TOP ({ChunksPerDeleteStatement}) FROM [ResourceChunks] WHERE [ResourceId] = {resourceId}", cancellationToken) == ChunksPerDeleteStatement)
+            $"DELETE TOP ({ChunksPerDeleteStatement}) FROM [ResourceChunks] WHERE [ResourceId] = {resourceId}", cancellationToken).ConfigureAwait(false) == ChunksPerDeleteStatement)
         {
         }
     }
@@ -1081,7 +1095,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
     /// </summary>
     private async Task<bool> DeleteVersionAsync(ResourceDbContext dbContext, ResourceModel version, int chunks, CancellationToken cancellationToken)
     {
-        await DeleteLargeVersionsChunksAsync(dbContext, [(version.Id, chunks)], cancellationToken);
+        await DeleteLargeVersionsChunksAsync(dbContext, [(version.Id, chunks)], cancellationToken).ConfigureAwait(false);
         dbContext.Resources.Remove(version);
 
         if (version.IsLatest)
@@ -1089,11 +1103,11 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
             ResourceModel? next = await dbContext.Resources
                 .Where(r => r.ContainerName == version.ContainerName && r.Name == version.Name && r.Id != version.Id)
                 .OrderByDescending(r => r.Id)
-                .FirstOrDefaultAsync(cancellationToken);
+                .FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
             if (next != null) next.IsLatest = true;
         }
 
-        return await dbContext.SaveChangesAsync(cancellationToken) > 0;
+        return await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false) > 0;
     }
 
     public override async Task<IReadOnlyList<ResourceInfo>> GetExpiredAsync(DateTimeOffset now, int maxVersions,
@@ -1116,7 +1130,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
             .ThenBy(r => r.VersionId)
             .Take(maxVersions)
             .Select(AsResourceInfo)
-            .ToListAsync(cancellationToken);
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
     }
 
     public override Task<bool> DeleteExpiredVersionAsync(ResourceLocation resource, string versionId, DateTimeOffset now,
@@ -1128,10 +1142,10 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
         return WriteNameAsync(resource.ContainerName, resource.ResourceName, async (dbContext, ct) =>
         {
             // A retry after a commit whose acknowledgement was lost finds the version gone.
-            if (await ResolveWithChunksAsync(dbContext.Resources, resource.ContainerName, resource.ResourceName, versionId, ct) is not { } found)
+            if (await ResolveWithChunksAsync(dbContext.Resources, resource.ContainerName, resource.ResourceName, versionId, ct).ConfigureAwait(false) is not { } found)
                 return deletedInAnEarlierAttempt;
             if (!(found.Version.ExpiresAt <= now)) return false;
-            return deletedInAnEarlierAttempt = await DeleteVersionAsync(dbContext, found.Version, found.Chunks, ct);
+            return deletedInAnEarlierAttempt = await DeleteVersionAsync(dbContext, found.Version, found.Chunks, ct).ConfigureAwait(false);
         }, cancellationToken);
     }
 
@@ -1156,10 +1170,10 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
                 current.Select(v => v.Resource),
                 async (dbContext, ct) =>
                 {
-                    var result = await DeleteExpiredBatchAsync(dbContext, current, now, deletedInAnEarlierAttempt, ct);
+                    var result = await DeleteExpiredBatchAsync(dbContext, current, now, deletedInAnEarlierAttempt, ct).ConfigureAwait(false);
                     deletedInAnEarlierAttempt = result.Deleted;
                     return result;
-                }, cancellationToken);
+                }, cancellationToken).ConfigureAwait(false);
             deleted.AddRange(gone);
 
             // The first batch is every version, as it doesn't know their chunks yet; each later one is only those that
@@ -1206,14 +1220,14 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
                 .Where(r => batchContainers.Contains(r.ContainerName) && batchNames.Contains(r.Name)
                     && ids.Contains(r.VersionId))
                 .Select(r => new { Version = r, Chunks = r.Chunks!.Count })
-                .ToListAsync(ct))
+                .ToListAsync(ct).ConfigureAwait(false))
             .Where(f => wanted.Contains(
                 (new ResourceLocation(f.Version.ContainerName, f.Version.Name), f.Version.VersionId!)))
             .ToList();
         var expired = found.Where(f => f.Version.ExpiresAt <= now).ToList();
         var deleting = expired.Take(CountWithinDeleteBudget(expired.Select(e => e.Chunks))).ToList();
 
-        await DeleteLargeVersionsChunksAsync(dbContext, deleting.Select(d => (d.Version.Id, d.Chunks)), ct);
+        await DeleteLargeVersionsChunksAsync(dbContext, deleting.Select(d => (d.Version.Id, d.Chunks)), ct).ConfigureAwait(false);
         dbContext.Resources.RemoveRange(deleting.Select(d => d.Version));
 
         // A name whose current version goes gets its most recently stored remaining version as current, as
@@ -1232,12 +1246,12 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
                         .Where(o => o.ContainerName == r.ContainerName && o.Name == r.Name
                             && !removed.Contains(o.Id))
                         .Max(o => o.Id))
-                .ToListAsync(ct);
+                .ToListAsync(ct).ConfigureAwait(false);
             foreach (ResourceModel version in next.Where(v => lostCurrent.Contains((v.ContainerName, v.Name))))
                 version.IsLatest = true;
         }
 
-        await dbContext.SaveChangesAsync(ct);
+        await dbContext.SaveChangesAsync(ct).ConfigureAwait(false);
 
         // A version gone already counts if an earlier attempt deleted it.
         static (ResourceLocation, string) Key(ResourceModel version) =>
@@ -1252,7 +1266,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
         CancellationToken cancellationToken = default) =>
         WriteNameAsync(resource.ContainerName, resource.ResourceName, async (dbContext, ct) =>
             await Version(dbContext.Resources, resource.ContainerName, resource.ResourceName, versionId)
-                .ExecuteUpdateAsync(s => s.SetProperty(r => r.ExpiresAt, expiresAt), ct) > 0, cancellationToken);
+                .ExecuteUpdateAsync(s => s.SetProperty(r => r.ExpiresAt, expiresAt), ct).ConfigureAwait(false) > 0, cancellationToken);
 
     public override Task<bool> SetResourceMetadataAsync(ResourceLocation resource, string? versionId,
         IReadOnlyDictionary<string, string> metadata, CancellationToken cancellationToken = default)
@@ -1260,14 +1274,14 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
         IDictionary<string, string> copy = new Dictionary<string, string>(metadata);
         return WriteNameAsync(resource.ContainerName, resource.ResourceName, async (dbContext, ct) =>
             await Version(dbContext.Resources, resource.ContainerName, resource.ResourceName, versionId)
-                .ExecuteUpdateAsync(s => s.SetProperty(r => r.Metadata, copy), ct) > 0, cancellationToken);
+                .ExecuteUpdateAsync(s => s.SetProperty(r => r.Metadata, copy), ct).ConfigureAwait(false) > 0, cancellationToken);
     }
 
     public override Task<bool> SetContentTypeAsync(ResourceLocation resource, string? versionId, string? contentType,
         CancellationToken cancellationToken = default) =>
         WriteNameAsync(resource.ContainerName, resource.ResourceName, async (dbContext, ct) =>
             await Version(dbContext.Resources, resource.ContainerName, resource.ResourceName, versionId)
-                .ExecuteUpdateAsync(s => s.SetProperty(r => r.ContentType, contentType), ct) > 0, cancellationToken);
+                .ExecuteUpdateAsync(s => s.SetProperty(r => r.ContentType, contentType), ct).ConfigureAwait(false) > 0, cancellationToken);
 
     public override async Task AddContainerAsync(string resourceContainerName,
         IReadOnlyDictionary<string, string> metadata, CancellationToken cancellationToken = default)
@@ -1283,7 +1297,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
 
             try
             {
-                await attempt.SaveChangesAsync(ct);
+                await attempt.SaveChangesAsync(ct).ConfigureAwait(false);
             }
             catch (DbUpdateException exception) when (IsUniqueViolation(exception))
             {
@@ -1295,7 +1309,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
             }
 
             return created = true;
-        }, cancellationToken);
+        }, cancellationToken).ConfigureAwait(false);
     }
 
     public override async Task<bool> SetContainerMetadataAsync(string resourceContainerName,
@@ -1304,7 +1318,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
         using ResourceDbContext dbContext = dbContextFactory.CreateDbContext();
         IDictionary<string, string> copy = new Dictionary<string, string>(metadata);
         return await dbContext.ResourceContainers.Where(x => x.Name == resourceContainerName)
-            .ExecuteUpdateAsync(s => s.SetProperty(c => c.Metadata, copy), cancellationToken) > 0;
+            .ExecuteUpdateAsync(s => s.SetProperty(c => c.Metadata, copy), cancellationToken).ConfigureAwait(false) > 0;
     }
 
     public override async Task<IReadOnlyList<ContainerInfo>> GetAllContainerInfoAsync(
@@ -1316,7 +1330,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
         {
             Name = x.Name,
             Metadata = x.Metadata
-        }).ToListAsync(cancellationToken);
+        }).ToListAsync(cancellationToken).ConfigureAwait(false);
     }
 
     public override async Task<ContainerInfo?> GetContainerInfoAsync(string resourceContainerName,
@@ -1328,7 +1342,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
         {
             Name = x.Name,
             Metadata = x.Metadata
-        }).FirstOrDefaultAsync(cancellationToken);
+        }).FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
     }
 
     public override async Task<ResourceContainerUsage> GetContainerUsageAsync(string resourceContainerName,
@@ -1345,7 +1359,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
                 COUNT_BIG(CASE WHEN r.[ContentLength] IS NULL THEN 1 END) AS [Unmeasured]
             FROM [Resources] r
             WHERE r.[ContainerName] = {resourceContainerName} AND r.[StagedAt] IS NULL
-            """).ToListAsync(cancellationToken))[0];
+            """).ToListAsync(cancellationToken).ConfigureAwait(false))[0];
         long storedSize = usage.StoredSize;
         if (usage.Unmeasured > 0)
         {
@@ -1353,7 +1367,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
                 SELECT COALESCE(SUM(CAST(DATALENGTH(ch.[Data]) AS bigint)), 0) AS [Value]
                 FROM [Resources] r JOIN [ResourceChunks] ch ON ch.[ResourceId] = r.[Id]
                 WHERE r.[ContainerName] = {resourceContainerName} AND r.[ContentLength] IS NULL AND r.[StagedAt] IS NULL
-                """).SingleAsync(cancellationToken);
+                """).SingleAsync(cancellationToken).ConfigureAwait(false);
         }
 
         return new ResourceContainerUsage(storedSize, usage.ResourceCount, usage.VersionCount);
@@ -1364,13 +1378,13 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
     {
         using ResourceDbContext dbContext = dbContextFactory.CreateDbContext();
 
-        if (!await dbContext.ResourceContainers.AnyAsync(x => x.Name == resourceContainerName, cancellationToken)) return false;
+        if (!await dbContext.ResourceContainers.AnyAsync(x => x.Name == resourceContainerName, cancellationToken).ConfigureAwait(false)) return false;
 
         // Each batch commits in a transaction of its own, so no single transaction holds the whole container's content.
         // A batch takes whole resources, each with its chunks, so a reader never sees part of one, until it reaches the
         // chunk budget. Each pass removes only what earlier passes left, so a delete that is canceled or fails partway
         // is finished by calling it again.
-        while (await WriteNamesAsync([], DeleteBatchAsync, cancellationToken) > 0)
+        while (await WriteNamesAsync([], DeleteBatchAsync, cancellationToken).ConfigureAwait(false) > 0)
         {
         }
 
@@ -1383,7 +1397,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
                 .OrderBy(r => r.Name).ThenBy(r => r.VersionId)
                 .Select(r => new { r.Id, r.Name, r.IsLatest, Chunks = r.Chunks!.Count })
                 .Take(MaxResourcesPerDeleteBatch)
-                .ToListAsync(ct);
+                .ToListAsync(ct).ConfigureAwait(false);
             if (candidates.Count == 0) return 0;
 
             // A name's current version goes after all its others: deleting it first would leave the name with stored
@@ -1412,12 +1426,12 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
                     && (await attempt.Database.SqlQuery<int>($"""
                         SELECT 1 AS [Value] FROM [Resources] WITH (UPDLOCK, ROWLOCK)
                         WHERE [Id] = {candidate.Id} AND [ContainerName] = {resourceContainerName}
-                        """).ToListAsync(ct)).Count == 0)
+                        """).ToListAsync(ct).ConfigureAwait(false)).Count == 0)
                     continue;
                 deleting.Add((candidate.Id, candidate.Chunks));
             }
 
-            await DeleteLargeVersionsChunksAsync(attempt, deleting, ct);
+            await DeleteLargeVersionsChunksAsync(attempt, deleting, ct).ConfigureAwait(false);
             if (attempt.Database.IsRelational())
             {
                 // A statement per version, in one round trip, rather than loading and tracking each to delete it: SQL
@@ -1437,14 +1451,14 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
                         .Append($"DELETE FROM [Resources] WHERE [Id] = @id{i};");
                     parameters[i + 1] = new SqlParameter($"@id{i}", batch[i]);
                 }
-                await attempt.Database.ExecuteSqlRawAsync(sql.ToString(), parameters, ct);
+                await attempt.Database.ExecuteSqlRawAsync(sql.ToString(), parameters, ct).ConfigureAwait(false);
             }
             else
             {
                 // The in-memory provider the unit tests use runs no SQL.
                 attempt.Resources.RemoveRange(
-                    await attempt.Resources.IgnoreQueryFilters().Where(r => batch.Contains(r.Id)).ToListAsync(ct));
-                await attempt.SaveChangesAsync(ct);
+                    await attempt.Resources.IgnoreQueryFilters().Where(r => batch.Contains(r.Id)).ToListAsync(ct).ConfigureAwait(false));
+                await attempt.SaveChangesAsync(ct).ConfigureAwait(false);
             }
             return batch.Count;
         }
@@ -1452,14 +1466,14 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
         bool deleted = false;
         return await WriteNamesAsync([], async (attempt, ct) =>
         {
-            ResourceContainerModel? container = await attempt.ResourceContainers.FirstOrDefaultAsync(x => x.Name == resourceContainerName, ct);
+            ResourceContainerModel? container = await attempt.ResourceContainers.FirstOrDefaultAsync(x => x.Name == resourceContainerName, ct).ConfigureAwait(false);
             // A retry after a commit whose acknowledgement was lost finds the container gone.
             if (container is null) return deleted;
 
             attempt.ResourceContainers.Remove(container);
-            await attempt.SaveChangesAsync(ct);
+            await attempt.SaveChangesAsync(ct).ConfigureAwait(false);
             return deleted = true;
-        }, cancellationToken);
+        }, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -1482,7 +1496,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
         string resourceContainerName, string resourceName, string? versionId, CancellationToken cancellationToken) =>
         await Version(query, resourceContainerName, resourceName, versionId)
             .Select(r => new { Version = r, Chunks = r.Chunks!.Count })
-            .FirstOrDefaultAsync(cancellationToken) is { } found ? (found.Version, found.Chunks) : null;
+            .FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false) is { } found ? (found.Version, found.Chunks) : null;
 
     /// <summary>The named version, or the current one when <paramref name="versionId"/> is null.</summary>
     private static IQueryable<ResourceModel> Version(IQueryable<ResourceModel> query, string resourceContainerName, string resourceName, string? versionId)

@@ -31,7 +31,7 @@ internal class ResourceChunker
         while (true)
         {
             byte[] buffer = buffers[index % buffers.Length] ??= new byte[ChunkSize];
-            int bytesRead = await stream.ReadAtLeastAsync(buffer, ChunkSize, throwOnEndOfStream: false, cancellationToken);
+            int bytesRead = await stream.ReadAtLeastAsync(buffer, ChunkSize, throwOnEndOfStream: false, cancellationToken).ConfigureAwait(false);
             if (bytesRead == 0) yield break;
 
             bool last = bytesRead < ChunkSize;

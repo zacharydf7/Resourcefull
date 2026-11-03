@@ -55,7 +55,7 @@ public sealed class ResourceLookupHttpResult : IResult, IActionResult
         {
             ResourceDownloadResult? opened = await OpenAsync(VersionId, requested is { From: { } from }
                 ? new ResourceRange(from, requested.To < long.MaxValue ? requested.To - from + 1 : null)
-                : null, cancellationToken);
+                : null, cancellationToken).ConfigureAwait(false);
             if (opened is null)
             {
                 response.StatusCode = StatusCodes.Status404NotFound;
@@ -85,7 +85,7 @@ public sealed class ResourceLookupHttpResult : IResult, IActionResult
 
                 if (wanted != opened.Range)
                 {
-                    download = await OpenAsync(resource.VersionId, wanted, cancellationToken);
+                    download = await OpenAsync(resource.VersionId, wanted, cancellationToken).ConfigureAwait(false);
                     if (download is null && attempt == 0 && VersionId is null) continue;
                     if (download is null)
                     {
@@ -101,13 +101,13 @@ public sealed class ResourceLookupHttpResult : IResult, IActionResult
                         new ContentRangeHeaderValue(part.Offset, part.Offset + length - 1, download.TotalLength);
                 }
 
-                await ResourceHttpResult.SendAsync(httpContext, download.Stream, resource, Options);
+                await ResourceHttpResult.SendAsync(httpContext, download.Stream, resource, Options).ConfigureAwait(false);
                 return;
             }
             finally
             {
-                await opened.Stream.DisposeAsync();
-                if (download is not null && download != opened) await download.Stream.DisposeAsync();
+                await opened.Stream.DisposeAsync().ConfigureAwait(false);
+                if (download is not null && download != opened) await download.Stream.DisposeAsync().ConfigureAwait(false);
             }
         }
     }
@@ -120,14 +120,14 @@ public sealed class ResourceLookupHttpResult : IResult, IActionResult
         {
             try
             {
-                return await Container.DownloadStreamingAsync(ResourceName, versionId, part, cancellationToken);
+                return await Container.DownloadStreamingAsync(ResourceName, versionId, part, cancellationToken).ConfigureAwait(false);
             }
             catch (ResourceRangeNotSatisfiableException)
             {
             }
         }
 
-        return await Container.DownloadStreamingAsync(ResourceName, versionId, cancellationToken: cancellationToken);
+        return await Container.DownloadStreamingAsync(ResourceName, versionId, cancellationToken: cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>

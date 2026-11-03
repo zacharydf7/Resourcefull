@@ -16,9 +16,10 @@ internal sealed class ResourcefullSqlServerHealthCheck(IDbContextFactory<Resourc
         using Activity? activity = SqlTelemetry.Start("health_check");
         try
         {
-            await using ResourceDbContext dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+            ResourceDbContext dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+            await using var dbContextDisposal = dbContext.ConfigureAwait(false);
             string[] known = [.. dbContext.Database.GetMigrations()];
-            string[] applied = [.. await dbContext.Database.GetAppliedMigrationsAsync(cancellationToken)];
+            string[] applied = [.. await dbContext.Database.GetAppliedMigrationsAsync(cancellationToken).ConfigureAwait(false)];
             string[] pending = [.. known.Except(applied)];
             // The history table is EF Core's, so an application sharing the database keeps its own migrations there
             // too; only migrations named as Resourcefull's are from a newer release.

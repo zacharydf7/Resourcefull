@@ -23,8 +23,9 @@ internal sealed partial class ExpiryService(IServiceScopeFactory scopes, ExpiryS
             {
                 try
                 {
-                    await using AsyncServiceScope scope = scopes.CreateAsyncScope();
-                    await scope.ServiceProvider.GetRequiredService<IResourceServiceClient>().DeleteExpiredAsync(stoppingToken);
+                    AsyncServiceScope scope = scopes.CreateAsyncScope();
+                    await using var scopeDisposal = scope.ConfigureAwait(false);
+                    await scope.ServiceProvider.GetRequiredService<IResourceServiceClient>().DeleteExpiredAsync(stoppingToken).ConfigureAwait(false);
                 }
                 catch (NotSupportedException exception)
                 {
@@ -37,7 +38,7 @@ internal sealed partial class ExpiryService(IServiceScopeFactory scopes, ExpiryS
                     LogFailed(logger, exception);
                 }
             }
-            while (await timer.WaitForNextTickAsync(stoppingToken));
+            while (await timer.WaitForNextTickAsync(stoppingToken).ConfigureAwait(false));
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
         {

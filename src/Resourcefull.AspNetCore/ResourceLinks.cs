@@ -121,7 +121,7 @@ internal sealed class ResourceLinkSigner(IDataProtectionProvider dataProtection,
             throw new ArgumentException("A link can show one version or follow the current one, not both.", nameof(link));
 
         ResourceInfo? version = await resources.GetContainerClient(link.ContainerName)
-            .GetResourceInfoAsync(link.ResourceName, link.VersionId, cancellationToken);
+            .GetResourceInfoAsync(link.ResourceName, link.VersionId, cancellationToken).ConfigureAwait(false);
         if (version is null) return null;
 
         var payload = new Payload(link.ContainerName, link.ResourceName, link.FollowCurrent ? null : version.VersionId,

@@ -29,8 +29,9 @@ public static class ResourcefullSqlDatabaseExtensions
         using Activity? activity = SqlTelemetry.Start("migrate");
         try
         {
-            await using ResourceDbContext dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
-            await dbContext.Database.MigrateAsync(cancellationToken);
+            ResourceDbContext dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+            await using var dbContextDisposal = dbContext.ConfigureAwait(false);
+            await dbContext.Database.MigrateAsync(cancellationToken).ConfigureAwait(false);
         }
         catch (Exception exception) when (SqlTelemetry.Failed(activity, exception))
         {

@@ -67,7 +67,7 @@ public sealed class HashingStream(Stream source) : Stream
     /// <inheritdoc />
     public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
     {
-        int bytesRead = await source.ReadAsync(buffer, cancellationToken);
+        int bytesRead = await source.ReadAsync(buffer, cancellationToken).ConfigureAwait(false);
         Append(buffer.Span[..bytesRead]);
         return bytesRead;
     }

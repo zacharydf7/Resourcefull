@@ -201,6 +201,9 @@
 - **A download's file name leaves out control characters and the characters that change text direction,** which a
   resource name can hold. A right-to-left override (U+202E) could make a download of `invoice` + U+202E + `fdp.exe`
   show as `invoiceexe.pdf`, and a name with a line break failed with an error instead of downloading.
+- **The library's own awaits no longer risk a deadlock when the caller blocks on a call.** A desktop app, or any other app
+  with a synchronization context, could hang when it waited for a call with `.Result` or `.Wait()`, because the
+  library's own awaits resumed on that context. They now resume on the thread pool.
 
 ## [3.1.0] - 2026-10-29
 

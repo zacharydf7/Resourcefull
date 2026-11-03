@@ -20,10 +20,10 @@ internal sealed class ResourceRangeStream(Stream content, long length) : Stream
     public override int Read(Span<byte> buffer) => Counted(content.Read(buffer[..Limit(buffer.Length)]));
 
     public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default) =>
-        Counted(await content.ReadAsync(buffer[..Limit(buffer.Length)], cancellationToken));
+        Counted(await content.ReadAsync(buffer[..Limit(buffer.Length)], cancellationToken).ConfigureAwait(false));
 
     public override async Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) =>
-        Counted(await content.ReadAsync(buffer.AsMemory(offset, Limit(count)), cancellationToken));
+        Counted(await content.ReadAsync(buffer.AsMemory(offset, Limit(count)), cancellationToken).ConfigureAwait(false));
 
     private int Limit(int count) => (int)Math.Min(count, length - _read);
 
