@@ -19,15 +19,17 @@
   marks both names, then commits with one conditional write of its entry, so its versions are never seen in both places
   or in neither; across containers, the store copies the content. Once a day, the expiry sweep deletes content no head
   names, which writes and deletes that stopped partway leave behind, and finishes purging deleted containers. Expiry
-  keeps an index of the versions that expire, so a sweep lists only what's due. An upload session stores its appends in
-  segments of up to 64 MiB, and completing has the store join them with `UploadPartCopy`, so the bytes don't pass
-  through the application. An append that would need more segments than the store can join throws the new
-  `ResourceUploadLimitException` (413 Content Too Large in ASP.NET Core). Names are kept exactly as given, even by
-  stores that keep keys as files, and are listed in Unicode code point order. It counts writes retried after a
-  concurrent change to the same name or session in `resourcefull.s3.retries`, stale expiry entries a sweep dropped in
-  `resourcefull.s3.stale_expiries`, abandoned sessions and unnamed content the sweep deleted in
-  `resourcefull.s3.abandoned_uploads`, and, in `resourcefull.s3.moves_recovered`, moves the sweep finished or undid
-  after their mover stopped. It's tested against SeaweedFS. See [S3-compatible storage](docs/providers/s3.md).
+  keeps an index of the versions that expire, so a sweep lists only what's due. Content larger than 78 GiB, the most one
+  multipart upload of 8 MiB parts takes, goes up in pieces that the store then joins, so an upload holds up to S3's 5
+  TiB; past that, it throws the new `ResourceUploadLimitException` (413 Content Too Large in ASP.NET Core). An upload
+  session stores its appends in segments of up to 64 MiB, and completing has the store join them with `UploadPartCopy`,
+  so the bytes don't pass through the application. An append that would need more segments than the store can join
+  throws it too. Names are kept exactly as given, even by stores that keep keys as files, and are listed in Unicode code
+  point order. It counts writes retried after a concurrent change to the same name or session in
+  `resourcefull.s3.retries`, stale expiry entries a sweep dropped in `resourcefull.s3.stale_expiries`, abandoned
+  sessions and unnamed content the sweep deleted in `resourcefull.s3.abandoned_uploads`, and, in
+  `resourcefull.s3.moves_recovered`, moves the sweep finished or undid after their mover stopped. It's tested against
+  SeaweedFS. See [S3-compatible storage](docs/providers/s3.md).
 - **Azure Blob Storage.** The new `Resourcefull.AzureBlob` package stores resources in a blob container of an Azure
   Storage account, working as the S3 provider does and sharing its code: conditional writes (`If-None-Match: *` and
   `If-Match`) keep one current version per name, and content of 8 MiB or more goes up in blocks.

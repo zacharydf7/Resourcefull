@@ -34,6 +34,15 @@ internal interface IObjectStore
     /// </summary>
     Task UploadAsync(string key, Stream content, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// The most bytes one <see cref="UploadAsync"/> stores: as many parts of <see cref="ObjectParts.PartSize"/> as the
+    /// store takes in one upload.
+    /// </summary>
+    long MaxUploadLength { get; }
+
+    /// <summary>The most bytes the store keeps in one object.</summary>
+    long MaxObjectLength { get; }
+
     /// <summary>The most objects <see cref="JoinAsync"/> can join into one.</summary>
     int MaxJoinedParts { get; }
 

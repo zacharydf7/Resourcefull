@@ -18,10 +18,11 @@ internal sealed class AzureBlobObjectStore(BlobContainerClient container) : IObj
     private const int ParallelRequests = 16;
 
     /// <summary>
-    /// How long the read-only link a join signs stays valid: long enough for the largest join, which is safe since the
-    /// link goes only to Azure.
+    /// How long the read-only link a join signs stays valid: an hour short of a week. A week is the longest a user
+    /// delegation key can last, and the spare hour keeps a clock a little ahead of Azure's from being refused. That's
+    /// long enough to join the largest upload, and safe, since the link goes only to Azure.
     /// </summary>
-    private static readonly TimeSpan JoinReadTime = TimeSpan.FromDays(1);
+    private static readonly TimeSpan JoinReadTime = TimeSpan.FromDays(7) - TimeSpan.FromHours(1);
 
     public string ConditionalWrites => "If-Match and If-None-Match on Put Blob";
 
@@ -99,6 +100,14 @@ internal sealed class AzureBlobObjectStore(BlobContainerClient container) : IObj
 
     /// <summary>A block blob's limit on its blocks.</summary>
     public int MaxJoinedParts => 50_000;
+
+    /// <summary>
+    /// The most bytes a block blob of <see cref="ObjectParts.PartSize"/> blocks holds, 50,000 of them. Tests set it lower.
+    /// </summary>
+    public long MaxUploadLength { get; init; } = 50_000L * ObjectParts.PartSize;
+
+    /// <summary>A block blob's limit: 50,000 blocks of 4,000 MiB.</summary>
+    public long MaxObjectLength => 50_000L * 4000 * 1024 * 1024;
 
     /// <summary>
     /// Blocks staged with <c>Put Block From URL</c>, each from a part, then a block list that commits them. Azure reads

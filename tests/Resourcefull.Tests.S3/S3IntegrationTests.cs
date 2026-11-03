@@ -106,6 +106,151 @@ public class S3IntegrationTests(S3Fixture fixture)
         Assert.Equal(payload, (await container.DownloadContentAsync("large.bin"))!.Content.ToArray());
     }
 
+    [Theory]
+    [InlineData(16)]
+    [InlineData(32)]
+    [InlineData(40)]
+    public async Task AddResourceAsync_ShouldStoreTheContentInPiecesTheStoreJoins_WhenItIsLargerThanOneUploadTakes(int mebibytes)
+    {
+        fixture.SkipIfUnavailable();
+
+        // Arrange: a store that takes 16 MiB in one upload, and content of one, two, or two and a half uploads' worth.
+        string prefix = $"pieces-{Guid.NewGuid():N}/";
+        var store = new S3ObjectStore(fixture.Client, fixture.BucketName) { MaxUploadLength = 2 * ObjectParts.PartSize };
+        ObjectStoreRepository repository = await NewRepositoryAsync(prefix, store: store);
+        byte[] payload = new byte[mebibytes * 1024 * 1024];
+        new Random(159).NextBytes(payload);
+        var location = new ResourceLocation("c", "big.bin");
+
+        // Act
+        WrittenContent written = await repository.AddResourceAsync(new NewResourceVersion(location, "v1"), new MemoryStream(payload));
+
+        // Assert: the content whole, with its hash, and only the name's head and one content object left, and no record of
+        // the pieces.
+        Assert.Equal(payload.LongLength, written.ContentLength);
+        Assert.Equal("sha256:" + Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(payload)), written.ContentHash);
+        Assert.Equal(payload, await ReadAllAsync(await repository.GetResourceStreamAsync(location)));
+        Assert.Equal(2, await CountKeysAsync(prefix + "d/"));
+        Assert.Equal(0, await CountKeysAsync(prefix + "p/"));
+    }
+
+    [Fact]
+    public async Task AddResourceAsync_ShouldLeaveNothingBehind_WhenJoiningThePiecesFails()
+    {
+        fixture.SkipIfUnavailable();
+
+        // Arrange: a store that takes 16 MiB in one upload and fails every join, and 40 MiB of content.
+        string prefix = $"pieces-failed-{Guid.NewGuid():N}/";
+        var store = new InterferingStore(new S3ObjectStore(fixture.Client, fixture.BucketName) { MaxUploadLength = 2 * ObjectParts.PartSize })
+        {
+            BeforeJoin = () => throw new IOException("Joining failed.")
+        };
+        ObjectStoreRepository repository = await NewRepositoryAsync(prefix, store: store);
+
+        // Act
+        Exception? failed = await Record.ExceptionAsync(() => repository.AddResourceAsync(
+            new NewResourceVersion(new ResourceLocation("c", "big.bin"), "v1"), new MemoryStream(new byte[40 * 1024 * 1024])));
+
+        // Assert: neither the pieces nor their record is left.
+        Assert.IsType<IOException>(failed);
+        Assert.Equal(0, await CountKeysAsync(prefix + "d/"));
+        Assert.Equal(0, await CountKeysAsync(prefix + "p/"));
+    }
+
+    [Fact]
+    public async Task AddResourceAsync_ShouldThrowUploadLimitExceptionAndLeaveNothingBehind_WhenTheContentIsLargerThanAnObject()
+    {
+        fixture.SkipIfUnavailable();
+
+        // Arrange: a store that takes 16 MiB in one upload and keeps 24 MiB in one object, and 40 MiB of content.
+        string prefix = $"pieces-limit-{Guid.NewGuid():N}/";
+        var store = new InterferingStore(new S3ObjectStore(fixture.Client, fixture.BucketName) { MaxUploadLength = 2 * ObjectParts.PartSize })
+        {
+            MaxObject = 3 * ObjectParts.PartSize
+        };
+        ObjectStoreRepository repository = await NewRepositoryAsync(prefix, store: store);
+
+        // Act
+        Exception? refused = await Record.ExceptionAsync(() => repository.AddResourceAsync(
+            new NewResourceVersion(new ResourceLocation("c", "big.bin"), "v1"), new MemoryStream(new byte[40 * 1024 * 1024])));
+
+        // Assert
+        Assert.IsType<ResourceUploadLimitException>(refused);
+        Assert.Equal(0, await CountKeysAsync(prefix + "d/"));
+        Assert.Equal(0, await CountKeysAsync(prefix + "p/"));
+    }
+
+    [Fact]
+    public async Task DeleteAbandonedUploadsAsync_ShouldDeleteAStoppedUploadsPieces_WhenItsRecordIsOverAnHourOld()
+    {
+        fixture.SkipIfUnavailable();
+
+        // Arrange: content no head names, a record of pieces listing it, as an upload that stopped leaves, and a store
+        // that lists the record as two hours old and the content as three days old.
+        string prefix = $"pieces-stopped-{Guid.NewGuid():N}/";
+        var clock = new MovableClock();
+        var store = new InterferingStore(new S3ObjectStore(fixture.Client, fixture.BucketName))
+        {
+            MapListing = item => item with
+            {
+                LastModified = item.LastModified - (item.Key.Contains("/p/", StringComparison.Ordinal) ? TimeSpan.FromHours(2) : TimeSpan.FromDays(3))
+            }
+        };
+        ObjectStoreRepository repository = await NewRepositoryAsync(prefix, clock, store: store);
+        await repository.AddResourceAsync(new NewResourceVersion(new ResourceLocation("c", "a.txt"), "v1"),
+            new MemoryStream("kept"u8.ToArray()));
+        string named = (await fixture.Client.ListObjectsV2Async(new ListObjectsV2Request
+        {
+            BucketName = fixture.BucketName, Prefix = prefix + "d/"
+        })).S3Objects.Single(o => o.Key.Contains("/b/", StringComparison.Ordinal)).Key;
+        string piece = named[..(named.LastIndexOf('/') + 1)] + new string('0', 32);
+        string record = $"{prefix}p/{new string('0', 32)}";
+        await fixture.Client.PutObjectAsync(new PutObjectRequest { BucketName = fixture.BucketName, Key = piece, ContentBody = "x" });
+        await fixture.Client.PutObjectAsync(new PutObjectRequest
+        {
+            BucketName = fixture.BucketName, Key = record, ContentBody = new JsonObject { ["k"] = new JsonArray(piece) }.ToJsonString()
+        });
+
+        // Act: two sweeps a day apart.
+        await repository.DeleteAbandonedUploadsAsync(DateTimeOffset.UtcNow.AddDays(-1));
+        int recordAfterFirst = await CountKeysAsync(record);
+        clock.Now = DateTimeOffset.UtcNow.AddDays(1).AddMinutes(1);
+        await repository.DeleteAbandonedUploadsAsync(DateTimeOffset.UtcNow.AddDays(-1));
+
+        // Assert: the stale record kept nothing and was deleted, so the piece went as any unnamed content does.
+        Assert.Equal(0, recordAfterFirst);
+        Assert.Equal(0, await CountKeysAsync(piece));
+    }
+
+    [Fact]
+    public async Task DeleteAbandonedUploadsAsync_ShouldKeepAnUploadsPieces_WhileTheUploadIsStillGoing()
+    {
+        fixture.SkipIfUnavailable();
+
+        // Arrange: a store that takes 16 MiB in one upload and lists content as three days old, and an upload of 40 MiB
+        // that runs a sweep just before its pieces are joined.
+        string prefix = $"pieces-kept-{Guid.NewGuid():N}/";
+        var store = new InterferingStore(new S3ObjectStore(fixture.Client, fixture.BucketName) { MaxUploadLength = 2 * ObjectParts.PartSize })
+        {
+            MapListing = item => item.Key.Contains("/b/", StringComparison.Ordinal)
+                ? item with { LastModified = item.LastModified.AddDays(-3) }
+                : item
+        };
+        ObjectStoreRepository repository = await NewRepositoryAsync(prefix, store: store);
+        store.BeforeJoin = () => repository.DeleteAbandonedUploadsAsync(DateTimeOffset.UtcNow.AddDays(-1));
+        var location = new ResourceLocation("c", "big.bin");
+        byte[] payload = new byte[40 * 1024 * 1024];
+        new Random(160).NextBytes(payload);
+
+        // Act
+        await repository.AddResourceAsync(new NewResourceVersion(location, "v1"), new MemoryStream(payload));
+        using GetObjectResponse scan = await fixture.Client.GetObjectAsync(fixture.BucketName, prefix + "s");
+
+        // Assert: the scan noted none of the pieces as unnamed, and the upload went through whole.
+        Assert.Empty(JsonNode.Parse(scan.ResponseStream)!["u"]!.AsArray());
+        Assert.Equal(payload, await ReadAllAsync(await repository.GetResourceStreamAsync(location)));
+    }
+
     [Fact]
     public async Task ConditionalWrites_ShouldSucceedOnce_WhenAWriteLandsButItsAnswerIsLost()
     {
@@ -1010,6 +1155,16 @@ public class S3IntegrationTests(S3Fixture fixture)
 
         public int MaxJoinedParts => MaxParts ?? inner.MaxJoinedParts;
 
+        public long MaxUploadLength => inner.MaxUploadLength;
+
+        /// <summary>The most an object holds, in place of the store's own limit.</summary>
+        public long? MaxObject { get; init; }
+
+        public long MaxObjectLength => MaxObject ?? inner.MaxObjectLength;
+
+        /// <summary>Changes what a listing says of each object, as for objects written longer ago.</summary>
+        public Func<ObjectListing, ObjectListing>? MapListing { get; set; }
+
         public async Task JoinAsync(string key, IReadOnlyList<ObjectRange> parts, CancellationToken cancellationToken)
         {
             if (BeforeJoin is not null) await BeforeJoin();
@@ -1038,7 +1193,8 @@ public class S3IntegrationTests(S3Fixture fixture)
             inner.OpenReadAsync(key, start, end, length, cancellationToken);
 
         public IAsyncEnumerable<ObjectListing> ListAsync(string prefix, string? startAfter, CancellationToken cancellationToken) =>
-            inner.ListAsync(prefix, startAfter, cancellationToken);
+            MapListing is { } map ? inner.ListAsync(prefix, startAfter, cancellationToken).Select(map)
+                : inner.ListAsync(prefix, startAfter, cancellationToken);
 
         public Task DeleteAsync(IReadOnlyList<string> keys, CancellationToken cancellationToken)
         {

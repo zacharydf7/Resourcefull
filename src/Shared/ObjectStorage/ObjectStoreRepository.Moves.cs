@@ -225,12 +225,14 @@ internal sealed partial class ObjectStoreRepository
     }
 
     /// <summary>Copies an object in the store, a part of <see cref="CopyPartSize"/> at a time.</summary>
-    private Task CopyContentAsync(string sourceKey, string destinationKey, long length, CancellationToken cancellationToken)
+    private Task CopyContentAsync(string sourceKey, string destinationKey, long length, CancellationToken cancellationToken) =>
+        store.JoinAsync(destinationKey, [.. PartsOf(sourceKey, length)], cancellationToken);
+
+    /// <summary>An object of <paramref name="length"/> bytes as parts to join, of <see cref="CopyPartSize"/> each but the last.</summary>
+    private IEnumerable<ObjectRange> PartsOf(string key, long length)
     {
-        int parts = (int)((length + CopyPartSize - 1) / CopyPartSize);
-        return store.JoinAsync(destinationKey, [.. Enumerable.Range(0, parts)
-            .Select(i => new ObjectRange(sourceKey, i * CopyPartSize, Math.Min(CopyPartSize, length - i * CopyPartSize)))],
-            cancellationToken);
+        for (long offset = 0; offset < length; offset += CopyPartSize)
+            yield return new ObjectRange(key, offset, Math.Min(CopyPartSize, length - offset));
     }
 
     /// <summary>

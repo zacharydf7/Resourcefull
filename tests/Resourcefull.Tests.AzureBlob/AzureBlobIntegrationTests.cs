@@ -177,6 +177,34 @@ public class AzureBlobIntegrationTests(AzureBlobFixture fixture)
     }
 
     [Fact]
+    public async Task AddResourceAsync_ShouldStoreTheContentInPiecesTheStoreJoins_WhenItIsLargerThanOneUploadTakes()
+    {
+        fixture.SkipIfUnavailable();
+
+        // Arrange: a store that takes 16 MiB in one upload, and 40 MiB of content, which takes three pieces.
+        string prefix = $"pieces-{Guid.NewGuid():N}/";
+        var store = new AzureBlobObjectStore(fixture.Client.GetBlobContainerClient(fixture.ContainerName))
+        {
+            MaxUploadLength = 2 * ObjectParts.PartSize
+        };
+        var repository = new ObjectStoreRepository(store, prefix, null, null);
+        await repository.AddContainerAsync("c", new Dictionary<string, string>());
+        byte[] payload = RandomNumberGenerator.GetBytes(40 * 1024 * 1024);
+        var location = new ResourceLocation("c", "big.bin");
+
+        // Act
+        WrittenContent written = await repository.AddResourceAsync(new NewResourceVersion(location, "v1"), new MemoryStream(payload));
+        await using Stream? content = await repository.GetResourceStreamAsync(location);
+        using var stored = new MemoryStream();
+        await content!.CopyToAsync(stored);
+
+        // Assert: the content whole, and only the name's head and one content blob left.
+        Assert.Equal(payload.LongLength, written.ContentLength);
+        Assert.Equal(payload, stored.ToArray());
+        Assert.Equal(2, await CountBlobsAsync(prefix + "d/"));
+    }
+
+    [Fact]
     public async Task MoveResourceAsync_ShouldCopyTheContentInParts_WhenMovedToAnotherContainer()
     {
         fixture.SkipIfUnavailable();

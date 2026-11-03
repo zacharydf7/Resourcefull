@@ -67,6 +67,9 @@ public interface IResourceContainerClient
     /// <see cref="ResourceUploadOptions.Conditions"/> is set and the storage provider doesn't support conditional uploads.
     /// </exception>
     /// <exception cref="ResourcePolicyViolationException">The container's policy refuses the upload; nothing was stored.</exception>
+    /// <exception cref="ResourceUploadLimitException">
+    /// The content is larger than the provider can store in one object; nothing was stored.
+    /// </exception>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
     public Task<ResourceInfo> UploadAsync(string resourceName, Stream content, ResourceUploadOptions? options = null,
         CancellationToken cancellationToken = default);

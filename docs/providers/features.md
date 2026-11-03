@@ -47,11 +47,12 @@ Some behavior follows the store underneath, though every provider meets the same
 - **The null character.** PostgreSQL can't store U+0000, so it refuses a name, version ID, content type or origin that
   contains one, which an older release's export might carry. No provider accepts one in a new name, since the name rules
   refuse control characters.
-- **The largest file.** SQL Server and PostgreSQL store a file in chunks, with no limit of their own. S3 uploads a file
-  in at most 10,000 parts of 8 MiB, so a single upload holds up to 78 GiB; Azure Blob uploads one in at most 50,000
-  blocks of 8 MiB, up to 390 GiB. An [upload session](../uploading-in-parts.md) with appends of 64 MiB or larger holds
-  more: up to 625 GiB with S3, and 3 TiB with Azure Blob. Raising both providers' limits to what their stores allow is
-  planned in [#159](https://github.com/zacharydf7/Resourcefull/issues/159). The in-memory provider holds what memory
+- **The largest file.** SQL Server and PostgreSQL store a file in chunks, with no limit of their own. S3 takes a single
+  upload of up to 5 TiB, the most it keeps in one object, and Azure Blob one of up to about 48 TiB. A file larger than
+  78 GiB on S3 or 390 GiB on Azure, the most one multipart upload or block blob takes in 8 MiB parts, goes up in pieces
+  of that size, which the store then joins. On both, an [upload session](../uploading-in-parts.md) holds less: at least
+  78 GiB with S3 and 390 GiB with Azure Blob, and up to 625 GiB and 3 TiB with appends of 64 MiB or larger. Raising that
+  is planned in [#160](https://github.com/zacharydf7/Resourcefull/issues/160). The in-memory provider holds what memory
   allows.
 - **What a call costs.** Each provider's page says what its calls cost in requests or queries, and what it leaves
   behind when something fails partway.

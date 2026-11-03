@@ -158,7 +158,8 @@ public sealed class ResourceUploadOffsetException : ResourcefullException
 /// <summary>
 /// Thrown when an append would take an upload session past what its provider can store in one session, as the
 /// S3 and Azure Blob providers' limit on the pieces they join. What the session stored before the limit stays stored,
-/// but it takes no more content: start a new session, and append in larger parts. Maps naturally to an HTTP 413.
+/// but it takes no more content: start a new session, and append in larger parts. It's also thrown for an upload larger
+/// than the provider can store in one object; such an upload stores nothing. Maps naturally to an HTTP 413.
 /// <para>Coming in 4.0.</para>
 /// </summary>
 public sealed class ResourceUploadLimitException : ResourcefullException

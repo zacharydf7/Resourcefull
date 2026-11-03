@@ -164,10 +164,15 @@ characters beyond U+FFFF, such as emoji, or from U+E000 to U+FFFF, might list in
 
 ## Costs
 
-- **An upload** smaller than 8 MiB reads the container's record, sends the content in one request, reads and writes
-  the head, then reads the container's record again to catch a container deleted meanwhile. A create-only or
-  conditional upload, which includes the default mode, also reads the head before sending the content. From 8 MiB
-  up, content goes up in 8 MiB blocks, each read into a buffer first, so each upload in progress holds 8 MiB of memory.
+- **An upload** smaller than 8 MiB reads the container's record, sends the content in one request, reads and writes the
+  head, then reads the container's record again to catch a container deleted meanwhile. A create-only or conditional
+  upload, which includes the default mode, also reads the head before sending the content. From 8 MiB up, content goes
+  up in 8 MiB blocks, each read into a buffer first, so each upload in progress holds 8 MiB of memory. Content larger
+  than 390 GiB, the most one upload's blocks hold, goes up in pieces of 390 GiB. The store then joins them, one copy
+  request per GiB, and the pieces are deleted. Until they're joined, a small record under `{prefix}p/` lists them,
+  written again every 15 minutes, so the daily scan for unnamed content leaves them alone. An upload holds up to about
+  48 TiB; a larger one throws `ResourceUploadLimitException`, which ASP.NET Core's handler answers with 413 Content Too
+  Large.
 - **A download** reads the container's record and the head, then streams the content; a range asks Azure for only
   that range.
 - **A listing page** reads the container's record, lists the heads, then reads each one, several at a time, since the

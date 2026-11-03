@@ -70,6 +70,9 @@ public abstract class ResourceRepository
     /// <exception cref="ResourcePreconditionFailedException">
     /// The name's current version doesn't meet <see cref="ResourceWriteCondition.Conditions"/>; nothing was stored.
     /// </exception>
+    /// <exception cref="ResourceUploadLimitException">
+    /// The content is larger than the provider can store in one object; nothing was stored.
+    /// </exception>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled; nothing was stored.</exception>
     public abstract Task<WrittenContent> AddResourceAsync(NewResourceVersion version, Stream content,
         ResourceWriteCondition? condition = null, CancellationToken cancellationToken = default);

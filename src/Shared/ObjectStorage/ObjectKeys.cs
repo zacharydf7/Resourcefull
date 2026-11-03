@@ -96,6 +96,12 @@ internal sealed class ObjectKeys(string prefix)
     /// </summary>
     public string Scan { get; } = prefix + "s";
 
+    /// <summary>The prefix of the records of the uploads that go up in pieces, while they do.</summary>
+    public string Pieces { get; } = prefix + "p/";
+
+    /// <summary>The key of the record of one upload's pieces.</summary>
+    public string PiecesOf(string token) => Pieces + token;
+
     /// <summary>
     /// The prefix of every move's entry, kept apart from the containers' data so deleting a container doesn't take the
     /// entry that decides a move into or out of it.

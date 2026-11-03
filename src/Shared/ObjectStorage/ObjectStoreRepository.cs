@@ -97,7 +97,7 @@ internal sealed partial class ObjectStoreRepository(IObjectStore store, string k
         WrittenContent? written = null;
         try
         {
-            await store.UploadAsync(contentKey, hashing, cancellationToken).ConfigureAwait(false);
+            await UploadContentAsync(location, contentKey, hashing, cancellationToken).ConfigureAwait(false);
             if (expiryKey is not null) await PutExpiryAsync(expiryKey, location, cancellationToken).ConfigureAwait(false);
             await ChangeHeadAsync(headKey, head =>
             {
@@ -142,6 +142,107 @@ internal sealed partial class ObjectStoreRepository(IObjectStore store, string k
         }
         condition.Conditions?.ThrowIfNotMet(location, current?.VersionId, current?.ContentHash);
     }
+
+    /// <summary>
+    /// Uploads a version's content to <paramref name="key"/>, in one upload when it fits in one, as nearly all content
+    /// does. Larger content goes up in pieces of <see cref="IObjectStore.MaxUploadLength"/>, the first at
+    /// <paramref name="key"/> and the rest at numbered keys beside it, and the store then joins them into
+    /// <paramref name="key"/>. Until they're joined, a record under <c>{prefix}p/</c> lists the pieces, written again
+    /// every quarter of <see cref="StalePiecesAge"/>, so the scan for unnamed content leaves them alone however long the
+    /// upload takes.
+    /// </summary>
+    /// <exception cref="ResourceUploadLimitException">The content is larger than the provider can store in one object.</exception>
+    private async Task UploadContentAsync(ResourceLocation location, string key, Stream content, CancellationToken cancellationToken)
+    {
+        string recordKey = _keys.PiecesOf(Guid.NewGuid().ToString("N"));
+        List<string> pieces = [key];
+        // What the record lists, replaced whole, so the task that writes it again never reads a list being changed.
+        string[] listed = [];
+        List<ObjectRange> parts = [];
+        byte[] next = new byte[1];
+        ReadOnlyMemory<byte> start = default;
+        using var uploaded = new CancellationTokenSource();
+        Task? keeping = null;
+        try
+        {
+            for (int index = 0; ; index++)
+            {
+                // No head names the pieces until the join, so before each piece after the first goes up, the record lists
+                // it and every piece before it.
+                if (index > 0)
+                {
+                    listed = [.. pieces];
+                    await WritePiecesAsync(recordKey, listed, cancellationToken).ConfigureAwait(false);
+                }
+                if (index == 1) keeping = KeepPiecesAsync(recordKey, () => listed, uploaded.Token);
+                string pieceKey = pieces[^1];
+                // Every piece before this one is full; this one stops at the store's limit on one object or at the most
+                // parts one join takes, whichever comes first.
+                long room = Math.Min(store.MaxObjectLength - index * store.MaxUploadLength,
+                    (long)(store.MaxJoinedParts - parts.Count) * CopyPartSize);
+                long limit = Math.Min(store.MaxUploadLength, room);
+                var piece = new SegmentStream(default, start, content, limit - start.Length);
+                await store.UploadAsync(pieceKey, piece, cancellationToken).ConfigureAwait(false);
+                long length = start.Length + piece.FromContent;
+                bool more = length == limit && await content.ReadAsync(next, cancellationToken).ConfigureAwait(false) == 1;
+                if (index == 0 && !more) return;
+                parts.AddRange(PartsOf(pieceKey, length));
+                if (!more) break;
+                if (limit == room) throw TooLarge(location, index * store.MaxUploadLength + limit);
+                start = next;
+                pieces.Add($"{key}-{index + 1}");
+            }
+            await store.JoinAsync(key, parts, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            await uploaded.CancelAsync().ConfigureAwait(false);
+            // Waited for, so a write of the record still going doesn't land after the record is deleted.
+            if (keeping is not null) await keeping.ConfigureAwait(false);
+            if (pieces.Count > 1) await DeleteQuietlyAsync([.. pieces.Skip(1), recordKey]).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// How old a record of an upload's pieces must be before the scan for unnamed content stops keeping them: a younger
+    /// one belongs to an upload still going, which writes it again every quarter of this.
+    /// </summary>
+    private static readonly TimeSpan StalePiecesAge = TimeSpan.FromHours(1);
+
+    private Task WritePiecesAsync(string recordKey, string[] pieces, CancellationToken cancellationToken) =>
+        store.UploadAsync(recordKey, new MemoryStream(JsonSerializer.SerializeToUtf8Bytes(new PiecesRecord([.. pieces]))),
+            cancellationToken);
+
+    /// <summary>
+    /// Writes the record of an upload's pieces again every quarter of <see cref="StalePiecesAge"/> until
+    /// <paramref name="stop"/>; a write that fails is tried again at the next turn.
+    /// </summary>
+    private async Task KeepPiecesAsync(string recordKey, Func<string[]> pieces, CancellationToken stop)
+    {
+        while (true)
+        {
+            try
+            {
+                await Task.Delay(StalePiecesAge / 4, RealTime, stop).ConfigureAwait(false);
+                await WritePiecesAsync(recordKey, pieces(), CancellationToken.None).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (stop.IsCancellationRequested)
+            {
+                return;
+            }
+            catch (Exception exception) when (store.IsStoreFailure(exception))
+            {
+                // Tried again at the next turn.
+            }
+        }
+    }
+
+    private static ResourceUploadLimitException TooLarge(ResourceLocation location, long limit) =>
+        new($"The content of the resource {location.ResourceName} in the container {location.ContainerName} is larger " +
+            $"than the {limit} bytes the provider can store in one object.")
+        {
+            ContainerName = location.ContainerName, ResourceName = location.ResourceName
+        };
 
     /// <summary>
     /// Deletes the content of a write that failed, and its expiry entry if it has one, unless the head names it after
@@ -748,6 +849,9 @@ internal sealed partial class ObjectStoreRepository(IObjectStore store, string k
 
     /// <summary>An object's value and ETag, as read.</summary>
     private readonly record struct Stored<T>(T? Value, string? ETag) where T : class;
+
+    /// <summary>The pieces of an upload too large for one, which the scan for unnamed content keeps while it's young.</summary>
+    private sealed record PiecesRecord([property: JsonPropertyName("k")] List<string> Keys);
 
     /// <summary>
     /// A container's record: its ID, which the keys of what it holds start with, its metadata, and whether it's deleted.
