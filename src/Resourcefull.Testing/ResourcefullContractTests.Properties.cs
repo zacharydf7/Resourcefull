@@ -7,6 +7,8 @@ public abstract partial class ResourcefullContractTests
     [Fact]
     public async Task SetResourceMetadataAsync_ShouldReplaceOnlyThatVersionsMetadata_WhenGivenAVersion()
     {
+        Requires(SupportsVersionChanges, "changing a version's metadata and content type");
+
         // Arrange
         using ServiceProvider provider = BuildServiceProvider(o => o.UseVersioning());
         IResourceContainerClient container = await NewContainerAsync(provider);
@@ -33,6 +35,8 @@ public abstract partial class ResourcefullContractTests
     [Fact]
     public async Task SetResourceMetadataAsync_ShouldChangeTheCurrentVersion_WhenGivenNoVersion()
     {
+        Requires(SupportsVersionChanges, "changing a version's metadata and content type");
+
         // Arrange
         using ServiceProvider provider = BuildServiceProvider(o => o.UseVersioning());
         IResourceContainerClient container = await NewContainerAsync(provider);
@@ -51,6 +55,8 @@ public abstract partial class ResourcefullContractTests
     [Fact]
     public async Task SetContentTypeAsync_ShouldChangeTheTypeInPlace_WhenCalled()
     {
+        Requires(SupportsVersionChanges, "changing a version's metadata and content type");
+
         // Arrange
         using ServiceProvider provider = BuildServiceProvider();
         IResourceContainerClient container = await NewContainerAsync(provider);
@@ -74,6 +80,8 @@ public abstract partial class ResourcefullContractTests
     [Fact]
     public async Task SetResourceMetadataAndContentType_ShouldReturnFalse_WhenTheVersionDoesNotExist()
     {
+        Requires(SupportsVersionChanges, "changing a version's metadata and content type");
+
         // Arrange
         using ServiceProvider provider = BuildServiceProvider();
         IResourceContainerClient container = await NewContainerAsync(provider);
@@ -115,6 +123,8 @@ public abstract partial class ResourcefullContractTests
     [Fact]
     public async Task SetContainerMetadataAsync_ShouldReplaceTheMetadata_WhenTheContainerExists()
     {
+        Requires(SupportsContainerMetadata, "changing container metadata");
+
         // Arrange
         using ServiceProvider provider = BuildServiceProvider();
         IResourceServiceClient service = ServiceOf(provider);

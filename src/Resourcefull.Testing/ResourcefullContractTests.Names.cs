@@ -41,19 +41,21 @@ public abstract partial class ResourcefullContractTests
 
         // Act
         ResourceContent? content = await container.DownloadContentAsync(spoofed);
-        ResourceInfo? renamed = await container.RenameResourceAsync(spoofed, "invoice.pdf");
+        ResourceInfo? renamed = SupportsMove ? await container.RenameResourceAsync(spoofed, "invoice.pdf") : null;
         bool deleted = await container.DeleteResourceIfExistsAsync(tabbed);
 
         // Assert
         Assert.Equal([1], content!.Content.ToArray());
-        Assert.Equal("invoice.pdf", renamed!.Name);
+        if (SupportsMove) Assert.Equal("invoice.pdf", renamed!.Name);
         Assert.True(deleted);
-        Assert.Equal(["invoice.pdf"], (await container.ListResourcesAsync().ToListAsync()).Select(r => r.Name));
+        Assert.Equal([SupportsMove ? "invoice.pdf" : spoofed], (await container.ListResourcesAsync().ToListAsync()).Select(r => r.Name));
     }
 
     [Fact]
     public async Task ImportContainerAsync_ShouldRestoreAnOlderName_WhenItBreaksTheRulesForNewNames()
     {
+        Requires(SupportsImport, "importing");
+
         // Arrange: an export of a name an earlier release could have stored, and a container name that's fine.
         using ServiceProvider provider = BuildServiceProvider();
         IResourceContainerClient container = await NewContainerAsync(provider);
@@ -223,7 +225,7 @@ public abstract partial class ResourcefullContractTests
         Assert.False(await container.ExistsAsync("a", nulVersionId));
         Assert.Null(await container.DownloadContentAsync(nulName));
         Assert.Empty(await container.GetResourceVersionsAsync(nulName));
-        Assert.False(await container.SetContentTypeAsync(nulName, null, "text/plain"));
+        if (SupportsVersionChanges) Assert.False(await container.SetContentTypeAsync(nulName, null, "text/plain"));
         Assert.False(await container.DeleteResourceIfExistsAsync(nulName));
         Assert.False(await container.DeleteResourceIfExistsAsync("a", nulVersionId));
         Assert.Empty(await container.ListResourcesAsync(new ResourceListOptions { Prefix = nulName }).ToListAsync());

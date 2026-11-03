@@ -15,6 +15,7 @@ PostgreSQL, in memory for tests, or in a storage provider of your own.
 | `Resourcefull.PostgreSql` | Stores resources in PostgreSQL. |
 | `Resourcefull.InMemory` | Keeps resources in process memory, for tests and local development. |
 | `Resourcefull.AspNetCore` | Serves downloads and accepts uploads in ASP.NET Core, with conditional requests and status codes. |
+| `Resourcefull.Testing` | The tests every provider must pass, for checking a provider of your own. |
 
 ## Features
 

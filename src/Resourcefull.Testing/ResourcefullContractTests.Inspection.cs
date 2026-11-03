@@ -181,6 +181,8 @@ public abstract partial class ResourcefullContractTests
     [Fact]
     public async Task ImportContainerAsync_ShouldLeaveNoContainer_WhenTheInspectorRefusesAVersion()
     {
+        Requires(SupportsImport, "importing");
+
         // Arrange: an export of a container whose uploads were accepted, imported into one whose aren't.
         using ServiceProvider provider = BuildInspectedServiceProvider();
         IResourceServiceClient service = ServiceOf(provider);
@@ -218,10 +220,10 @@ public abstract partial class ResourcefullContractTests
         // Act
         await container.RestoreVersionAsync("report.pdf", first.VersionId);
         await container.CopyResourceAsync("report.pdf", container.Name, "copy.pdf");
-        await container.MoveResourceAsync("copy.pdf", container.Name, "moved.pdf");
+        if (SupportsMove) await container.MoveResourceAsync("copy.pdf", container.Name, "moved.pdf");
 
         // Assert
         Assert.Equal(0, inspected);
-        Assert.Equal("first", (await container.DownloadContentAsync("moved.pdf"))!.Content.ToString());
+        Assert.Equal("first", (await container.DownloadContentAsync(SupportsMove ? "moved.pdf" : "copy.pdf"))!.Content.ToString());
     }
 }

@@ -33,6 +33,8 @@ public abstract partial class ResourcefullContractTests
     [Fact]
     public async Task SetExpiryAsync_ShouldChangeTheCurrentVersion_WhenGivenNoVersionId()
     {
+        Requires(SupportsExpiry, "expiry");
+
         // Arrange
         using ServiceProvider provider = BuildServiceProvider(o => o.UseVersioning());
         IResourceContainerClient container = await NewContainerAsync(provider);
@@ -55,6 +57,8 @@ public abstract partial class ResourcefullContractTests
     [Fact]
     public async Task DeleteExpiredVersionsAsync_ShouldDeleteOnlyWhatsStillExpired_WhenGivenABatch()
     {
+        Requires(SupportsExpiry, "expiry");
+
         // Arrange: a name whose expired current version has an older one behind it, a version whose expiry was
         // extended since it was listed, and a version that doesn't exist.
         using ServiceProvider provider = BuildServiceProvider(o => o.UseVersioning());
@@ -85,6 +89,8 @@ public abstract partial class ResourcefullContractTests
     [Fact]
     public async Task DeleteExpiredVersionsAsync_ShouldMakeTheLatestVersionLeftCurrent_WhenItDeletesSeveralOfAName()
     {
+        Requires(SupportsExpiry, "expiry");
+
         // Arrange: three versions of a name, the two latest of them expired.
         using ServiceProvider provider = BuildServiceProvider(o => o.UseVersioning());
         IResourceContainerClient container = await NewContainerAsync(provider);
@@ -108,6 +114,8 @@ public abstract partial class ResourcefullContractTests
     [Fact]
     public async Task DeleteExpiredAsync_ShouldDeleteOnlyExpiredVersions_WhenCalled()
     {
+        Requires(SupportsExpiry, "expiry");
+
         // Arrange
         using ServiceProvider provider = BuildServiceProvider();
         IResourceContainerClient container = await NewContainerAsync(provider);
@@ -127,6 +135,8 @@ public abstract partial class ResourcefullContractTests
     [Fact]
     public async Task DeleteExpiredAsync_ShouldMakeThePreviousVersionCurrent_WhenTheCurrentVersionExpires()
     {
+        Requires(SupportsExpiry, "expiry");
+
         // Arrange
         using ServiceProvider provider = BuildServiceProvider(o => o.UseVersioning());
         IResourceContainerClient container = await NewContainerAsync(provider);
@@ -145,6 +155,8 @@ public abstract partial class ResourcefullContractTests
     [Fact]
     public async Task SetExpiryAsync_ShouldChangeOrClearTheExpiry_WhenTheVersionExists()
     {
+        Requires(SupportsExpiry, "expiry");
+
         // Arrange
         using ServiceProvider provider = BuildServiceProvider();
         IResourceContainerClient container = await NewContainerAsync(provider);
@@ -183,19 +195,22 @@ public abstract partial class ResourcefullContractTests
         ResourceInfo? plainCopy = await container.CopyResourceAsync("a", name, "copy", new ResourceCopyOptions { VersionId = first.VersionId });
         ResourceInfo? expiringCopy = await container.CopyResourceAsync("a", name, "expiring", new ResourceCopyOptions { ExpiresAt = Past });
         ResourceInfo? restored = await container.RestoreVersionAsync("a", first.VersionId);
-        await container.MoveResourceAsync("a", name, "moved");
+        if (SupportsMove) await container.MoveResourceAsync("a", name, "moved");
 
         // Assert
         Assert.Null(plainCopy!.ExpiresAt);
         // A write returns the expiry it was given; the store keeps it to its precision.
         Assert.Equal(Past, expiringCopy!.ExpiresAt);
         Assert.Null(restored!.ExpiresAt);
-        Assert.Equal(Kept(first.ExpiresAt), (await container.GetResourceInfoAsync("moved", first.VersionId))!.ExpiresAt);
+        if (SupportsMove)
+            Assert.Equal(Kept(first.ExpiresAt), (await container.GetResourceInfoAsync("moved", first.VersionId))!.ExpiresAt);
     }
 
     [Fact]
     public async Task CleanupHandler_ShouldHearOfEveryExpiredAndPrunedVersionBeforeItIsDeleted_WhenOneIsRegistered()
     {
+        Requires(SupportsExpiry, "expiry");
+
         // Arrange
         using ServiceProvider provider = BuildServiceProvider(o => o.UseVersioning(1).UseCleanupHandler<RecordingCleanupHandler>());
         IResourceContainerClient container = await NewContainerAsync(provider);
@@ -217,6 +232,8 @@ public abstract partial class ResourcefullContractTests
     [Fact]
     public async Task UploadAsync_ShouldKeepAPrunedVersionUntilItsGracePeriodEnds_WhenExpiryIsOn()
     {
+        Requires(SupportsExpiry, "expiry");
+
         // Arrange
         var clock = new ManualTimeProvider { Now = DateTimeOffset.UtcNow };
         using ServiceProvider provider = BuildServiceProvider(o =>
@@ -293,6 +310,8 @@ public abstract partial class ResourcefullContractTests
     [Fact]
     public async Task DeleteExpiredAsync_ShouldDeleteTheReplacedVersionsToo_WhenTheCurrentVersionExpiresWithoutVersioning()
     {
+        Requires(SupportsExpiry, "expiry");
+
         // Arrange: an overwrite that expires sooner than the grace period of the version it replaced.
         var clock = new ManualTimeProvider { Now = DateTimeOffset.UtcNow };
         using ServiceProvider provider = BuildServiceProvider(o =>
@@ -317,6 +336,8 @@ public abstract partial class ResourcefullContractTests
     [Fact]
     public async Task DownloadStreamingAsync_ShouldFinishReading_WhenAnUploadReplacesTheVersionWhileExpiryIsOn()
     {
+        Requires(SupportsExpiry, "expiry");
+
         // Arrange: without versioning an upload replaces the version before it; the content spans several pages.
         using ServiceProvider provider = BuildServiceProvider(o => o.UseExpiry());
         IResourceContainerClient container = await NewContainerAsync(provider);
@@ -338,6 +359,8 @@ public abstract partial class ResourcefullContractTests
     [Fact]
     public async Task CleanupHandler_ShouldKeepTheVersionButNotHoldUpOthers_WhenTheHandlerFailsForIt()
     {
+        Requires(SupportsExpiry, "expiry");
+
         // Arrange: the handler refuses one container's versions; another container's expire later.
         using ServiceProvider provider = BuildServiceProvider(o => o.UseVersioning(1).UseCleanupHandler<RecordingCleanupHandler>());
         IResourceContainerClient container = await NewContainerAsync(provider);
@@ -371,6 +394,8 @@ public abstract partial class ResourcefullContractTests
     [Fact]
     public async Task DeleteExpiredVersionAsync_ShouldKeepTheVersion_WhenItsExpiryWasMovedPastTheSweepsTime()
     {
+        Requires(SupportsExpiry, "expiry");
+
         // Arrange: listed as expired by a sweep, then extended before the sweep deleted it.
         using ServiceProvider provider = BuildServiceProvider();
         IResourceContainerClient container = await NewContainerAsync(provider);
@@ -391,6 +416,8 @@ public abstract partial class ResourcefullContractTests
     [Fact]
     public async Task DeleteExpiredAsync_ShouldUseTheRegisteredClock_WhenOneIsRegistered()
     {
+        Requires(SupportsExpiry, "expiry");
+
         // Arrange: an application test's clock, far from the real one.
         var clock = new ManualTimeProvider { Now = new DateTimeOffset(2000, 1, 1, 0, 0, 0, TimeSpan.Zero) };
         using ServiceProvider provider = BuildServiceProvider(o => o.Services.AddSingleton<TimeProvider>(clock));
@@ -412,6 +439,8 @@ public abstract partial class ResourcefullContractTests
     [Fact]
     public async Task DeleteExpiredAsync_ShouldKeepAReadOnlyContainersVersionsButNotHoldUpOthers_WhenTheyExpireFirst()
     {
+        Requires(SupportsExpiry, "expiry");
+
         // Arrange: a frozen container whose version expires before another container's.
         using ServiceProvider provider = BuildServiceProvider(o => o.UseContainerPolicies(cacheFor: TimeSpan.Zero)
             .UsePolicyProvider<TestPolicyProvider>());
@@ -438,6 +467,8 @@ public abstract partial class ResourcefullContractTests
     [Fact]
     public async Task GetExpiredAsync_ShouldListEachExpiredVersionOnceInOrder_WhenPagedOneAtATimeFromTheLast()
     {
+        Requires(SupportsExpiry, "expiry");
+
         // Arrange: expiries long before any other test's, two of them equal, so the version ID breaks the tie. Versions
         // an earlier run left behind in a persistent store can be listed too, so only this container's are compared.
         using ServiceProvider provider = BuildServiceProvider();

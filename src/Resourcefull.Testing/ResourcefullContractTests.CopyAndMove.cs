@@ -157,6 +157,8 @@ public abstract partial class ResourcefullContractTests
     [Fact]
     public async Task MoveResourceAsync_ShouldMoveEveryVersionKeepingTheirIdsAndOrigins_WhenMovedToAnotherContainer()
     {
+        Requires(SupportsMove, "moving resources");
+
         // Arrange: two versions, the older one itself a copy.
         using ServiceProvider provider = BuildServiceProvider(o => o.UseVersioning());
         IResourceContainerClient source = await NewContainerAsync(provider);
@@ -182,6 +184,8 @@ public abstract partial class ResourcefullContractTests
     [Fact]
     public async Task MoveResourceAsync_ShouldRenameTheResource_WhenMovedWithinItsContainer()
     {
+        Requires(SupportsMove, "moving resources");
+
         // Arrange
         using ServiceProvider provider = BuildServiceProvider();
         IResourceContainerClient container = await NewContainerAsync(provider);
@@ -234,6 +238,8 @@ public abstract partial class ResourcefullContractTests
     [Fact]
     public async Task RenameResourceAsync_ShouldMoveEveryVersionToTheNewName_WhenCalled()
     {
+        Requires(SupportsMove, "moving resources");
+
         // Arrange
         using ServiceProvider provider = BuildServiceProvider(o => o.UseVersioning());
         IResourceContainerClient container = await NewContainerAsync(provider);
@@ -253,6 +259,8 @@ public abstract partial class ResourcefullContractTests
     [Fact]
     public async Task MoveResourceAsync_ShouldChangeNothing_WhenTheDestinationExistsOrItsContainerIsMissingOrConditionsFail()
     {
+        Requires(SupportsMove, "moving resources");
+
         // Arrange
         using ServiceProvider provider = BuildServiceProvider();
         IResourceContainerClient container = await NewContainerAsync(provider);

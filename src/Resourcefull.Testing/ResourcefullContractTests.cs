@@ -1,4 +1,9 @@
+using System.Runtime.CompilerServices;
 using Microsoft.Extensions.DependencyInjection;
+
+[assembly: InternalsVisibleTo("Resourcefull.Tests.Unit")]
+[assembly: InternalsVisibleTo("Resourcefull.Tests.AspNetCore")]
+[assembly: InternalsVisibleTo("Resourcefull.Tests.Integration")]
 
 namespace Resourcefull.Testing;
 
@@ -26,6 +31,54 @@ public abstract partial class ResourcefullContractTests
     /// which differs from ordinal order only between characters beyond U+FFFF and those from U+E000 to U+FFFF.
     /// </summary>
     protected virtual IComparer<string> NameOrder => StringComparer.Ordinal;
+
+    // Switches for the features ResourceRepository leaves optional; the refusal tests are in
+    // ResourcefullContractTests.Optional.cs.
+
+    /// <summary>Whether the provider replaces a container's metadata, with <c>SetContainerMetadataAsync</c>.</summary>
+    /// <remarks>
+    /// Override it to return <see langword="false"/> when the provider doesn't override that member: the feature's
+    /// tests are then skipped, and a test checks that the clients refuse it.
+    /// </remarks>
+    protected virtual bool SupportsContainerMetadata => true;
+
+    /// <summary>
+    /// Whether the provider changes a stored version's metadata and content type, with <c>SetResourceMetadataAsync</c>
+    /// and <c>SetContentTypeAsync</c>.
+    /// </summary>
+    /// <remarks>
+    /// Override it to return <see langword="false"/> when the provider doesn't override those members: the feature's
+    /// tests are then skipped, and a test checks that the clients refuse it.
+    /// </remarks>
+    protected virtual bool SupportsVersionChanges => true;
+
+    /// <summary>Whether the provider moves and renames resources, with <c>MoveResourceAsync</c>.</summary>
+    /// <remarks>
+    /// Override it to return <see langword="false"/> when the provider doesn't override that member: the feature's
+    /// tests are then skipped, and a test checks that the clients refuse it.
+    /// </remarks>
+    protected virtual bool SupportsMove => true;
+
+    /// <summary>Whether the provider imports versions as they were exported, with <c>ImportVersionAsync</c>.</summary>
+    /// <remarks>
+    /// Override it to return <see langword="false"/> when the provider doesn't override that member: the feature's
+    /// tests are then skipped, and a test checks that the clients refuse it.
+    /// </remarks>
+    protected virtual bool SupportsImport => true;
+
+    /// <summary>
+    /// Whether the provider supports expiry, with <c>GetExpiredAsync</c>, <c>DeleteExpiredVersionAsync</c> and
+    /// <c>SetExpiryAsync</c>.
+    /// </summary>
+    /// <remarks>
+    /// Override it to return <see langword="false"/> when the provider doesn't override those members: the feature's
+    /// tests are then skipped, and a test checks that the clients refuse it.
+    /// </remarks>
+    protected virtual bool SupportsExpiry => true;
+
+    /// <summary>Skips the calling test unless the provider supports <paramref name="feature"/>.</summary>
+    private static void Requires(bool supported, string feature) =>
+        Assert.SkipUnless(supported, $"The provider doesn't support {feature}.");
 
     /// <summary>A time the tests give, as the store keeps it: cut to <see cref="TimePrecision"/>.</summary>
     private DateTimeOffset? Kept(DateTimeOffset? time) =>

@@ -9,9 +9,16 @@
   container policies, export and import. `UsePostgreSql(connectionString, configure, schema)` registers it, and
   `MigrateResourcefullDatabaseAsync` and `GenerateResourcefullScript` provision it. It keeps times to the microsecond,
   lists names in Unicode code point order, and refuses U+0000 in the names, version IDs and content types it stores.
-  `AddResourcefullPostgreSqlCheck` is its health check, and it counts
-  retries and abandoned uploads in `resourcefull.postgresql.*`. It's tested against PostgreSQL 16 and 17. See
-  [PostgreSQL](docs/providers/postgresql.md).
+  `AddResourcefullPostgreSqlCheck` is its health check, and it counts retries and abandoned uploads in
+  `resourcefull.postgresql.*`. It's tested against PostgreSQL 16 and 17. See [PostgreSQL](docs/providers/postgresql.md).
+- **The contract tests as a package.** `Resourcefull.Testing` holds the tests every provider must pass, as an
+  abstract xUnit v3 class (`xunit.v3` 4.0.2 or later): derive from `ResourcefullContractTests`, register your
+  provider, and the suite runs against it. For each optional feature a provider leaves out (container metadata,
+  changing a version's metadata and content type, moves, imports or expiry), its test class turns off the `Supports…`
+  switch; that feature's tests are then skipped, and other tests check that the clients refuse it with
+  `NotSupportedException`. `TimePrecision` and `NameOrder` describe a
+  store that keeps times less precisely or orders names differently. See
+  [Testing a provider](docs/providers/writing-a-provider.md#testing-a-provider).
 - **Several stores in one application.** `AddKeyedResourcefull("archive", …)` adds a store under a name, beside the one
   `AddResourcefull` adds, with its own provider and settings; resolve its client with
   `[FromKeyedServices("archive")]`. Each store has its own policies, URI provider, upload inspector, cleanup handler

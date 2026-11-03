@@ -86,9 +86,11 @@ RESOURCEFULL_SCALE=true RESOURCEFULL_SCALE_GIB=1 RESOURCEFULL_SCALE_ROWS=1000000
 
 ### How the tests are organized
 
-- `src/Resourcefull.Testing` is one suite of behavior every provider must share. It runs against the
-  in-memory provider in the unit tests and against SQL Server in the integration tests, so a behavior added to one
-  provider should get a contract test.
+- `src/Resourcefull.Testing` is one suite of behavior every provider must share, shipped as a package so provider
+  authors can run it too. The unit tests run it against the in-memory provider and against a minimal provider that
+  implements only the abstract members; SQL Server and PostgreSQL run it in their own test projects. So a behavior
+  added to one provider should get a contract test. A test of an optional feature starts with `Requires(SupportsX, …)`,
+  or checks the switch around the one call that needs it.
 - `tests/Resourcefull.Tests.Unit` covers the clients and each provider's internals.
 - `tests/Resourcefull.Tests.Integration` covers what needs a real SQL Server: concurrency, retries, cancellation,
   provisioning scripts and migrations.

@@ -1,6 +1,6 @@
 # API reference
 
-Every public type and member of the five packages, generated from their XML documentation.
+Every public type and member of the five library packages, generated from their XML documentation.
 
 - **`Resourcefull`**: the clients you use (`IResourceServiceClient`, `IResourceContainerClient`), their models and
   exceptions, registration (`AddResourcefull`, `ResourcefullOptionsBuilder`), provisioning
@@ -12,3 +12,6 @@ Every public type and member of the five packages, generated from their XML docu
 - **`Resourcefull.PostgreSql`**: `UsePostgreSql` and `AddResourcefullPostgreSqlCheck`.
 - **`Resourcefull.AspNetCore`**: `Results.Resource`, `UploadFromRequestAsync`, `AddResourcefullExceptionHandler`, and
   signed links (`AddResourcefullLinks`, `IResourceLinkSigner`, `Results.SharedResource`).
+
+The sixth package, `Resourcefull.Testing`, holds the contract tests for checking a provider; see
+[Testing a provider](../docs/providers/writing-a-provider.md#testing-a-provider).

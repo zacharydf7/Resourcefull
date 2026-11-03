@@ -50,11 +50,13 @@ public abstract partial class ResourcefullContractTests
 
         // Act
         ResourceExportResult exported = await service.ExportContainerAsync(sourceName, export);
+
+        // Assert: every name is counted and, when the provider supports import, the export holds every name's
+        // content.
+        Assert.Equal(1_001, exported.ResourceCount);
+        if (!SupportsImport) return;
         export.Position = 0;
         await service.ImportContainerAsync(restoredName, export);
-
-        // Assert
-        Assert.Equal(1_001, exported.ResourceCount);
         IResourceContainerClient restored = service.GetContainerClient(restoredName);
         Assert.Equal(1_001, (await restored.ListResourcesAsync().ToListAsync()).Count);
         Assert.Equal("1000", (await restored.DownloadContentAsync("r1000"))!.Content.ToString());
@@ -63,6 +65,8 @@ public abstract partial class ResourcefullContractTests
     [Fact]
     public async Task ImportContainerAsync_ShouldRestoreEveryVersionAsItWas_WhenGivenAnExport()
     {
+        Requires(SupportsImport, "importing");
+
         // Arrange: metadata, a history over several chunks, a copy, an expiry, and an older version that's current.
         using ServiceProvider provider = BuildServiceProvider(o => o.UseVersioning());
         IResourceServiceClient service = ServiceOf(provider);
@@ -150,6 +154,8 @@ public abstract partial class ResourcefullContractTests
     [InlineData("changed to another length")]
     public async Task ImportContainerAsync_ShouldRefuseAndLeaveNoContainer_WhenTheExportsContentWasChanged(string replacement)
     {
+        Requires(SupportsImport, "importing");
+
         // Arrange: an export whose content was edited after it was written.
         using ServiceProvider provider = BuildServiceProvider();
         IResourceServiceClient service = ServiceOf(provider);
@@ -205,6 +211,8 @@ public abstract partial class ResourcefullContractTests
     [Fact]
     public async Task ImportContainerAsync_ShouldRefuseAndLeaveNoContainer_WhenAFileIsLongerThanItsManifestSays()
     {
+        Requires(SupportsImport, "importing");
+
         // Arrange: the content and its hash are untouched; only the length the manifest gives it is shorter.
         using ServiceProvider provider = BuildServiceProvider();
         IResourceServiceClient service = ServiceOf(provider);
@@ -243,6 +251,8 @@ public abstract partial class ResourcefullContractTests
     [Fact]
     public async Task ImportVersionAsync_ShouldRefuseAVersionIdTheNameAlreadyHas_WhenCalledTwice()
     {
+        Requires(SupportsImport, "importing");
+
         // Arrange
         using ServiceProvider provider = BuildServiceProvider();
         IResourceContainerClient container = await NewContainerAsync(provider);
@@ -325,6 +335,8 @@ public abstract partial class ResourcefullContractTests
     [InlineData(ResourcePolicyRule.MaxContainerSize, 29L, false)]
     public async Task ImportContainerAsync_ShouldCountWhatItHasImported_WhenTheContainerHasALimit(ResourcePolicyRule rule, long limit, bool fits)
     {
+        Requires(SupportsImport, "importing");
+
         // Arrange
         using ServiceProvider provider = BuildServiceProvider(o => o.UseVersioning().UseContainerPolicies(cacheFor: TimeSpan.Zero)
             .UsePolicyProvider<TestPolicyProvider>());
@@ -351,6 +363,8 @@ public abstract partial class ResourcefullContractTests
     [Fact]
     public async Task ImportContainerAsync_ShouldNotCountANameWithNoVersions_WhenTheContainerLimitsNames()
     {
+        Requires(SupportsImport, "importing");
+
         // Arrange: an export of "a" and "b" whose manifest also lists a name with no versions, which stores nothing.
         using ServiceProvider provider = BuildServiceProvider(o => o.UseContainerPolicies(cacheFor: TimeSpan.Zero)
             .UsePolicyProvider<TestPolicyProvider>());
@@ -460,6 +474,8 @@ public abstract partial class ResourcefullContractTests
     [Fact]
     public async Task PruneContainerAsync_ShouldPruneTheVersionsAnImportKeptPastTheLimit_WhenCalled()
     {
+        Requires(SupportsImport, "importing");
+
         // Arrange: the export's notes.txt has two versions; this store keeps one.
         using ServiceProvider provider = BuildServiceProvider(o => o.UseVersioning(1));
         IResourceServiceClient service = ServiceOf(provider);
@@ -481,6 +497,8 @@ public abstract partial class ResourcefullContractTests
     [Fact]
     public async Task ImportContainerAsync_ShouldReadAFormat1ExportAndExportItAgainUnchanged_WhenGivenOneAs32WroteIt()
     {
+        Requires(SupportsImport, "importing");
+
         // Arrange
         using ServiceProvider provider = BuildServiceProvider(o => o.UseVersioning());
         IResourceServiceClient service = ServiceOf(provider);

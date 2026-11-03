@@ -305,11 +305,26 @@ same code works for named and unnamed stores.
 
 ## Testing a provider
 
-The repository's contract test suite, `src/Resourcefull.Testing`, is an abstract xUnit class that runs the
-same tests against any provider; both built-in providers pass it. To check your provider, copy the suite into your
-test project and derive a class that registers your provider:
+<div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 4.0</span></div>
+
+The `Resourcefull.Testing` package holds the contract tests: about 200 tests of what every provider must do, from
+round-tripping content and keeping versions to conditional writes, listings, policies and names. Every built-in
+provider passes them, and they're versioned with the core, so a new release's tests check what that release expects.
+
+They're written for xUnit v3, and need `xunit.v3` 4.0.2 or later. Add the package to an xUnit v3 test project:
+
+```shell
+dotnet add package Resourcefull.Testing
+```
+
+Then derive a class from `ResourcefullContractTests` that registers your provider. The suite calls
+`BuildServiceProvider` once per test, and each test works in containers of its own, so all the tests can share one
+store:
 
 ```csharp
+using Microsoft.Extensions.DependencyInjection;
+using Resourcefull.Testing;
+
 public class FileSystemContractTests : ResourcefullContractTests
 {
     protected override ServiceProvider BuildServiceProvider(Action<ResourcefullOptionsBuilder>? configure = null)
@@ -324,3 +339,41 @@ public class FileSystemContractTests : ResourcefullContractTests
     }
 }
 ```
+
+Run `dotnet test`, and xUnit runs every test the class inherits. A store that needs a server, such as a database,
+can skip its tests when none is available: call `Assert.SkipUnless` in `BuildServiceProvider`.
+
+### Features your provider leaves out
+
+If your provider doesn't override one of the optional members described above, turn off that feature's switch in your
+test class, and the suite skips its tests. In their place, a test checks that the clients refuse the feature
+with `NotSupportedException`, changing nothing, rather than seem to succeed:
+
+| Switch | Turn it off when the provider doesn't override |
+|---|---|
+| `SupportsContainerMetadata` | `SetContainerMetadataAsync` |
+| `SupportsVersionChanges` | `SetResourceMetadataAsync` and `SetContentTypeAsync` |
+| `SupportsMove` | `MoveResourceAsync` |
+| `SupportsImport` | `ImportVersionAsync` |
+| `SupportsExpiry` | `GetExpiredAsync`, `DeleteExpiredVersionAsync` and `SetExpiryAsync` |
+
+```csharp
+public class FileSystemContractTests : ResourcefullContractTests
+{
+    protected override bool SupportsExpiry => false;
+
+    // BuildServiceProvider as above.
+}
+```
+
+The members with a default that works, such as `CopyResourceAsync` and `GetResourcePageAsync`, need no switch: the
+suite tests them either way.
+
+### How the store keeps things
+
+Two more settings describe a store that keeps times or orders names differently from .NET:
+
+- **`TimePrecision`**: how precisely the store keeps times. A time a test gives, such as an expiry, is expected back
+  cut to this precision. It's exact by default; PostgreSQL's contract tests set a microsecond.
+- **`NameOrder`**: the order the store lists names in. It's `StringComparer.Ordinal` by default; PostgreSQL's
+  contract tests set Unicode code point order, which is PostgreSQL's byte order.

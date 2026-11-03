@@ -3,7 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 namespace Resourcefull.Testing;
 
 /// <summary>An upload inspector that answers as the delegate registered with it does.</summary>
-public sealed class DelegatingUploadInspector(
+internal sealed class DelegatingUploadInspector(
     Func<ResourceUploadInspection, CancellationToken, Task<ResourceInspectionResult>> answer) : IResourceUploadInspector
 {
     public async ValueTask<ResourceInspectionResult> InspectAsync(ResourceUploadInspection upload, CancellationToken cancellationToken) =>

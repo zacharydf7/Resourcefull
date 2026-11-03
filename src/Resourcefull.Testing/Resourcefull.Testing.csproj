@@ -5,7 +5,10 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
 
-    <IsPackable>false</IsPackable>
+    <Description>The contract every Resourcefull provider must keep, as xUnit v3 tests: derive a class that registers your provider, and the suite runs against it.</Description>
+    <Title>Resourcefull.Testing</Title>
+    <PackageTags>$(PackageTags);testing;xunit;contract-tests</PackageTags>
+    <!-- A library of tests, not a test project of its own: the tests run in the project that derives from them. -->
     <IsTestProject>false</IsTestProject>
     <!-- The test methods are public for xUnit and named for what they check, so they carry no XML docs. -->
     <NoWarn>$(NoWarn);CS1591</NoWarn>

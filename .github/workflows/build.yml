@@ -38,6 +38,7 @@ jobs:
         dotnet pack src/Resourcefull.PostgreSql --no-build -c Release --output ./nupkg
         dotnet pack src/Resourcefull.InMemory --no-build -c Release --output ./nupkg
         dotnet pack src/Resourcefull.AspNetCore --no-build -c Release --output ./nupkg
+        dotnet pack src/Resourcefull.Testing --no-build -c Release --output ./nupkg
     - name: Upload NuGet packages
       uses: actions/upload-artifact@v7
       with:
