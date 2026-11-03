@@ -76,6 +76,8 @@
     href: providers/sql-server-storage.md
   - name: Upgrading the database
     href: providers/sql-server-upgrades.md
+  - name: PostgreSQL
+    href: providers/postgresql.md
   - name: Backups and recovery
     href: backups-and-recovery.md
   - name: Health checks

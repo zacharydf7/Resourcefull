@@ -5,13 +5,14 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/zacharydf7/Resourcefull/blob/main/LICENSE)
 
 Resourcefull stores and serves files of any type and size from infrastructure you run yourself. Upload, download,
-list and version **resources** in named **containers** through one client API, and keep the bytes in SQL Server, in
-memory for tests, or in a storage provider of your own.
+list and version **resources** in named **containers** through one client API, and keep the bytes in SQL Server or
+PostgreSQL, in memory for tests, or in a storage provider of your own.
 
 | Package | What it's for |
 |---|---|
 | `Resourcefull` | The clients and the provider interface. |
 | `Resourcefull.SqlServer` | Stores resources in SQL Server. |
+| `Resourcefull.PostgreSql` | Stores resources in PostgreSQL. |
 | `Resourcefull.InMemory` | Keeps resources in process memory, for tests and local development. |
 | `Resourcefull.AspNetCore` | Serves downloads and accepts uploads in ASP.NET Core, with conditional requests and status codes. |
 
@@ -43,7 +44,7 @@ Coming in 4.0, and documented on the site already:
 
 ```shell
 dotnet add package Resourcefull
-dotnet add package Resourcefull.SqlServer   # or Resourcefull.InMemory
+dotnet add package Resourcefull.SqlServer   # or Resourcefull.PostgreSql, or Resourcefull.InMemory
 ```
 
 Register Resourcefull with a provider, and provision the database (here at startup, which suits a single instance;
@@ -94,6 +95,8 @@ you're trying to do, plus the API reference. Deciding between Resourcefull, obje
   uploads and sharing files with links
 - [SQL Server](https://zacharydf7.github.io/Resourcefull/docs/providers/sql-server.html): provisioning, permissions
   and upgrades
+- [PostgreSQL](https://zacharydf7.github.io/Resourcefull/docs/providers/postgresql.html): provisioning, permissions
+  and how it differs from SQL Server
 - [Upgrading](https://zacharydf7.github.io/Resourcefull/docs/upgrading.html), including from 2.x, and the
   [changelog](https://github.com/zacharydf7/Resourcefull/blob/main/CHANGELOG.md)
 

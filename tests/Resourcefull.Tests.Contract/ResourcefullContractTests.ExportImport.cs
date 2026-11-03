@@ -259,7 +259,7 @@ public abstract partial class ResourcefullContractTests
         // Assert
         await Assert.ThrowsAsync<ResourceConflictException>(again);
         ResourceInfo stored = (await container.GetResourceInfoAsync("a"))!;
-        Assert.Equal(("imported", Past), (stored.VersionId, stored.LastModified));
+        Assert.Equal(("imported", Kept(Past)), (stored.VersionId, stored.LastModified));
     }
 
     [SkippableFact]

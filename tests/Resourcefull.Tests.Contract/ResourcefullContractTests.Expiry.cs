@@ -120,7 +120,7 @@ public abstract partial class ResourcefullContractTests
 
         // Assert
         Assert.Equal(["later", "permanent"], (await container.ListResourcesAsync().ToListAsync()).Select(r => r.Name).Order());
-        Assert.Equal(later.ExpiresAt, (await container.GetResourceInfoAsync("later"))!.ExpiresAt);
+        Assert.Equal(Kept(later.ExpiresAt), (await container.GetResourceInfoAsync("later"))!.ExpiresAt);
         Assert.Null((await container.GetResourceInfoAsync("permanent"))!.ExpiresAt);
     }
 
@@ -165,7 +165,7 @@ public abstract partial class ResourcefullContractTests
         // Assert
         Assert.Equal([true, true, true, false], found);
         Assert.Equal(["cleared", "extended"], (await container.ListResourcesAsync().ToListAsync()).Select(r => r.Name).Order());
-        Assert.Equal(Future, (await container.GetResourceInfoAsync("extended"))!.ExpiresAt);
+        Assert.Equal(Kept(Future), (await container.GetResourceInfoAsync("extended"))!.ExpiresAt);
         Assert.Equal(extended.LastModified, (await container.GetResourceInfoAsync("extended"))!.LastModified);
     }
 
@@ -187,9 +187,10 @@ public abstract partial class ResourcefullContractTests
 
         // Assert
         Assert.Null(plainCopy!.ExpiresAt);
+        // A write returns the expiry it was given; the store keeps it to its precision.
         Assert.Equal(Past, expiringCopy!.ExpiresAt);
         Assert.Null(restored!.ExpiresAt);
-        Assert.Equal(first.ExpiresAt, (await container.GetResourceInfoAsync("moved", first.VersionId))!.ExpiresAt);
+        Assert.Equal(Kept(first.ExpiresAt), (await container.GetResourceInfoAsync("moved", first.VersionId))!.ExpiresAt);
     }
 
     [SkippableFact]
@@ -235,7 +236,7 @@ public abstract partial class ResourcefullContractTests
         await ServiceOf(provider).DeleteExpiredAsync();
 
         // Assert: kept, expiring five minutes after the prune, then deleted by the sweep, which reports it.
-        Assert.Equal(pruned.AddMinutes(5), kept!.ExpiresAt);
+        Assert.Equal(Kept(pruned.AddMinutes(5)), kept!.ExpiresAt);
         Assert.False(reportedWhilePruning);
         Assert.False(await container.ExistsAsync("notes.txt", first.VersionId));
         ResourceCleanup cleanup = Assert.Single(RecordingCleanupHandler.In(container.Info.Name));
@@ -259,7 +260,7 @@ public abstract partial class ResourcefullContractTests
         await container.UploadAsync("notes.txt", BinaryData.FromString("2"), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace });
 
         // Assert
-        Assert.Equal(clock.Now.AddMinutes(1), (await container.GetResourceInfoAsync("notes.txt", first.VersionId))!.ExpiresAt);
+        Assert.Equal(Kept(clock.Now.AddMinutes(1)), (await container.GetResourceInfoAsync("notes.txt", first.VersionId))!.ExpiresAt);
     }
 
     [SkippableTheory]

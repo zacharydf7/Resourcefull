@@ -2,7 +2,7 @@
 
 Resourcefull is a .NET library for storing files in your own infrastructure and serving them from your application.
 Your code uploads, downloads, lists, versions and deletes files through one client API, and a **storage provider**
-decides where the bytes go: SQL Server in production, process memory in tests, or a store of your own.
+decides where the bytes go: SQL Server or PostgreSQL in production, process memory in tests, or a store of your own.
 
 It's for applications that keep files people upload or download, such as invoices, profile pictures, reports, contract
 scans or video, and want them next to the rest of their data, rather than in a cloud service.
@@ -36,6 +36,7 @@ ResourceDownloadResult? download = await invoices.DownloadStreamingAsync("2026/1
 |---|---|
 | `Resourcefull` | The client API every application uses. |
 | `Resourcefull.SqlServer` | Stores files in a SQL Server database. Use it in production. |
+| `Resourcefull.PostgreSql` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | Stores files in a PostgreSQL database. Use it in production. |
 | `Resourcefull.InMemory` | Keeps files in process memory, for tests and local development. |
 | `Resourcefull.AspNetCore` | Serves and accepts files over HTTP with the right status codes and headers, and creates signed links for sharing them. |
 
@@ -50,7 +51,8 @@ ResourceDownloadResult? download = await invoices.DownloadStreamingAsync("2026/1
   [shares files with links](sharing-links.md).
 - **Managing storage:** [container policies](container-policies.md) for quotas and file types,
   [expiring resources](expiry.md), and [backing up and moving containers](backup-and-move.md).
-- **Running in production:** setting up [SQL Server](providers/sql-server.md), [health checks](health-checks.md),
+- **Running in production:** setting up [SQL Server](providers/sql-server.md) or [PostgreSQL](providers/postgresql.md),
+  [health checks](health-checks.md),
   [telemetry](telemetry.md) and [troubleshooting](troubleshooting.md).
 - **Testing and extending:** [testing with the in-memory provider](providers/in-memory.md), and
   [writing a provider](providers/writing-a-provider.md) of your own.

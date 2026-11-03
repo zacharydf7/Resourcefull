@@ -76,7 +76,7 @@ public abstract partial class ResourcefullContractTests
         List<string> listed = await ListNamesAsync(container, new ResourceListOptions { PageSize = 2 });
 
         // Assert
-        Assert.Equal(names.Order(StringComparer.Ordinal), listed);
+        Assert.Equal(names.Order(NameOrder), listed);
     }
 
     [SkippableFact]

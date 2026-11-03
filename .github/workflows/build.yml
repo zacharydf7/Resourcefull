@@ -35,6 +35,7 @@ jobs:
       run: |
         dotnet pack src/Resourcefull --no-build -c Release --output ./nupkg
         dotnet pack src/Resourcefull.SqlServer --no-build -c Release --output ./nupkg
+        dotnet pack src/Resourcefull.PostgreSql --no-build -c Release --output ./nupkg
         dotnet pack src/Resourcefull.InMemory --no-build -c Release --output ./nupkg
         dotnet pack src/Resourcefull.AspNetCore --no-build -c Release --output ./nupkg
     - name: Upload NuGet packages
@@ -95,6 +96,35 @@ jobs:
       run: dotnet build --no-restore --configuration Release
     - name: Test
       run: dotnet test tests/Resourcefull.Tests.Integration --no-build --configuration Release
+
+  postgresql-tests:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The PostgreSQL versions the provider's tests cover.
+        postgres: [ "16", "17" ]
+    services:
+      postgres:
+        image: postgres:${{ matrix.postgres }}
+        env:
+          POSTGRES_PASSWORD: "Resourcefull-Integration1"
+        ports:
+          - 5432:5432
+    env:
+      RESOURCEFULL_TEST_POSTGRESQL: "Host=127.0.0.1;Port=5432;Username=postgres;Password=Resourcefull-Integration1"
+    steps:
+    - uses: actions/checkout@v7
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v6
+      with:
+        global-json-file: global.json
+    - name: Restore dependencies
+      run: dotnet restore
+    - name: Build
+      run: dotnet build --no-restore --configuration Release
+    - name: Test
+      run: dotnet test tests/Resourcefull.Tests.PostgreSql --no-build --configuration Release
 
   performance:
     runs-on: ubuntu-latest

@@ -208,6 +208,31 @@ public abstract partial class ResourcefullContractTests
         Assert.Equal("b", (await container.DownloadContentAsync("b"))!.Content.ToString());
     }
 
+    [SkippableFact]
+    public async Task Lookups_ShouldFindNothing_WhenANameOrVersionIdHasU0000()
+    {
+        // Arrange: a provider whose storage can't hold U+0000 mustn't fail on a name or version ID that has it.
+        using ServiceProvider provider = BuildServiceProvider();
+        IResourceContainerClient container = await NewContainerAsync(provider);
+        ResourceInfo a = await container.UploadAsync("a", BinaryData.FromString("a"));
+        IResourceServiceClient service = ServiceOf(provider);
+        string nulName = "a\0", nulVersionId = a.VersionId + "\0", nulContainer = container.Name + "\0";
+
+        // Act & Assert
+        Assert.False(await container.ExistsAsync(nulName));
+        Assert.False(await container.ExistsAsync("a", nulVersionId));
+        Assert.Null(await container.DownloadContentAsync(nulName));
+        Assert.Empty(await container.GetResourceVersionsAsync(nulName));
+        Assert.False(await container.SetContentTypeAsync(nulName, null, "text/plain"));
+        Assert.False(await container.DeleteResourceIfExistsAsync(nulName));
+        Assert.False(await container.DeleteResourceIfExistsAsync("a", nulVersionId));
+        Assert.Empty(await container.ListResourcesAsync(new ResourceListOptions { Prefix = nulName }).ToListAsync());
+        Assert.False(await service.ContainerExistsAsync(nulContainer));
+        Assert.False(await service.DeleteContainerIfExistsAsync(nulContainer));
+        Assert.Empty(await service.ListContainersAsync(new ContainerListOptions { Prefix = nulContainer }).ToListAsync());
+        Assert.Equal("a", (await container.DownloadContentAsync("a"))!.Content.ToString());
+    }
+
     public static TheoryData<string> InvalidContainerNames =>
         ["", " ", " leading", "trailing ", new string('c', ResourceNames.MaxContainerNameLength + 1)];
 

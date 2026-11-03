@@ -30,7 +30,7 @@ database call as a child of the operation's span. With .NET Aspire, add them to 
 Every measurement in this table carries these tags:
 
 - **`resourcefull.operation`:** one of the operations below.
-- **`resourcefull.provider`:** `sqlserver`, `inmemory`, or a custom provider's type name.
+- **`resourcefull.provider`:** `sqlserver`, `postgresql`, `inmemory`, or a custom provider's type name.
 - **`resourcefull.store`** <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>**:** the store's name, for a store added with `AddKeyedResourcefull`; see
   [Several stores](several-stores.md). The store `AddResourcefull` adds records none.
 - **`error.type`:** the exception's type, on a failed operation only.
@@ -51,6 +51,8 @@ own. Each carries `resourcefull.provider`, and all but `resourcefull.client.expi
 | `resourcefull.client.cleanup_handler.failures` | {failure} | calls to your [cleanup handler](expiry.md#auditing-whats-deleted) that threw, with `resourcefull.cleanup_reason`: `expired` or `pruned`. A handler failure also counts as a failed prune or expired version, since the version stays |
 | `resourcefull.sqlserver.abandoned_uploads` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | {upload} | staged versions of uploads that stopped partway, which the [expiry](expiry.md) sweep deleted an hour after they last stored anything |
 | `resourcefull.sqlserver.retries` | {retry} | SQL Server calls retried after a transient failure, such as a deadlock or a dropped connection, with `db.response.status_code`: the SQL Server error number, such as `1205` for a deadlock |
+| `resourcefull.postgresql.abandoned_uploads` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | {upload} | as `resourcefull.sqlserver.abandoned_uploads`, for [PostgreSQL](providers/postgresql.md) |
+| `resourcefull.postgresql.retries` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | {retry} | PostgreSQL calls retried after a transient failure, with `db.response.status_code`: the SQLSTATE code, such as `40P01` for a deadlock |
 
 What to alert on:
 

@@ -4,6 +4,14 @@
 
 ### Added
 
+- **PostgreSQL.** The new `Resourcefull.PostgreSql` package stores resources in PostgreSQL, with everything the SQL
+  Server provider does: chunked streaming, versions, conditional writes, copies and moves, expiry, staged uploads,
+  container policies, export and import. `UsePostgreSql(connectionString, configure, schema)` registers it, and
+  `MigrateResourcefullDatabaseAsync` and `GenerateResourcefullScript` provision it. It keeps times to the microsecond,
+  lists names in Unicode code point order, and refuses U+0000 in the names, version IDs and content types it stores.
+  `AddResourcefullPostgreSqlCheck` is its health check, and it counts
+  retries and abandoned uploads in `resourcefull.postgresql.*`. It's tested against PostgreSQL 16 and 17. See
+  [PostgreSQL](docs/providers/postgresql.md).
 - **Several stores in one application.** `AddKeyedResourcefull("archive", …)` adds a store under a name, beside the one
   `AddResourcefull` adds, with its own provider and settings; resolve its client with
   `[FromKeyedServices("archive")]`. Each store has its own policies, URI provider, upload inspector, cleanup handler

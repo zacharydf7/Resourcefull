@@ -11,8 +11,8 @@ description: Store and serve files of any type and size from infrastructure you 
 <div>
 <h1>Files for .NET apps, <span>stored where you choose</span></h1>
 <p class="rf-lede">Resourcefull stores and serves files of any type and size from infrastructure you run yourself.
-Upload, download, list and version them through one client API, and keep the bytes in SQL Server, in memory for
-tests, or in a storage provider of your own.</p>
+Upload, download, list and version them through one client API, and keep the bytes in SQL Server or PostgreSQL, in
+memory for tests, or in a storage provider of your own.</p>
 <div class="rf-actions">
 <a class="rf-btn rf-btn-primary" href="docs/getting-started.md">Get started <i class="bi bi-arrow-right"></i></a>
 <a class="rf-btn rf-btn-secondary" href="docs/index.md">Read the docs</a>
@@ -138,7 +138,7 @@ storage is down.</p>
 <div class="rf-path">
 <h3>Running in production</h3>
 <ul>
-<li><a href="docs/providers/sql-server.md">Setting up SQL Server</a></li>
+<li><a href="docs/providers/sql-server.md">Setting up SQL Server</a> or <a href="docs/providers/postgresql.md">PostgreSQL</a></li>
 <li><a href="docs/health-checks.md">Health checks</a> and <a href="docs/telemetry.md">telemetry</a></li>
 <li><a href="docs/troubleshooting.md">Troubleshooting</a></li>
 </ul>
@@ -175,6 +175,11 @@ rest of your application.</p>
 <h3><i class="bi bi-database"></i>SQL Server</h3>
 <p><code>Resourcefull.SqlServer</code> for production: streamed in chunks, transactional, with migrations and
 retries built in.</p>
+</a>
+<a class="rf-card" href="docs/providers/postgresql.md">
+<h3><i class="bi bi-database"></i>PostgreSQL</h3>
+<p><code>Resourcefull.PostgreSql</code> for production on PostgreSQL: the same chunked streaming, transactions,
+migrations and retries.</p>
 </a>
 <a class="rf-card" href="docs/providers/in-memory.md">
 <h3><i class="bi bi-cpu"></i>In memory</h3>

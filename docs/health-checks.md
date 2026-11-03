@@ -9,6 +9,10 @@ so a load balancer, an orchestrator or your monitoring can tell whether an insta
 builder.Services.AddHealthChecks()
     .AddResourcefullSqlServerCheck(tags: ["ready"]);  // with SQL Server
 
+// or, with PostgreSQL:
+builder.Services.AddHealthChecks()
+    .AddResourcefullPostgreSqlCheck(tags: ["ready"]);
+
 // or, with any provider:
 builder.Services.AddHealthChecks()
     .AddResourcefullCheck(tags: ["ready"]);
