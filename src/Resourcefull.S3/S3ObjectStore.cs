@@ -108,6 +108,8 @@ internal sealed class S3ObjectStore(IAmazonS3 s3, string bucket) : IObjectStore
     /// <summary>A multipart upload's limit on its parts.</summary>
     public int MaxJoinedParts => 10_000;
 
+    public int KeySegmentBytes => ObjectKeys.SegmentBytes;
+
     /// <summary>
     /// The most bytes a multipart upload of <see cref="ObjectParts.PartSize"/> parts holds, 10,000 of them. Tests set it
     /// lower.

@@ -11,6 +11,7 @@
             "Resourcefull.AspNetCore/Resourcefull.AspNetCore.csproj",
             "Resourcefull.SqlServer/Resourcefull.SqlServer.csproj",
             "Resourcefull.PostgreSql/Resourcefull.PostgreSql.csproj",
+            "Resourcefull.FileSystem/Resourcefull.FileSystem.csproj",
             "Resourcefull.S3/Resourcefull.S3.csproj",
             "Resourcefull.AzureBlob/Resourcefull.AzureBlob.csproj"
           ]

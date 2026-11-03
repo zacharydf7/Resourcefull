@@ -31,6 +31,8 @@ about moves applies to it too.
   [hash backfill](providers/sql-server-upgrades.md#recording-hashes-for-older-versions) records it.
 - [Container policies](container-policies.md) apply: a copy is checked as an upload to the destination, and a move needs
   a source that isn't read-only and a destination with room for every version it brings.
+- **With the [file-system](providers/file-system.md) provider,** a rename copies nothing, but a move to another
+  container copies each version's content through your application, so it takes longer the larger the versions are.
 - **With the [S3](providers/s3.md) and [Azure Blob](providers/azure-blob.md) providers,** a rename copies nothing, but
   a move to another container has the store copy each version's content, so it takes longer the larger the versions
   are. The content still doesn't pass through your application. Their pages explain how a move stays all or nothing

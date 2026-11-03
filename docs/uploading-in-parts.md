@@ -8,8 +8,8 @@ instead. What has arrived stays stored, so after a dropped connection, or even a
 asks how much is stored and carries on from there. Nothing shows the new version until the session is completed,
 and then it becomes the name's current version all at once, as an upload's does.
 
-Every built-in provider supports sessions: SQL Server, PostgreSQL, [S3](providers/s3.md),
-[Azure Blob](providers/azure-blob.md) and in-memory.
+Every built-in provider supports sessions: SQL Server, PostgreSQL, the [file system](providers/file-system.md),
+[S3](providers/s3.md), [Azure Blob](providers/azure-blob.md) and in-memory.
 
 ## A session from start to finish
 
@@ -42,9 +42,9 @@ ResourceInfo? stored = await container.CompleteUploadAsync("video.mp4", upload.U
 
 ## Resuming after a failure
 
-An append stores its part as it arrives, about a MiB at a time with SQL Server and PostgreSQL and up to 64 MiB at a
-time with S3 and Azure Blob, so an append that fails partway keeps what it stored. (The in-memory provider stores an
-append whole or not at all.) To resume, ask the session where it ended, and send the rest from there:
+An append stores its part as it arrives, about a MiB at a time with SQL Server and PostgreSQL and up to 64 MiB at a time
+with the file system, S3 and Azure Blob, so an append that fails partway keeps what it stored. (The in-memory provider
+stores an append whole or not at all.) To resume, ask the session where it ended, and send the rest from there:
 
 ```csharp
 ResourceUpload? current = await container.GetUploadAsync("video.mp4", uploadId);
@@ -112,6 +112,8 @@ content, the session is deleted, since that content is never to be stored.
   sessions you abandon, or they stay.
 - **A session isn't moved or copied** with its name: moving or renaming the resource leaves a session for the old
   name where it is.
+- **With the file system, completing copies the session's content** into the version's file, through your application,
+  so the content is written twice. A session holds as much as the disk has room for.
 - **With S3 and Azure Blob, a session holds as much as one upload:** 5 TiB with S3 and about 48 TiB with Azure Blob. An
   append past that throws `ResourceUploadLimitException`; what the session stored stays, but it takes no more content.
   The session stores its appends in pieces of up to 64 MiB, and once it holds as many as the store can join, the next

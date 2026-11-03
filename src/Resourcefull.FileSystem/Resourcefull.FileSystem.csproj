@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <Description>File-system storage for Resourcefull: a directory on a local disk or a network share, with versions, content hashes, and create-only and conditional writes, built on file locks and atomic moves.</Description>
+    <Title>Resourcefull.FileSystem</Title>
+    <PackageTags>$(PackageTags);file-system;local-storage</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.14" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Resourcefull\Resourcefull.csproj" />
+  </ItemGroup>
+
+  <!-- The store-independent repository, shared with Resourcefull.S3 and Resourcefull.AzureBlob. -->
+  <ItemGroup>
+    <Compile Include="..\Shared\ObjectStorage\*.cs" Link="ObjectStorage\%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Resourcefull.Tests.FileSystem" />
+  </ItemGroup>
+
+</Project>

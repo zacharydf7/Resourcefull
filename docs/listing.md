@@ -26,8 +26,8 @@ return Results.Ok(new { page.Resources, page.ContinuationToken });
   `2026/10` before `2026/10/a`. Some providers differ for a few names. SQL Server compares names as if the shorter were
   padded with spaces, so a name followed by a character below U+0020 sorts before the name itself: `a` followed by a tab
   and `b` comes before `a`. PostgreSQL orders names by Unicode code point, which lists a character beyond U+FFFF, such
-  as an emoji, after those from U+E000 to U+FFFF rather than before; see [PostgreSQL](providers/postgresql.md). S3 lists
-  in code point order too, and Azure Blob in whatever order Azure returns; see
+  as an emoji, after those from U+E000 to U+FFFF rather than before; see [PostgreSQL](providers/postgresql.md). The file
+  system and S3 list in code point order too, and Azure Blob in whatever order Azure returns; see
   [Provider features](providers/features.md#differences-that-arent-gaps). In every case, a listing still returns every
   name exactly once; only the order of such names differs from the in-memory provider.
 - **The prefix** is matched ordinally and case-sensitively, with every character taken literally, including `%`, `_`

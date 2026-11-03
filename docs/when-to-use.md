@@ -20,10 +20,13 @@ Resourcefull fits and where something else serves you better.
 
 ## Where Resourcefull fits
 
-Resourcefull stores files in your database, with the SQL Server provider, and gives them the features the other
-approaches leave to you: [versions](versioning.md), content hashes, [quotas and allowed file types](container-policies.md),
-[expiry](expiry.md), [signed links](sharing-links.md) and [ASP.NET Core endpoints](aspnet-core/index.md) that answer
-with the right headers. Quotas, file types, expiry and signed links are new in 4.0 <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>.
+Resourcefull stores files in your database, with the SQL Server provider, or on a disk or file share of your own, with
+the [file-system provider](providers/file-system.md)
+<span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>. Either way, it gives them the features the other
+approaches leave to you: [versions](versioning.md), content hashes,
+[quotas and allowed file types](container-policies.md), [expiry](expiry.md), [signed links](sharing-links.md) and
+[ASP.NET Core endpoints](aspnet-core/index.md) that answer with the right headers. Quotas, file types, expiry and signed
+links are new in 4.0 <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>.
 
 It suits you when:
 
@@ -63,7 +66,8 @@ Something else serves you better when:
 
 Your code talks to `IResourceServiceClient`, not to SQL Server, so moving the bytes elsewhere later means changing the
 provider, not the code that uses it. When you move to the cloud, or outgrow your database, change `UseSqlServer` to
-[`UseS3`](providers/s3.md) or [`UseAzureBlobStorage`](providers/azure-blob.md)
+[`UseFileSystem`](providers/file-system.md), [`UseS3`](providers/s3.md) or
+[`UseAzureBlobStorage`](providers/azure-blob.md)
 <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>. Every provider is meant to support every feature,
 so that this one line is the only change; [Provider features](providers/features.md) shows where each provider stands.
 A [provider of your own](providers/writing-a-provider.md) can store the bytes anywhere else, and

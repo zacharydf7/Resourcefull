@@ -5,16 +5,18 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/zacharydf7/Resourcefull/blob/main/LICENSE)
 
 Resourcefull stores and serves files of any type and size from infrastructure you run yourself: the SQL Server or
-PostgreSQL database you already have, with nothing new to deploy. Upload, download, list and version **resources** in
-named **containers** through one client API. When you move to the cloud, your code comes with you: change the line that
-picks the provider to keep the bytes in Amazon S3, another S3-compatible store or Azure Blob Storage instead. Tests can
-keep the bytes in memory, and a storage provider of your own can keep them anywhere else.
+PostgreSQL database you already have, or a directory on your own disks, with nothing new to deploy. Upload, download,
+list and version **resources** in named **containers** through one client API. When you move to the cloud, your code
+comes with you: change the line that picks the provider to keep the bytes in Amazon S3, another S3-compatible store or
+Azure Blob Storage instead. Tests can keep the bytes in memory, and a storage provider of your own can keep them
+anywhere else.
 
 | Package | What it's for |
 |---|---|
 | `Resourcefull` | The clients and the provider interface. |
 | `Resourcefull.SqlServer` | Stores resources in SQL Server. |
 | `Resourcefull.PostgreSql` | Stores resources in PostgreSQL. |
+| `Resourcefull.FileSystem` | Stores resources in a directory, on a local disk or a network share. |
 | `Resourcefull.S3` | Stores resources in Amazon S3 or another S3-compatible store. |
 | `Resourcefull.AzureBlob` | Stores resources in Azure Blob Storage. |
 | `Resourcefull.InMemory` | Keeps resources in process memory, for tests and local development. |
@@ -104,6 +106,8 @@ you're trying to do, plus the API reference. Deciding between Resourcefull, obje
   and upgrades
 - [PostgreSQL](https://zacharydf7.github.io/Resourcefull/docs/providers/postgresql.html): provisioning, permissions
   and how it differs from SQL Server
+- [File system](https://zacharydf7.github.io/Resourcefull/docs/providers/file-system.html): choosing a directory,
+  sharing it between servers, backups and costs
 - [S3-compatible storage](https://zacharydf7.github.io/Resourcefull/docs/providers/s3.html): connecting to a store,
   sharing a bucket, permissions and costs
 - [Azure Blob Storage](https://zacharydf7.github.io/Resourcefull/docs/providers/azure-blob.html): connecting to an

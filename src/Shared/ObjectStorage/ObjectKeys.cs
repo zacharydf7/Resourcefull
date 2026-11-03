@@ -17,16 +17,18 @@ namespace Resourcefull.ObjectStorage;
 /// </para>
 /// <para>
 /// No <c>.</c> or <c>/</c> is left in a name, so stores that keep keys as files see no <c>.</c>, <c>..</c> or empty
-/// segments, and a <c>/</c> goes in once a segment nears <see cref="SegmentBytes"/>, to keep it within what a filesystem
-/// allows. Whether a <c>/</c> goes in depends only on what came before it, so two names get their <c>/</c>s at the same
+/// segments, and a <c>/</c> goes in once a segment nears <paramref name="segmentBytes"/>, to keep it within what a
+/// filesystem allows. Whether a <c>/</c> goes in depends only on what came before it, so two names get their <c>/</c>s at the same
 /// places up to where they differ, and the order holds. Each key ends with <c>!</c>, which an escape never does, so no
 /// key followed by a <c>/</c> is the start of another key: such a store would keep the shorter one as a directory, and
 /// couldn't store it as a file too.
 /// </para>
 /// </remarks>
-internal sealed class ObjectKeys(string prefix)
+/// <param name="prefix">What every key starts with.</param>
+/// <param name="segmentBytes">The most UTF-8 bytes between the <c>/</c>s put into an escaped name.</param>
+internal sealed class ObjectKeys(string prefix, int segmentBytes = ObjectKeys.SegmentBytes)
 {
-    /// <summary>The most UTF-8 bytes between the <c>/</c>s put into an escaped name.</summary>
+    /// <summary>The most UTF-8 bytes between the <c>/</c>s put into an escaped name, unless the store asks for fewer.</summary>
     internal const int SegmentBytes = 200;
 
     /// <summary>The longest unit a character escapes to: the escape of an unpaired surrogate.</summary>
@@ -133,14 +135,14 @@ internal sealed class ObjectKeys(string prefix)
     internal string UploadOf(string key) => key[..(key.IndexOf(End + "/", Uploads.Length, StringComparison.Ordinal) + 2)];
 
     /// <summary>A name as it goes into a key, before the <c>!</c> that ends it, keeping the order of names.</summary>
-    internal static string Escape(string name)
+    internal string Escape(string name)
     {
         var escaped = new StringBuilder(name.Length + 8);
         int segment = 0;
         for (int i = 0; i < name.Length; i++)
         {
             // Decided before seeing the next character, which is what keeps the order.
-            if (segment > SegmentBytes - LongestUnit)
+            if (segment > segmentBytes - LongestUnit)
             {
                 escaped.Append('/');
                 segment = 0;

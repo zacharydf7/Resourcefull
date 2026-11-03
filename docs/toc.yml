@@ -86,6 +86,8 @@
     href: providers/sql-server-upgrades.md
   - name: PostgreSQL
     href: providers/postgresql.md
+  - name: File system
+    href: providers/file-system.md
   - name: S3-compatible storage
     href: providers/s3.md
   - name: Azure Blob Storage

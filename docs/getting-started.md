@@ -11,6 +11,7 @@ dotnet add package Resourcefull
 dotnet add package Resourcefull.InMemory   # in process memory: tests and trying things out
 dotnet add package Resourcefull.SqlServer  # SQL Server: production
 dotnet add package Resourcefull.PostgreSql # PostgreSQL: production
+dotnet add package Resourcefull.FileSystem # a directory on a disk or a file share: production
 dotnet add package Resourcefull.S3         # Amazon S3 or another S3-compatible store: production
 dotnet add package Resourcefull.AzureBlob  # Azure Blob Storage: production
 ```
@@ -44,12 +45,13 @@ await app.Services.MigrateResourcefullDatabaseAsync();
 
 With several instances, provision from a deployment step instead: on SQL Server, the first provisioning turns on a
 database setting that briefly disconnects every other session. [SQL Server](providers/sql-server.md) covers both. For
-PostgreSQL, call `UsePostgreSql` in place of `UseSqlServer`; see [PostgreSQL](providers/postgresql.md). For an
-S3-compatible store, call `UseS3` with the bucket's name, and skip provisioning; see
-[S3-compatible storage](providers/s3.md). For Azure Blob Storage, call `UseAzureBlobStorage` with the blob container's
-name and a client, and skip provisioning; see [Azure Blob Storage](providers/azure-blob.md). `UseVersioning` is
-optional; see [Versioning](versioning.md), and give every application that shares the database, bucket or blob
-container the same setting.
+PostgreSQL, call `UsePostgreSql` in place of `UseSqlServer`; see [PostgreSQL](providers/postgresql.md). To keep the
+files in a directory, call `UseFileSystem` with its path, and skip provisioning; see
+[File system](providers/file-system.md). For an S3-compatible store, call `UseS3` with the bucket's name, and skip
+provisioning; see [S3-compatible storage](providers/s3.md). For Azure Blob Storage, call `UseAzureBlobStorage` with the
+blob container's name and a client, and skip provisioning; see [Azure Blob Storage](providers/azure-blob.md).
+`UseVersioning` is optional; see [Versioning](versioning.md), and give every application that shares the database,
+directory, bucket or blob container the same setting.
 
 ### Settings from configuration
 

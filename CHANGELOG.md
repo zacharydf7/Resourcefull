@@ -11,6 +11,16 @@
   lists names in Unicode code point order, and refuses U+0000 in the names, version IDs and content types it stores.
   `AddResourcefullPostgreSqlCheck` is its health check, and it counts retries and abandoned uploads in
   `resourcefull.postgresql.*`. It's tested against PostgreSQL 16 and 17. See [PostgreSQL](docs/providers/postgresql.md).
+- **File-system storage.** The new `Resourcefull.FileSystem` package stores resources as files in a directory, on a
+  local disk or a network share, with no database or storage service: `UseFileSystem(rootPath)` registers it. It works
+  as the S3 and Azure Blob providers do and shares their code, so it supports everything they do. Each write goes to a
+  file flushed to disk, then moved into place, so nothing reads a file half-written; a change to a name holds a lock
+  file while it compares and writes, so processes sharing the directory take turns. Names are escaped so that no
+  filesystem changes them, which keeps names that differ only in case or Unicode normalization apart on Windows and
+  macOS. They're listed in Unicode code point order. On macOS, a name whose file's path would pass the system's
+  1,023-byte limit throws `ResourceNameException`. It counts its retries, recovered moves, stale expiry entries and
+  abandoned uploads in `resourcefull.filesystem.*`, and is tested on Linux, Windows and macOS. See
+  [File system](docs/providers/file-system.md).
 - **S3-compatible storage.** The new `Resourcefull.S3` package stores resources in a bucket of Amazon S3 or another
   store that speaks its API, using only the store's conditional writes (`If-None-Match: *` and `If-Match` on
   `PutObject`) to keep one current version per name. `UseS3(bucketName, configure)` registers it, with a client and a

@@ -11,7 +11,8 @@ description: Store and serve files of any type and size from infrastructure you 
 <div>
 <h1>Files for .NET apps, <span>stored where you choose</span></h1>
 <p class="rf-lede">Resourcefull stores and serves files of any type and size from infrastructure you run yourself: the
-SQL Server or PostgreSQL database you already have. Upload, download, list and version them through one client API.
+SQL Server or PostgreSQL database you already have, or a directory on your own disks. Upload, download, list and
+version them through one client API.
 When you move to the cloud, change one line to keep the bytes in Amazon S3, another S3-compatible store or Azure Blob
 Storage instead.</p>
 <div class="rf-actions">
@@ -20,7 +21,7 @@ Storage instead.</p>
 <a class="rf-btn rf-btn-secondary" href="https://github.com/zacharydf7/Resourcefull"><i class="bi bi-github"></i> GitHub</a>
 </div>
 <div class="rf-install">$ <b>dotnet add package</b> <span class="rf-install-name"
-data-packages="Resourcefull.SqlServer Resourcefull.PostgreSql Resourcefull.S3 Resourcefull.AzureBlob Resourcefull.InMemory Resourcefull.AspNetCore">Resourcefull.SqlServer</span></div>
+data-packages="Resourcefull.SqlServer Resourcefull.PostgreSql Resourcefull.FileSystem Resourcefull.S3 Resourcefull.AzureBlob Resourcefull.InMemory Resourcefull.AspNetCore">Resourcefull.SqlServer</span></div>
 </div>
 <div class="rf-code">
 <div class="rf-code-bar"><i></i><i></i><i></i><span>Program.cs</span></div>
@@ -141,7 +142,8 @@ storage is down.</p>
 <h3>Running in production</h3>
 <ul>
 <li><a href="docs/providers/sql-server.md">Setting up SQL Server</a>, <a href="docs/providers/postgresql.md">PostgreSQL</a>,
-<a href="docs/providers/s3.md">S3-compatible storage</a> or <a href="docs/providers/azure-blob.md">Azure Blob Storage</a></li>
+<a href="docs/providers/file-system.md">the file system</a>, <a href="docs/providers/s3.md">S3-compatible storage</a> or
+<a href="docs/providers/azure-blob.md">Azure Blob Storage</a></li>
 <li><a href="docs/health-checks.md">Health checks</a> and <a href="docs/telemetry.md">telemetry</a></li>
 <li><a href="docs/troubleshooting.md">Troubleshooting</a></li>
 </ul>
@@ -183,6 +185,11 @@ retries built in.</p>
 <h3><i class="bi bi-database"></i>PostgreSQL</h3>
 <p><code>Resourcefull.PostgreSql</code> for production on PostgreSQL: the same chunked streaming, transactions,
 migrations and retries.</p>
+</a>
+<a class="rf-card" href="docs/providers/file-system.md">
+<h3><i class="bi bi-folder"></i>File system</h3>
+<p><code>Resourcefull.FileSystem</code> for a directory on a local disk or a file share: nothing else to run, and
+every feature the other providers have.</p>
 </a>
 <a class="rf-card" href="docs/providers/s3.md">
 <h3><i class="bi bi-cloud"></i>S3-compatible storage</h3>

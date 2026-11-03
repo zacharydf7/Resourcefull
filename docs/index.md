@@ -2,8 +2,8 @@
 
 Resourcefull is a .NET library for storing files in your own infrastructure and serving them from your application.
 Your code uploads, downloads, lists, versions and deletes files through one client API, and a **storage provider**
-decides where the bytes go: the SQL Server or PostgreSQL database you already run, process memory in tests, or a store
-of your own.
+decides where the bytes go: the SQL Server or PostgreSQL database you already run, a directory on your own disks,
+process memory in tests, or a store of your own.
 
 It's for applications that keep files people upload or download, such as invoices, profile pictures, reports, contract
 scans or video, and want them next to the rest of their data, on servers they run. When an application moves to the
@@ -39,6 +39,7 @@ ResourceDownloadResult? download = await invoices.DownloadStreamingAsync("2026/1
 | `Resourcefull` | The client API every application uses. |
 | `Resourcefull.SqlServer` | Stores files in a SQL Server database. Use it in production. |
 | `Resourcefull.PostgreSql` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | Stores files in a PostgreSQL database. Use it in production. |
+| `Resourcefull.FileSystem` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | Stores files in a directory, on a local disk or a network share. Use it in production. |
 | `Resourcefull.S3` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | Stores files in Amazon S3 or another S3-compatible object store. Use it in production. |
 | `Resourcefull.AzureBlob` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | Stores files in Azure Blob Storage. Use it in production. |
 | `Resourcefull.InMemory` | Keeps files in process memory, for tests and local development. |
@@ -56,6 +57,7 @@ ResourceDownloadResult? download = await invoices.DownloadStreamingAsync("2026/1
 - **Managing storage:** [container policies](container-policies.md) for quotas and file types,
   [expiring resources](expiry.md), and [backing up and moving containers](backup-and-move.md).
 - **Running in production:** setting up [SQL Server](providers/sql-server.md), [PostgreSQL](providers/postgresql.md),
+  [the file system](providers/file-system.md),
   [S3-compatible storage](providers/s3.md) or [Azure Blob Storage](providers/azure-blob.md),
   [health checks](health-checks.md),
   [telemetry](telemetry.md) and [troubleshooting](troubleshooting.md).

@@ -47,6 +47,12 @@ internal interface IObjectStore
     int MaxJoinedParts { get; }
 
     /// <summary>
+    /// The most UTF-8 bytes between the <c>/</c>s of an escaped name in a key: <see cref="ObjectKeys.SegmentBytes"/>,
+    /// unless the store keeps keys in a form that takes more room.
+    /// </summary>
+    int KeySegmentBytes { get; }
+
+    /// <summary>
     /// Writes <paramref name="key"/> as the content of <paramref name="parts"/>, in order, joined in the store so the
     /// bytes don't pass through the application. Each part but the last is at least <see cref="ObjectParts.PartSize"/>
     /// long, and none is longer than <see cref="ObjectParts.MaxJoinedPartSize"/> plus <see cref="ObjectParts.PartSize"/>.

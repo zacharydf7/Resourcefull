@@ -18,7 +18,7 @@
     <ProjectReference Include="..\Resourcefull\Resourcefull.csproj" />
   </ItemGroup>
 
-  <!-- The store-independent repository, shared with Resourcefull.AzureBlob. -->
+  <!-- The store-independent repository, shared with Resourcefull.AzureBlob and Resourcefull.FileSystem. -->
   <ItemGroup>
     <Compile Include="..\Shared\ObjectStorage\*.cs" Link="ObjectStorage\%(Filename)%(Extension)" />
   </ItemGroup>

@@ -18,7 +18,7 @@
     <ProjectReference Include="..\Resourcefull\Resourcefull.csproj" />
   </ItemGroup>
 
-  <!-- The store-independent repository, shared with Resourcefull.S3. -->
+  <!-- The store-independent repository, shared with Resourcefull.S3 and Resourcefull.FileSystem. -->
   <ItemGroup>
     <Compile Include="..\Shared\ObjectStorage\*.cs" Link="ObjectStorage\%(Filename)%(Extension)" />
   </ItemGroup>

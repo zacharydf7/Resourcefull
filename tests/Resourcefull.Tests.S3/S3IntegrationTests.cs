@@ -1299,6 +1299,8 @@ public class S3IntegrationTests(S3Fixture fixture)
 
         public int MaxJoinedParts => MaxParts ?? inner.MaxJoinedParts;
 
+        public int KeySegmentBytes => inner.KeySegmentBytes;
+
         public long MaxUploadLength => inner.MaxUploadLength;
 
         /// <summary>The most an object holds, in place of the store's own limit.</summary>

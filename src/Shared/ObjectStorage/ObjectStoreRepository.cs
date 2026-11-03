@@ -57,7 +57,7 @@ internal sealed partial class ObjectStoreRepository(IObjectStore store, string k
     /// </summary>
     private static readonly TimeSpan StaleExpiryAge = TimeSpan.FromHours(1);
 
-    private readonly ObjectKeys _keys = new(keyPrefix);
+    private readonly ObjectKeys _keys = new(keyPrefix, store.KeySegmentBytes);
     private readonly TimeProvider _clock = timeProvider ?? TimeProvider.System;
 
     // Resources

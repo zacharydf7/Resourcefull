@@ -101,6 +101,8 @@ internal sealed class AzureBlobObjectStore(BlobContainerClient container) : IObj
     /// <summary>A block blob's limit on its blocks.</summary>
     public int MaxJoinedParts => 50_000;
 
+    public int KeySegmentBytes => ObjectKeys.SegmentBytes;
+
     /// <summary>
     /// The most bytes a block blob of <see cref="ObjectParts.PartSize"/> blocks holds, 50,000 of them. Tests set it lower.
     /// </summary>

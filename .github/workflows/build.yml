@@ -38,6 +38,7 @@ jobs:
         dotnet pack src/Resourcefull.PostgreSql --no-build -c Release --output ./nupkg
         dotnet pack src/Resourcefull.S3 --no-build -c Release --output ./nupkg
         dotnet pack src/Resourcefull.AzureBlob --no-build -c Release --output ./nupkg
+        dotnet pack src/Resourcefull.FileSystem --no-build -c Release --output ./nupkg
         dotnet pack src/Resourcefull.InMemory --no-build -c Release --output ./nupkg
         dotnet pack src/Resourcefull.AspNetCore --no-build -c Release --output ./nupkg
         dotnet pack src/Resourcefull.Testing --no-build -c Release --output ./nupkg
@@ -170,6 +171,25 @@ jobs:
       run: dotnet build --no-restore --configuration Release
     - name: Test
       run: dotnet test tests/Resourcefull.Tests.AzureBlob --no-build --configuration Release
+
+  filesystem-tests:
+    # Filesystems differ in what they take in a name, whether they ignore case or Unicode normalization, and how they
+    # lock files, so the provider is tested on each.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+    - uses: actions/checkout@v7
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v6
+      with:
+        global-json-file: global.json
+    - name: Build
+      run: dotnet build tests/Resourcefull.Tests.FileSystem --configuration Release
+    - name: Test
+      run: dotnet test tests/Resourcefull.Tests.FileSystem --no-build --configuration Release
 
   performance:
     runs-on: ubuntu-latest
