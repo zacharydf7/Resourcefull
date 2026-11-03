@@ -246,7 +246,7 @@ malware. Check the type and scan for malware when files come from people you don
 
 The upload waits for the inspector's answer when the provider reads the content to its end, so a
 [provider of your own](providers/writing-a-provider.md) must read until a read returns nothing before it makes the
-version current, and store nothing if that read throws. Both built-in providers do, and the
+version current, and store nothing if that read throws. Every built-in provider does, and the
 [provider tests](providers/writing-a-provider.md#testing-a-provider) check it. A provider that stops reading sooner
 makes the version current before the answer; Resourcefull then deletes it if the inspector refuses it or throws,
 but until then it can be read. An inspected upload's stream can't seek, so a provider can't retry it by reading the

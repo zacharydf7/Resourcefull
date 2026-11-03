@@ -1,7 +1,7 @@
 # Concurrency
 
-Resourcefull is built to be called from many requests, processes and servers at once. Both built-in providers make the
-same guarantees:
+Resourcefull is built to be called from many requests, processes and servers at once. Every built-in provider makes
+the same guarantees:
 
 - **One current version per name, always.** Uploads of the same name are made current one at a time, so however
   many run at once, each name ends up with exactly one current version: the one stored last. SQL Server also enforces

@@ -9,6 +9,14 @@ the [changelog](../CHANGELOG.md).
 
 The biggest release so far, documented here already:
 
+- **[Three new places to store files](providers/features.md):** [PostgreSQL](providers/postgresql.md),
+  [Amazon S3 or another S3-compatible store](providers/s3.md) and [Azure Blob Storage](providers/azure-blob.md), each
+  with every feature, so moving from your own servers to the cloud takes changing one line.
+- **[Uploading in parts](uploading-in-parts.md):** a large file arrives over several requests, and what's arrived
+  survives a dropped connection or a restart.
+- **[Upload links](upload-links.md)** that let someone without an account send you files, until they expire.
+- **[A dashboard](aspnet-core/dashboard.md)** for browsing containers, usage and limits while you develop.
+- **[Stricter names](upgrading-to-4.md#names-are-stricter)**, the same with every provider.
 - **[Copy, move and rename](copying-and-moving.md)** files, within a container or between containers. Each copy
   remembers where it came from.
 - **[Container policies](container-policies.md):** per-container limits on file size, total size and file count,
@@ -65,18 +73,12 @@ Coming from 1.x or 2.x? See [Upgrading to 3.0](upgrading-to-3.md). See the
 These are plans, not promises: the order can change, and nothing has a date. Each links to its issue on GitHub, where a
 comment saying you need it helps decide what comes first.
 
-- **More places to store files:** a [PostgreSQL provider](https://github.com/zacharydf7/Resourcefull/issues/108), an
-  [S3-compatible provider](https://github.com/zacharydf7/Resourcefull/issues/110), a
-  [file-system provider](https://github.com/zacharydf7/Resourcefull/issues/51) and a
+- **More places to store files:** a [file-system provider](https://github.com/zacharydf7/Resourcefull/issues/51) and a
   [SQLite provider](https://github.com/zacharydf7/Resourcefull/issues/118).
-- **Bigger uploads:** [resumable uploads](https://github.com/zacharydf7/Resourcefull/issues/112) and
-  [signed upload links](https://github.com/zacharydf7/Resourcefull/issues/113).
+- **Bigger files in the cloud:** single uploads larger than 78 GiB to S3 and 390 GiB to Azure Blob
+  ([#159](https://github.com/zacharydf7/Resourcefull/issues/159)).
 - **Managing files:** [finding files by metadata](https://github.com/zacharydf7/Resourcefull/issues/57),
   [soft delete, retention and legal holds](https://github.com/zacharydf7/Resourcefull/issues/56), and
   [storing identical content once](https://github.com/zacharydf7/Resourcefull/issues/58).
-- **Seeing your storage:** a [dashboard page](https://github.com/zacharydf7/Resourcefull/issues/129) for containers,
-  usage and limits.
-- **Also in 4.0:** [stricter names](https://github.com/zacharydf7/Resourcefull/issues/128). They break code written
-  for 3.x, so they come in a major release.
 
 Something missing? [Open an issue](https://github.com/zacharydf7/Resourcefull/issues/new/choose).

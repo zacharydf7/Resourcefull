@@ -156,7 +156,7 @@
   claims, and refuse it. No version becomes current until it answers; a refusal fails the upload with
   `ResourceContentRefusedException`, which `AddResourcefullExceptionHandler` turns into 422. The content is read
   once and never held whole, and with SQL Server nothing is locked while the inspector decides. Providers must read
-  the content to its end before making a version current, which both built-in providers do. See
+  the content to its end before making a version current, which every built-in provider does. See
   [Inspecting uploads](docs/upload-inspection.md), with examples for ClamAV and Windows AMSI.
 - **Changing metadata and content type.** `SetResourceMetadataAsync` and `SetContentTypeAsync` change a version's
   metadata or content type in place, without uploading it again: it keeps its ID, content, `LastModified` and ETag,
