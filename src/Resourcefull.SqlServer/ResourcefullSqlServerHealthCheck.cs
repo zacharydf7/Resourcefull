@@ -9,11 +9,12 @@ namespace Resourcefull.SqlServer;
 /// Checks that SQL Server can be reached and that the database has every migration this release needs. Reading the
 /// migration history is the reachability check too.
 /// </summary>
-internal sealed class ResourcefullSqlServerHealthCheck(IDbContextFactory<ResourceDbContext> dbContextFactory) : IHealthCheck
+internal sealed class ResourcefullSqlServerHealthCheck(IDbContextFactory<ResourceDbContext> dbContextFactory,
+    string? storeName = null) : IHealthCheck
 {
     public async Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context, CancellationToken cancellationToken = default)
     {
-        using Activity? activity = SqlTelemetry.Start("health_check");
+        using Activity? activity = SqlTelemetry.Start("health_check", storeName);
         try
         {
             ResourceDbContext dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
@@ -80,16 +81,20 @@ public static class ResourcefullSqlServerHealthChecksBuilderExtensions
     /// <param name="failureStatus">What to report for an unreachable or outdated database; Unhealthy when null.</param>
     /// <param name="tags">Tags to filter checks by, such as <c>ready</c>.</param>
     /// <param name="timeout">How long the check may take before it counts as failed; no limit when null.</param>
+    /// <param name="storeName">
+    /// The store to check, added with <c>AddKeyedResourcefull</c>; <see langword="null"/> for the store without a name.
+    /// Give each store's check a <paramref name="name"/> of its own.
+    /// </param>
     /// <returns><paramref name="builder"/>, for chaining.</returns>
     public static IHealthChecksBuilder AddResourcefullSqlServerCheck(this IHealthChecksBuilder builder,
         string name = "resourcefull", HealthStatus? failureStatus = null, IEnumerable<string>? tags = null,
-        TimeSpan? timeout = null)
+        TimeSpan? timeout = null, string? storeName = null)
     {
         ArgumentNullException.ThrowIfNull(builder);
         return builder.Add(new HealthCheckRegistration(name,
-            services => new ResourcefullSqlServerHealthCheck(services.GetService<IDbContextFactory<ResourceDbContext>>()
-                ?? throw new InvalidOperationException($"{nameof(AddResourcefullSqlServerCheck)} needs Resourcefull " +
-                    $"configured with {nameof(ResourcefullSqlOptionsExtensions.UseSqlServer)}.")),
+            services => new ResourcefullSqlServerHealthCheck(
+                ResourcefullSqlDatabaseExtensions.DbContextFactoryOf(services, storeName, nameof(AddResourcefullSqlServerCheck)),
+                storeName),
             failureStatus, tags, timeout));
     }
 }

@@ -3,19 +3,24 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Resourcefull.Providers;
 
 namespace Resourcefull;
 
 /// <summary>
-/// Configures Resourcefull inside <see cref="ResourcefullServiceCollectionExtensions.AddResourcefull"/>: its storage
-/// provider, versioning, URI provider, telemetry, container policies and expiry.
+/// Configures one store inside <see cref="ResourcefullServiceCollectionExtensions.AddResourcefull"/> or
+/// <see cref="ResourcefullServiceCollectionExtensions.AddKeyedResourcefull"/>: its storage provider, versioning, URI
+/// provider, telemetry, container policies and expiry.
 /// </summary>
 public class ResourcefullOptionsBuilder
 {
+    private bool _expiryRegistered;
+
     /// <summary>
     /// Gets whether a storage provider has been configured. Exactly one must be, through a provider package's
-    /// <c>Use…</c> extension or <see cref="UseProvider{TRepository}"/>.
+    /// <c>Use…</c> extension or <see cref="UseProvider{TRepository}(ServiceLifetime)"/>.
     /// </summary>
     public bool ProviderConfigured { get; private set; }
 
@@ -25,11 +30,28 @@ public class ResourcefullOptionsBuilder
     public IServiceCollection Services { get; init; }
 
     /// <summary>
-    /// Creates a builder that registers into <paramref name="services"/>. Applications get one from
+    /// Gets the store's name, given to <see cref="ResourcefullServiceCollectionExtensions.AddKeyedResourcefull"/>, or
+    /// <see langword="null"/> for the store <see cref="ResourcefullServiceCollectionExtensions.AddResourcefull"/> adds.
+    /// The store's services are registered with it as their service key, so a provider registers its own services
+    /// under it and resolves them with it; in .NET's own container, a <see langword="null"/> key is the same as no key.
+    /// <para>Coming in 4.0.</para>
+    /// </summary>
+    public string? StoreName { get; }
+
+    /// <summary>The name of the store's <see cref="ResourcefullOptions"/>.</summary>
+    internal string OptionsName => StoreName ?? Options.DefaultName;
+
+    /// <summary>
+    /// Creates a builder that registers one store into <paramref name="services"/>. Applications get one from
     /// <see cref="ResourcefullServiceCollectionExtensions.AddResourcefull"/> rather than creating it.
     /// </summary>
     /// <param name="services">The application's service collection.</param>
-    public ResourcefullOptionsBuilder(IServiceCollection services) => Services = services;
+    /// <param name="storeName">The store's name; <see langword="null"/> for the store without one.</param>
+    public ResourcefullOptionsBuilder(IServiceCollection services, string? storeName = null)
+    {
+        Services = services;
+        StoreName = storeName;
+    }
 
     /// <summary>
     /// Uses <typeparamref name="TRepository"/> as the storage provider. Provider packages call this from their own
@@ -46,10 +68,44 @@ public class ResourcefullOptionsBuilder
             throw new InvalidOperationException("Provider has already been configured.");
         }
 
-        Services.RemoveAll<ResourceRepository>();
-        Services.Add(new ServiceDescriptor(typeof(ResourceRepository), typeof(TRepository), lifetime));
+        Replace(new ServiceDescriptor(typeof(ResourceRepository), StoreName, typeof(TRepository), lifetime));
         ProviderConfigured = true;
         return this;
+    }
+
+    /// <summary>
+    /// Uses the provider that <paramref name="create"/> makes, for a provider that needs services registered for this
+    /// store; resolve them with <see cref="StoreName"/> as their key. Otherwise works like
+    /// <see cref="UseProvider{TRepository}(ServiceLifetime)"/>.
+    /// <para>Coming in 4.0.</para>
+    /// </summary>
+    /// <typeparam name="TRepository">The provider's class, derived from <see cref="ResourceRepository"/>.</typeparam>
+    /// <param name="create">Makes the provider from the application's services.</param>
+    /// <param name="lifetime">How long one instance serves: singleton for a provider that holds its own state.</param>
+    /// <exception cref="InvalidOperationException">A provider has already been configured.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="create"/> is null.</exception>
+    public ResourcefullOptionsBuilder UseProvider<TRepository>(Func<IServiceProvider, TRepository> create,
+        ServiceLifetime lifetime = ServiceLifetime.Scoped) where TRepository : ResourceRepository
+    {
+        ArgumentNullException.ThrowIfNull(create);
+        if (ProviderConfigured)
+        {
+            throw new InvalidOperationException("Provider has already been configured.");
+        }
+
+        Replace(new ServiceDescriptor(typeof(ResourceRepository), StoreName, (services, _) => create(services), lifetime));
+        ProviderConfigured = true;
+        return this;
+    }
+
+    /// <summary>
+    /// Registers a service of this store's, replacing the one it had. With no store name, the descriptor isn't keyed, as
+    /// before stores had names.
+    /// </summary>
+    private void Replace(ServiceDescriptor descriptor)
+    {
+        Services.RemoveAllKeyed(descriptor.ServiceType, StoreName);
+        Services.Add(descriptor);
     }
 
     /// <summary>
@@ -59,16 +115,7 @@ public class ResourcefullOptionsBuilder
     /// <typeparam name="T">The <see cref="IUriProvider"/> implementation.</typeparam>
     public ResourcefullOptionsBuilder UseUriProvider<T>() where T : class, IUriProvider
     {
-        ServiceDescriptor? descriptor = Services.SingleOrDefault(
-                d => d.ServiceType ==
-                    typeof(IUriProvider));
-
-        if (descriptor != null)
-        {
-            Services.Remove(descriptor);
-        }
-
-        Services.AddScoped<IUriProvider, T>();
+        Replace(new ServiceDescriptor(typeof(IUriProvider), StoreName, typeof(T), ServiceLifetime.Scoped));
         return this;
     }
 
@@ -88,7 +135,7 @@ public class ResourcefullOptionsBuilder
             throw new ArgumentOutOfRangeException(nameof(maxVersions), maxVersions, "Keep at least one version.");
         }
 
-        Services.Configure<ResourcefullOptions>(options => options.MaxVersions = maxVersions ?? 100);
+        Services.Configure<ResourcefullOptions>(OptionsName, options => options.MaxVersions = maxVersions ?? 100);
         return this;
     }
 
@@ -101,7 +148,7 @@ public class ResourcefullOptionsBuilder
     public ResourcefullOptionsBuilder UseTelemetry(Action<ResourcefullTelemetryOptions> configure)
     {
         ArgumentNullException.ThrowIfNull(configure);
-        Services.Configure<ResourcefullOptions>(options => configure(options.Telemetry));
+        Services.Configure<ResourcefullOptions>(OptionsName, options => configure(options.Telemetry));
         return this;
     }
 
@@ -134,10 +181,14 @@ public class ResourcefullOptionsBuilder
                 "The time can't be negative.");
         }
 
-        Services.RemoveAll<ContainerPolicySettings>();
-        Services.AddSingleton(_ => new ContainerPolicySettings(defaults ?? new ResourceContainerPolicy(),
-            cacheFor ?? TimeSpan.FromSeconds(5), keepLastKnownFor ?? TimeSpan.FromMinutes(5)));
-        Services.TryAddScoped<ContainerPolicies>();
+        Replace(new ServiceDescriptor(typeof(ContainerPolicySettings), StoreName, (_, _) => new ContainerPolicySettings(
+            defaults ?? new ResourceContainerPolicy(), cacheFor ?? TimeSpan.FromSeconds(5), keepLastKnownFor ?? TimeSpan.FromMinutes(5)),
+            ServiceLifetime.Singleton));
+        string? storeName = StoreName;
+        Replace(new ServiceDescriptor(typeof(ContainerPolicies), StoreName, (services, _) => new ContainerPolicies(
+            services.GetRequiredStoreService<ContainerPolicySettings>(storeName),
+            services.GetRequiredStoreService<ResourceRepository>(storeName),
+            services.GetStoreService<IResourcePolicyProvider>(storeName)), ServiceLifetime.Scoped));
         return this;
     }
 
@@ -150,9 +201,9 @@ public class ResourcefullOptionsBuilder
     /// <typeparam name="TProvider">The <see cref="IResourcePolicyProvider"/> implementation.</typeparam>
     public ResourcefullOptionsBuilder UsePolicyProvider<TProvider>() where TProvider : class, IResourcePolicyProvider
     {
-        Services.RemoveAll<IResourcePolicyProvider>();
-        Services.AddScoped<IResourcePolicyProvider, TProvider>();
-        if (!Services.Any(d => d.ServiceType == typeof(ContainerPolicySettings))) UseContainerPolicies();
+        Replace(new ServiceDescriptor(typeof(IResourcePolicyProvider), StoreName, typeof(TProvider), ServiceLifetime.Scoped));
+        if (!Services.Any(d => d.ServiceType == typeof(ContainerPolicySettings) && Equals(d.ServiceKey, StoreName)))
+            UseContainerPolicies();
         return this;
     }
 
@@ -173,9 +224,16 @@ public class ResourcefullOptionsBuilder
         if (interval <= TimeSpan.Zero)
             throw new ArgumentOutOfRangeException(nameof(interval), interval, "The interval must be positive.");
 
-        Services.RemoveAll<ExpirySettings>();
-        Services.AddSingleton(new ExpirySettings(interval ?? TimeSpan.FromMinutes(1)));
-        Services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, ExpiryService>());
+        Replace(new ServiceDescriptor(typeof(ExpirySettings), StoreName, new ExpirySettings(interval ?? TimeSpan.FromMinutes(1))));
+        if (!_expiryRegistered)
+        {
+            // One sweep for each store, so not TryAddEnumerable, which would keep only the first store's.
+            string? storeName = StoreName;
+            Services.AddSingleton<IHostedService>(services => new ExpiryService(services.GetRequiredService<IServiceScopeFactory>(),
+                services.GetRequiredStoreService<ExpirySettings>(storeName), storeName,
+                services.GetRequiredService<ILogger<ExpiryService>>()));
+            _expiryRegistered = true;
+        }
         return this;
     }
 
@@ -188,8 +246,7 @@ public class ResourcefullOptionsBuilder
     /// <typeparam name="THandler">The <see cref="IResourceCleanupHandler"/> implementation.</typeparam>
     public ResourcefullOptionsBuilder UseCleanupHandler<THandler>() where THandler : class, IResourceCleanupHandler
     {
-        Services.RemoveAll<IResourceCleanupHandler>();
-        Services.AddScoped<IResourceCleanupHandler, THandler>();
+        Replace(new ServiceDescriptor(typeof(IResourceCleanupHandler), StoreName, typeof(THandler), ServiceLifetime.Scoped));
         return this;
     }
 
@@ -202,8 +259,7 @@ public class ResourcefullOptionsBuilder
     /// <typeparam name="TInspector">The <see cref="IResourceUploadInspector"/> implementation.</typeparam>
     public ResourcefullOptionsBuilder UseUploadInspector<TInspector>() where TInspector : class, IResourceUploadInspector
     {
-        Services.RemoveAll<IResourceUploadInspector>();
-        Services.AddScoped<IResourceUploadInspector, TInspector>();
+        Replace(new ServiceDescriptor(typeof(IResourceUploadInspector), StoreName, typeof(TInspector), ServiceLifetime.Scoped));
         return this;
     }
 

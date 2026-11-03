@@ -1,5 +1,6 @@
 ﻿using System.Data.Common;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
 using Resourcefull.InMemory;
@@ -118,6 +119,54 @@ public class ResourcefullSqlOptionsExtensionsTests
         // Assert
         Assert.Contains("UseSqlServer", exception.Message);
     }
+
+    [Fact]
+    public async Task MigrateResourcefullDatabaseAsync_ShouldThrowAndNameTheStore_WhenNoStoreOnSqlServerHasTheName()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        services.AddKeyedResourcefull("archive", options => options.UseInMemory());
+        await using ServiceProvider provider = services.BuildServiceProvider();
+
+        // Act
+        Task act() => provider.MigrateResourcefullDatabaseAsync("archive");
+
+        // Assert
+        InvalidOperationException exception = await Assert.ThrowsAsync<InvalidOperationException>(act);
+        Assert.Contains("archive", exception.Message);
+    }
+
+    [Fact]
+    public void GenerateResourcefullScript_ShouldThrowArgumentException_WhenGivenABlankStoreName()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        services.AddResourcefull(options => options.UseSqlServer("Server=unused;Database=unused"));
+        using ServiceProvider provider = services.BuildServiceProvider();
+
+        // Act & Assert
+        Assert.Throws<ArgumentException>("storeName", () => provider.GenerateResourcefullScript(" "));
+    }
+
+    [Fact]
+    public async Task UseSqlServer_ShouldApplyConfigureDbContext_WhenTheApplicationConfiguresTheContext()
+    {
+        // Arrange: add an interceptor the way the performance tests do.
+        var interceptor = new NoOpInterceptor();
+        var services = new ServiceCollection();
+        services.AddResourcefull(options => options.UseSqlServer("Server=unused;Database=unused"));
+        services.ConfigureDbContext<ResourceDbContext>(options => options.AddInterceptors(interceptor));
+        await using ServiceProvider provider = services.BuildServiceProvider();
+
+        // Act
+        await using ResourceDbContext dbContext =
+            await provider.GetRequiredService<IDbContextFactory<ResourceDbContext>>().CreateDbContextAsync();
+
+        // Assert
+        Assert.Contains(interceptor, dbContext.GetService<IDbContextOptions>().FindExtension<CoreOptionsExtension>()!.Interceptors!);
+    }
+
+    private sealed class NoOpInterceptor : DbCommandInterceptor;
 
     [Theory]
     [InlineData("")]

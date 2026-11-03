@@ -758,6 +758,28 @@ public sealed class TelemetryTests : IDisposable
         Assert.Equal(9, SpansIn(root).Single(s => s.OperationName == "resourcefull list_containers").GetTagItem("resourcefull.page_size"));
     }
 
+    [Fact]
+    public async Task ClientOperations_ShouldRecordTheStoreName_WhenTheStoreHasOne()
+    {
+        // Arrange
+        await using ServiceProvider provider = new ServiceCollection()
+            .AddResourcefull(o => o.UseInMemory()).AddKeyedResourcefull("telemetry-archive", o => o.UseInMemory())
+            .BuildServiceProvider();
+        using Activity root = TestSource.StartActivity("test")!;
+
+        // Act
+        await provider.GetRequiredService<IResourceServiceClient>().CreateContainerAsync("hot");
+        await provider.GetRequiredKeyedService<IResourceServiceClient>("telemetry-archive").CreateContainerAsync("cold");
+
+        // Assert: the store without a name adds no tag, so what it records doesn't change.
+        List<Activity> spans = SpansIn(root);
+        Assert.Null(spans.Single(s => Equals(s.GetTagItem("resourcefull.container"), "hot")).GetTagItem("resourcefull.store"));
+        Assert.Equal("telemetry-archive",
+            spans.Single(s => Equals(s.GetTagItem("resourcefull.container"), "cold")).GetTagItem("resourcefull.store"));
+        Assert.Contains(_measurements, m => m.Instrument == "resourcefull.client.operation.duration"
+            && Equals(m.Tags.GetValueOrDefault("resourcefull.store"), "telemetry-archive"));
+    }
+
     private sealed class FailingCleanupHandler : IResourceCleanupHandler
     {
         public ValueTask OnCleanupAsync(ResourceCleanup cleanup, CancellationToken cancellationToken) =>

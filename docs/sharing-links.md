@@ -48,6 +48,8 @@ builder.Services.AddResourcefullLinks();
 one instance of your application, or restart it, read [Keeping links working](sharing-links-in-production.md#keeping-links-working-data-protection-keys)
 before going live.
 
+Signed links work with the store `AddResourcefull` adds, not yet with a [named store](several-stores.md).
+
 ### 2. Add an endpoint that creates links
 
 This is your application's endpoint, so you decide who may share what. Here, any signed-in user can share any file in

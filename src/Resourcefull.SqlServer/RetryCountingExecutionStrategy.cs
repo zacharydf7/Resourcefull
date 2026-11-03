@@ -8,12 +8,12 @@ namespace Resourcefull.SqlServer;
 /// of transient failures shows up in metrics rather than only as slower operations.
 /// </summary>
 internal sealed class RetryCountingExecutionStrategy(ExecutionStrategyDependencies dependencies, int maxRetryCount,
-    TimeSpan maxRetryDelay, ICollection<int> errorNumbersToAdd)
+    TimeSpan maxRetryDelay, ICollection<int> errorNumbersToAdd, string? storeName = null)
     : SqlServerRetryingExecutionStrategy(dependencies, maxRetryCount, maxRetryDelay, errorNumbersToAdd)
 {
     protected override void OnRetry()
     {
-        SqlTelemetry.CountRetry(ExceptionsEncountered[^1]);
+        SqlTelemetry.CountRetry(ExceptionsEncountered[^1], storeName);
         base.OnRetry();
     }
 }

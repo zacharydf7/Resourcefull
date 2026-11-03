@@ -62,6 +62,8 @@
     href: expiry.md
   - name: Backing up and moving containers
     href: backup-and-move.md
+  - name: Several stores
+    href: several-stores.md
 - name: Running in production
   items:
   - name: Going to production

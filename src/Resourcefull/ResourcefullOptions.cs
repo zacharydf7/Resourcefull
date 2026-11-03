@@ -2,7 +2,8 @@
 
 /// <summary>
 /// The options Resourcefull runs with, as configured through <see cref="ResourcefullOptionsBuilder"/>. Inject
-/// <c>IOptions&lt;ResourcefullOptions&gt;</c> to read them.
+/// <c>IOptions&lt;ResourcefullOptions&gt;</c> to read them, or for a named store,
+/// <c>IOptionsMonitor&lt;ResourcefullOptions&gt;</c> and call <c>Get</c> with its name.
 /// </summary>
 public class ResourcefullOptions
 {
@@ -18,4 +19,7 @@ public class ResourcefullOptions
     /// <see cref="ResourcefullOptionsBuilder.UseTelemetry(Action{ResourcefullTelemetryOptions})"/>.
     /// </summary>
     public ResourcefullTelemetryOptions Telemetry { get; internal set; } = new();
+
+    /// <summary>The store's name, recorded on its telemetry; null for the store without one.</summary>
+    internal string? StoreName { get; set; }
 }

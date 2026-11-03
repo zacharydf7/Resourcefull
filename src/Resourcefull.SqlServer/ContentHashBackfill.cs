@@ -11,21 +11,30 @@ namespace Resourcefull.SqlServer;
 /// computed, so it can be stopped at any point and run again later to carry on; once every version has a hash, a run
 /// reads no content.
 /// </summary>
-/// <remarks>Registered by <c>UseSqlServer</c>; resolve it from a scope.</remarks>
+/// <remarks>
+/// Registered by <c>UseSqlServer</c>; resolve it from a scope, by the store's name for a store added with
+/// <c>AddKeyedResourcefull</c>.
+/// </remarks>
 public sealed class ContentHashBackfill
 {
     private const int VersionsPerQuery = 100;
 
     private readonly IDbContextFactory<ResourceDbContext> _dbContextFactory;
 
-    internal ContentHashBackfill(IDbContextFactory<ResourceDbContext> dbContextFactory) => _dbContextFactory = dbContextFactory;
+    private readonly string? _storeName;
+
+    internal ContentHashBackfill(IDbContextFactory<ResourceDbContext> dbContextFactory, string? storeName = null)
+    {
+        _dbContextFactory = dbContextFactory;
+        _storeName = storeName;
+    }
 
     /// <summary>Hashes every version that has no hash yet, then checks every version's recorded length.</summary>
     /// <param name="cancellationToken">Stops the run; the hashes already recorded are kept.</param>
     /// <returns>How many hashes this run recorded, and every version whose recorded length is wrong.</returns>
     public async Task<ContentHashBackfillResult> RunAsync(CancellationToken cancellationToken = default)
     {
-        using Activity? activity = SqlTelemetry.Start("backfill");
+        using Activity? activity = SqlTelemetry.Start("backfill", _storeName);
         try
         {
             ContentHashBackfillResult result = await RunCoreAsync(cancellationToken).ConfigureAwait(false);

@@ -19,7 +19,8 @@ using System.Text;
 
 namespace Resourcefull.SqlServer;
 
-internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbContextFactory, TimeProvider? timeProvider = null) : ResourceRepository
+internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbContextFactory, TimeProvider? timeProvider = null,
+    string? storeName = null) : ResourceRepository
 {
     private readonly TimeProvider _clock = timeProvider ?? TimeProvider.System;
 
@@ -366,7 +367,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
             afterId = abandoned[^1];
         }
 
-        SqlTelemetry.CountAbandonedUploads(deleted);
+        SqlTelemetry.CountAbandonedUploads(deleted, storeName);
         if (failures.Count > 0)
         {
             throw new AggregateException($"{failures.Count} abandoned uploads' versions weren't deleted, and stay for " +

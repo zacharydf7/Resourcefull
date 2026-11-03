@@ -11,11 +11,13 @@ internal sealed record ExpirySettings(TimeSpan Interval);
 /// Deletes expired versions when the application starts and every interval after, each time in a scope of its own,
 /// as <see cref="ResourcefullOptionsBuilder.UseExpiry"/> registers it.
 /// </summary>
-internal sealed partial class ExpiryService(IServiceScopeFactory scopes, ExpirySettings settings, ILogger<ExpiryService> logger)
-    : BackgroundService
+internal sealed partial class ExpiryService(IServiceScopeFactory scopes, ExpirySettings settings, string? storeName,
+    ILogger<ExpiryService> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        // So the logs say which store's sweep they're about.
+        using IDisposable? scope = storeName is null ? null : logger.BeginScope("Resourcefull store {StoreName}", storeName);
         using var timer = new PeriodicTimer(settings.Interval);
         try
         {
@@ -23,9 +25,10 @@ internal sealed partial class ExpiryService(IServiceScopeFactory scopes, ExpiryS
             {
                 try
                 {
-                    AsyncServiceScope scope = scopes.CreateAsyncScope();
-                    await using var scopeDisposal = scope.ConfigureAwait(false);
-                    await scope.ServiceProvider.GetRequiredService<IResourceServiceClient>().DeleteExpiredAsync(stoppingToken).ConfigureAwait(false);
+                    AsyncServiceScope services = scopes.CreateAsyncScope();
+                    await using var servicesDisposal = services.ConfigureAwait(false);
+                    await services.ServiceProvider.GetRequiredStoreService<IResourceServiceClient>(storeName)
+                        .DeleteExpiredAsync(stoppingToken).ConfigureAwait(false);
                 }
                 catch (NotSupportedException exception)
                 {

@@ -1,0 +1,93 @@
+# Several stores
+
+<div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 4.0</span></div>
+
+Most applications need one store: one place their files live, set up with `AddResourcefull`. Some need more than one:
+
+- **Hot and archive storage.** Recent files in a fast database, and older ones in a cheaper one.
+- **A database for each tenant,** so one customer's files never share a database with another's.
+- **Moving to another provider gradually,** reading from the old store while new files go to the new one.
+
+`AddKeyedResourcefull` adds a store under a name, beside the one `AddResourcefull` adds or on its own. Each store is
+configured the same way, with its own provider and settings:
+
+```csharp
+builder.Services.AddResourcefull(options => options
+    .UseSqlServer(builder.Configuration.GetConnectionString("Resources")!));
+
+builder.Services.AddKeyedResourcefull("archive", options => options
+    .UseSqlServer(builder.Configuration.GetConnectionString("Archive")!)
+    .UseVersioning(maxVersions: 10));
+```
+
+Ask for a named store's client as a
+[keyed service](https://learn.microsoft.com/dotnet/core/extensions/dependency-injection#keyed-services), by its name:
+
+```csharp
+public sealed class InvoiceArchive([FromKeyedServices("archive")] IResourceServiceClient archive)
+{
+    public async Task SaveAsync(string name, Stream pdf, CancellationToken cancellationToken)
+    {
+        IResourceContainerClient invoices =
+            await archive.CreateContainerIfNotExistsAsync("invoices", cancellationToken: cancellationToken);
+        await invoices.UploadAsync(name, pdf, cancellationToken: cancellationToken);
+    }
+}
+```
+
+The store `AddResourcefull` adds has no name, so a plain `IResourceServiceClient` is that one, as before.
+
+## What each store has of its own
+
+Everything you give a store's options belongs to that store alone:
+
+- its provider, and with SQL Server, its database and [schema](providers/sql-server.md#choosing-a-schema);
+- versioning, [container policies](container-policies.md) and the policy provider;
+- the [URI provider](uri-providers.md), the [upload inspector](upload-inspection.md) and the cleanup handler;
+- [expiry](expiry.md): each store that calls `UseExpiry` gets a sweep of its own, on its own interval;
+- what [telemetry](telemetry.md) records.
+
+Two stores can use the same provider with different databases, or different providers. Containers belong to their
+store: a container named `invoices` in one store has nothing to do with one of the same name in another. Copies and
+moves work within one store; to move a file to another store, download it from one and upload it to the other.
+
+A store can be added only once. Calling `AddResourcefull` a second time, or `AddKeyedResourcefull` with a name already
+added, throws `InvalidOperationException`, rather than mixing two configurations into one store. Names are compared
+exactly, so `archive` and `Archive` are two stores.
+
+## SQL Server
+
+Provision each store's database. `MigrateResourcefullDatabaseAsync` and `GenerateResourcefullScript` take the store's
+name, and without one work on the store `AddResourcefull` adds:
+
+```csharp
+var app = builder.Build();
+await app.Services.MigrateResourcefullDatabaseAsync();
+await app.Services.MigrateResourcefullDatabaseAsync("archive");
+```
+
+Two stores can share a database if each has its tables in a [schema](providers/sql-server.md#choosing-a-schema) of
+its own. Each store also has its own [`ContentHashBackfill`](providers/sql-server-upgrades.md#recording-hashes-for-older-versions).
+For a named store, resolve it from a scope by the store's name, with
+`GetRequiredKeyedService<ContentHashBackfill>("archive")`.
+
+## Health checks
+
+The [health checks](health-checks.md) take the store's name too. Give each store's check a name of its own:
+
+```csharp
+builder.Services.AddHealthChecks()
+    .AddResourcefullSqlServerCheck(tags: ["ready"])
+    .AddResourcefullSqlServerCheck("resourcefull-archive", tags: ["ready"], storeName: "archive");
+```
+
+## Telemetry
+
+Spans and metrics from a named store carry a `resourcefull.store` tag with the store's name, so a dashboard can tell
+the archive's latency from the hot store's. The store `AddResourcefull` adds records no such tag, so adding a second
+store doesn't change what the first one records.
+
+## Signed links
+
+[Signed links](sharing-links.md) work with the store `AddResourcefull` adds, not yet with a named store.
+`Results.Resource` and the [exception handler](aspnet-core/status-codes.md) work with every store.

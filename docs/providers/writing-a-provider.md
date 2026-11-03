@@ -264,6 +264,28 @@ throws `NotSupportedException`.
 store can add up a container's versions in one query, override it. Count every version in `StoredSize` and
 `VersionCount`, and each name once in `ResourceCount`.
 
+## Several stores
+
+<div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 4.0</span></div>
+
+An application can add [several stores](../several-stores.md), each configured with its own options builder. A
+provider that needs services of its own, such as its settings or a connection, registers them under the store's name,
+`builder.StoreName`. It then makes the provider with the `UseProvider` overload that takes a factory, and resolves
+those services by the same name:
+
+```csharp
+public static ResourcefullOptionsBuilder UseFiles(this ResourcefullOptionsBuilder builder, string root)
+{
+    string? storeName = builder.StoreName;
+    builder.Services.AddKeyedSingleton(storeName, (_, _) => new FileStoreSettings(root));
+    return builder.UseProvider(services =>
+        new FileRepository(services.GetRequiredKeyedService<FileStoreSettings>(storeName)));
+}
+```
+
+The store `AddResourcefull` adds has no name, and in .NET's own container a `null` key is the same as no key, so the
+same code works for named and unnamed stores.
+
 ## Testing a provider
 
 The repository's contract test suite, `tests/Resourcefull.Tests.Contract`, is an abstract xUnit class that runs the

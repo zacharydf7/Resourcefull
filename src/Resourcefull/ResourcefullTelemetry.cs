@@ -102,6 +102,14 @@ internal sealed class ClientTelemetry(string provider, ResourcefullOptions optio
 {
     public string Provider { get; } = provider;
 
+    /// <summary>The tags every measurement carries: the provider, and the store's name when it has one.</summary>
+    private TagList StoreTags()
+    {
+        var tags = new TagList { { "resourcefull.provider", Provider } };
+        if (options.StoreName is not null) tags.Add("resourcefull.store", options.StoreName);
+        return tags;
+    }
+
     public Task<T> RunAsync<T>(string operation, string? containerName, string? resourceName, Func<Task<T>> body,
         string? extraTag = null, object? extraValue = null) =>
         RunAsync(operation, containerName, resourceName, _ => body(), extraTag, extraValue);
@@ -135,7 +143,8 @@ internal sealed class ClientTelemetry(string provider, ResourcefullOptions optio
         {
             if (timed)
             {
-                var tags = new TagList { { "resourcefull.operation", operation }, { "resourcefull.provider", Provider } };
+                TagList tags = StoreTags();
+                tags.Add("resourcefull.operation", operation);
                 if (errorType is not null) tags.Add("error.type", errorType);
                 Telemetry.Duration.Record(Stopwatch.GetElapsedTime(start).TotalSeconds, tags);
             }
@@ -149,6 +158,7 @@ internal sealed class ClientTelemetry(string provider, ResourcefullOptions optio
         if (activity is null) return null;
         activity.SetTag("resourcefull.operation", operation);
         activity.SetTag("resourcefull.provider", Provider);
+        if (options.StoreName is not null) activity.SetTag("resourcefull.store", options.StoreName);
         if (!string.IsNullOrEmpty(containerName)) activity.SetTag("resourcefull.container", containerName);
         return activity;
     }
@@ -204,14 +214,15 @@ internal sealed class ClientTelemetry(string provider, ResourcefullOptions optio
     public void CountFailure(Counter<long> counter, Exception exception, string? extraTag = null, object? extraValue = null)
     {
         if (!counter.Enabled) return;
-        var tags = new TagList { { "resourcefull.provider", Provider }, { "error.type", exception.GetType().FullName } };
+        TagList tags = StoreTags();
+        tags.Add("error.type", exception.GetType().FullName);
         if (extraTag is not null) tags.Add(extraTag, extraValue);
         counter.Add(1, tags);
     }
 
     public void CountExpired()
     {
-        if (Telemetry.Expired.Enabled) Telemetry.Expired.Add(1, new KeyValuePair<string, object?>("resourcefull.provider", Provider));
+        if (Telemetry.Expired.Enabled) Telemetry.Expired.Add(1, StoreTags());
     }
 
     /// <summary>Tells the cleanup handler about a version, counting the call as failed if it throws.</summary>
@@ -237,32 +248,34 @@ internal sealed class ClientTelemetry(string provider, ResourcefullOptions optio
     {
         activity?.SetTag("resourcefull.inspection_outcome", outcome);
         if (!Telemetry.InspectionDuration.Enabled) return;
-        var tags = new TagList
-        {
-            { "resourcefull.operation", operation }, { "resourcefull.provider", Provider }, { "resourcefull.inspection_outcome", outcome }
-        };
+        TagList tags = StoreTags();
+        tags.Add("resourcefull.operation", operation);
+        tags.Add("resourcefull.inspection_outcome", outcome);
         if (failure is not null) tags.Add("error.type", failure.GetType().FullName);
         Telemetry.InspectionDuration.Record(Stopwatch.GetElapsedTime(start).TotalSeconds, tags);
     }
 
     public void RecordUploaded(string operation, long bytes)
     {
-        if (Telemetry.Uploaded.Enabled)
-            Telemetry.Uploaded.Add(bytes, new KeyValuePair<string, object?>("resourcefull.operation", operation),
-                new KeyValuePair<string, object?>("resourcefull.provider", Provider));
+        if (!Telemetry.Uploaded.Enabled) return;
+        TagList tags = StoreTags();
+        tags.Add("resourcefull.operation", operation);
+        Telemetry.Uploaded.Add(bytes, tags);
     }
 
     /// <summary>The stream, counting the bytes read from it when anything listens to the downloaded counter.</summary>
-    public Stream CountDownloaded(Stream stream) =>
-        Telemetry.Downloaded.Enabled ? new DownloadCountingStream(stream, Provider) : stream;
+    public Stream CountDownloaded(Stream stream)
+    {
+        if (!Telemetry.Downloaded.Enabled) return stream;
+        TagList tags = StoreTags();
+        tags.Add("resourcefull.operation", "download");
+        return new DownloadCountingStream(stream, tags);
+    }
 }
 
 /// <summary>A download stream that adds the bytes read from it to the downloaded counter.</summary>
-internal sealed class DownloadCountingStream(Stream inner, string provider) : Stream
+internal sealed class DownloadCountingStream(Stream inner, TagList tags) : Stream
 {
-    private readonly KeyValuePair<string, object?>[] _tags =
-        [new("resourcefull.operation", "download"), new("resourcefull.provider", provider)];
-
     public override bool CanRead => inner.CanRead;
     public override bool CanSeek => false;
     public override bool CanWrite => false;
@@ -281,7 +294,7 @@ internal sealed class DownloadCountingStream(Stream inner, string provider) : St
 
     private int Counted(int read)
     {
-        if (read > 0) Telemetry.Downloaded.Add(read, _tags);
+        if (read > 0) Telemetry.Downloaded.Add(read, tags);
         return read;
     }
 

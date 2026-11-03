@@ -27,27 +27,37 @@ internal static class SqlTelemetry
         description: "Staged versions of uploads that stopped before finishing, deleted by the expiry sweep.");
 
     /// <summary>Counts the staged versions of abandoned uploads a sweep deleted.</summary>
-    public static void CountAbandonedUploads(int deleted)
+    public static void CountAbandonedUploads(int deleted, string? storeName)
     {
-        if (deleted > 0) AbandonedUploads.Add(deleted, new TagList { { "resourcefull.provider", "sqlserver" } });
+        if (deleted > 0) AbandonedUploads.Add(deleted, StoreTags(storeName));
     }
 
     /// <summary>Counts a retry, tagged with the failure's type and, for a SQL Server error, its number.</summary>
-    public static void CountRetry(Exception exception)
+    public static void CountRetry(Exception exception, string? storeName)
     {
         if (!Retries.Enabled) return;
-        var tags = new TagList { { "resourcefull.provider", "sqlserver" }, { "error.type", exception.GetType().FullName } };
+        TagList tags = StoreTags(storeName);
+        tags.Add("error.type", exception.GetType().FullName);
         if ((exception as SqlException ?? exception.InnerException as SqlException) is { } sql)
             tags.Add("db.response.status_code", sql.Number.ToString(CultureInfo.InvariantCulture));
         Retries.Add(1, tags);
     }
 
-    public static Activity? Start(string operation)
+    public static Activity? Start(string operation, string? storeName)
     {
         Activity? activity = Source.StartActivity($"resourcefull {operation}");
         activity?.SetTag("resourcefull.operation", operation);
         activity?.SetTag("resourcefull.provider", "sqlserver");
+        if (storeName is not null) activity?.SetTag("resourcefull.store", storeName);
         return activity;
+    }
+
+    /// <summary>The tags every measurement carries, as the clients' do: the provider, and the store's name if it has one.</summary>
+    private static TagList StoreTags(string? storeName)
+    {
+        var tags = new TagList { { "resourcefull.provider", "sqlserver" } };
+        if (storeName is not null) tags.Add("resourcefull.store", storeName);
+        return tags;
     }
 
     /// <summary>

@@ -48,17 +48,21 @@ public static class ResourcefullHealthChecksBuilderExtensions
     /// <param name="failureStatus">What to report when storage can't be reached; Unhealthy when null.</param>
     /// <param name="tags">Tags to filter checks by, such as <c>ready</c>.</param>
     /// <param name="timeout">How long the check may take before it counts as failed; no limit when null.</param>
+    /// <param name="storeName">
+    /// The store to check, added with <see cref="ResourcefullServiceCollectionExtensions.AddKeyedResourcefull"/>;
+    /// <see langword="null"/> for the store without a name. Give each store's check a <paramref name="name"/> of its own.
+    /// </param>
     /// <returns><paramref name="builder"/>, for chaining.</returns>
     public static IHealthChecksBuilder AddResourcefullCheck(this IHealthChecksBuilder builder, string name = "resourcefull",
-        HealthStatus? failureStatus = null, IEnumerable<string>? tags = null, TimeSpan? timeout = null)
+        HealthStatus? failureStatus = null, IEnumerable<string>? tags = null, TimeSpan? timeout = null, string? storeName = null)
     {
         ArgumentNullException.ThrowIfNull(builder);
         return builder.Add(new HealthCheckRegistration(name,
             services => new ResourcefullHealthCheck(
-                services.GetService<ResourceRepository>() ?? throw new InvalidOperationException(
-                    $"{nameof(AddResourcefullCheck)} needs Resourcefull added with " +
-                    $"{nameof(ResourcefullServiceCollectionExtensions.AddResourcefull)}."),
-                services.GetRequiredService<IOptions<ResourcefullOptions>>().Value),
+                services.GetStoreService<ResourceRepository>(storeName) ?? throw new InvalidOperationException(storeName is null
+                    ? $"{nameof(AddResourcefullCheck)} needs Resourcefull added with {nameof(ResourcefullServiceCollectionExtensions.AddResourcefull)}."
+                    : $"{nameof(AddResourcefullCheck)} needs a store named '{storeName}' added with {nameof(ResourcefullServiceCollectionExtensions.AddKeyedResourcefull)}."),
+                services.GetRequiredService<IOptionsMonitor<ResourcefullOptions>>().Get(storeName ?? Options.DefaultName)),
             failureStatus, tags, timeout));
     }
 }

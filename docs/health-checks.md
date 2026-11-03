@@ -16,7 +16,8 @@ builder.Services.AddHealthChecks()
 app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = check => check.Tags.Contains("ready") });
 ```
 
-Both take the usual parameters: `name` (`"resourcefull"` by default), `failureStatus`, `tags` and `timeout`.
+Both take the usual parameters: `name` (`"resourcefull"` by default), `failureStatus`, `tags` and `timeout`. They also
+take `storeName` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>, to check a [named store](several-stores.md) rather than the one `AddResourcefull` adds.
 
 ## What they report
 

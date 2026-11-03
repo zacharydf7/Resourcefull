@@ -18,8 +18,35 @@ public class ExpiryTests
         int calls = 0;
         client.Setup(c => c.DeleteExpiredAsync(It.IsAny<CancellationToken>())).Returns(() => sweep(++calls));
         ServiceProvider services = new ServiceCollection().AddScoped(_ => client.Object).BuildServiceProvider();
-        return (new ExpiryService(services.GetRequiredService<IServiceScopeFactory>(), new ExpirySettings(interval),
+        return (new ExpiryService(services.GetRequiredService<IServiceScopeFactory>(), new ExpirySettings(interval), null,
             NullLogger<ExpiryService>.Instance), client);
+    }
+
+    [Fact]
+    public async Task ExpiryService_ShouldSweepItsOwnStore_WhenTheStoreHasAName()
+    {
+        // Arrange: the store without a name, and the archive, each with a client that records its sweeps.
+        var unnamed = new Mock<IResourceServiceClient>();
+        var archive = new Mock<IResourceServiceClient>();
+        var swept = new TaskCompletionSource();
+        archive.Setup(c => c.DeleteExpiredAsync(It.IsAny<CancellationToken>())).Returns(() =>
+        {
+            swept.TrySetResult();
+            return Task.FromResult(0);
+        });
+        ServiceProvider services = new ServiceCollection().AddScoped(_ => unnamed.Object)
+            .AddKeyedScoped("archive", (_, _) => archive.Object).BuildServiceProvider();
+        var service = new ExpiryService(services.GetRequiredService<IServiceScopeFactory>(), new ExpirySettings(TimeSpan.FromHours(1)),
+            "archive", NullLogger<ExpiryService>.Instance);
+
+        // Act
+        await service.StartAsync(CancellationToken.None);
+        Task reached = await Task.WhenAny(swept.Task, Task.Delay(TimeSpan.FromSeconds(10)));
+        await service.StopAsync(CancellationToken.None);
+
+        // Assert
+        Assert.Same(swept.Task, reached);
+        unnamed.Verify(c => c.DeleteExpiredAsync(It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]

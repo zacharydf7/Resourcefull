@@ -4,6 +4,13 @@
 
 ### Added
 
+- **Several stores in one application.** `AddKeyedResourcefull("archive", …)` adds a store under a name, beside the one
+  `AddResourcefull` adds, with its own provider and settings; resolve its client with
+  `[FromKeyedServices("archive")]`. Each store has its own policies, URI provider, upload inspector, cleanup handler
+  and expiry sweep. `MigrateResourcefullDatabaseAsync`, `GenerateResourcefullScript`, the SQL Server hash backfill and
+  both health checks take a store's name. Spans and metrics from a named store carry `resourcefull.store`. Providers
+  read the store's name from `ResourcefullOptionsBuilder.StoreName`, and a new `UseProvider` overload takes a factory.
+  Signed links work with the store `AddResourcefull` adds. See [Several stores](docs/several-stores.md).
 - **Listing containers a page at a time.** `ListContainersAsync` enumerates every container, or those whose names start
   with a prefix, fetching a page at a time, so it holds only one page in memory, even in a store with a container for
   each user. `GetContainerPageAsync` returns one page and a continuation token, for an API that pages for its own
@@ -134,6 +141,9 @@
   rest. `ResourcefullOptions.IsVersioningEnabled` is gone. `RestoreVersionAsync` works with versioning off, as long
   as the version exists. The `upload` and `copy` spans gain `resourcefull.write_mode`. `UploadFromRequestAsync` still
   replaces, as a `PUT` does. See [Upgrading to 4.0](docs/upgrading-to-4.md#uploads-say-whether-they-replace).
+- **Adding Resourcefull twice throws.** A second `AddResourcefull` replaced the provider and kept the first call's other
+  settings; it now throws `InvalidOperationException`. Add a second store with `AddKeyedResourcefull`. See
+  [Upgrading to 4.0](docs/upgrading-to-4.md#adding-resourcefull-twice).
 - **Consistent names.** The container methods drop "Resource": `CreateContainerAsync`,
   `CreateContainerIfNotExistsAsync`, `GetContainerInfoAsync`, `DeleteContainerIfExistsAsync` and
   `GetContainerClient`, beside the existing `ContainerExistsAsync`. `GetResourceContainersAsync`, which read every

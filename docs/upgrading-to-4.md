@@ -143,6 +143,12 @@ using IResourceContainerClient container = service.GetResourceContainerClient("r
 IResourceContainerClient container = service.GetContainerClient("reports");
 ```
 
+### Adding Resourcefull twice
+
+In 3.x, calling `AddResourcefull` a second time replaced the provider but kept the first call's other settings. 4.0
+throws `InvalidOperationException` instead. To use a second store, add it under a name with `AddKeyedResourcefull`;
+see [Several stores](several-stores.md).
+
 ### Custom providers
 
 A provider now derives from the `ResourceRepository` base class rather than implementing the `IResourceRepository`

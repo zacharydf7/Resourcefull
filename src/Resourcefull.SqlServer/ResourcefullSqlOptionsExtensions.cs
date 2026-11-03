@@ -15,8 +15,10 @@ public static partial class ResourcefullSqlOptionsExtensions
     /// <summary>
     /// Stores resources in the SQL Server database that <paramref name="connectionString"/> names, retrying transient
     /// failures (including deadlocks). Provision the database with
-    /// <see cref="ResourcefullSqlDatabaseExtensions.MigrateResourcefullDatabaseAsync"/> or the packaged scripts.
-    /// Also registers <see cref="ContentHashBackfill"/>.
+    /// <see cref="ResourcefullSqlDatabaseExtensions.MigrateResourcefullDatabaseAsync(IServiceProvider, CancellationToken)"/>
+    /// or the packaged scripts.
+    /// Also registers <see cref="ContentHashBackfill"/>, under the store's name for a store added with
+    /// <c>AddKeyedResourcefull</c>.
     /// </summary>
     /// <param name="builder">The builder passed to <c>AddResourcefull</c>.</param>
     /// <param name="connectionString">The connection string of the database that holds Resourcefull's tables.</param>
@@ -58,16 +60,22 @@ public static partial class ResourcefullSqlOptionsExtensions
             throw new ArgumentException(
                 "A schema name must start with a letter or underscore, followed by up to 127 letters, digits or underscores.", nameof(schema));
         }
-        builder.UseProvider<ResourceSqlRepository>();
+        // Each store has its own contexts, so its factory and everything that uses it are registered under its name.
+        string? storeName = builder.StoreName;
+        builder.UseProvider(services => new ResourceSqlRepository(
+            services.GetRequiredStoreService<IDbContextFactory<ResourceDbContext>>(storeName), services.GetService<TimeProvider>(),
+            storeName));
 
-        builder.Services.AddDbContextFactory<ResourceDbContext>(options =>
+        builder.Services.AddKeyedSingleton<IDbContextFactory<ResourceDbContext>>(storeName, (services, _) =>
         {
+            DbContextOptionsBuilder<ResourceDbContext> options = new DbContextOptionsBuilder<ResourceDbContext>()
+                .UseApplicationServiceProvider(services);
             options.UseSqlServer(connectionString, sql =>
             {
                 sql.ExecutionStrategy(dependencies => new RetryCountingExecutionStrategy(dependencies,
                     maxRetryCount: 5,
                     maxRetryDelay: TimeSpan.FromSeconds(10),
-                    errorNumbersToAdd: [1205, ResourceSqlRepository.NameLockNotGrantedError]));
+                    errorNumbersToAdd: [1205, ResourceSqlRepository.NameLockNotGrantedError], storeName));
                 if (schema is not null) sql.MigrationsHistoryTable(HistoryRepository.DefaultTableName, schema);
                 configure(sql);
             });
@@ -79,8 +87,15 @@ public static partial class ResourcefullSqlOptionsExtensions
                 // The migrations' snapshot has no schema, so the model in one always looks changed.
                 options.ConfigureWarnings(warnings => warnings.Ignore(RelationalEventId.PendingModelChangesWarning));
             }
+            // Last, apply the application's ConfigureDbContext calls to every store's contexts, as
+            // AddDbContextFactory would.
+            foreach (IDbContextOptionsConfiguration<ResourceDbContext> configuration in
+                services.GetServices<IDbContextOptionsConfiguration<ResourceDbContext>>())
+                configuration.Configure(services, options);
+            return new ResourceDbContextFactory(options.Options);
         });
-        builder.Services.AddScoped(services => new ContentHashBackfill(services.GetRequiredService<IDbContextFactory<ResourceDbContext>>()));
+        builder.Services.AddKeyedScoped(storeName, (services, _) => new ContentHashBackfill(
+            services.GetRequiredStoreService<IDbContextFactory<ResourceDbContext>>(storeName), storeName));
         return builder;
     }
 

@@ -31,6 +31,8 @@ Every measurement in this table carries these tags:
 
 - **`resourcefull.operation`:** one of the operations below.
 - **`resourcefull.provider`:** `sqlserver`, `inmemory`, or a custom provider's type name.
+- **`resourcefull.store`** <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>**:** the store's name, for a store added with `AddKeyedResourcefull`; see
+  [Several stores](several-stores.md). The store `AddResourcefull` adds records none.
 - **`error.type`:** the exception's type, on a failed operation only.
 
 Container and resource names aren't metric tags: there can be any number of them, which would swamp a metrics backend.
