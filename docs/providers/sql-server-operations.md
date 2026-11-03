@@ -94,9 +94,9 @@ What that means for slow clients:
 - **The log isn't held back.** Each batch's log can be truncated, or backed up under the full recovery model, while the
   rest of the upload is still arriving. The upload writes as much to the log in all as it did before.
 - **A stopped upload leaves its batches behind** when its process dies before it can delete them. The
-  [expiry](../expiry.md) sweep deletes a staged version an hour after its upload last stored anything. An upload
-  marks itself running every 10 minutes as its content arrives, so it's safe as long as a chunk, about 40 KB, arrives
-  every 50 minutes: far slower than Kestrel's minimum rate lets a request body go. Without `UseExpiry`, call
+  [expiry](../expiry.md) sweep deletes a staged version a day after its upload last stored anything, so an
+  [upload session](../uploading-in-parts.md) can resume after a pause. An upload marks itself running every 10 minutes
+  as its content arrives, so the sweep leaves it alone as long as content keeps arriving. Without `UseExpiry`, call
   `DeleteExpiredAsync` on a schedule, or such batches stay until you do. `resourcefull.sqlserver.abandoned_uploads`
   counts what the sweep deletes.
 

@@ -50,6 +50,31 @@ public sealed class DeleteIntegrationTests(PostgreSqlFixture fixture)
         Assert.True(Interlocked.Read(ref counted) >= 1);
     }
 
+    [Fact]
+    public async Task CancelUploadAsync_ShouldLeaveAnUploadAlone_WhenGivenTheIdOfOneWhoseContentIsStillArriving()
+    {
+        fixture.SkipIfUnavailable();
+
+        // Arrange: an upload's version is staged while its content arrives, as a session's is, but it isn't a session.
+        using ServiceProvider provider = fixture.BuildServiceProvider();
+        IResourceContainerClient container = await NewContainerAsync(provider);
+        var content = new PausingStream(Payload, PauseAt);
+        Task<ResourceInfo> upload = container.UploadAsync("video.mp4", content);
+        await content.Paused;
+        string versionId = await StagedVersionIdAsync(container.Name);
+
+        // Act
+        ResourceUpload? session = await container.GetUploadAsync("video.mp4", versionId);
+        bool canceled = await container.CancelUploadAsync("video.mp4", versionId);
+        content.Resume();
+        ResourceInfo stored = await upload;
+
+        // Assert
+        Assert.Null(session);
+        Assert.False(canceled);
+        Assert.Equal((versionId, Payload.LongLength), (stored.VersionId, stored.ContentLength!.Value));
+    }
+
     public static TheoryData<string> Deletes => ["version", "name", "container", "expire"];
 
     [Theory]
@@ -102,6 +127,17 @@ public sealed class DeleteIntegrationTests(PostgreSqlFixture fixture)
         listener.SetMeasurementEventCallback<long>((_, measurement, _, _) => counted(measurement));
         listener.Start();
         return listener;
+    }
+
+    /// <summary>The ID of the container's one staged version.</summary>
+    private async Task<string> StagedVersionIdAsync(string containerName)
+    {
+        await using var connection = new NpgsqlConnection(fixture.ConnectionString);
+        await connection.OpenAsync();
+        await using NpgsqlCommand command = connection.CreateCommand();
+        command.CommandText = """SELECT "VersionId" FROM "Resources" WHERE "ContainerName" = @c AND "StagedAt" IS NOT NULL""";
+        command.Parameters.AddWithValue("c", containerName);
+        return (string)(await command.ExecuteScalarAsync())!;
     }
 
     /// <summary>Every version row and chunk of the container's, staged or not.</summary>

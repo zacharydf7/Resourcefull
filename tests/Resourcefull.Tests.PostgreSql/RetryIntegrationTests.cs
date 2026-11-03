@@ -108,6 +108,55 @@ public sealed class RetryIntegrationTests(PostgreSqlFixture fixture)
     }
 
     [Fact]
+    public async Task AppendStagedContentAsync_ShouldStoreEachBatchOnce_WhenABatchCommitsButItsAcknowledgementIsLost()
+    {
+        fixture.SkipIfUnavailable();
+
+        // Arrange: a session's first batch commits, then its acknowledgement is lost, so it's sent again and finds
+        // itself stored.
+        var failure = new FailOnceAfterCommitInterceptor();
+        (ResourcePostgreSqlRepository repository, string c) = await NewRepositoryAsync(failure);
+        var location = new ResourceLocation(c, "n");
+        await repository.StartStagedVersionAsync(Version(c));
+        failure.Arm();
+
+        // Act
+        long? stored = await repository.AppendStagedContentAsync(location, "v1", 0, new NonSeekableStream(Payload));
+
+        // Assert
+        Assert.True(failure.Failed);
+        Assert.Equal(Payload.Length, stored);
+        await using Stream content = (await repository.GetStagedStreamAsync(location, "v1"))!;
+        using var copy = new MemoryStream();
+        await content.CopyToAsync(copy);
+        Assert.Equal(Payload, copy.ToArray());
+    }
+
+    [Fact]
+    public async Task CompleteStagedVersionAsync_ShouldReturnWhatItStored_WhenItCommitsButItsAcknowledgementIsLost()
+    {
+        fixture.SkipIfUnavailable();
+
+        // Arrange: the completion commits, then its acknowledgement is lost, so the retry finds the session gone, made
+        // current.
+        var failure = new FailOnceAfterCommitInterceptor();
+        (ResourcePostgreSqlRepository repository, string c) = await NewRepositoryAsync(failure);
+        var location = new ResourceLocation(c, "n");
+        await repository.StartStagedVersionAsync(Version(c));
+        await repository.AppendStagedContentAsync(location, "v1", 0, new MemoryStream(Payload));
+        failure.Arm();
+
+        // Act
+        WrittenContent? written = await repository.CompleteStagedVersionAsync(location, "v1", Payload.Length, PayloadHash);
+
+        // Assert
+        Assert.True(failure.Failed);
+        Assert.Equal((Payload.LongLength, PayloadHash), (written!.ContentLength, written.ContentHash));
+        Assert.True(Assert.Single(await repository.GetResourceVersionsAsync(location)).IsLatest);
+        Assert.Null(await repository.GetStagedVersionAsync(location, "v1"));
+    }
+
+    [Fact]
     public async Task CopyResourceAsync_ShouldReturnWhatItStoredWithoutCopyingAgain_WhenTheCommitSucceedsButItsAcknowledgementIsLost()
     {
         fixture.SkipIfUnavailable();

@@ -147,6 +147,51 @@ public sealed class TelemetryTests : IDisposable
     }
 
     [Fact]
+    public async Task UploadSession_ShouldRecordASpanForEachCallAndTheBytesAppendedAndStored_WhenCompleted()
+    {
+        // Arrange
+        using ServiceProvider provider = NewServices();
+        IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>().CreateContainerAsync("c");
+        using Activity root = TestSource.StartActivity("test")!;
+
+        // Act
+        ResourceUpload upload = await container.StartUploadAsync("video.mp4");
+        upload = (await container.AppendUploadAsync("video.mp4", upload.UploadId, 0, new MemoryStream(new byte[3])))!;
+        await container.AppendUploadAsync("video.mp4", upload.UploadId, upload.Offset, new MemoryStream(new byte[4]));
+        await container.CompleteUploadAsync("video.mp4", upload.UploadId);
+
+        // Assert
+        List<Activity> calls = [.. SpansIn(root).Where(s => s.ParentSpanId == root.SpanId).OrderBy(s => s.StartTimeUtc)];
+        Assert.Equal(["resourcefull upload_start", "resourcefull upload_append", "resourcefull upload_append",
+            "resourcefull upload_complete"], calls.Select(s => s.OperationName));
+        Assert.Equal([0L, 3L], calls.Where(s => s.OperationName == "resourcefull upload_append")
+            .Select(s => (long)s.GetTagItem("resourcefull.offset")!));
+        Assert.Equal([3.0, 4.0], _measurements.Where(m => m.Instrument == "resourcefull.client.appended").Select(m => m.Value));
+        Assert.Contains(_measurements, m => m.Instrument == "resourcefull.client.uploaded" && m.Value == 7
+            && Equals(m.Tags["resourcefull.operation"], "upload_complete"));
+    }
+
+    [Fact]
+    public async Task AppendUploadAsync_ShouldCountWhatItStored_WhenItFailsPartway()
+    {
+        // Arrange: a provider that stored 5 bytes of the append before it failed.
+        var repository = new Mock<ResourceRepository>();
+        var staged = new StagedVersion(new NewResourceVersion(new ResourceLocation("c", "a"), "u1"), 0);
+        repository.SetupSequence(r => r.GetStagedVersionAsync(new ResourceLocation("c", "a"), "u1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(staged)
+            .ReturnsAsync(staged with { StoredLength = 5 });
+        repository.Setup(r => r.AppendStagedContentAsync(new ResourceLocation("c", "a"), "u1", 0, It.IsAny<Stream>(),
+            It.IsAny<CancellationToken>())).ThrowsAsync(new IOException("The connection dropped."));
+        var container = new ResourceContainerClient(repository.Object, null, new ResourcefullOptions(), new ContainerInfo { Name = "c" }, null);
+
+        // Act
+        await Assert.ThrowsAsync<IOException>(() => container.AppendUploadAsync("a", "u1", 0, new MemoryStream(new byte[9])));
+
+        // Assert
+        Assert.Equal([5.0], _measurements.Where(m => m.Instrument == "resourcefull.client.appended").Select(m => m.Value));
+    }
+
+    [Fact]
     public async Task UploadAsync_ShouldRecordTheErrorType_WhenItFails()
     {
         // Arrange
@@ -378,7 +423,7 @@ public sealed class TelemetryTests : IDisposable
     }
 
     [Fact]
-    public async Task DeleteExpiredAsync_ShouldDeleteUploadsAbandonedAnHourAgoAndRecordHowMany_WhenCalled()
+    public async Task DeleteExpiredAsync_ShouldDeleteUploadsAbandonedADayAgoAndRecordHowMany_WhenCalled()
     {
         // Arrange: a provider that found two uploads abandoned, and an expired version, so the sweep records a span.
         var repository = new Mock<ResourceRepository>();
@@ -398,7 +443,7 @@ public sealed class TelemetryTests : IDisposable
 
         // Assert
         repository.Verify(r => r.DeleteAbandonedUploadsAsync(
-            It.Is<DateTimeOffset>(t => t >= before.AddHours(-1) && t <= DateTimeOffset.UtcNow.AddHours(-1)),
+            It.Is<DateTimeOffset>(t => t >= before.AddHours(-24) && t <= DateTimeOffset.UtcNow.AddHours(-24)),
             It.IsAny<CancellationToken>()), Times.Once);
         Activity expire = Assert.Single(SpansIn(root), s => s.OperationName == "resourcefull expire");
         Assert.Equal(2, expire.GetTagItem("resourcefull.abandoned_uploads"));

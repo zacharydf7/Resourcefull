@@ -79,6 +79,20 @@ public abstract partial class ResourcefullContractTests
     }
 
     [Fact]
+    public async Task StartUploadAsync_ShouldThrowNotSupportedException_WhenTheProviderDoesNotSupportUploadSessions()
+    {
+        Assert.SkipWhen(SupportsUploadSessions, "The provider supports upload sessions.");
+
+        // Arrange
+        using ServiceProvider provider = BuildServiceProvider();
+        IResourceContainerClient container = await NewContainerAsync(provider);
+
+        // Act & Assert
+        await Assert.ThrowsAsync<NotSupportedException>(() => container.StartUploadAsync("a"));
+        Assert.False(await container.ExistsAsync("a"));
+    }
+
+    [Fact]
     public async Task SetExpiryAndDeleteExpiredAsync_ShouldThrowNotSupportedException_WhenTheProviderDoesNotSupportExpiry()
     {
         Assert.SkipWhen(SupportsExpiry, "The provider supports expiry.");

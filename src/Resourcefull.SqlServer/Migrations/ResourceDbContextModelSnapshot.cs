@@ -95,6 +95,9 @@ namespace Resourcefull.SqlServer.Migrations
                         .HasColumnType("nvarchar(36)")
                         .UseCollation("Latin1_General_100_BIN2");
 
+                    b.Property<long?>("DeclaredLength")
+                        .HasColumnType("bigint");
+
                     b.Property<DateTimeOffset?>("ExpiresAt")
                         .HasColumnType("datetimeoffset");
 

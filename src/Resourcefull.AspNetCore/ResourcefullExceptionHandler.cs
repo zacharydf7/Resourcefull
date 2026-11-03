@@ -5,7 +5,8 @@ using Microsoft.Extensions.DependencyInjection;
 namespace Resourcefull.AspNetCore;
 
 /// <summary>
-/// Turns Resourcefull's exceptions into problem details responses: <see cref="ResourceConflictException"/> into 409,
+/// Turns Resourcefull's exceptions into problem details responses: <see cref="ResourceConflictException"/> and
+/// <see cref="ResourceUploadOffsetException"/> into 409,
 /// <see cref="ResourceContainerNotFoundException"/> into 404, <see cref="ResourceContentLengthMismatchException"/> and
 /// <see cref="ResourceNameException"/> into 400, <see cref="ResourcePreconditionFailedException"/> into 412,
 /// <see cref="ResourceRangeNotSatisfiableException"/> into 416 with the content's length in <c>Content-Range</c>,
@@ -26,7 +27,7 @@ public sealed class ResourcefullExceptionHandler(IProblemDetailsService problemD
     {
         int? status = exception switch
         {
-            ResourceConflictException => StatusCodes.Status409Conflict,
+            ResourceConflictException or ResourceUploadOffsetException => StatusCodes.Status409Conflict,
             ResourceContainerNotFoundException => StatusCodes.Status404NotFound,
             ResourceContentLengthMismatchException or ResourceNameException => StatusCodes.Status400BadRequest,
             ResourcePreconditionFailedException => StatusCodes.Status412PreconditionFailed,

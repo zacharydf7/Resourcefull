@@ -72,7 +72,7 @@ public class ResourceChunkerTests
         var stream = new CancelAfterReadsStream(new byte[ResourceChunker.ChunkSize * 3], cts, readsBeforeCancel: 1);
 
         // Act & Assert
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => ResourceChunker.ChunksAsync(stream, reuseAfter: 16, cts.Token).ToListAsync().AsTask());
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => ResourceChunker.ChunksAsync(stream, reuseAfter: 16, cancellationToken: cts.Token).ToListAsync().AsTask());
     }
 
     [Fact]

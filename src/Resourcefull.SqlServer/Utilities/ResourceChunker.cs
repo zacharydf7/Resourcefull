@@ -21,11 +21,12 @@ internal class ResourceChunker
     /// How many buffers full chunks share in turn, so a chunk's data is overwritten that many chunks later: the caller
     /// must be done with each chunk by then. A short final chunk gets an array of its own, sized to its data.
     /// </param>
+    /// <param name="afterIndex">The index the first chunk follows: that of the last chunk already stored, for an append.</param>
     /// <param name="cancellationToken">Cancels reading.</param>
-    public static async IAsyncEnumerable<ResourceChunkModel> ChunksAsync(Stream stream, int reuseAfter,
+    public static async IAsyncEnumerable<ResourceChunkModel> ChunksAsync(Stream stream, int reuseAfter, int afterIndex = 0,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        var index = 0;
+        var index = afterIndex;
         var buffers = new byte[reuseAfter][];
 
         while (true)

@@ -9,6 +9,7 @@ public class ResourcefullExceptionHandlerTests
     public static TheoryData<Exception, HttpStatusCode> MappedExceptions() => new()
     {
         { new ResourceConflictException("Resource report.txt already exists."), HttpStatusCode.Conflict },
+        { new ResourceUploadOffsetException("The upload has 10 bytes stored, not 5.", 10), HttpStatusCode.Conflict },
         { new ResourceContainerNotFoundException("Resource Container files does not exist."), HttpStatusCode.NotFound },
         { new ResourceContentLengthMismatchException("The length doesn't match."), HttpStatusCode.BadRequest },
         { new ResourceNameException("Name must not start or end with whitespace.", "resourceName"), HttpStatusCode.BadRequest },

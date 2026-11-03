@@ -436,4 +436,141 @@ public interface IResourceContainerClient
     /// </exception>
     public Task<ResourceContainerPolicy> GetPolicyAsync(CancellationToken cancellationToken = default)
         => throw new NotSupportedException($"{GetType().Name} doesn't report its policy.");
+
+    /// <summary>
+    /// Starts an upload session: a version of <paramref name="resourceName"/> whose content arrives over several
+    /// appends, which can resume after a dropped connection, even from another process, and which becomes current only
+    /// when <see cref="CompleteUploadAsync"/> is called. Nothing shows the version until then. A session nothing is
+    /// appended to for 24 hours is deleted by the expiry sweep, so turn on
+    /// <see cref="ResourcefullOptionsBuilder.UseExpiry"/>, or cancel a session you abandon.
+    /// <para>Coming in 4.0.</para>
+    /// </summary>
+    /// <param name="resourceName">The name the version will be stored under.</param>
+    /// <param name="options">The version's content type, expected length, metadata and expiry.</param>
+    /// <param name="cancellationToken">Cancels the start; a canceled start leaves no session.</param>
+    /// <returns>The new session, with nothing stored.</returns>
+    /// <exception cref="ArgumentException"><paramref name="resourceName"/> breaks the rules for a new name.</exception>
+    /// <exception cref="ResourceContainerNotFoundException">The container doesn't exist.</exception>
+    /// <exception cref="ResourcePolicyViolationException">
+    /// The container's policy refuses the upload: it's read-only, doesn't allow the content type, or the expected
+    /// length is over a limit.
+    /// </exception>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
+    /// <exception cref="NotSupportedException">
+    /// The provider doesn't support upload sessions, or this is the default implementation.
+    /// </exception>
+    public Task<ResourceUpload> StartUploadAsync(string resourceName, ResourceUploadSessionOptions? options = null,
+        CancellationToken cancellationToken = default)
+        => throw new NotSupportedException($"{GetType().Name} doesn't support upload sessions.");
+
+    /// <summary>
+    /// Gets an upload session as it stands, to find where to resume: its <see cref="ResourceUpload.Offset"/> is how
+    /// many bytes are stored.
+    /// <para>Coming in 4.0.</para>
+    /// </summary>
+    /// <param name="resourceName">The name the session's version will be stored under.</param>
+    /// <param name="uploadId">The session's ID.</param>
+    /// <param name="cancellationToken">Cancels the lookup.</param>
+    /// <returns>The session, or <see langword="null"/> if there's none: it was completed, canceled or swept.</returns>
+    /// <exception cref="ArgumentException"><paramref name="resourceName"/> breaks the name rules, or <paramref name="uploadId"/> is empty.</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
+    /// <exception cref="NotSupportedException">
+    /// The provider doesn't support upload sessions, or this is the default implementation.
+    /// </exception>
+    public Task<ResourceUpload?> GetUploadAsync(string resourceName, string uploadId, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException($"{GetType().Name} doesn't support upload sessions.");
+
+    /// <summary>
+    /// Appends <paramref name="content"/> to an upload session, reading it to its end. An append that fails partway may
+    /// keep part of what it sent, depending on the provider: get the session to find where its content now ends, and
+    /// resume from there.
+    /// <para>Coming in 4.0.</para>
+    /// </summary>
+    /// <param name="resourceName">The name the session's version will be stored under.</param>
+    /// <param name="uploadId">The session's ID.</param>
+    /// <param name="offset">Where the content starts: the session's <see cref="ResourceUpload.Offset"/>.</param>
+    /// <param name="content">The content to append.</param>
+    /// <param name="cancellationToken">Cancels the append; what's already stored stays stored.</param>
+    /// <returns>The session after the append, or <see langword="null"/> if there's no such session.</returns>
+    /// <exception cref="ArgumentException"><paramref name="resourceName"/> breaks the name rules, or <paramref name="uploadId"/> is empty.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="offset"/> is negative.</exception>
+    /// <exception cref="ResourceUploadOffsetException">
+    /// The stored content doesn't end at <paramref name="offset"/>; nothing was stored. Resume from its
+    /// <see cref="ResourceUploadOffsetException.CurrentOffset"/>.
+    /// </exception>
+    /// <exception cref="ResourcePolicyViolationException">
+    /// The content would take the version past the container's <see cref="ResourceContainerPolicy.MaxResourceSize"/>, or
+    /// past what the whole container may hold. Part of what arrived before the limit may stay stored.
+    /// </exception>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
+    /// <exception cref="NotSupportedException">
+    /// The provider doesn't support upload sessions, or this is the default implementation.
+    /// </exception>
+    public Task<ResourceUpload?> AppendUploadAsync(string resourceName, string uploadId, long offset, Stream content,
+        CancellationToken cancellationToken = default)
+        => throw new NotSupportedException($"{GetType().Name} doesn't support upload sessions.");
+
+    /// <summary>
+    /// Completes an upload session, making its version the name's current one, as an upload with the same mode and
+    /// conditions would. It reads the stored content once, to measure and hash it and to pass it to the upload
+    /// inspector, so it takes about as long as reading the content back. Older versions are pruned as after an upload.
+    /// <para>Coming in 4.0.</para>
+    /// </summary>
+    /// <param name="resourceName">The name the session's version will be stored under.</param>
+    /// <param name="uploadId">The session's ID.</param>
+    /// <param name="mode">
+    /// What to do when the name already has a current version: <see cref="ResourceWriteMode.Create"/>, the default,
+    /// refuses, and <see cref="ResourceWriteMode.Replace"/> replaces it.
+    /// </param>
+    /// <param name="conditions">
+    /// What the name's current version must be, decided as the version becomes current; they need
+    /// <see cref="ResourceWriteMode.Replace"/>.
+    /// </param>
+    /// <param name="cancellationToken">Cancels the completion; a canceled completion leaves the session as it was.</param>
+    /// <returns>The version as stored, or <see langword="null"/> if there's no such session.</returns>
+    /// <exception cref="ArgumentException">
+    /// <paramref name="resourceName"/> breaks the name rules, <paramref name="uploadId"/> is empty, or
+    /// <paramref name="conditions"/> are given with <see cref="ResourceWriteMode.Create"/>.
+    /// </exception>
+    /// <exception cref="ResourceConflictException">
+    /// <paramref name="mode"/> is <see cref="ResourceWriteMode.Create"/> and the name has a current version. The session
+    /// stays, so it can be completed with <see cref="ResourceWriteMode.Replace"/>.
+    /// </exception>
+    /// <exception cref="ResourcePreconditionFailedException">
+    /// The name's current version doesn't meet <paramref name="conditions"/>. The session stays.
+    /// </exception>
+    /// <exception cref="ResourceContentRefusedException">
+    /// The upload inspector refused the content. The session is deleted.
+    /// </exception>
+    /// <exception cref="ResourceContentLengthMismatchException">
+    /// The session declared a length at its start, and a different length was appended. The session stays.
+    /// </exception>
+    /// <exception cref="ResourceUploadOffsetException">
+    /// An append stored more content while the completion read it. The session stays, and can be completed again.
+    /// </exception>
+    /// <exception cref="ResourcePolicyViolationException">The container's policy refuses the version. The session stays.</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
+    /// <exception cref="NotSupportedException">
+    /// The provider doesn't support upload sessions, or this is the default implementation.
+    /// </exception>
+    public Task<ResourceInfo?> CompleteUploadAsync(string resourceName, string uploadId,
+        ResourceWriteMode mode = ResourceWriteMode.Create, ResourceConditions? conditions = null,
+        CancellationToken cancellationToken = default)
+        => throw new NotSupportedException($"{GetType().Name} doesn't support upload sessions.");
+
+    /// <summary>
+    /// Cancels an upload session, deleting what it stored.
+    /// <para>Coming in 4.0.</para>
+    /// </summary>
+    /// <param name="resourceName">The name the session's version would have been stored under.</param>
+    /// <param name="uploadId">The session's ID.</param>
+    /// <param name="cancellationToken">Cancels the delete.</param>
+    /// <returns><see langword="true"/> if it was canceled; <see langword="false"/> if there's no such session.</returns>
+    /// <exception cref="ArgumentException"><paramref name="resourceName"/> breaks the name rules, or <paramref name="uploadId"/> is empty.</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
+    /// <exception cref="NotSupportedException">
+    /// The provider doesn't support upload sessions, or this is the default implementation.
+    /// </exception>
+    public Task<bool> CancelUploadAsync(string resourceName, string uploadId, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException($"{GetType().Name} doesn't support upload sessions.");
 }

@@ -92,6 +92,33 @@ internal sealed class ContainerPolicies(ContainerPolicySettings settings, Resour
     }
 
     /// <summary>
+    /// Checks an append to an upload session whose stored content ends at <paramref name="offset"/>: the container
+    /// mustn't be read-only, and the content may take the version only up to the largest a resource may be, and no
+    /// larger than the whole container may hold. The other limits are checked as the session completes, with the
+    /// version's real length; a session's content doesn't count toward the container's usage until then.
+    /// </summary>
+    /// <returns>The size the appended content must stay within as it's read, or <see langword="null"/> for no limit.</returns>
+    public async Task<ContentLimit?> CheckAppendAsync(string containerName, long offset, ClientTelemetry telemetry,
+        CancellationToken cancellationToken)
+    {
+        ResourceContainerPolicy policy = await GetAsync(containerName, telemetry, cancellationToken).ConfigureAwait(false);
+        ThrowIfReadOnly(containerName, policy);
+        ContentLimit? limit = null;
+        if (policy.MaxResourceSize is { } maxSize)
+        {
+            limit = new ContentLimit(Math.Max(0, maxSize.Bytes - offset), ResourcePolicyRule.MaxResourceSize, maxSize.Bytes,
+                containerName, TooLargeMessage(containerName, maxSize));
+        }
+        if (policy.MaxContainerSize is { } maxContainerSize && (limit is null || maxContainerSize.Bytes - offset < limit.Bytes))
+        {
+            limit = new ContentLimit(Math.Max(0, maxContainerSize.Bytes - offset), ResourcePolicyRule.MaxContainerSize,
+                maxContainerSize.Bytes, containerName,
+                $"The content is larger than the container {containerName} holds in all, {maxContainerSize}.");
+        }
+        return limit;
+    }
+
+    /// <summary>
     /// Checks a move of a resource, every version of it in <paramref name="versions"/>, against both containers'
     /// policies: the source mustn't be read-only, and the destination is checked as for a new name holding those
     /// versions, unless the move stays within its container, which then holds what it did. Every version's

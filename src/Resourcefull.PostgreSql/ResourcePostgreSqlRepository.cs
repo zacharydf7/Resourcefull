@@ -58,8 +58,8 @@ internal class ResourcePostgreSqlRepository(IDbContextFactory<ResourceDbContext>
 
     /// <summary>
     /// How often an upload moves its staged version's <see cref="ResourceModel.StagedAt"/> forward, as a chunk arrives:
-    /// well within the hour after which the expiry sweep takes a staged version as abandoned, so an upload is safe as
-    /// long as a chunk, about 40 KB, arrives every 50 minutes, far slower than Kestrel lets a request body go.
+    /// well within the 24 hours after which the expiry sweep takes a staged version as abandoned, so an upload is safe
+    /// as long as its content keeps arriving.
     /// </summary>
     private static readonly TimeSpan StagedStampInterval = TimeSpan.FromMinutes(10);
 
@@ -119,7 +119,7 @@ internal class ResourcePostgreSqlRepository(IDbContextFactory<ResourceDbContext>
         catch (Exception exception) when (IsForeignKeyViolation(exception) || exception is DbUpdateConcurrencyException)
         {
             // Its container was deleted meanwhile, taking the staged version with it; or the staged version alone is
-            // gone, as the sweep of abandoned uploads takes one whose upload stored nothing for an hour.
+            // gone, as the sweep of abandoned uploads takes one whose upload stored nothing for a day.
             await ThrowIfContainerMissingAsync(resourceContainerName, exception, cancellationToken).ConfigureAwait(false);
             if (staged is null) throw;
             throw new InvalidOperationException($"The resource {resourceName} wasn't stored in the container " +
@@ -240,7 +240,7 @@ internal class ResourcePostgreSqlRepository(IDbContextFactory<ResourceDbContext>
         // Each batch is stored before the chunker reuses its buffers: it shares ChunksPerUploadBatch of them in turn,
         // and a batch holds at most that many chunks, however early it goes.
         await foreach (ResourceChunkModel chunk in
-            ResourceChunker.ChunksAsync(content, ChunksPerUploadBatch, cancellationToken).ConfigureAwait(false))
+            ResourceChunker.ChunksAsync(content, ChunksPerUploadBatch, cancellationToken: cancellationToken).ConfigureAwait(false))
         {
             chunk.ResourceId = resourceId;
             batch.Add(chunk);
@@ -328,6 +328,253 @@ internal class ResourcePostgreSqlRepository(IDbContextFactory<ResourceDbContext>
             await transaction.CommitAsync(ct).ConfigureAwait(false);
             return true;
         }, cancellationToken).ConfigureAwait(false);
+    }
+
+    // Upload sessions. A session's version is staged as an upload's is, with the length appended so far in its
+    // ContentLength, which a staged upload's leaves null until it's current: that's what tells the two apart. Appends
+    // take no name lock: each batch moves the length forward only from the length it expects, in the transaction that
+    // stores the batch's chunks, so two appends from the same offset can't both store.
+
+    public override async Task StartStagedVersionAsync(NewResourceVersion version, CancellationToken cancellationToken = default)
+    {
+        ThrowIfUnstorable(version);
+        using ResourceDbContext dbContext = dbContextFactory.CreateDbContext();
+        bool sentBefore = false;
+        try
+        {
+            await dbContext.Database.CreateExecutionStrategy().ExecuteAsync(async ct =>
+            {
+                using ResourceDbContext attempt = NewWriteContext();
+                // A retry after a commit whose acknowledgement was lost finds the session it started.
+                if (sentBefore && await Session(attempt, version.Location, version.VersionId).AnyAsync(ct).ConfigureAwait(false))
+                    return;
+                sentBefore = true;
+
+                ResourceModel resource = NewVersion(version);
+                resource.StagedAt = Now();
+                resource.ContentHash = StagedContentHash;
+                resource.ContentLength = 0;
+                resource.DeclaredLength = version.DeclaredLength;
+                attempt.Resources.Add(resource);
+                try
+                {
+                    await attempt.SaveChangesAsync(ct).ConfigureAwait(false);
+                }
+                catch (DbUpdateException exception) when (IsUniqueViolation(exception))
+                {
+                    throw VersionExists(version.Location.ContainerName, version.Location.ResourceName, version.VersionId, exception);
+                }
+            }, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception exception) when (IsForeignKeyViolation(exception))
+        {
+            await ThrowIfContainerMissingAsync(version.Location.ContainerName, exception, cancellationToken).ConfigureAwait(false);
+            throw;
+        }
+    }
+
+    public override async Task<StagedVersion?> GetStagedVersionAsync(ResourceLocation resource, string versionId,
+        CancellationToken cancellationToken = default)
+    {
+        using ResourceDbContext dbContext = dbContextFactory.CreateDbContext();
+        ResourceModel? staged = await Session(dbContext, resource, versionId).AsNoTracking()
+            .FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
+        return staged is null
+            ? null
+            : new StagedVersion(new NewResourceVersion(resource, versionId)
+            {
+                ContentType = staged.ContentType,
+                Metadata = new Dictionary<string, string>(staged.Metadata),
+                ExpiresAt = staged.ExpiresAt,
+                DeclaredLength = staged.DeclaredLength
+            }, staged.ContentLength!.Value);
+    }
+
+    public override async Task<long?> AppendStagedContentAsync(ResourceLocation resource, string versionId, long offset,
+        Stream content, CancellationToken cancellationToken = default)
+    {
+        using ResourceDbContext dbContext = dbContextFactory.CreateDbContext();
+        var session = await Session(dbContext, resource, versionId)
+            .Select(r => new { r.Id, Length = r.ContentLength!.Value, LastIndex = r.Chunks!.Max(c => (int?)c.Index) ?? 0 })
+            .FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
+        if (session is null) return null;
+        if (session.Length != offset) throw OffsetNotAtEnd(resource, versionId, offset, session.Length);
+
+        IExecutionStrategy strategy = dbContext.Database.CreateExecutionStrategy();
+        long length = offset;
+        var batch = new List<ResourceChunkModel>(ChunksPerUploadBatch);
+        // Each batch is stored before the chunker reuses its buffers, as an upload's is.
+        await foreach (ResourceChunkModel chunk in ResourceChunker.ChunksAsync(content, ChunksPerUploadBatch, session.LastIndex,
+            cancellationToken).ConfigureAwait(false))
+        {
+            chunk.ResourceId = session.Id;
+            batch.Add(chunk);
+            if (batch.Count < ChunksPerUploadBatch) continue;
+            if (await AppendBatchAsync(strategy, resource, versionId, batch, length, cancellationToken).ConfigureAwait(false) is not { } stored)
+                return null;
+            length = stored;
+        }
+        if (batch.Count == 0) return length;
+        return await AppendBatchAsync(strategy, resource, versionId, batch, length, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Stores a batch of an append's chunks, with the session's length moved forward by their size and its stamp moved
+    /// on, provided its length is still <paramref name="expected"/>; then empties the batch.
+    /// </summary>
+    /// <returns>The session's length after the batch, or <see langword="null"/> if the session is gone.</returns>
+    private async Task<long?> AppendBatchAsync(IExecutionStrategy strategy, ResourceLocation resource, string versionId,
+        List<ResourceChunkModel> batch, long expected, CancellationToken cancellationToken)
+    {
+        long resourceId = batch[0].ResourceId;
+        long after = expected + batch.Sum(c => (long)c.Data.Length);
+        bool sentBefore = false;
+        long? stored = await strategy.ExecuteAsync(async ct =>
+        {
+            bool retry = sentBefore;
+            sentBefore = true;
+            using ResourceDbContext attempt = NewWriteContext();
+            var transaction = await attempt.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
+            await using var transactionDisposal = transaction.ConfigureAwait(false);
+            int moved = await attempt.Database.ExecuteSqlAsync(attempt.QualifyTables($"""
+                UPDATE "Resources" SET "ContentLength" = {after}, "StagedAt" = {Now()}
+                WHERE "Id" = {resourceId} AND "StagedAt" IS NOT NULL AND "ContentLength" = {expected}
+                """), ct).ConfigureAwait(false);
+            if (moved == 0)
+            {
+                long? current = (await attempt.Database.SqlQuery<long?>(attempt.QualifyTables($"""
+                    SELECT "ContentLength" AS "Value" FROM "Resources" WHERE "Id" = {resourceId} AND "StagedAt" IS NOT NULL
+                    """)).ToListAsync(ct).ConfigureAwait(false)).FirstOrDefault();
+                // A retry after a commit whose acknowledgement was lost finds its own batch stored.
+                if (current is null || (retry && current == after)) return current;
+                throw OffsetNotAtEnd(resource, versionId, expected, current.Value);
+            }
+
+            DbCommand command = NewCommand(attempt);
+            await using var commandDisposal = command.ConfigureAwait(false);
+            command.Transaction = transaction.GetDbTransaction();
+            command.CommandText = ResourceDbContext.QualifyTables(InsertChunks(command, batch), attempt.Schema);
+            await command.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+            await transaction.CommitAsync(ct).ConfigureAwait(false);
+            return (long?)after;
+        }, cancellationToken).ConfigureAwait(false);
+        batch.Clear();
+        return stored;
+    }
+
+    public override async Task<Stream?> GetStagedStreamAsync(ResourceLocation resource, string versionId,
+        CancellationToken cancellationToken = default)
+    {
+        // The stream reads the chunks through this context as the caller reads, and disposes it.
+        ResourceDbContext dbContext = dbContextFactory.CreateDbContext();
+        try
+        {
+            var session = await Session(dbContext, resource, versionId)
+                .Select(r => new { r.Id, Length = r.ContentLength!.Value })
+                .FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
+            if (session is not null) return new ResourceStream(PageReader(dbContext, session.Id), session.Length, dbContext);
+            await dbContext.DisposeAsync().ConfigureAwait(false);
+            return null;
+        }
+        catch
+        {
+            await dbContext.DisposeAsync().ConfigureAwait(false);
+            throw;
+        }
+    }
+
+    public override Task<WrittenContent?> CompleteStagedVersionAsync(ResourceLocation resource, string versionId,
+        long contentLength, string contentHash, ResourceWriteCondition? condition = null,
+        CancellationToken cancellationToken = default)
+    {
+        (string resourceContainerName, string resourceName) = resource;
+        if (HasNul(resourceContainerName) || HasNul(resourceName) || HasNul(versionId)) return Task.FromResult<WrittenContent?>(null);
+        condition ??= new ResourceWriteCondition();
+        WrittenContent? written = null;
+        long completedId = 0;
+        return WriteNameAsync(resourceContainerName, resourceName, async (attempt, ct) =>
+        {
+            // Locked as it's read, so an append can't store a batch the measured length and hash don't cover.
+            SessionRow? staged = (await attempt.Database.SqlQuery<SessionRow>(attempt.QualifyTables($"""
+                SELECT "Id", "ContentLength", "StagedAt" FROM "Resources"
+                WHERE "ContainerName" = {resourceContainerName} AND "Name" = {resourceName} AND "VersionId" = {versionId}
+                    AND "StagedAt" IS NOT NULL AND "ContentLength" IS NOT NULL
+                FOR UPDATE
+                """)).ToListAsync(ct).ConfigureAwait(false)).FirstOrDefault();
+            // A retry after a commit whose acknowledgement was lost finds the session gone, made current, which the
+            // filter lets it see; one whose earlier attempt rolled back, and that something else deleted, finds nothing.
+            if (staged is null)
+            {
+                return written is not null && await attempt.Resources.AnyAsync(r => r.Id == completedId, ct).ConfigureAwait(false)
+                    ? written
+                    : null;
+            }
+            if (staged.ContentLength != contentLength) throw OffsetNotAtEnd(resource, versionId, contentLength, staged.ContentLength);
+
+            List<ResourceModel> priorLatest =
+                await CurrentForWriteAsync(attempt, resourceContainerName, resourceName, condition, ct).ConfigureAwait(false);
+            var completed = new WrittenContent(contentLength, contentHash, Now());
+            ResourceModel current = attempt.Resources.Attach(new ResourceModel
+            {
+                Id = staged.Id, ContainerName = resourceContainerName, Name = resourceName, StagedAt = staged.StagedAt
+            }).Entity;
+            current.StagedAt = null;
+            await MakeCurrentAsync(attempt, priorLatest, current, completed, ct).ConfigureAwait(false);
+            completedId = staged.Id;
+            return written = completed;
+        }, cancellationToken);
+    }
+
+    public override async Task<bool> DeleteStagedVersionAsync(ResourceLocation resource, string versionId,
+        CancellationToken cancellationToken = default)
+    {
+        using ResourceDbContext dbContext = dbContextFactory.CreateDbContext();
+        long? resourceId = await Session(dbContext, resource, versionId).Select(r => (long?)r.Id)
+            .FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
+        return resourceId is { } id && await DeleteStagedVersionAsync(dbContext.Database.CreateExecutionStrategy(), id, null,
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Adds the batch's chunks to <paramref name="command"/> as parameters, and returns the statement that inserts them.
+    /// </summary>
+    private static string InsertChunks(DbCommand command, List<ResourceChunkModel> batch)
+    {
+        var sql = new StringBuilder("""INSERT INTO "ResourceChunks" ("ResourceId", "Index", "Data") VALUES """);
+        command.Parameters.Add(new NpgsqlParameter("resourceId", batch[0].ResourceId));
+        for (int i = 0; i < batch.Count; i++)
+        {
+            sql.Append(i == 0 ? "" : ", ").Append($"(@resourceId, @index{i}, @data{i})");
+            command.Parameters.Add(new NpgsqlParameter($"index{i}", batch[i].Index));
+            command.Parameters.Add(new NpgsqlParameter($"data{i}", NpgsqlDbType.Bytea) { Value = batch[i].Data });
+        }
+        return sql.ToString();
+    }
+
+    /// <summary>
+    /// A session's staged version: staged, and with the length a session keeps, which an upload's doesn't. None for a
+    /// name or ID PostgreSQL can't hold.
+    /// </summary>
+    private static IQueryable<ResourceModel> Session(ResourceDbContext dbContext, ResourceLocation resource, string versionId) =>
+        HasNul(versionId)
+            ? dbContext.Resources.Where(r => false)
+            : Versions(dbContext.Resources.IgnoreQueryFilters(), resource.ContainerName, resource.ResourceName)
+                .Where(r => r.VersionId == versionId && r.StagedAt != null && r.ContentLength != null);
+
+    private static ResourceUploadOffsetException OffsetNotAtEnd(ResourceLocation resource, string versionId, long offset,
+        long stored) =>
+        new($"The upload {versionId} of the resource {resource.ResourceName} in the container {resource.ContainerName} " +
+            $"has {stored} bytes stored, not {offset}.", stored)
+        {
+            ContainerName = resource.ContainerName, ResourceName = resource.ResourceName
+        };
+
+    /// <summary>What <see cref="CompleteStagedVersionAsync"/> reads of a session, named as its query's columns.</summary>
+    internal sealed class SessionRow
+    {
+        public long Id { get; set; }
+        public long ContentLength { get; set; }
+        public DateTimeOffset StagedAt { get; set; }
     }
 
     public override async Task<int> DeleteAbandonedUploadsAsync(DateTimeOffset staleBefore,
@@ -577,14 +824,7 @@ internal class ResourcePostgreSqlRepository(IDbContextFactory<ResourceDbContext>
             {
                 DbCommand command = NewCommand(dbContext);
                 await using var commandDisposal = command.ConfigureAwait(false);
-                var sql = new StringBuilder("""INSERT INTO "ResourceChunks" ("ResourceId", "Index", "Data") VALUES """);
-                command.Parameters.Add(new NpgsqlParameter("resourceId", resourceId));
-                for (int i = 0; i < batch.Count; i++)
-                {
-                    sql.Append(i == 0 ? "" : ", ").Append($"(@resourceId, @index{i}, @data{i})");
-                    command.Parameters.Add(new NpgsqlParameter($"index{i}", batch[i].Index));
-                    command.Parameters.Add(new NpgsqlParameter($"data{i}", NpgsqlDbType.Bytea) { Value = batch[i].Data });
-                }
+                var sql = new StringBuilder(InsertChunks(command, batch));
                 if (stamp)
                 {
                     sql.Append("""; UPDATE "Resources" SET "StagedAt" = @now WHERE "Id" = @resourceId""");

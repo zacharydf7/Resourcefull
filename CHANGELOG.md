@@ -11,6 +11,19 @@
   lists names in Unicode code point order, and refuses U+0000 in the names, version IDs and content types it stores.
   `AddResourcefullPostgreSqlCheck` is its health check, and it counts retries and abandoned uploads in
   `resourcefull.postgresql.*`. It's tested against PostgreSQL 16 and 17. See [PostgreSQL](docs/providers/postgresql.md).
+- **Uploading in parts.** An upload session stores a large file over several appends, and what's stored survives a
+  dropped connection or a restart: `StartUploadAsync`, then `AppendUploadAsync` from each part's offset,
+  `GetUploadAsync` to find where to resume, and `CompleteUploadAsync`, which makes the version current with the
+  write mode and conditions it's given, as `UploadAsync` does. `CancelUploadAsync` gives up on one. An append that
+  doesn't start where the stored content ends throws `ResourceUploadOffsetException` (409 Conflict in ASP.NET
+  Core), so a part is never stored twice. Completing reads the content back once to hash and inspect it. The expiry
+  sweep deletes a session nothing was appended to for a day, and the same goes for what a stopped upload left behind,
+  which used to be swept after an hour. Providers support sessions by overriding six new `ResourceRepository`
+  members, and `Resourcefull.Testing` gains a `SupportsUploadSessions` switch for those that don't; every built-in
+  provider supports them. A session that declared a length completes only with that length appended
+  (`ResourceContentLengthMismatchException` otherwise), and the `Resourcefull_AddDeclaredLength` migration adds the
+  nullable column that keeps it. Each call records a span, and appends count bytes in `resourcefull.client.appended`.
+  See [Uploading in parts](docs/uploading-in-parts.md).
 - **A conditions check for providers.** `ResourceConditions.ThrowIfNotMet(resource, currentVersionId,
   currentContentHash)` makes the check every provider must make when a write has conditions: given the current version
   the write read, it throws `ResourcePreconditionFailedException` if they aren't met. A provider can call it instead of
@@ -200,7 +213,7 @@
   and makes the version current in a short transaction at the end. So a slow client no longer holds a connection,
   locks and the transaction log for as long as it takes, and a transient failure partway sends the batch again rather
   than failing the upload, even from a stream that can't seek, such as a request body. A canceled or failed upload
-  deletes what it stored; the expiry sweep deletes what an upload whose process died left behind, an hour after it
+  deletes what it stored; the expiry sweep deletes what an upload whose process died left behind, a day after it
   last stored anything. Each upload costs about one round trip more. The `Resourcefull_AddStagedAt` migration adds a
   nullable column and an index. Providers get `DeleteAbandonedUploadsAsync`, whose default does nothing. The upload
   span gains `resourcefull.batches`, and the `expire` span `resourcefull.abandoned_uploads`. See

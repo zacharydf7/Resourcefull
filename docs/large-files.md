@@ -10,4 +10,7 @@ matter with large files:
   nothing.
 - **A slow upload holds nothing up,** with SQL Server <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>. No transaction, lock or connection is held while its
   content arrives; see [Uploads, connections and the log](providers/sql-server-operations.md#uploads-connections-and-the-log).
+- **Send a very large file in parts** <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> over a connection that may drop. An
+  [upload session](uploading-in-parts.md) keeps what has arrived, so the upload resumes where it stopped rather
+  than starting again.
 - **Web servers limit request sizes.** See [large uploads in ASP.NET Core](aspnet-core/accepting-uploads.md#large-uploads).

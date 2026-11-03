@@ -23,7 +23,8 @@ database call as a child of the operation's span. With .NET Aspire, add them to 
 | Instrument | Type | Unit | What it measures |
 |---|---|---|---|
 | `resourcefull.client.operation.duration` | histogram | s | each operation, from call to result |
-| `resourcefull.client.uploaded` | counter | By | content bytes stored by uploads, restores and imports |
+| `resourcefull.client.uploaded` | counter | By | content bytes stored by uploads, restores and imports, and by completed [upload sessions](uploading-in-parts.md) |
+| `resourcefull.client.appended` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | counter | By | content bytes stored by appends to upload sessions, before the sessions complete |
 | `resourcefull.client.downloaded` | counter | By | content bytes read from download streams, counted as they're read |
 | `resourcefull.client.inspection.duration` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | histogram | s | how long your [upload inspector](upload-inspection.md) took to answer, from the start of the upload or imported version, with `resourcefull.inspection_outcome`: `accepted`, `refused`, `failed` or `canceled` |
 
@@ -49,7 +50,7 @@ own. Each carries `resourcefull.provider`, and all but `resourcefull.client.expi
 | `resourcefull.client.expire.failures` | {version} | expired versions a sweep failed to delete; they stay for the next sweep |
 | `resourcefull.client.policy.last_known_uses` | {use} | times a container's last known [policy](container-policies.md) was used because the policy provider failed, at most once per container each `cacheFor` |
 | `resourcefull.client.cleanup_handler.failures` | {failure} | calls to your [cleanup handler](expiry.md#auditing-whats-deleted) that threw, with `resourcefull.cleanup_reason`: `expired` or `pruned`. A handler failure also counts as a failed prune or expired version, since the version stays |
-| `resourcefull.sqlserver.abandoned_uploads` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | {upload} | staged versions of uploads that stopped partway, which the [expiry](expiry.md) sweep deleted an hour after they last stored anything |
+| `resourcefull.sqlserver.abandoned_uploads` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | {upload} | staged versions of uploads that stopped partway, which the [expiry](expiry.md) sweep deleted a day after they last stored anything; upload sessions nothing was added to are counted here too |
 | `resourcefull.sqlserver.retries` | {retry} | SQL Server calls retried after a transient failure, such as a deadlock or a dropped connection, with `db.response.status_code`: the SQL Server error number, such as `1205` for a deadlock |
 | `resourcefull.postgresql.abandoned_uploads` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | {upload} | as `resourcefull.sqlserver.abandoned_uploads`, for [PostgreSQL](providers/postgresql.md) |
 | `resourcefull.postgresql.retries` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | {retry} | PostgreSQL calls retried after a transient failure, with `db.response.status_code`: the SQLSTATE code, such as `40P01` for a deadlock |
@@ -87,6 +88,11 @@ metrics. It also has:
 | Operation | Methods | Extra span tags |
 |---|---|---|
 | `upload` | `UploadAsync`, both overloads | `resourcefull.conditional`; `resourcefull.write_mode` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>: `create` or `replace`; a `resourcefull prune` child span for pruning older versions; with an [upload inspector](upload-inspection.md) <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>, a `resourcefull inspect` child span, with `resourcefull.inspection_outcome`; with SQL Server <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>, `resourcefull.batches`: the batches of about a MiB its content was stored in |
+| `upload_start` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | `StartUploadAsync`, which starts an [upload session](uploading-in-parts.md) | |
+| `upload_get` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | `GetUploadAsync` | |
+| `upload_append` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | `AppendUploadAsync` | `resourcefull.offset`: where the append started |
+| `upload_complete` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | `CompleteUploadAsync` | `resourcefull.conditional`; `resourcefull.write_mode`: `create` or `replace`; a `resourcefull prune` child span; with an [upload inspector](upload-inspection.md), a `resourcefull inspect` child span |
+| `upload_cancel` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | `CancelUploadAsync` | |
 | `restore` | `RestoreVersionAsync` | a `resourcefull prune` child span; with SQL Server <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>, `resourcefull.batches` when it stores the version's content again, as for a version stored before 3.0 without a hash |
 | `download` | `DownloadStreamingAsync`, `DownloadContentAsync` | for a range, `resourcefull.range`, as HTTP writes it: `100-199`, or `100-` to the end |
 | `get_info` | `GetResourceInfoAsync` | |

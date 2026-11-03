@@ -94,6 +94,9 @@ namespace Resourcefull.PostgreSql.Migrations
                         .HasColumnType("character varying(36)")
                         .UseCollation("C");
 
+                    b.Property<long?>("DeclaredLength")
+                        .HasColumnType("bigint");
+
                     b.Property<DateTimeOffset?>("ExpiresAt")
                         .HasColumnType("timestamp with time zone");
 

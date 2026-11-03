@@ -28,6 +28,7 @@ public class MinimalProviderContractTests : ResourcefullContractTests
     protected override bool SupportsMove => false;
     protected override bool SupportsImport => false;
     protected override bool SupportsExpiry => false;
+    protected override bool SupportsUploadSessions => false;
 
     /// <summary>Passes on only the members every provider must implement, leaving the rest to their defaults.</summary>
     private sealed class MinimalRepository(ResourceRepository inner) : ResourceRepository

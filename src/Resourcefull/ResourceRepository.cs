@@ -413,6 +413,109 @@ public abstract class ResourceRepository
     public virtual Task<int> DeleteAbandonedUploadsAsync(DateTimeOffset staleBefore, CancellationToken cancellationToken = default)
         => Task.FromResult(0);
 
+    // Upload sessions: a staged version that content is appended to over several calls, which may come from different
+    // processes, and that becomes current when it's completed. A staged version is invisible to every other member,
+    // as an upload's is while its content arrives, and DeleteAbandonedUploadsAsync deletes one that nothing was
+    // appended to since its cutoff. A provider supports them by overriding all six members; by default each throws
+    // NotSupportedException.
+
+    /// <summary>
+    /// Stages <paramref name="version"/>, with no content, so content can be appended to it. It keeps the version's
+    /// content type, metadata, expiry and declared length, for <see cref="GetStagedVersionAsync"/> to return.
+    /// <para>Coming in 4.0.</para>
+    /// </summary>
+    /// <param name="version">The version to stage.</param>
+    /// <param name="cancellationToken">Cancels the start; a canceled start stages nothing.</param>
+    /// <exception cref="ResourceContainerNotFoundException">The container doesn't exist.</exception>
+    /// <exception cref="NotSupportedException">The provider doesn't support upload sessions, as by default.</exception>
+    public virtual Task StartStagedVersionAsync(NewResourceVersion version, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException($"{GetType().Name} doesn't support upload sessions.");
+
+    /// <summary>
+    /// A staged version as it stands: the version as it was staged, and how many bytes have been appended to it.
+    /// <para>Coming in 4.0.</para>
+    /// </summary>
+    /// <param name="resource">The name the version is staged under.</param>
+    /// <param name="versionId">The staged version's ID.</param>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns>The staged version, or <see langword="null"/> if there's none: it was completed, deleted or swept.</returns>
+    /// <exception cref="NotSupportedException">The provider doesn't support upload sessions, as by default.</exception>
+    public virtual Task<StagedVersion?> GetStagedVersionAsync(ResourceLocation resource, string versionId,
+        CancellationToken cancellationToken = default)
+        => throw new NotSupportedException($"{GetType().Name} doesn't support upload sessions.");
+
+    /// <summary>
+    /// Appends <paramref name="content"/> to a staged version, reading it to its end, provided the stored content ends
+    /// at <paramref name="offset"/>. Content may be stored as it arrives, so an append that fails partway keeps what it
+    /// stored, and the caller resumes from the new length. Each part stored moves the version's stamp forward, so
+    /// <see cref="DeleteAbandonedUploadsAsync"/> leaves a session alone while content still arrives.
+    /// <para>Coming in 4.0.</para>
+    /// </summary>
+    /// <param name="resource">The name the version is staged under.</param>
+    /// <param name="versionId">The staged version's ID.</param>
+    /// <param name="offset">Where the content starts: the stored length the caller last saw.</param>
+    /// <param name="content">The content to append.</param>
+    /// <param name="cancellationToken">Cancels the append; what's already stored stays stored.</param>
+    /// <returns>The stored length after the append, or <see langword="null"/> if there's no such staged version.</returns>
+    /// <exception cref="ResourceUploadOffsetException">The stored content doesn't end at <paramref name="offset"/>.</exception>
+    /// <exception cref="NotSupportedException">The provider doesn't support upload sessions, as by default.</exception>
+    public virtual Task<long?> AppendStagedContentAsync(ResourceLocation resource, string versionId, long offset, Stream content,
+        CancellationToken cancellationToken = default)
+        => throw new NotSupportedException($"{GetType().Name} doesn't support upload sessions.");
+
+    /// <summary>
+    /// Reads a staged version's content from the start, for the clients to measure, hash and inspect it before it's
+    /// completed. The caller owns and disposes the stream.
+    /// <para>Coming in 4.0.</para>
+    /// </summary>
+    /// <param name="resource">The name the version is staged under.</param>
+    /// <param name="versionId">The staged version's ID.</param>
+    /// <param name="cancellationToken">Cancels opening the stream.</param>
+    /// <returns>The content, or <see langword="null"/> if there's no such staged version.</returns>
+    /// <exception cref="NotSupportedException">The provider doesn't support upload sessions, as by default.</exception>
+    public virtual Task<Stream?> GetStagedStreamAsync(ResourceLocation resource, string versionId,
+        CancellationToken cancellationToken = default)
+        => throw new NotSupportedException($"{GetType().Name} doesn't support upload sessions.");
+
+    /// <summary>
+    /// Makes a staged version its name's current version, with the length and hash the clients measured, as
+    /// <see cref="AddResourceAsync"/> makes an upload current: deciding <paramref name="condition"/> in the same step,
+    /// and stamping the version with the time it becomes current.
+    /// <para>Coming in 4.0.</para>
+    /// </summary>
+    /// <param name="resource">The name the version is staged under.</param>
+    /// <param name="versionId">The staged version's ID.</param>
+    /// <param name="contentLength">The content's length, as the clients measured it.</param>
+    /// <param name="contentHash">The content's hash, as the clients measured it.</param>
+    /// <param name="condition">What the name's current version must be for the version to become current.</param>
+    /// <param name="cancellationToken">Cancels the completion; a canceled completion leaves the version staged.</param>
+    /// <returns>
+    /// What was stored, stamped with the time it became current, or <see langword="null"/> if there's no such staged
+    /// version.
+    /// </returns>
+    /// <exception cref="ResourceConflictException">The condition is create-only and the name has a current version.</exception>
+    /// <exception cref="ResourcePreconditionFailedException">The name's current version doesn't meet the conditions.</exception>
+    /// <exception cref="ResourceUploadOffsetException">
+    /// The stored content isn't <paramref name="contentLength"/> long: something was appended after it was measured.
+    /// </exception>
+    /// <exception cref="NotSupportedException">The provider doesn't support upload sessions, as by default.</exception>
+    public virtual Task<WrittenContent?> CompleteStagedVersionAsync(ResourceLocation resource, string versionId, long contentLength,
+        string contentHash, ResourceWriteCondition? condition = null, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException($"{GetType().Name} doesn't support upload sessions.");
+
+    /// <summary>
+    /// Deletes a staged version and its content.
+    /// <para>Coming in 4.0.</para>
+    /// </summary>
+    /// <param name="resource">The name the version is staged under.</param>
+    /// <param name="versionId">The staged version's ID.</param>
+    /// <param name="cancellationToken">Cancels the delete.</param>
+    /// <returns><see langword="true"/> if it was deleted; <see langword="false"/> if there's no such staged version.</returns>
+    /// <exception cref="NotSupportedException">The provider doesn't support upload sessions, as by default.</exception>
+    public virtual Task<bool> DeleteStagedVersionAsync(ResourceLocation resource, string versionId,
+        CancellationToken cancellationToken = default)
+        => throw new NotSupportedException($"{GetType().Name} doesn't support upload sessions.");
+
     /// <summary>
     /// Deletes each of <paramref name="versions"/> that's still expired at <paramref name="now"/>, as
     /// <see cref="DeleteExpiredVersionAsync"/> does for one, and returns those it deleted; a version that's

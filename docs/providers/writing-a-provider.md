@@ -244,6 +244,38 @@ To support it:
   there's nothing to delete. Delete only what an upload last added to before `staleBefore`, and return how many uploads'
   leftovers you deleted. Its default does nothing, for a provider that leaves nothing behind.
 
+## Upload sessions
+
+<div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 4.0</span></div>
+
+[Upload sessions](../uploading-in-parts.md) store a version's content over several appends, which may come from
+different processes, and make it current when the session completes. A provider supports them by overriding six
+members, which work on a staged version: one that only these members can see, just as an upload's version stays hidden
+while its content arrives.
+
+- **`StartStagedVersionAsync`** stages a version with no content, keeping its content type, metadata, expiry and
+  declared length. A missing container throws `ResourceContainerNotFoundException`.
+- **`GetStagedVersionAsync`** returns the version as it was staged and how many bytes are stored, or `null`.
+- **`AppendStagedContentAsync`** appends content, provided the stored content ends at the offset it's given;
+  otherwise it throws `ResourceUploadOffsetException` with the stored length, and stores nothing. It may store the
+  content as it arrives, so an append that fails partway keeps what it stored. Make the check and the store one step,
+  as SQL Server's provider does by moving the stored length forward only from the length it expects, in the
+  transaction that stores each batch, so two appends from the same offset can't both succeed. When your provider
+  retries a batch after a transient failure, and the earlier attempt's commit succeeded but its acknowledgement was
+  lost, the retry must recognize its own stored batch rather than refuse it.
+- **`GetStagedStreamAsync`** reads the staged content from the start. The clients read it once, to measure, hash and
+  inspect it, before they complete the session.
+- **`CompleteStagedVersionAsync`** makes the version current with the length and hash it's given, deciding the write
+  condition as `AddResourceAsync` does. Refuse a length that isn't what's stored with `ResourceUploadOffsetException`:
+  an append landed after the content was measured. Lock against appends while you check, so none lands between the
+  check and the change.
+- **`DeleteStagedVersionAsync`** deletes a staged version and its content.
+
+Each append should move the version's stamp forward, so `DeleteAbandonedUploadsAsync` deletes a session only once
+nothing has been appended to it for a day. For a session that doesn't exist, `DeleteStagedVersionAsync` returns
+`false`, and the others, except `StartStagedVersionAsync`, return `null`. The defaults throw
+`NotSupportedException`, so with a provider that doesn't override them, the clients' session methods throw it too.
+
 ## Changing metadata and content type
 
 `SetResourceMetadataAsync` and `SetContentTypeAsync` are for
@@ -358,6 +390,7 @@ with `NotSupportedException`, changing nothing, rather than seem to succeed:
 | `SupportsMove` | `MoveResourceAsync` |
 | `SupportsImport` | `ImportVersionAsync` |
 | `SupportsExpiry` | `GetExpiredAsync`, `DeleteExpiredVersionAsync` and `SetExpiryAsync` |
+| `SupportsUploadSessions` | the six [upload session](#upload-sessions) members |
 
 ```csharp
 public class FileSystemContractTests : ResourcefullContractTests

@@ -17,6 +17,9 @@ internal class ResourceModel
     public string? CopiedFromVersionId { get; set; }
     public DateTimeOffset? ExpiresAt { get; set; }
 
+    /// <summary>The length an upload session said its version would have, checked as it completes; otherwise null.</summary>
+    public long? DeclaredLength { get; set; }
+
     /// <summary>
     /// Set while an upload stores the version's content, and moved forward as it goes; null once the version is stored.
     /// A staged version is invisible to every query but the upload's own, and the expiry sweep deletes one whose upload

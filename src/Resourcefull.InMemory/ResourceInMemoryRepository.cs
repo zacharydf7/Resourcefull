@@ -330,6 +330,110 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : R
             ? ToContainerInfo(container)
             : null, cancellationToken);
 
+    public override Task StartStagedVersionAsync(NewResourceVersion version, CancellationToken cancellationToken = default) =>
+        UnderLockAsync(() =>
+        {
+            (string resourceContainerName, string resourceName) = version.Location;
+            InMemoryResourceContainer container = _containers.GetValueOrDefault(resourceContainerName)
+                ?? throw ContainerMissing(resourceContainerName);
+            container.Staged.Add((resourceName, version.VersionId),
+                new InMemoryStagedVersion { Version = version, StagedAt = _clock.GetUtcNow() });
+            return true;
+        }, cancellationToken);
+
+    public override Task<StagedVersion?> GetStagedVersionAsync(ResourceLocation resource, string versionId,
+        CancellationToken cancellationToken = default) =>
+        UnderLockAsync(() => StagedOf(resource, versionId) is { } staged
+            ? new StagedVersion(staged.Version, staged.Content.Length)
+            : null, cancellationToken);
+
+    public override async Task<long?> AppendStagedContentAsync(ResourceLocation resource, string versionId, long offset,
+        Stream content, CancellationToken cancellationToken = default)
+    {
+        // Checked before the content is read, to spare reading an append that will fail, and again as it's added.
+        if (await UnderLockAsync(() => ThrowIfNotAt(resource, versionId, offset), cancellationToken).ConfigureAwait(false) is null)
+            return null;
+
+        using var buffer = new MemoryStream();
+        await content.CopyToAsync(buffer, cancellationToken).ConfigureAwait(false);
+        return await UnderLockAsync(() =>
+        {
+            if (ThrowIfNotAt(resource, versionId, offset) is not { } staged) return (long?)null;
+            buffer.Position = 0;
+            buffer.CopyTo(staged.Content);
+            staged.StagedAt = _clock.GetUtcNow();
+            return staged.Content.Length;
+        }, cancellationToken).ConfigureAwait(false);
+    }
+
+    public override Task<Stream?> GetStagedStreamAsync(ResourceLocation resource, string versionId,
+        CancellationToken cancellationToken = default) =>
+        UnderLockAsync(() => StagedOf(resource, versionId) is { } staged
+            ? (Stream?)new MemoryStream(staged.Content.ToArray(), writable: false)
+            : null, cancellationToken);
+
+    public override Task<WrittenContent?> CompleteStagedVersionAsync(ResourceLocation resource, string versionId,
+        long contentLength, string contentHash, ResourceWriteCondition? condition = null,
+        CancellationToken cancellationToken = default) =>
+        UnderLockAsync(() =>
+        {
+            (string resourceContainerName, string resourceName) = resource;
+            if (ThrowIfNotAt(resource, versionId, contentLength) is not { } staged) return null;
+            InMemoryResourceContainer container = _containers[resourceContainerName];
+            container.Resources.TryGetValue(resourceName, out List<InMemoryResource>? versions);
+            if (condition?.CreateOnly == true && versions is not null)
+                throw ResourceExists(resourceContainerName, resourceName);
+            if (condition?.Conditions is { } conditions)
+                ThrowIfNotMet(conditions, resourceContainerName, resourceName, versions?.MaxBy(r => r.Sequence));
+
+            var written = new WrittenContent(contentLength, contentHash, _clock.GetUtcNow());
+            AddVersion(container, staged.Version, staged.Content.ToArray(), written);
+            container.Staged.Remove((resourceName, versionId));
+            return (WrittenContent?)written;
+        }, cancellationToken);
+
+    public override Task<bool> DeleteStagedVersionAsync(ResourceLocation resource, string versionId,
+        CancellationToken cancellationToken = default) =>
+        UnderLockAsync(() => _containers.GetValueOrDefault(resource.ContainerName) is { } container
+            && container.Staged.Remove((resource.ResourceName, versionId)), cancellationToken);
+
+    public override Task<int> DeleteAbandonedUploadsAsync(DateTimeOffset staleBefore, CancellationToken cancellationToken = default) =>
+        UnderLockAsync(() =>
+        {
+            int deleted = 0;
+            foreach (InMemoryResourceContainer container in _containers.Values)
+            {
+                foreach (var key in container.Staged.Where(s => s.Value.StagedAt < staleBefore).Select(s => s.Key).ToList())
+                {
+                    container.Staged.Remove(key);
+                    deleted++;
+                }
+            }
+            return deleted;
+        }, cancellationToken);
+
+    /// <summary>The staged version, or <see langword="null"/> if there's none; called under the lock.</summary>
+    private InMemoryStagedVersion? StagedOf(ResourceLocation resource, string versionId) =>
+        _containers.GetValueOrDefault(resource.ContainerName)?.Staged.GetValueOrDefault((resource.ResourceName, versionId));
+
+    /// <summary>
+    /// The staged version, provided its content ends at <paramref name="offset"/>, or <see langword="null"/> if
+    /// there's none; called under the lock.
+    /// </summary>
+    private InMemoryStagedVersion? ThrowIfNotAt(ResourceLocation resource, string versionId, long offset)
+    {
+        if (StagedOf(resource, versionId) is not { } staged) return null;
+        if (staged.Content.Length != offset)
+        {
+            throw new ResourceUploadOffsetException($"The upload {versionId} of the resource {resource.ResourceName} in the " +
+                $"container {resource.ContainerName} has {staged.Content.Length} bytes stored, not {offset}.", staged.Content.Length)
+            {
+                ContainerName = resource.ContainerName, ResourceName = resource.ResourceName
+            };
+        }
+        return staged;
+    }
+
     public override Task<bool> DeleteContainerAsync(string resourceContainerName,
         CancellationToken cancellationToken = default) =>
         UnderLockAsync(() => _containers.Remove(resourceContainerName), cancellationToken);

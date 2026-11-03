@@ -54,6 +54,9 @@ internal static class Telemetry
     public static readonly Counter<long> Uploaded = Meter.CreateCounter<long>("resourcefull.client.uploaded",
         unit: "By", description: "Content bytes stored by uploads and restores.");
 
+    public static readonly Counter<long> Appended = Meter.CreateCounter<long>("resourcefull.client.appended",
+        unit: "By", description: "Content bytes stored by appends to upload sessions, before the sessions complete.");
+
     public static readonly Counter<long> Downloaded = Meter.CreateCounter<long>("resourcefull.client.downloaded",
         unit: "By", description: "Content bytes read from download streams, counted as they're read.");
 
@@ -253,6 +256,11 @@ internal sealed class ClientTelemetry(string provider, ResourcefullOptions optio
         tags.Add("resourcefull.inspection_outcome", outcome);
         if (failure is not null) tags.Add("error.type", failure.GetType().FullName);
         Telemetry.InspectionDuration.Record(Stopwatch.GetElapsedTime(start).TotalSeconds, tags);
+    }
+
+    public void RecordAppended(long bytes)
+    {
+        if (Telemetry.Appended.Enabled) Telemetry.Appended.Add(bytes, StoreTags());
     }
 
     public void RecordUploaded(string operation, long bytes)

@@ -136,6 +136,26 @@ public sealed class ResourcePreconditionFailedException : ResourcefullException
 }
 
 /// <summary>
+/// Thrown when an append to an upload session doesn't start where the stored content ends, as when an earlier append's
+/// content was stored but its answer was lost. Nothing is stored. Resume from <see cref="CurrentOffset"/>. Maps
+/// naturally to an HTTP 409.
+/// <para>Coming in 4.0.</para>
+/// </summary>
+public sealed class ResourceUploadOffsetException : ResourcefullException
+{
+    /// <summary>Creates the exception with a message and where the session's stored content ends.</summary>
+    /// <param name="message">The message that describes the error.</param>
+    /// <param name="currentOffset">How many bytes the session has stored.</param>
+    public ResourceUploadOffsetException(string message, long currentOffset) : base(message)
+    {
+        CurrentOffset = currentOffset;
+    }
+
+    /// <summary>How many bytes the session had stored when the append was refused: where the next append must start.</summary>
+    public long CurrentOffset { get; }
+}
+
+/// <summary>
 /// Thrown when an upload declares a content length that differs from the bytes it supplies. Nothing is
 /// stored. Maps naturally to an HTTP 400.
 /// </summary>

@@ -327,9 +327,10 @@ internal class ResourceServiceClient(ResourceRepository resourceRepository, IOpt
 
     /// <summary>
     /// How long after an upload last stored anything the sweep takes it as abandoned: a provider that stages content,
-    /// as SQL Server's does, marks an upload as running every 10 minutes while its content keeps arriving.
+    /// as SQL Server's does, marks an upload as running every 10 minutes while its content keeps arriving. A day, so an
+    /// upload session can resume after a dropped connection or a night's pause.
     /// </summary>
-    internal static readonly TimeSpan AbandonedUploadAge = TimeSpan.FromHours(1);
+    internal static readonly TimeSpan AbandonedUploadAge = TimeSpan.FromHours(24);
 
     /// <summary>How many expired versions one query lists, so a cleanup holds a bounded batch at a time.</summary>
     private const int ExpiredPerBatch = 100;

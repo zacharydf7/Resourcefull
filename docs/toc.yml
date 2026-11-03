@@ -14,6 +14,8 @@
     href: names.md
   - name: Uploading files
     href: uploading.md
+  - name: Uploading in parts
+    href: uploading-in-parts.md
   - name: Inspecting uploads
     href: upload-inspection.md
   - name: Downloading files
