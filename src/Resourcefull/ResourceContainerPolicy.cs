@@ -62,6 +62,15 @@ public sealed class ResourceContainerPolicy
     /// Reads still work.
     /// </summary>
     public bool? ReadOnly { get; init; }
+
+    /// <summary>
+    /// Whether <see cref="AllowedContentTypes"/> lets an upload declare <paramref name="contentType"/>, matched the same
+    /// way the policy checks an upload's type. It's <see langword="true"/> for any type, or none, when <see cref="AllowedContentTypes"/> is
+    /// <see langword="null"/>.
+    /// </summary>
+    /// <param name="contentType">The type an upload declares, parameters included, or <see langword="null"/> for none.</param>
+    public bool AllowsContentType(string? contentType) =>
+        AllowedContentTypes is null || ContainerPolicies.Allows(AllowedContentTypes, contentType);
 }
 
 /// <summary>

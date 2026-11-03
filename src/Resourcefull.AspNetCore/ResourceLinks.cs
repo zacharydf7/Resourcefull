@@ -3,6 +3,8 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.Features;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
@@ -78,8 +80,8 @@ public enum ResourceLinkStatus
 public sealed record ResourceLinkCheck(ResourceLinkStatus Status, SignedResourceLink? Link);
 
 /// <summary>
-/// Creates and checks the tokens of signed links: strings that let whoever holds them download one resource until
-/// they expire, without signing in. Register it with <see cref="ResourceLinkServiceCollectionExtensions.AddResourcefullLinks"/>.
+/// Creates and checks the tokens of signed links: strings that let whoever holds them download one resource, or upload
+/// what an upload link allows, until they expire, without signing in. Register it with <see cref="ResourceLinkServiceCollectionExtensions.AddResourcefullLinks"/>.
 /// Tokens are signed and encrypted with ASP.NET Core Data Protection, so they can't be changed, read or made up, and
 /// they work on every instance that shares the application's Data Protection keys.
 /// <para>Coming in 4.0.</para>
@@ -103,14 +105,35 @@ public interface IResourceLinkSigner
     /// <summary>Checks a token: whether this application signed it, whether it has expired, and what it grants.</summary>
     /// <param name="token">The token from the link's URL.</param>
     ResourceLinkCheck Check(string token);
+
+    /// <summary>
+    /// Creates a token for an upload <paramref name="link"/>, to put into a URL your application serves with
+    /// <c>Results.SharedUpload</c>. Anyone with the URL can upload what the link allows until it expires. Upload tokens
+    /// and download tokens are sealed apart, so neither works as the other.
+    /// </summary>
+    /// <param name="link">Where uploads go, what they may be, and for how long.</param>
+    /// <returns>The token.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <see cref="ResourceUploadLink.ExpiresIn"/> isn't positive, or <see cref="ResourceUploadLink.MaxSize"/> is negative.
+    /// </exception>
+    /// <exception cref="ArgumentException">
+    /// The link sets both <see cref="ResourceUploadLink.ResourceName"/> and <see cref="ResourceUploadLink.NamePrefix"/>, or
+    /// neither, or a name breaks the name rules.
+    /// </exception>
+    string CreateUploadToken(ResourceUploadLink link);
+
+    /// <summary>Checks an upload token: whether this application signed it, whether it has expired, and what it allows.</summary>
+    /// <param name="token">The token from the link's URL.</param>
+    ResourceUploadLinkCheck CheckUpload(string token);
 }
 
 /// <summary>Signs links with the application's Data Protection keys.</summary>
 internal sealed class ResourceLinkSigner(IDataProtectionProvider dataProtection, IResourceServiceClient resources,
     TimeProvider? timeProvider = null) : IResourceLinkSigner
 {
-    // Changing the purpose would invalidate every link ever made, as removing the keys does.
+    // Changing a purpose would invalidate every link ever made with it, as removing the keys does.
     private readonly IDataProtector _protector = dataProtection.CreateProtector("Resourcefull.ResourceLink.v1");
+    private readonly IDataProtector _uploadProtector = dataProtection.CreateProtector("Resourcefull.ResourceUploadLink.v1");
     private readonly TimeProvider _clock = timeProvider ?? TimeProvider.System;
 
     public async Task<string?> CreateTokenAsync(ResourceLink link, CancellationToken cancellationToken = default)
@@ -131,22 +154,58 @@ internal sealed class ResourceLinkSigner(IDataProtectionProvider dataProtection,
 
     public ResourceLinkCheck Check(string token)
     {
-        Payload? payload;
+        if (Open<Payload>(_protector, token) is not { } payload) return new ResourceLinkCheck(ResourceLinkStatus.Invalid, null);
+        var link = new SignedResourceLink(payload.ContainerName, payload.ResourceName, payload.VersionId,
+            DateTimeOffset.FromUnixTimeMilliseconds(payload.ExpiresAt), payload.Inline);
+        return new ResourceLinkCheck(StatusAt(link.ExpiresAt), link);
+    }
+
+    public string CreateUploadToken(ResourceUploadLink link)
+    {
+        ArgumentNullException.ThrowIfNull(link);
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(link.ExpiresIn, TimeSpan.Zero, nameof(link));
+        if (link.MaxSize is { } maxSize) ArgumentOutOfRangeException.ThrowIfNegative(maxSize, nameof(link));
+        if (link.ResourceName is null == link.NamePrefix is null)
+            throw new ArgumentException("An upload link uploads to one name or to names under a prefix: set one of the two.", nameof(link));
+        // A prefix is valid when a name can start with it.
+        if (!ResourceNames.IsValidContainerName(link.ContainerName)
+            || !ResourceNames.IsValidResourceName(link.ResourceName ?? link.NamePrefix + "a"))
+        {
+            throw new ArgumentException("The upload link's container name, resource name or prefix breaks the name rules.", nameof(link));
+        }
+
+        var payload = new UploadPayload(link.ContainerName, link.ResourceName, link.NamePrefix, link.MaxSize,
+            link.AllowedContentTypes?.ToArray(), link.Mode == ResourceWriteMode.Replace,
+            (_clock.GetUtcNow() + link.ExpiresIn).ToUnixTimeMilliseconds());
+        return Base64Url.EncodeToString(_uploadProtector.Protect(JsonSerializer.SerializeToUtf8Bytes(payload)));
+    }
+
+    public ResourceUploadLinkCheck CheckUpload(string token)
+    {
+        if (Open<UploadPayload>(_uploadProtector, token) is not { } payload)
+            return new ResourceUploadLinkCheck(ResourceLinkStatus.Invalid, null);
+        var link = new SignedResourceUploadLink(payload.ContainerName, payload.ResourceName, payload.NamePrefix, payload.MaxSize,
+            payload.AllowedContentTypes, payload.Replace ? ResourceWriteMode.Replace : ResourceWriteMode.Create,
+            DateTimeOffset.FromUnixTimeMilliseconds(payload.ExpiresAt));
+        return new ResourceUploadLinkCheck(StatusAt(link.ExpiresAt), link);
+    }
+
+    /// <summary>What <paramref name="token"/> holds, or <see langword="null"/> if this application didn't seal it.</summary>
+    private static T? Open<T>(IDataProtector protector, string token) where T : class
+    {
         try
         {
-            payload = JsonSerializer.Deserialize<Payload>(_protector.Unprotect(Base64Url.DecodeFromChars(token)));
+            return JsonSerializer.Deserialize<T>(protector.Unprotect(Base64Url.DecodeFromChars(token)));
         }
         catch (Exception exception) when (exception is FormatException or CryptographicException)
         {
             // Not something this application signed, whatever is wrong with it.
-            return new ResourceLinkCheck(ResourceLinkStatus.Invalid, null);
+            return null;
         }
-
-        if (payload is null) return new ResourceLinkCheck(ResourceLinkStatus.Invalid, null);
-        var link = new SignedResourceLink(payload.ContainerName, payload.ResourceName, payload.VersionId,
-            DateTimeOffset.FromUnixTimeMilliseconds(payload.ExpiresAt), payload.Inline);
-        return new ResourceLinkCheck(link.ExpiresAt <= _clock.GetUtcNow() ? ResourceLinkStatus.Expired : ResourceLinkStatus.Valid, link);
     }
+
+    private ResourceLinkStatus StatusAt(DateTimeOffset expiresAt) =>
+        expiresAt <= _clock.GetUtcNow() ? ResourceLinkStatus.Expired : ResourceLinkStatus.Valid;
 
     /// <summary>What a token holds, with short names to keep links short.</summary>
     private sealed record Payload(
@@ -155,6 +214,28 @@ internal sealed class ResourceLinkSigner(IDataProtectionProvider dataProtection,
         [property: JsonPropertyName("v")] string? VersionId,
         [property: JsonPropertyName("e")] long ExpiresAt,
         [property: JsonPropertyName("i")] bool Inline);
+
+    /// <summary>What an upload token holds, with short names to keep links short.</summary>
+    private sealed record UploadPayload(
+        [property: JsonPropertyName("c")] string ContainerName,
+        [property: JsonPropertyName("n")] string? ResourceName,
+        [property: JsonPropertyName("p")] string? NamePrefix,
+        [property: JsonPropertyName("s")] long? MaxSize,
+        [property: JsonPropertyName("t")] string[]? AllowedContentTypes,
+        [property: JsonPropertyName("r")] bool Replace,
+        [property: JsonPropertyName("e")] long ExpiresAt);
+}
+
+/// <summary>Tags the request's span with whether its link works.</summary>
+internal static class ResourceLinkTelemetry
+{
+    public static void Record(HttpContext httpContext, ResourceLinkStatus status) =>
+        httpContext.Features.Get<IHttpActivityFeature>()?.Activity.SetTag("resourcefull.link", status switch
+        {
+            ResourceLinkStatus.Valid => "valid",
+            ResourceLinkStatus.Expired => "expired",
+            _ => "invalid"
+        });
 }
 
 /// <summary>

@@ -23,6 +23,22 @@ public class ContainerPolicyTests
     }
 
     [Theory]
+    [InlineData("application/pdf", true)]
+    [InlineData("Application/PDF; name=a.pdf", true)]
+    [InlineData("image/png", true)]
+    [InlineData("text/plain", false)]
+    [InlineData(null, false)]
+    public void AllowsContentType_ShouldMatchAsAnUploadIsChecked_WhenGivenAType(string? contentType, bool allowed)
+    {
+        // Arrange
+        var policy = new ResourceContainerPolicy { AllowedContentTypes = ["application/pdf", "image/*"] };
+
+        // Act & Assert
+        Assert.Equal(allowed, policy.AllowsContentType(contentType));
+        Assert.True(new ResourceContainerPolicy().AllowsContentType(contentType));
+    }
+
+    [Theory]
     [InlineData("5 GB", 5L << 30)]
     [InlineData("100MB", 100L << 20)]
     [InlineData("1.5 gb", 3L << 29)]

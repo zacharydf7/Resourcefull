@@ -1,5 +1,4 @@
 using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -42,12 +41,7 @@ public sealed class SharedResourceHttpResult : IResult, IActionResult
             ?? throw new InvalidOperationException(
                 $"Results.SharedResource needs signed links added with {nameof(ResourceLinkServiceCollectionExtensions.AddResourcefullLinks)}.");
         ResourceLinkCheck check = signer.Check(Token);
-        httpContext.Features.Get<IHttpActivityFeature>()?.Activity.SetTag("resourcefull.link", check.Status switch
-        {
-            ResourceLinkStatus.Valid => "valid",
-            ResourceLinkStatus.Expired => "expired",
-            _ => "invalid"
-        });
+        ResourceLinkTelemetry.Record(httpContext, check.Status);
 
         switch (check)
         {

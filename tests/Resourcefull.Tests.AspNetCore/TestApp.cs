@@ -12,8 +12,8 @@ namespace Resourcefull.Tests.AspNetCore;
 /// <summary>
 /// A minimal API over the in-memory provider, served by the test server, with endpoints built from the package the way
 /// an application would: download, download inline under another name, download looked up by the result (which
-/// answers ranges), download through a signed link, upload, one that throws a given exception, and a Razor page that
-/// downloads. Each app has Data Protection keys of its own, held in memory, so one app's links don't work in another.
+/// answers ranges), download through a signed link, upload, upload through a signed link, one that throws a given
+/// exception, and a Razor page that downloads. Each app has Data Protection keys of its own, held in memory, so one app's links don't work in another.
 /// </summary>
 internal sealed class TestApp : IAsyncDisposable
 {
@@ -37,7 +37,8 @@ internal sealed class TestApp : IAsyncDisposable
     /// <summary>Creates signed links in this app.</summary>
     public IResourceLinkSigner Links => _app.Services.CreateScope().ServiceProvider.GetRequiredService<IResourceLinkSigner>();
 
-    public static async Task<TestApp> StartAsync(Exception? toThrow = null, bool versioning = true, TimeProvider? clock = null)
+    public static async Task<TestApp> StartAsync(Exception? toThrow = null, bool versioning = true, TimeProvider? clock = null,
+        ResourceContainerPolicy? policy = null)
     {
         WebApplicationBuilder builder = WebApplication.CreateSlimBuilder();
         builder.WebHost.UseTestServer();
@@ -48,6 +49,7 @@ internal sealed class TestApp : IAsyncDisposable
         {
             options.UseInMemory();
             if (versioning) options.UseVersioning();
+            if (policy is not null) options.UseContainerPolicies(policy);
         });
         builder.Services.AddResourcefullExceptionHandler();
         builder.Services.AddRazorPages().AddApplicationPart(typeof(TestApp).Assembly);
@@ -72,6 +74,8 @@ internal sealed class TestApp : IAsyncDisposable
             Results.SharedResource(resources, token));
         app.MapPut("/files/{**name}", (string name, HttpRequest request, IResourceServiceClient resources, CancellationToken cancellationToken) =>
             resources.GetContainerClient(Container).UploadFromRequestAsync(name, request, null, cancellationToken));
+        app.MapPut("/upload/{token}/{**name}", (string token, string? name, IResourceServiceClient resources) =>
+            Results.SharedUpload(resources, token, name));
         app.MapGet("/throw", () => { throw toThrow!; });
         app.MapRazorPages();
 

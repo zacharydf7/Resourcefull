@@ -12,7 +12,8 @@ https://example.com/shared/CfDJ8Nq0l2xR...a long string of letters...
 
 This page explains how signed links work, how to add them to an ASP.NET Core application, and what people see when
 they open one. [Shared links in production](sharing-links-in-production.md) covers keeping them working across servers
-and restarts, and using them safely. You don't need any background in security to follow either page.
+and restarts, and using them safely. You don't need any background in security to follow either page. To receive
+files instead, from people who can't sign in, see [Receiving files through links](upload-links.md).
 
 ## How it works
 

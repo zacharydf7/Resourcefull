@@ -56,6 +56,8 @@
     href: sharing-links.md
   - name: Shared links in production
     href: sharing-links-in-production.md
+  - name: Receiving files through links
+    href: upload-links.md
 - name: Managing storage
   items:
   - name: Container policies

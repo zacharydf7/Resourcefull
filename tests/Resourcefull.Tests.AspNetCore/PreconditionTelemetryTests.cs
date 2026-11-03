@@ -58,6 +58,28 @@ public sealed class PreconditionTelemetryTests
         Assert.Equal(expected, link);
     }
 
+    [Theory]
+    [InlineData("valid", HttpStatusCode.Created)]
+    [InlineData("expired", HttpStatusCode.Gone)]
+    [InlineData("invalid", HttpStatusCode.NotFound)]
+    public async Task SharedUpload_ShouldRecordTheLinksStatusOnTheRequestSpan_WhenALinkIsUsed(string expected, HttpStatusCode expectedStatus)
+    {
+        // Arrange
+        var clock = new ManualTimeProvider();
+        await using TestApp app = await TestApp.StartAsync(clock: clock);
+        string token = expected == "invalid" ? "not-a-token"
+            : app.Links.CreateUploadToken(new ResourceUploadLink(TestApp.Container) { ResourceName = "report.txt" });
+        if (expected == "expired") clock.Now = clock.Now.AddHours(2);
+
+        // Act
+        (HttpStatusCode status, object? link) = await SendAsync(app,
+            new HttpRequestMessage(HttpMethod.Put, $"/upload/{token}") { Content = new StringContent("x") }, "resourcefull.link");
+
+        // Assert
+        Assert.Equal(expectedStatus, status);
+        Assert.Equal(expected, link);
+    }
+
     [Fact]
     public async Task Resource_ShouldRecordNotModifiedOnTheRequestSpan_WhenIfNoneMatchHolds()
     {

@@ -42,6 +42,20 @@ public static class ResourcefullResults
         /// <returns>The result, which checks the token when it runs.</returns>
         public static IResult SharedResource(IResourceServiceClient resources, string token) =>
             new SharedResourceHttpResult(resources, token);
+
+        /// <summary>
+        /// Stores the request's body through a signed upload link, for whoever holds the link, without authentication.
+        /// See <see cref="SharedUploadHttpResult"/>, and <see cref="IResourceLinkSigner.CreateUploadToken"/> to make links.
+        /// </summary>
+        /// <param name="resources">The client to store the upload through.</param>
+        /// <param name="token">The token from the link's URL.</param>
+        /// <param name="resourceName">
+        /// The name the holder gave, from the URL, for a link with a prefix; <see langword="null"/> or empty for a link to
+        /// one name.
+        /// </param>
+        /// <returns>The result, which checks the token and stores the body when it runs.</returns>
+        public static IResult SharedUpload(IResourceServiceClient resources, string token, string? resourceName = null) =>
+            new SharedUploadHttpResult(resources, token, resourceName);
     }
 }
 
@@ -65,5 +79,9 @@ public static class ResourcefullTypedResults
         /// <inheritdoc cref="ResourcefullResults.SharedResource(IResourceServiceClient, string)"/>
         public static SharedResourceHttpResult SharedResource(IResourceServiceClient resources, string token) =>
             new(resources, token);
+
+        /// <inheritdoc cref="ResourcefullResults.SharedUpload(IResourceServiceClient, string, string?)"/>
+        public static SharedUploadHttpResult SharedUpload(IResourceServiceClient resources, string token, string? resourceName = null) =>
+            new(resources, token, resourceName);
     }
 }

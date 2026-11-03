@@ -72,6 +72,12 @@
   `Results.SharedResource`. Links are sealed with ASP.NET Core Data Protection, can't be changed or read, and show the
   version that was current when they were made unless they follow the current one. See
   [Sharing files with links](docs/sharing-links.md).
+- **Upload links.** `IResourceLinkSigner.CreateUploadToken` creates links that let anyone upload without signing in
+  until they expire. A link uploads to one name or to names under a prefix, and can set a size limit, allowed content
+  types, and whether an upload may replace a file (by default it can't). `Results.SharedUpload` serves them, checking
+  the link's limits before the body is read, and `CheckUpload` reads a token. Upload and download tokens are sealed
+  apart, so neither works as the other. `ResourceContainerPolicy.AllowsContentType` says whether a policy allows a
+  type. See [Receiving files through links](docs/upload-links.md).
 - **Expiring resources.** `ResourceUploadOptions.ExpiresAt` sets when a version expires, and `UseExpiry` runs a
   background service that deletes expired versions within one interval, on every instance safely. `SetExpiryAsync`
   changes or clears a version's expiry, or the current version's with a `null` version ID. An

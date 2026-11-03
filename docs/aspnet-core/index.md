@@ -24,3 +24,5 @@ This section covers:
 - [URIs for your API](../uri-providers.md): giving containers and resources the URLs your endpoints serve them at.
 - [Sharing files with links](../sharing-links.md): links that let anyone download one file, without signing in,
   until they expire.
+- [Receiving files through links](../upload-links.md): links that let anyone upload files, within limits you set,
+  without signing in, until they expire.

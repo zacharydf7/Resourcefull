@@ -163,7 +163,7 @@ internal sealed class ContainerPolicies(ContainerPolicySettings settings, Resour
 
     private static void ThrowIfTypeNotAllowed(string containerName, ResourceContainerPolicy policy, string? contentType)
     {
-        if (policy.AllowedContentTypes is { } allowed && !Allows(allowed, contentType))
+        if (policy.AllowedContentTypes is { } allowed && !policy.AllowsContentType(contentType))
         {
             throw new ResourcePolicyViolationException(contentType is null
                 ? $"The container {containerName} accepts only content that declares a type: {string.Join(", ", allowed)}."
@@ -243,7 +243,7 @@ internal sealed class ContainerPolicies(ContainerPolicySettings settings, Resour
     /// ignoring case, where <c>type/*</c> covers every subtype and <c>*/*</c> every type. It's parsed strictly: a value
     /// holding more than one type, which browsers read as its last, isn't allowed because of its first.
     /// </summary>
-    private static bool Allows(IReadOnlyCollection<string> allowed, string? contentType)
+    internal static bool Allows(IReadOnlyCollection<string> allowed, string? contentType)
     {
         if (!System.Net.Http.Headers.MediaTypeHeaderValue.TryParse(contentType, out var parsed) || parsed.MediaType is not { } type)
             return false;

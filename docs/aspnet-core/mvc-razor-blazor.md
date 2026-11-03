@@ -38,9 +38,9 @@ For a form upload in an MVC view, take an `IFormFile` and keep `[ValidateAntiFor
 ## Razor Pages
 
 A Razor page's handler can't return an `IResult`: ASP.NET Core refuses it at run time, with "Unsupported handler method
-return type". From 4.0 <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>, the results `TypedResults.Resource` and `TypedResults.SharedResource` return are
-action results too, so a handler returns them as it would `File(...)`, conditional requests included, and ranges when
-the result looks the resource up, as here:
+return type". From 4.0 <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>, the results `TypedResults.Resource`, `TypedResults.SharedResource` and `TypedResults.SharedUpload` return are
+action results too, so a handler can return them. The download results work as `File(...)` does, conditional requests
+included, and ranges when the result looks the resource up, as here:
 
 ```csharp
 public IActionResult OnGet(string name) =>

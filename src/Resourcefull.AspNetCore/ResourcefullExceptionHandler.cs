@@ -25,21 +25,7 @@ public sealed class ResourcefullExceptionHandler(IProblemDetailsService problemD
     /// <inheritdoc />
     public async ValueTask<bool> TryHandleAsync(HttpContext httpContext, Exception exception, CancellationToken cancellationToken)
     {
-        int? status = exception switch
-        {
-            ResourceConflictException or ResourceUploadOffsetException => StatusCodes.Status409Conflict,
-            ResourceContainerNotFoundException => StatusCodes.Status404NotFound,
-            ResourceContentLengthMismatchException or ResourceNameException => StatusCodes.Status400BadRequest,
-            ResourcePreconditionFailedException => StatusCodes.Status412PreconditionFailed,
-            ResourceRangeNotSatisfiableException => StatusCodes.Status416RangeNotSatisfiable,
-            ResourceContentRefusedException => StatusCodes.Status422UnprocessableEntity,
-            ResourcePolicyViolationException { Rule: ResourcePolicyRule.MaxResourceSize or ResourcePolicyRule.MaxContainerSize }
-                => StatusCodes.Status413PayloadTooLarge,
-            ResourcePolicyViolationException { Rule: ResourcePolicyRule.MaxResourceCount } => StatusCodes.Status409Conflict,
-            ResourcePolicyViolationException { Rule: ResourcePolicyRule.ReadOnly } => StatusCodes.Status403Forbidden,
-            ResourcePolicyViolationException { Rule: ResourcePolicyRule.AllowedContentTypes } => StatusCodes.Status415UnsupportedMediaType,
-            _ => null
-        };
+        int? status = StatusCodeOf(exception);
         if (status is null) return false;
 
         httpContext.Response.StatusCode = status.Value;
@@ -52,6 +38,23 @@ public sealed class ResourcefullExceptionHandler(IProblemDetailsService problemD
             ProblemDetails = { Status = status, Title = exception.Message }
         }).ConfigureAwait(false);
     }
+
+    /// <summary>The status code the handler answers <paramref name="exception"/> with, or <see langword="null"/> if it doesn't.</summary>
+    internal static int? StatusCodeOf(Exception exception) => exception switch
+    {
+        ResourceConflictException or ResourceUploadOffsetException => StatusCodes.Status409Conflict,
+        ResourceContainerNotFoundException => StatusCodes.Status404NotFound,
+        ResourceContentLengthMismatchException or ResourceNameException => StatusCodes.Status400BadRequest,
+        ResourcePreconditionFailedException => StatusCodes.Status412PreconditionFailed,
+        ResourceRangeNotSatisfiableException => StatusCodes.Status416RangeNotSatisfiable,
+        ResourceContentRefusedException => StatusCodes.Status422UnprocessableEntity,
+        ResourcePolicyViolationException { Rule: ResourcePolicyRule.MaxResourceSize or ResourcePolicyRule.MaxContainerSize }
+            => StatusCodes.Status413PayloadTooLarge,
+        ResourcePolicyViolationException { Rule: ResourcePolicyRule.MaxResourceCount } => StatusCodes.Status409Conflict,
+        ResourcePolicyViolationException { Rule: ResourcePolicyRule.ReadOnly } => StatusCodes.Status403Forbidden,
+        ResourcePolicyViolationException { Rule: ResourcePolicyRule.AllowedContentTypes } => StatusCodes.Status415UnsupportedMediaType,
+        _ => null
+    };
 }
 
 /// <summary>Registers <see cref="ResourcefullExceptionHandler"/>.</summary>
