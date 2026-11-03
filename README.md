@@ -4,9 +4,12 @@
 [![Build](https://github.com/zacharydf7/Resourcefull/actions/workflows/build.yml/badge.svg)](https://github.com/zacharydf7/Resourcefull/actions/workflows/build.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/zacharydf7/Resourcefull/blob/main/LICENSE)
 
-Resourcefull stores and serves files of any type and size from infrastructure you run yourself. Upload, download,
-list and version **resources** in named **containers** through one client API, and keep the bytes in SQL Server,
-PostgreSQL or an S3-compatible object store, in memory for tests, or in a storage provider of your own.
+Resourcefull stores and serves files of any type and size from infrastructure you run yourself: the SQL Server or
+PostgreSQL database you already have, with nothing new to deploy. Upload, download, list and version **resources** in
+named **containers** through one client API. When you move to the cloud, your code comes with you: change the line that
+picks the provider to keep the bytes in Amazon S3, another S3-compatible store or Azure Blob Storage instead. The
+object-store providers don't support moving, expiry or upload sessions yet. Tests can keep the bytes in memory, and a
+storage provider of your own can keep them anywhere else.
 
 | Package | What it's for |
 |---|---|
@@ -14,6 +17,7 @@ PostgreSQL or an S3-compatible object store, in memory for tests, or in a storag
 | `Resourcefull.SqlServer` | Stores resources in SQL Server. |
 | `Resourcefull.PostgreSql` | Stores resources in PostgreSQL. |
 | `Resourcefull.S3` | Stores resources in Amazon S3 or another S3-compatible store. |
+| `Resourcefull.AzureBlob` | Stores resources in Azure Blob Storage. |
 | `Resourcefull.InMemory` | Keeps resources in process memory, for tests and local development. |
 | `Resourcefull.AspNetCore` | Serves downloads and accepts uploads in ASP.NET Core, with conditional requests and status codes. |
 | `Resourcefull.Testing` | The tests every provider must pass, for checking a provider of your own. |
@@ -103,6 +107,8 @@ you're trying to do, plus the API reference. Deciding between Resourcefull, obje
   and how it differs from SQL Server
 - [S3-compatible storage](https://zacharydf7.github.io/Resourcefull/docs/providers/s3.html): connecting to a store,
   sharing a bucket, permissions and costs
+- [Azure Blob Storage](https://zacharydf7.github.io/Resourcefull/docs/providers/azure-blob.html): connecting to an
+  account, permissions, account settings and costs
 - [Upgrading](https://zacharydf7.github.io/Resourcefull/docs/upgrading.html), including from 2.x, and the
   [changelog](https://github.com/zacharydf7/Resourcefull/blob/main/CHANGELOG.md)
 

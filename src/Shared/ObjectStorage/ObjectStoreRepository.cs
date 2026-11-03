@@ -1,40 +1,29 @@
-using System.Buffers;
-using System.Net;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Amazon.Runtime;
-using Amazon.S3;
-using Amazon.S3.Model;
 using Resourcefull.Providers;
 
-namespace Resourcefull.S3;
+namespace Resourcefull.ObjectStorage;
 
 /// <summary>
-/// Keeps resources in an S3-compatible bucket, using only conditional puts for consistency. Each container has a
-/// record, and each name a head object listing its versions' attributes in the order they were stored, the last one
-/// current; every change to a name is a compare-and-swap of its head, retried when another writer got there first.
-/// Content goes in objects of its own, written before the head names them. See <see cref="S3Keys"/> for the layout.
+/// Keeps resources in an object store, using only conditional writes for consistency, so it works on any store
+/// <see cref="IObjectStore"/> can reach. Each container has a record, and each name a head object listing its versions'
+/// attributes in the order they were stored, the last one current; every change to a name is a compare-and-swap of its
+/// head, retried when another writer got there first. Content goes in objects of its own, written before the head names
+/// them. See <see cref="ObjectKeys"/> for the layout.
 /// </summary>
 /// <remarks>
 /// Every conditional write carries a random write ID. When the store refuses one, the object is read again: if it
-/// holds that ID, the write did land, and the refusal was the SDK sending it again after its answer was lost.
+/// holds that ID, the write did land, and the refusal was the client sending it again after its answer was lost.
 /// </remarks>
-internal sealed class ResourceS3Repository(IAmazonS3 s3, string bucket, string keyPrefix, TimeProvider? timeProvider,
-    string? storeName) : ResourceRepository
+/// <param name="store">The store, reached through its provider's client.</param>
+/// <param name="keyPrefix">What every key starts with.</param>
+/// <param name="timeProvider">The clock versions are stamped with.</param>
+/// <param name="storeName">The store's name, for telemetry; <see langword="null"/> for the store without one.</param>
+internal sealed class ObjectStoreRepository(IObjectStore store, string keyPrefix, TimeProvider? timeProvider, string? storeName)
+    : ResourceRepository
 {
-    /// <summary>
-    /// Content smaller than this goes up in one request; the rest goes in parts of this size, so memory stays bounded.
-    /// </summary>
-    internal const int PartSize = 8 * 1024 * 1024;
-
-    /// <summary>
-    /// The most one read of the content asks for. An upload inspector's refusal stops the upload at the next read, so
-    /// reading a part in small slices keeps the upload from reading content it then throws away.
-    /// </summary>
-    private const int ReadSize = 81920;
-
     /// <summary>How many heads or records a listing reads at once.</summary>
     private const int ParallelReads = 16;
 
@@ -53,7 +42,10 @@ internal sealed class ResourceS3Repository(IAmazonS3 s3, string bucket, string k
     /// </summary>
     private const int EmptyHeadSize = 32;
 
-    private readonly S3Keys _keys = new(keyPrefix);
+    /// <summary>How many objects a purge lists, then deletes, at a time.</summary>
+    private const int PurgeBatchSize = 1000;
+
+    private readonly ObjectKeys _keys = new(keyPrefix);
     private readonly TimeProvider _clock = timeProvider ?? TimeProvider.System;
 
     // Resources
@@ -91,7 +83,7 @@ internal sealed class ResourceS3Repository(IAmazonS3 s3, string bucket, string k
         WrittenContent? written = null;
         try
         {
-            await UploadAsync(contentKey, hashing, cancellationToken).ConfigureAwait(false);
+            await store.UploadAsync(contentKey, hashing, cancellationToken).ConfigureAwait(false);
             await ChangeHeadAsync(headKey, head =>
             {
                 // An earlier try already added this version: it landed, but another writer changed the head before it
@@ -154,7 +146,7 @@ internal sealed class ResourceS3Repository(IAmazonS3 s3, string bucket, string k
             Head? head = (await GetAsync<Head>(headKey, CancellationToken.None).ConfigureAwait(false)).Value;
             if (head?.Versions.Any(v => v.Blob == blob) != true) await DeleteQuietlyAsync([contentKey]).ConfigureAwait(false);
         }
-        catch (Exception exception) when (IsStoreFailure(exception))
+        catch (Exception exception) when (store.IsStoreFailure(exception))
         {
             // Left in place: deleting content a head names would lose a stored version.
         }
@@ -192,7 +184,7 @@ internal sealed class ResourceS3Repository(IAmazonS3 s3, string bucket, string k
             {
                 // A name whose versions were deleted since it was listed is left out.
                 if (head is not null)
-                    page.Add(ToInfo(resourceContainerName, S3Keys.Unescape(key[heads.Length..]), head.Versions[^1], true));
+                    page.Add(ToInfo(resourceContainerName, ObjectKeys.Unescape(key[heads.Length..]), head.Versions[^1], true));
             }
             if (page.Count >= pageSize) break;
         }
@@ -232,20 +224,12 @@ internal sealed class ResourceS3Repository(IAmazonS3 s3, string bucket, string k
 
         long start = Math.Min(offset, version.ContentLength);
         long end = Math.Min(length is { } count ? start + count : version.ContentLength, version.ContentLength);
-        if (start >= end) return new S3ResourceStream(null, version.ContentLength, start);
+        if (start >= end) return new ObjectResourceStream(null, version.ContentLength, start);
 
-        var request = new GetObjectRequest { BucketName = bucket, Key = _keys.Content(container.Id, version.Blob) };
-        if (start > 0 || end < version.ContentLength) request.ByteRange = new ByteRange(start, end - 1);
-        try
-        {
-            GetObjectResponse response = await s3.GetObjectAsync(request, cancellationToken).ConfigureAwait(false);
-            return new S3ResourceStream(response, version.ContentLength, start);
-        }
-        catch (AmazonS3Exception exception) when (IsMissingObject(exception))
-        {
-            // Deleted since the head was read.
-            return null;
-        }
+        ObjectRead? read = await store.OpenReadAsync(_keys.Content(container.Id, version.Blob), start, end, version.ContentLength,
+            cancellationToken).ConfigureAwait(false);
+        // Missing when it was deleted since the head was read.
+        return read is null ? null : new ObjectResourceStream(read, version.ContentLength, start);
     }
 
     /// <summary>
@@ -311,12 +295,12 @@ internal sealed class ResourceS3Repository(IAmazonS3 s3, string bucket, string k
             return new ResourceContainerUsage(0, 0, 0);
 
         long storedBytes = 0, versions = 0, resources = 0;
-        await foreach (S3Object content in ListAsync(_keys.Contents(container.Id), null, cancellationToken).ConfigureAwait(false))
+        await foreach (ObjectListing content in store.ListAsync(_keys.Contents(container.Id), null, cancellationToken).ConfigureAwait(false))
         {
-            storedBytes += content.Size ?? 0;
+            storedBytes += content.Size;
             versions++;
         }
-        await foreach (S3Object head in ListAsync(_keys.Heads(container.Id), null, cancellationToken).ConfigureAwait(false))
+        await foreach (ObjectListing head in store.ListAsync(_keys.Heads(container.Id), null, cancellationToken).ConfigureAwait(false))
         {
             if (head.Size > EmptyHeadSize) resources++;
         }
@@ -361,7 +345,7 @@ internal sealed class ResourceS3Repository(IAmazonS3 s3, string bucket, string k
             foreach ((string key, ContainerRecord? record) in await ReadAllAsync<ContainerRecord>(keys, cancellationToken).ConfigureAwait(false))
             {
                 if (record is { Deleted: false })
-                    page.Add(ToInfo(S3Keys.Unescape(key[_keys.Containers.Length..]), record));
+                    page.Add(ToInfo(ObjectKeys.Unescape(key[_keys.Containers.Length..]), record));
             }
             if (page.Count >= pageSize) break;
         }
@@ -447,7 +431,7 @@ internal sealed class ResourceS3Repository(IAmazonS3 s3, string bucket, string k
             if (change(current.Value) is not { } changed) return false;
             if (await TryPutAsync(key, id => Serialize(changed with { WriteId = id }), current.ETag).ConfigureAwait(false)) return true;
 
-            S3Telemetry.CountRetry(storeName);
+            ObjectStoreTelemetry.CountRetry(storeName);
             await WaitToRetryAsync(key, attempt, cancellationToken).ConfigureAwait(false);
         }
     }
@@ -456,12 +440,12 @@ internal sealed class ResourceS3Repository(IAmazonS3 s3, string bucket, string k
     /// Waits a little before writing <paramref name="key"/> again, at random once writers keep colliding, so one of them
     /// gets through; and gives up once the store has refused <see cref="MaxAttempts"/> writes in a row.
     /// </summary>
-    private static async Task WaitToRetryAsync(string key, int attempt, CancellationToken cancellationToken)
+    private async Task WaitToRetryAsync(string key, int attempt, CancellationToken cancellationToken)
     {
         if (attempt >= MaxAttempts)
         {
             throw new InvalidOperationException($"The store refused {MaxAttempts} conditional writes of {key} in a row. " +
-                "Check that it honors If-Match and If-None-Match on PutObject, and that nothing else writes under Resourcefull's prefix.");
+                $"Check that it honors {store.ConditionalWrites}, and that nothing else writes under Resourcefull's prefix.");
         }
         if (attempt > 2) await Task.Delay(Random.Shared.Next(1, Math.Min(10 * attempt, 200)), cancellationToken).ConfigureAwait(false);
     }
@@ -472,31 +456,9 @@ internal sealed class ResourceS3Repository(IAmazonS3 s3, string bucket, string k
     /// </summary>
     private async Task<Stored<T>> GetAsync<T>(string key, CancellationToken cancellationToken) where T : class
     {
-        (byte[]? body, string? etag) = await GetBytesAsync(key, cancellationToken).ConfigureAwait(false);
+        (byte[]? body, string? etag) = await store.GetAsync(key, cancellationToken).ConfigureAwait(false);
         return new Stored<T>(body is { Length: > 0 } && body[0] == '{' ? JsonSerializer.Deserialize<T>(body) : null, etag);
     }
-
-    private async Task<(byte[]? Body, string? ETag)> GetBytesAsync(string key, CancellationToken cancellationToken)
-    {
-        try
-        {
-            using GetObjectResponse response = await s3.GetObjectAsync(bucket, key, cancellationToken).ConfigureAwait(false);
-            using var body = new MemoryStream();
-            await response.ResponseStream.CopyToAsync(body, cancellationToken).ConfigureAwait(false);
-            return (body.ToArray(), response.ETag);
-        }
-        catch (AmazonS3Exception exception) when (IsMissingObject(exception))
-        {
-            return (null, null);
-        }
-    }
-
-    /// <summary>
-    /// Whether the store answered that the object doesn't exist, rather than that the bucket doesn't, which is a
-    /// mistake in the configuration and mustn't read as an empty store. A key too long to exist counts as missing.
-    /// </summary>
-    private static bool IsMissingObject(AmazonS3Exception exception) =>
-        exception is { StatusCode: HttpStatusCode.NotFound, ErrorCode: not "NoSuchBucket" } or { ErrorCode: "KeyTooLongError" };
 
     /// <summary>
     /// Writes the body <paramref name="body"/> makes from a new write ID, only if the object is still as it was read:
@@ -507,26 +469,16 @@ internal sealed class ResourceS3Repository(IAmazonS3 s3, string bucket, string k
     private async Task<bool> TryPutAsync(string key, Func<string, byte[]> body, string? etag)
     {
         string writeId = Guid.NewGuid().ToString("N");
-        var request = new PutObjectRequest { BucketName = bucket, Key = key, InputStream = new MemoryStream(body(writeId), false) };
-        if (etag is null) request.IfNoneMatch = "*";
-        else request.IfMatch = etag;
-        try
-        {
-            await s3.PutObjectAsync(request, CancellationToken.None).ConfigureAwait(false);
-            return true;
-        }
-        catch (AmazonS3Exception exception) when (exception.StatusCode is HttpStatusCode.PreconditionFailed or HttpStatusCode.Conflict)
-        {
-            // The write may have landed and its response been lost, and the store then refused the SDK's resend because
-            // of it.
-            return await ReadWriteIdAsync(key).ConfigureAwait(false) == writeId;
-        }
+        // When refused, the write may have landed and its response been lost, and the store then refused the client's
+        // resend because of it.
+        return await store.TryPutAsync(key, body(writeId), etag).ConfigureAwait(false)
+            || await ReadWriteIdAsync(key).ConfigureAwait(false) == writeId;
     }
 
     /// <summary>The write ID an object holds: in its JSON, or as the whole of a head with no versions.</summary>
     private async Task<string?> ReadWriteIdAsync(string key)
     {
-        (byte[]? body, _) = await GetBytesAsync(key, CancellationToken.None).ConfigureAwait(false);
+        (byte[]? body, _) = await store.GetAsync(key, CancellationToken.None).ConfigureAwait(false);
         if (body is null) return null;
         if (body.Length == 0 || body[0] != '{') return Encoding.UTF8.GetString(body);
         using JsonDocument document = JsonDocument.Parse(body);
@@ -534,88 +486,15 @@ internal sealed class ResourceS3Repository(IAmazonS3 s3, string bucket, string k
     }
 
     /// <summary>
-    /// Writes <paramref name="content"/> to <paramref name="key"/>, reading it until a read returns nothing: in one
-    /// request when it fits in a part, otherwise as a multipart upload, abandoned if it fails.
-    /// </summary>
-    private async Task UploadAsync(string key, Stream content, CancellationToken cancellationToken)
-    {
-        byte[] buffer = ArrayPool<byte>.Shared.Rent(PartSize);
-        try
-        {
-            int filled = await FillAsync(content, buffer, cancellationToken).ConfigureAwait(false);
-            if (filled < PartSize)
-            {
-                await s3.PutObjectAsync(new PutObjectRequest
-                {
-                    BucketName = bucket, Key = key, InputStream = new MemoryStream(buffer, 0, filled, false)
-                }, cancellationToken).ConfigureAwait(false);
-                return;
-            }
-
-            InitiateMultipartUploadResponse upload = await s3.InitiateMultipartUploadAsync(
-                new InitiateMultipartUploadRequest { BucketName = bucket, Key = key }, cancellationToken).ConfigureAwait(false);
-            try
-            {
-                var parts = new List<PartETag>();
-                for (int number = 1; filled > 0; number++)
-                {
-                    UploadPartResponse part = await s3.UploadPartAsync(new UploadPartRequest
-                    {
-                        BucketName = bucket, Key = key, UploadId = upload.UploadId, PartNumber = number,
-                        InputStream = new MemoryStream(buffer, 0, filled, false), PartSize = filled
-                    }, cancellationToken).ConfigureAwait(false);
-                    parts.Add(new PartETag(number, part.ETag));
-                    filled = await FillAsync(content, buffer, cancellationToken).ConfigureAwait(false);
-                }
-                await s3.CompleteMultipartUploadAsync(new CompleteMultipartUploadRequest
-                {
-                    BucketName = bucket, Key = key, UploadId = upload.UploadId, PartETags = parts
-                }, cancellationToken).ConfigureAwait(false);
-            }
-            catch
-            {
-                try
-                {
-                    await s3.AbortMultipartUploadAsync(bucket, key, upload.UploadId, CancellationToken.None).ConfigureAwait(false);
-                }
-                catch (Exception exception) when (IsStoreFailure(exception))
-                {
-                    // Amazon S3 keeps the parts until a lifecycle rule aborts the upload; some other stores clean them
-                    // up on their own.
-                }
-                throw;
-            }
-        }
-        finally
-        {
-            ArrayPool<byte>.Shared.Return(buffer);
-        }
-    }
-
-    /// <summary>Reads into <paramref name="buffer"/> until it's full or a read returns nothing.</summary>
-    private static async Task<int> FillAsync(Stream content, byte[] buffer, CancellationToken cancellationToken)
-    {
-        int filled = 0;
-        while (filled < PartSize)
-        {
-            int read = await content.ReadAsync(buffer.AsMemory(filled, Math.Min(PartSize - filled, ReadSize)), cancellationToken)
-                .ConfigureAwait(false);
-            if (read == 0) break;
-            filled += read;
-        }
-        return filled;
-    }
-
-    /// <summary>
     /// Lists the objects under <paramref name="prefix"/> after <paramref name="startAfter"/> that <paramref name="live"/>
     /// keeps, in key order, a batch at a time: as many as <paramref name="wanted"/> says are still needed, up to what's
     /// read at once.
     /// </summary>
-    private async IAsyncEnumerable<string[]> ListKeysAsync(string prefix, string? startAfter, Func<S3Object, bool> live,
+    private async IAsyncEnumerable<string[]> ListKeysAsync(string prefix, string? startAfter, Func<ObjectListing, bool> live,
         Func<int> wanted, [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         var batch = new List<string>();
-        await foreach (S3Object item in ListAsync(prefix, startAfter, cancellationToken).ConfigureAwait(false))
+        await foreach (ObjectListing item in store.ListAsync(prefix, startAfter, cancellationToken).ConfigureAwait(false))
         {
             if (!live(item)) continue;
             batch.Add(item.Key);
@@ -628,20 +507,6 @@ internal sealed class ResourceS3Repository(IAmazonS3 s3, string bucket, string k
         if (batch.Count > 0) yield return [.. batch];
     }
 
-    private async IAsyncEnumerable<S3Object> ListAsync(string prefix, string? startAfter,
-        [EnumeratorCancellation] CancellationToken cancellationToken)
-    {
-        var request = new ListObjectsV2Request { BucketName = bucket, Prefix = prefix, StartAfter = startAfter };
-        ListObjectsV2Response response;
-        do
-        {
-            response = await s3.ListObjectsV2Async(request, cancellationToken).ConfigureAwait(false);
-            foreach (S3Object item in response.S3Objects ?? []) yield return item;
-            request.ContinuationToken = response.NextContinuationToken;
-        }
-        while (response.IsTruncated == true);
-    }
-
     /// <summary>Reads every key in <paramref name="keys"/>, several at once, keeping their order.</summary>
     private async Task<(string Key, T? Value)[]> ReadAllAsync<T>(string[] keys, CancellationToken cancellationToken) where T : class
     {
@@ -652,18 +517,19 @@ internal sealed class ResourceS3Repository(IAmazonS3 s3, string bucket, string k
         return values;
     }
 
-    /// <summary>Deletes everything under a container's ID, a listing at a time.</summary>
+    /// <summary>Deletes everything under a container's ID, a batch at a time, each listed afresh.</summary>
     private async Task PurgeAsync(string containerId, CancellationToken cancellationToken)
     {
         while (true)
         {
-            ListObjectsV2Response listed = await s3.ListObjectsV2Async(
-                new ListObjectsV2Request { BucketName = bucket, Prefix = _keys.Data(containerId) }, cancellationToken).ConfigureAwait(false);
-            if (listed.S3Objects is not { Count: > 0 } objects) return;
-            await s3.DeleteObjectsAsync(new DeleteObjectsRequest
+            var keys = new List<string>(PurgeBatchSize);
+            await foreach (ObjectListing item in store.ListAsync(_keys.Data(containerId), null, cancellationToken).ConfigureAwait(false))
             {
-                BucketName = bucket, Objects = [.. objects.Select(o => new KeyVersion { Key = o.Key })]
-            }, cancellationToken).ConfigureAwait(false);
+                keys.Add(item.Key);
+                if (keys.Count == PurgeBatchSize) break;
+            }
+            if (keys.Count == 0) return;
+            await store.DeleteAsync(keys, cancellationToken).ConfigureAwait(false);
         }
     }
 
@@ -676,7 +542,7 @@ internal sealed class ResourceS3Repository(IAmazonS3 s3, string bucket, string k
         {
             await PurgeAsync(containerId, CancellationToken.None).ConfigureAwait(false);
         }
-        catch (Exception exception) when (IsStoreFailure(exception))
+        catch (Exception exception) when (store.IsStoreFailure(exception))
         {
             // Nothing reads under a deleted container's ID.
         }
@@ -690,23 +556,13 @@ internal sealed class ResourceS3Repository(IAmazonS3 s3, string bucket, string k
         if (keys.Length == 0) return;
         try
         {
-            await s3.DeleteObjectsAsync(new DeleteObjectsRequest
-            {
-                BucketName = bucket, Objects = [.. keys.Select(k => new KeyVersion { Key = k })]
-            }).ConfigureAwait(false);
+            await store.DeleteAsync(keys, CancellationToken.None).ConfigureAwait(false);
         }
-        catch (Exception exception) when (IsStoreFailure(exception))
+        catch (Exception exception) when (store.IsStoreFailure(exception))
         {
             // Unreachable either way: nothing names it.
         }
     }
-
-    /// <summary>
-    /// Whether a cleanup failed because the store refused it or couldn't be reached, rather than for a reason the
-    /// caller should hear about; a cleanup is sent with no token, so a cancellation is the client's timeout.
-    /// </summary>
-    private static bool IsStoreFailure(Exception exception) =>
-        exception is AmazonServiceException or HttpRequestException or IOException or TimeoutException or OperationCanceledException;
 
     /// <summary>A head as stored: JSON, or for a name with no versions, just the write ID.</summary>
     private static byte[] Serialize(Head head) =>

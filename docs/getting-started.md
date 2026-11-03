@@ -12,6 +12,7 @@ dotnet add package Resourcefull.InMemory   # in process memory: tests and trying
 dotnet add package Resourcefull.SqlServer  # SQL Server: production
 dotnet add package Resourcefull.PostgreSql # PostgreSQL: production
 dotnet add package Resourcefull.S3         # Amazon S3 or another S3-compatible store: production
+dotnet add package Resourcefull.AzureBlob  # Azure Blob Storage: production
 ```
 
 ## Register Resourcefull
@@ -45,8 +46,10 @@ With several instances, provision from a deployment step instead: on SQL Server,
 database setting that briefly disconnects every other session. [SQL Server](providers/sql-server.md) covers both. For
 PostgreSQL, call `UsePostgreSql` in place of `UseSqlServer`; see [PostgreSQL](providers/postgresql.md). For an
 S3-compatible store, call `UseS3` with the bucket's name, and skip provisioning; see
-[S3-compatible storage](providers/s3.md). `UseVersioning` is optional; see [Versioning](versioning.md), and give every
-application that shares the database or bucket the same setting.
+[S3-compatible storage](providers/s3.md). For Azure Blob Storage, call `UseAzureBlobStorage` with the blob container's
+name and a client, and skip provisioning; see [Azure Blob Storage](providers/azure-blob.md). `UseVersioning` is
+optional; see [Versioning](versioning.md), and give every application that shares the database, bucket or blob
+container the same setting.
 
 ### Settings from configuration
 

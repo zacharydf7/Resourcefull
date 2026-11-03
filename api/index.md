@@ -1,6 +1,6 @@
 # API reference
 
-Every public type and member of the six library packages, generated from their XML documentation.
+Every public type and member of the seven library packages, generated from their XML documentation.
 
 - **`Resourcefull`**: the clients you use (`IResourceServiceClient`, `IResourceContainerClient`), their models and
   exceptions, registration (`AddResourcefull`, `ResourcefullOptionsBuilder`), provisioning
@@ -11,8 +11,9 @@ Every public type and member of the six library packages, generated from their X
 - **`Resourcefull.SqlServer`**: `UseSqlServer` and `ContentHashBackfill`.
 - **`Resourcefull.PostgreSql`**: `UsePostgreSql` and `AddResourcefullPostgreSqlCheck`.
 - **`Resourcefull.S3`**: `UseS3` and `ResourcefullS3Options`.
+- **`Resourcefull.AzureBlob`**: `UseAzureBlobStorage` and `ResourcefullAzureBlobOptions`.
 - **`Resourcefull.AspNetCore`**: `Results.Resource`, `UploadFromRequestAsync`, `AddResourcefullExceptionHandler`, and
   signed links (`AddResourcefullLinks`, `IResourceLinkSigner`, `Results.SharedResource`).
 
-The seventh package, `Resourcefull.Testing`, holds the contract tests for checking a provider; see
+The eighth package, `Resourcefull.Testing`, holds the contract tests for checking a provider; see
 [Testing a provider](../docs/providers/writing-a-provider.md#testing-a-provider).

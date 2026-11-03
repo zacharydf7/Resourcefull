@@ -19,6 +19,14 @@
   `NotSupportedException` for now. Names are kept exactly as given, even by stores that keep keys as files, and are
   listed in Unicode code point order. It counts writes retried after a concurrent change to the same name in
   `resourcefull.s3.retries`, and is tested against SeaweedFS. See [S3-compatible storage](docs/providers/s3.md).
+- **Azure Blob Storage.** The new `Resourcefull.AzureBlob` package stores resources in a blob container of an Azure
+  Storage account, working as the S3 provider does and sharing its code: conditional writes (`If-None-Match: *` and
+  `If-Match`) keep one current version per name, and content of 8 MiB or more goes up in blocks.
+  `UseAzureBlobStorage(containerName, configure)` registers it, with a `BlobServiceClient` and a key prefix of your
+  choosing, or the `BlobServiceClient` registered in your services. It supports what the S3 provider does and, like it,
+  throws `NotSupportedException` for moving, expiry and upload sessions for now. It counts writes retried after a
+  concurrent change to the same name in `resourcefull.azureblob.retries`, and is tested against Azurite. See
+  [Azure Blob Storage](docs/providers/azure-blob.md).
 - **Uploading in parts.** An upload session stores a large file over several appends, and what's stored survives a
   dropped connection or a restart: `StartUploadAsync`, then `AppendUploadAsync` from each part's offset,
   `GetUploadAsync` to find where to resume, and `CompleteUploadAsync`, which makes the version current with the

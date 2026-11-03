@@ -1,5 +1,6 @@
 using Amazon.S3;
 using Microsoft.Extensions.DependencyInjection;
+using Resourcefull.ObjectStorage;
 
 namespace Resourcefull.S3;
 
@@ -62,9 +63,9 @@ public static class ResourcefullS3OptionsExtensions
 
         string? storeName = builder.StoreName;
         // The repository holds no state of its own, and the client is thread-safe, so one instance serves every scope.
-        builder.UseProvider(services => new ResourceS3Repository(
-            options.Client ?? services.GetService<IAmazonS3>() ?? new AmazonS3Client(), bucketName, options.KeyPrefix,
-            services.GetService<TimeProvider>(), storeName), ServiceLifetime.Singleton);
+        builder.UseProvider(services => new ObjectStoreRepository(
+            new S3ObjectStore(options.Client ?? services.GetService<IAmazonS3>() ?? new AmazonS3Client(), bucketName),
+            options.KeyPrefix, services.GetService<TimeProvider>(), storeName), ServiceLifetime.Singleton);
         return builder;
     }
 }

@@ -1,14 +1,12 @@
-using Amazon.S3.Model;
-
-namespace Resourcefull.S3;
+namespace Resourcefull.ObjectStorage;
 
 /// <summary>
 /// A version's content as the store sends it: read-only and forward-only, with the content's full length as
 /// <see cref="Length"/> and, for a range, a <see cref="Position"/> that starts where the range does.
 /// </summary>
-internal sealed class S3ResourceStream(GetObjectResponse? response, long length, long position) : Stream
+internal sealed class ObjectResourceStream(ObjectRead? read, long length, long position) : Stream
 {
-    private readonly Stream _body = response?.ResponseStream ?? Null;
+    private readonly Stream _body = read?.Body ?? Null;
     private long _position = position;
 
     public override bool CanRead => true;
@@ -56,7 +54,7 @@ internal sealed class S3ResourceStream(GetObjectResponse? response, long length,
 
     protected override void Dispose(bool disposing)
     {
-        if (disposing) response?.Dispose();
+        if (disposing) read?.Owner.Dispose();
         base.Dispose(disposing);
     }
 }

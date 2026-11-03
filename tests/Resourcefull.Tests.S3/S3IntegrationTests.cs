@@ -4,6 +4,7 @@ using System.Text.Json.Nodes;
 using Amazon.S3;
 using Amazon.S3.Model;
 using Microsoft.Extensions.DependencyInjection;
+using Resourcefull.ObjectStorage;
 using Resourcefull.S3;
 
 namespace Resourcefull.Tests.S3;
@@ -68,7 +69,7 @@ public class S3IntegrationTests(S3Fixture fixture)
         await using ServiceProvider provider = fixture.BuildServiceProvider();
         IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>()
             .CreateContainerAsync($"c-{Guid.NewGuid():N}");
-        string shorter = new('a', S3Keys.SegmentBytes - S3Keys.LongestUnit + 1), longer = shorter + "b";
+        string shorter = new('a', ObjectKeys.SegmentBytes - ObjectKeys.LongestUnit + 1), longer = shorter + "b";
         string[] order = longerFirst ? [longer, shorter] : [shorter, longer];
 
         // Act
@@ -89,7 +90,7 @@ public class S3IntegrationTests(S3Fixture fixture)
         await using ServiceProvider provider = fixture.BuildServiceProvider();
         IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>()
             .CreateContainerAsync($"c-{Guid.NewGuid():N}");
-        byte[] payload = new byte[ResourceS3Repository.PartSize + 1];
+        byte[] payload = new byte[ObjectParts.PartSize + 1];
         new Random(1042).NextBytes(payload);
 
         // Act

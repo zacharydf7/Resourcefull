@@ -1,10 +1,10 @@
 using System.Text;
 
-namespace Resourcefull.S3;
+namespace Resourcefull.ObjectStorage;
 
 /// <summary>
-/// Where things are kept in the bucket, under the key prefix: each container's record, and under the container's ID,
-/// each name's head and each version's content.
+/// Where things are kept in the object store, under the key prefix: each container's record, and under the container's
+/// ID, each name's head and each version's content.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -24,7 +24,7 @@ namespace Resourcefull.S3;
 /// couldn't store it as a file too.
 /// </para>
 /// </remarks>
-internal sealed class S3Keys(string prefix)
+internal sealed class ObjectKeys(string prefix)
 {
     /// <summary>The most UTF-8 bytes between the <c>/</c>s put into an escaped name.</summary>
     internal const int SegmentBytes = 200;

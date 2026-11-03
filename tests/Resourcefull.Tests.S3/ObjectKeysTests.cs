@@ -1,11 +1,11 @@
 using System.Text;
-using Resourcefull.S3;
+using Resourcefull.ObjectStorage;
 
 namespace Resourcefull.Tests.S3;
 
-public class S3KeysTests
+public class ObjectKeysTests
 {
-    private static readonly S3Keys Keys = new("resourcefull/");
+    private static readonly ObjectKeys Keys = new("resourcefull/");
 
     /// <summary>A name's head key, past the part every head key in the container shares.</summary>
     private static string KeyOf(string name) => Keys.Head("c", name)[Keys.Heads("c").Length..];
@@ -26,10 +26,10 @@ public class S3KeysTests
 
         // Assert: no dots, backslashes or empty segments, and within what's left of S3's 1,024 bytes after the longest
         // key prefix and the container's part.
-        Assert.Equal(name, S3Keys.Unescape(key));
+        Assert.Equal(name, ObjectKeys.Unescape(key));
         Assert.DoesNotContain('.', key);
         Assert.DoesNotContain('\\', key);
-        Assert.All(key.Split('/'), segment => Assert.InRange(Encoding.UTF8.GetByteCount(segment), 1, S3Keys.SegmentBytes));
+        Assert.All(key.Split('/'), segment => Assert.InRange(Encoding.UTF8.GetByteCount(segment), 1, ObjectKeys.SegmentBytes));
         Assert.InRange(Encoding.UTF8.GetByteCount(Keys.Head(new string('0', 32), name)), 1, 1024 - 200 + "resourcefull/".Length);
     }
 

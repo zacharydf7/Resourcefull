@@ -86,6 +86,8 @@
     href: providers/postgresql.md
   - name: S3-compatible storage
     href: providers/s3.md
+  - name: Azure Blob Storage
+    href: providers/azure-blob.md
   - name: Backups and recovery
     href: backups-and-recovery.md
   - name: Health checks

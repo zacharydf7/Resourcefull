@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <Description>Azure Blob Storage for Resourcefull: versions, content hashes, and create-only and conditional writes, built on the store's ETag conditions.</Description>
+    <Title>Resourcefull.AzureBlob</Title>
+    <PackageTags>$(PackageTags);azure;azure-blob-storage</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Azure.Storage.Blobs" Version="12.30.1" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.14" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Resourcefull\Resourcefull.csproj" />
+  </ItemGroup>
+
+  <!-- The store-independent repository, shared with Resourcefull.S3. -->
+  <ItemGroup>
+    <Compile Include="..\Shared\ObjectStorage\*.cs" Link="ObjectStorage\%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Resourcefull.Tests.AzureBlob" />
+  </ItemGroup>
+
+</Project>
