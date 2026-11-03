@@ -19,6 +19,11 @@ first, with `sqlcmd -b -I` (or SSMS in SQLCMD mode with `:on error exit` at the 
 error). Each script applies one migration, skips itself when `__EFMigrationsHistory` already records it, and is safe to
 run again if it's interrupted. `Resourcefull.sql` applies all of them in one go.
 
+With the tables in a [schema](sql-server.md#choosing-a-schema) <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>, the packaged scripts won't work, since they're
+written for tables in the default schema; generate a script with `GenerateResourcefullScript` from the upgraded
+application instead. Like `Resourcefull.sql`, it applies whatever the
+database is missing.
+
 ## Recording hashes for older versions
 
 Every version stored by 3.0 or later records its SHA-256 hash. Versions stored earlier have `ContentHash = null` until

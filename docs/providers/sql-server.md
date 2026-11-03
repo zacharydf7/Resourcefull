@@ -13,8 +13,9 @@ builder.Services.AddResourcefull(options => options
 
 The connection string names the database that holds Resourcefull's tables: `ResourceContainers`, `Resources` and
 `ResourceChunks`, plus EF Core's migration history, `__EFMigrationsHistory`. It can be a database of its own or your
-application's, as long as none of your tables share the first three names. The history table can be shared with your
-own EF Core migrations.
+application's, as long as none of your tables share the first three names, or Resourcefull's tables are in a
+[schema of their own](#choosing-a-schema). Without a schema, the history table can be shared with your own EF Core
+migrations.
 
 A database of its own is the better default. Provisioning turns on [`READ_COMMITTED_SNAPSHOT`](#read_committed_snapshot),
 a setting of the whole database, and file content makes the database large, which affects how you back it up (see
@@ -24,6 +25,56 @@ join your transactions; [Files and your own data](../files-and-your-data.md) sho
 
 Keep the connection string out of source control, in user secrets, environment variables or a secrets store. Anything
 `Microsoft.Data.SqlClient` accepts works.
+
+## Choosing a schema
+
+<div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 4.0</span></div>
+
+Without a schema, Resourcefull's tables go in the database user's default schema, normally `dbo`. In your
+application's database that puts them beside your own tables. To keep them apart, give `UseSqlServer` a schema:
+
+```csharp
+builder.Services.AddResourcefull(options => options
+    .UseSqlServer(connectionString, sql => { }, schema: "resourcefull"));
+```
+
+All three tables go in that schema, with their indexes and keys, and every query Resourcefull runs uses it. Resourcefull
+also keeps its migration history there, in `resourcefull.__EFMigrationsHistory`, so it no longer shares a history table
+with your own EF Core migrations. `MigrateResourcefullDatabaseAsync` creates the schema if it's missing.
+
+A schema's name is a letter or underscore, then up to 127 letters, digits or underscores. Every instance of the
+application must use the same schema: an instance configured without it would look for the tables in `dbo` and not
+find them.
+
+### Moving existing tables into a schema
+
+A database provisioned without a schema has Resourcefull's tables in `dbo`. To move them into a schema:
+
+1. Stop every instance of the application, and back up the database.
+2. Run this connected to the database, as a login with `db_owner`. It moves the tables, with their indexes, keys and
+   rows, and copies the migration history into the schema. Copying every row is fine, including your own migrations':
+   Resourcefull ignores the ones that aren't its own.
+
+   ```sql
+   CREATE SCHEMA [resourcefull];
+   GO
+   SET XACT_ABORT ON;
+   BEGIN TRANSACTION;
+   ALTER SCHEMA [resourcefull] TRANSFER [dbo].[ResourceContainers];
+   ALTER SCHEMA [resourcefull] TRANSFER [dbo].[Resources];
+   ALTER SCHEMA [resourcefull] TRANSFER [dbo].[ResourceChunks];
+   CREATE TABLE [resourcefull].[__EFMigrationsHistory] (
+       [MigrationId] nvarchar(150) NOT NULL CONSTRAINT [PK___EFMigrationsHistory] PRIMARY KEY,
+       [ProductVersion] nvarchar(32) NOT NULL);
+   INSERT INTO [resourcefull].[__EFMigrationsHistory]
+       SELECT [MigrationId], [ProductVersion] FROM [dbo].[__EFMigrationsHistory];
+   COMMIT;
+   ```
+
+3. Deploy the application with the schema given to `UseSqlServer`, and start it.
+
+Moving a table to another schema doesn't copy its rows, so it's quick whatever their size. Resourcefull's rows stay in
+`dbo.__EFMigrationsHistory`, where they do no harm.
 
 ## Provisioning
 
@@ -52,6 +103,17 @@ The scripts run against the database you connect to and never create or switch d
 error, and `-I` turns on `QUOTED_IDENTIFIER`, which the filtered indexes need. `Resourcefull.sql` brings an empty or
 older database to the current schema and is safe to run again. The scripts aren't added to projects that reference
 the package; they're also in the repository under `src/Resourcefull.SqlServer/Scripts/`.
+
+The packaged scripts are for tables without a [schema](#choosing-a-schema). With a schema, have the application, configured
+with that schema, write the script <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> and run it the same way:
+
+```csharp
+File.WriteAllText("Resourcefull.sql", app.Services.GenerateResourcefullScript());
+```
+
+`GenerateResourcefullScript` builds the script from the same migrations `MigrateResourcefullDatabaseAsync` applies,
+without connecting to the database. Like `Resourcefull.sql`, it applies only what the database is missing, so it's
+safe to run again.
 
 ## Permissions
 

@@ -13,7 +13,7 @@ namespace Resourcefull.Tests.Integration;
 /// skip rather than fail. A server named by the environment that cannot be reached fails the suite.
 /// Each run gets its own database which is dropped on teardown.
 /// </summary>
-public sealed class SqlServerFixture : IAsyncLifetime
+public class SqlServerFixture : IAsyncLifetime
 {
     private const string ConnectionEnvVar = "RESOURCEFULL_TEST_SQLSERVER";
     private const string ReadyTimeoutEnvVar = "RESOURCEFULL_TEST_SQL_READY_TIMEOUT_SECONDS";
@@ -33,6 +33,9 @@ public sealed class SqlServerFixture : IAsyncLifetime
 
     /// <summary>Connection string pointing at the provisioned per-run test database.</summary>
     public string ConnectionString { get; private set; } = string.Empty;
+
+    /// <summary>The schema given to <c>UseSqlServer</c>; <see langword="null"/> leaves the tables in <c>dbo</c>.</summary>
+    public virtual string? Schema => null;
 
     public async Task InitializeAsync()
     {
@@ -56,8 +59,8 @@ public sealed class SqlServerFixture : IAsyncLifetime
         ConnectionString = RegisterDatabase($"Resourcefull_IT_{_runId}");
 
         // Apply the real migration chain so the test database has the production schema.
-        await using var dbContext = CreateDbContext(ConnectionString);
-        await dbContext.Database.MigrateAsync();
+        await using ServiceProvider services = BuildServiceProvider();
+        await services.MigrateResourcefullDatabaseAsync();
 
         IsAvailable = true;
     }
@@ -110,7 +113,7 @@ public sealed class SqlServerFixture : IAsyncLifetime
         var services = new ServiceCollection();
         services.AddResourcefull(options =>
         {
-            options.UseSqlServer(ConnectionString);
+            options.UseSqlServer(ConnectionString, _ => { }, Schema);
             configure?.Invoke(options);
         });
         return services.BuildServiceProvider();
@@ -154,4 +157,16 @@ public sealed class SqlServerFixture : IAsyncLifetime
 public sealed class SqlServerCollection : ICollectionFixture<SqlServerFixture>
 {
     public const string Name = "SqlServer";
+}
+
+/// <summary>A test database whose tables are in a schema of their own rather than <c>dbo</c>.</summary>
+public sealed class SqlServerSchemaFixture : SqlServerFixture
+{
+    public override string? Schema => "resourcefull";
+}
+
+[CollectionDefinition(Name)]
+public sealed class SqlServerSchemaCollection : ICollectionFixture<SqlServerSchemaFixture>
+{
+    public const string Name = "SqlServerSchema";
 }

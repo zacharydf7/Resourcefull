@@ -309,12 +309,12 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
             // Locked as it's read, so an upload can't make it current, or move its stamp forward, before it goes. A retry
             // after a commit whose acknowledgement was lost finds it gone.
             List<int> chunks = attempt.Database.IsRelational()
-                ? await attempt.Database.SqlQuery<int>($"""
+                ? await attempt.Database.SqlQuery<int>(attempt.QualifyTables($"""
                     SELECT (SELECT COUNT(*) FROM [ResourceChunks] c WHERE c.[ResourceId] = r.[Id]) AS [Value]
                     FROM [Resources] r WITH (UPDLOCK, ROWLOCK)
                     WHERE r.[Id] = {resourceId} AND r.[StagedAt] IS NOT NULL
                         AND ({staleBefore} IS NULL OR r.[StagedAt] < {staleBefore})
-                    """).ToListAsync(ct).ConfigureAwait(false)
+                    """)).ToListAsync(ct).ConfigureAwait(false)
                 : await attempt.Resources.IgnoreQueryFilters()
                     .Where(r => r.Id == resourceId && r.StagedAt != null
                         && (staleBefore == null || r.StagedAt < staleBefore))
@@ -455,8 +455,8 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
                 attempt.Resources.Add(copy);
                 await attempt.SaveChangesAsync(ct).ConfigureAwait(false);
                 // Copied by the server, so no content passes through the application.
-                await attempt.Database.ExecuteSqlAsync(
-                    $"INSERT INTO [ResourceChunks] ([ResourceId], [Index], [Data]) SELECT {copy.Id}, [Index], [Data] FROM [ResourceChunks] WHERE [ResourceId] = {from.Id}",
+                await attempt.Database.ExecuteSqlAsync(attempt.QualifyTables(
+                    $"INSERT INTO [ResourceChunks] ([ResourceId], [Index], [Data]) SELECT {copy.Id}, [Index], [Data] FROM [ResourceChunks] WHERE [ResourceId] = {from.Id}"),
                     ct).ConfigureAwait(false);
 
                 var stored = new WrittenContent(from.Length, from.ContentHash!, _clock.GetUtcNow());
@@ -598,7 +598,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
                     sql.Append("; UPDATE [Resources] SET [StagedAt] = @now WHERE [Id] = @resourceId");
                     command.Parameters.Add(new SqlParameter("@now", now));
                 }
-                command.CommandText = sql.ToString();
+                command.CommandText = ResourceDbContext.QualifyTables(sql.ToString(), dbContext.Schema);
                 await command.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
             }
             catch (SqlException exception)
@@ -684,7 +684,12 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
         await dbContext.Database.ExecuteSqlRawAsync(sql.ToString(), parameters, cancellationToken).ConfigureAwait(false);
     }
 
-    /// <summary>The application lock resource for a name: lock resources are limited to 255 characters, so it's hashed.</summary>
+    /// <summary>
+    /// The application lock resource for a name. Lock resources are limited to 255 characters, so it's hashed. Stores in
+    /// different schemas of the same database share it: a store without a schema uses the database user's default
+    /// schema, which can be the one another store was given, so a single lock across every store is what keeps writers
+    /// of a name taking turns.
+    /// </summary>
     internal static string NameLockResource(ResourceLocation name) =>
         "Resourcefull:" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes($"{name.ContainerName}\n{name.ResourceName}")));
 
@@ -869,13 +874,13 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
 
             // Only the chunks the range overlaps, found by adding up their lengths: releases have stored different
             // chunk sizes, so a position can't be turned into an index by division.
-            ChunkSpan chunks = (await dbContext.Database.SqlQuery<ChunkSpan>($"""
+            ChunkSpan chunks = (await dbContext.Database.SqlQuery<ChunkSpan>(dbContext.QualifyTables($"""
                 SELECT MAX(CASE WHEN [End] <= {start} THEN [Index] END) AS [AfterIndex],
                     MAX(CASE WHEN [End] <= {start} THEN [End] END) AS [Start],
                     MIN(CASE WHEN [End] >= {end} THEN [Index] END) AS [ThroughIndex]
                 FROM (SELECT [Index], SUM(CAST(DATALENGTH([Data]) AS bigint)) OVER (ORDER BY [Index] ROWS UNBOUNDED PRECEDING) AS [End]
                     FROM [ResourceChunks] WHERE [ResourceId] = {existingResource.Id}) AS [Chunks]
-                """).ToListAsync(cancellationToken).ConfigureAwait(false))[0];
+                """)).ToListAsync(cancellationToken).ConfigureAwait(false))[0];
             return new ResourceStream(PageReader(dbContext, existingResource.Id, chunks.AfterIndex, chunks.ThroughIndex),
                 existingResource.Length, dbContext, chunks.Start ?? 0, start, end);
         }
@@ -914,10 +919,10 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
                 {
                     DbCommand command = NewCommand(dbContext);
                     await using var commandDisposal = command.ConfigureAwait(false);
-                    command.CommandText =
+                    command.CommandText = ResourceDbContext.QualifyTables(
                         $"SELECT TOP ({ChunksPerReadPage}) [Index], DATALENGTH([Data]), [Data] FROM [ResourceChunks] " +
                         "WHERE [ResourceId] = @resourceId AND (@lastIndex IS NULL OR [Index] > @lastIndex)" +
-                        (throughIndex is null ? "" : " AND [Index] <= @throughIndex") + " ORDER BY [Index]";
+                        (throughIndex is null ? "" : " AND [Index] <= @throughIndex") + " ORDER BY [Index]", dbContext.Schema);
                     command.Parameters.Add(new SqlParameter("@resourceId", resourceId));
                     command.Parameters.Add(new SqlParameter("@lastIndex", SqlDbType.Int) { Value = (object?)lastIndex ?? DBNull.Value });
                     if (throughIndex is not null)
@@ -1083,8 +1088,8 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
         // The in-memory provider the unit tests use leaves them to the cascade.
         if (!dbContext.Database.IsRelational()) return;
 
-        while (await dbContext.Database.ExecuteSqlAsync(
-            $"DELETE TOP ({ChunksPerDeleteStatement}) FROM [ResourceChunks] WHERE [ResourceId] = {resourceId}", cancellationToken).ConfigureAwait(false) == ChunksPerDeleteStatement)
+        while (await dbContext.Database.ExecuteSqlAsync(dbContext.QualifyTables(
+            $"DELETE TOP ({ChunksPerDeleteStatement}) FROM [ResourceChunks] WHERE [ResourceId] = {resourceId}"), cancellationToken).ConfigureAwait(false) == ChunksPerDeleteStatement)
         {
         }
     }
@@ -1352,22 +1357,22 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
 
         // One aggregate over the container's version rows, from their recorded lengths, which doesn't touch the chunks.
         // Only if an early release stored versions without a length are their chunks' lengths added up, separately.
-        UsageRow usage = (await dbContext.Database.SqlQuery<UsageRow>($"""
+        UsageRow usage = (await dbContext.Database.SqlQuery<UsageRow>(dbContext.QualifyTables($"""
             SELECT COALESCE(SUM(r.[ContentLength]), 0) AS [StoredSize],
                 COUNT_BIG(CASE WHEN r.[IsLatest] = 1 THEN 1 END) AS [ResourceCount],
                 COUNT_BIG(*) AS [VersionCount],
                 COUNT_BIG(CASE WHEN r.[ContentLength] IS NULL THEN 1 END) AS [Unmeasured]
             FROM [Resources] r
             WHERE r.[ContainerName] = {resourceContainerName} AND r.[StagedAt] IS NULL
-            """).ToListAsync(cancellationToken).ConfigureAwait(false))[0];
+            """)).ToListAsync(cancellationToken).ConfigureAwait(false))[0];
         long storedSize = usage.StoredSize;
         if (usage.Unmeasured > 0)
         {
-            storedSize += await dbContext.Database.SqlQuery<long>($"""
+            storedSize += await dbContext.Database.SqlQuery<long>(dbContext.QualifyTables($"""
                 SELECT COALESCE(SUM(CAST(DATALENGTH(ch.[Data]) AS bigint)), 0) AS [Value]
                 FROM [Resources] r JOIN [ResourceChunks] ch ON ch.[ResourceId] = r.[Id]
                 WHERE r.[ContainerName] = {resourceContainerName} AND r.[ContentLength] IS NULL AND r.[StagedAt] IS NULL
-                """).SingleAsync(cancellationToken).ConfigureAwait(false);
+                """)).SingleAsync(cancellationToken).ConfigureAwait(false);
         }
 
         return new ResourceContainerUsage(storedSize, usage.ResourceCount, usage.VersionCount);
@@ -1423,10 +1428,10 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
             foreach (var candidate in candidates.Where(c => batch.Contains(c.Id)))
             {
                 if (candidate.Chunks > ChunksPerDeleteStatement && attempt.Database.IsRelational()
-                    && (await attempt.Database.SqlQuery<int>($"""
+                    && (await attempt.Database.SqlQuery<int>(attempt.QualifyTables($"""
                         SELECT 1 AS [Value] FROM [Resources] WITH (UPDLOCK, ROWLOCK)
                         WHERE [Id] = {candidate.Id} AND [ContainerName] = {resourceContainerName}
-                        """).ToListAsync(ct).ConfigureAwait(false)).Count == 0)
+                        """)).ToListAsync(ct).ConfigureAwait(false)).Count == 0)
                     continue;
                 deleting.Add((candidate.Id, candidate.Chunks));
             }
@@ -1451,7 +1456,8 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
                         .Append($"DELETE FROM [Resources] WHERE [Id] = @id{i};");
                     parameters[i + 1] = new SqlParameter($"@id{i}", batch[i]);
                 }
-                await attempt.Database.ExecuteSqlRawAsync(sql.ToString(), parameters, ct).ConfigureAwait(false);
+                await attempt.Database.ExecuteSqlRawAsync(ResourceDbContext.QualifyTables(sql.ToString(), attempt.Schema), parameters,
+                    ct).ConfigureAwait(false);
             }
             else
             {

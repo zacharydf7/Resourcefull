@@ -4,6 +4,12 @@
 
 ### Added
 
+- **A schema for SQL Server's tables.** `UseSqlServer(connectionString, configure, schema: "resourcefull")` puts
+  Resourcefull's tables, and its own migration history, in a schema of their own, so they don't mix with an
+  application's tables in `dbo`. `MigrateResourcefullDatabaseAsync` creates the schema, and the new
+  `GenerateResourcefullScript` writes the provisioning script for it, since the packaged scripts are for `dbo`. Without
+  a schema nothing changes. The `migrate` span records `resourcefull.schema`. See
+  [Choosing a schema](docs/providers/sql-server.md#choosing-a-schema), which also shows how to move existing tables.
 - **Exporting and importing containers.** `ExportContainerAsync` writes a container, every version of every file, to
   a zip, and `ImportContainerAsync` creates a new container from one, keeping each version's ID and `LastModified`.
   Imports check the manifest and every file's hash and length, and delete what they created if anything fails.

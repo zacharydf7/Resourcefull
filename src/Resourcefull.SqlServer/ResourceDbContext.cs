@@ -1,6 +1,8 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Resourcefull.SqlServer.Models;
 using System.Reflection;
+using System.Runtime.CompilerServices;
+using System.Text.RegularExpressions;
 
 namespace Resourcefull.SqlServer;
 
@@ -27,8 +29,34 @@ internal class ResourceDbContext(DbContextOptions<ResourceDbContext> options) : 
     internal DbSet<ResourceChunkModel> ResourceChunks { get; set; }
     internal DbSet<ResourceContainerModel> ResourceContainers { get; set; }
 
+    /// <summary>
+    /// The schema given to <c>UseSqlServer</c>, or <see langword="null"/> without one: the tables' names are then left
+    /// unqualified, as before schemas could be chosen, so they're in the database user's default schema.
+    /// </summary>
+    internal string? Schema { get; } = options.FindExtension<SchemaOptionsExtension>()?.Schema;
+
+    /// <summary>The model's tables, which go in the schema given to <c>UseSqlServer</c> when there is one.</summary>
+    internal static readonly string[] TableNames = ["Resources", "ResourceChunks", "ResourceContainers"];
+
+    private static readonly Regex TableName = new($@"(?<!\.)\[({string.Join("|", TableNames)})\]", RegexOptions.Compiled);
+
+    /// <summary>
+    /// Qualifies the tables named in Resourcefull's own SQL with <paramref name="schema"/>, or returns the SQL unchanged
+    /// when it's <see langword="null"/>. That SQL always writes them in brackets, such as <c>[Resources]</c>.
+    /// </summary>
+    internal static string QualifyTables(string sql, string? schema) =>
+        schema is null ? sql : TableName.Replace(sql, $"[{schema}].$0");
+
+    /// <summary>
+    /// Qualifies the tables in an interpolated query, keeping its values as parameters. There's deliberately no
+    /// instance overload that takes only a string: an interpolated string would bind to it and lose its parameters.
+    /// </summary>
+    internal FormattableString QualifyTables(FormattableString sql) =>
+        Schema is null ? sql : FormattableStringFactory.Create(QualifyTables(sql.Format, Schema), sql.GetArguments());
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        if (Schema is not null) modelBuilder.HasDefaultSchema(Schema);
         modelBuilder.ApplyConfigurationsFromAssembly(Assembly.GetExecutingAssembly());
     }
 }

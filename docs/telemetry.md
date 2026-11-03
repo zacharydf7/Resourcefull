@@ -107,7 +107,7 @@ metrics. It also has:
 | `container_exists` | `ContainerExistsAsync` | |
 | `list_containers` | `GetContainersAsync` | |
 | `delete_container` | `DeleteContainerIfExistsAsync` | |
-| `migrate` | `MigrateResourcefullDatabaseAsync` (SQL Server) | span only |
+| `migrate` | `MigrateResourcefullDatabaseAsync` (SQL Server) | span only; `resourcefull.schema` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>: the [schema](providers/sql-server.md#choosing-a-schema) given to `UseSqlServer`, when there is one |
 | `backfill` | `ContentHashBackfill.RunAsync` (SQL Server) | span only; `resourcefull.hashed`, `resourcefull.mismatches` |
 | `health_check` | `AddResourcefullCheck`; `AddResourcefullSqlServerCheck` (span only) | for SQL Server, `resourcefull.pending_migrations` |
 
