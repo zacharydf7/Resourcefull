@@ -36,6 +36,7 @@ jobs:
         dotnet pack src/Resourcefull --no-build -c Release --output ./nupkg
         dotnet pack src/Resourcefull.SqlServer --no-build -c Release --output ./nupkg
         dotnet pack src/Resourcefull.PostgreSql --no-build -c Release --output ./nupkg
+        dotnet pack src/Resourcefull.S3 --no-build -c Release --output ./nupkg
         dotnet pack src/Resourcefull.InMemory --no-build -c Release --output ./nupkg
         dotnet pack src/Resourcefull.AspNetCore --no-build -c Release --output ./nupkg
         dotnet pack src/Resourcefull.Testing --no-build -c Release --output ./nupkg
@@ -126,6 +127,27 @@ jobs:
       run: dotnet build --no-restore --configuration Release
     - name: Test
       run: dotnet test tests/Resourcefull.Tests.PostgreSql --no-build --configuration Release
+
+  s3-tests:
+    runs-on: ubuntu-latest
+    env:
+      RESOURCEFULL_TEST_S3: "http://127.0.0.1:8333"
+    steps:
+    - uses: actions/checkout@v7
+    # Started here rather than as a service, since a service can't be given the command that turns on S3. SeaweedFS
+    # keeps keys as files, so running against it also checks that names with dots and slashes are kept as given.
+    - name: Start SeaweedFS
+      run: docker run -d --name seaweedfs -p 8333:8333 chrislusf/seaweedfs:4.50 server -s3 -dir=/data
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v6
+      with:
+        global-json-file: global.json
+    - name: Restore dependencies
+      run: dotnet restore
+    - name: Build
+      run: dotnet build --no-restore --configuration Release
+    - name: Test
+      run: dotnet test tests/Resourcefull.Tests.S3 --no-build --configuration Release
 
   performance:
     runs-on: ubuntu-latest

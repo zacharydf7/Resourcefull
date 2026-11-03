@@ -5,14 +5,15 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/zacharydf7/Resourcefull/blob/main/LICENSE)
 
 Resourcefull stores and serves files of any type and size from infrastructure you run yourself. Upload, download,
-list and version **resources** in named **containers** through one client API, and keep the bytes in SQL Server or
-PostgreSQL, in memory for tests, or in a storage provider of your own.
+list and version **resources** in named **containers** through one client API, and keep the bytes in SQL Server,
+PostgreSQL or an S3-compatible object store, in memory for tests, or in a storage provider of your own.
 
 | Package | What it's for |
 |---|---|
 | `Resourcefull` | The clients and the provider interface. |
 | `Resourcefull.SqlServer` | Stores resources in SQL Server. |
 | `Resourcefull.PostgreSql` | Stores resources in PostgreSQL. |
+| `Resourcefull.S3` | Stores resources in Amazon S3 or another S3-compatible store. |
 | `Resourcefull.InMemory` | Keeps resources in process memory, for tests and local development. |
 | `Resourcefull.AspNetCore` | Serves downloads and accepts uploads in ASP.NET Core, with conditional requests and status codes. |
 | `Resourcefull.Testing` | The tests every provider must pass, for checking a provider of your own. |
@@ -100,6 +101,8 @@ you're trying to do, plus the API reference. Deciding between Resourcefull, obje
   and upgrades
 - [PostgreSQL](https://zacharydf7.github.io/Resourcefull/docs/providers/postgresql.html): provisioning, permissions
   and how it differs from SQL Server
+- [S3-compatible storage](https://zacharydf7.github.io/Resourcefull/docs/providers/s3.html): connecting to a store,
+  sharing a bucket, permissions and costs
 - [Upgrading](https://zacharydf7.github.io/Resourcefull/docs/upgrading.html), including from 2.x, and the
   [changelog](https://github.com/zacharydf7/Resourcefull/blob/main/CHANGELOG.md)
 

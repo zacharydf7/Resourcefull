@@ -11,6 +11,14 @@
   lists names in Unicode code point order, and refuses U+0000 in the names, version IDs and content types it stores.
   `AddResourcefullPostgreSqlCheck` is its health check, and it counts retries and abandoned uploads in
   `resourcefull.postgresql.*`. It's tested against PostgreSQL 16 and 17. See [PostgreSQL](docs/providers/postgresql.md).
+- **S3-compatible storage.** The new `Resourcefull.S3` package stores resources in a bucket of Amazon S3 or another
+  store that speaks its API, using only the store's conditional writes (`If-None-Match: *` and `If-Match` on
+  `PutObject`) to keep one current version per name. `UseS3(bucketName, configure)` registers it, with a client and a
+  key prefix of your choosing. It supports versions, create-only and conditional writes and deletes, copies, container
+  and version metadata, container policies, and export and import; moving, expiry and upload sessions throw
+  `NotSupportedException` for now. Names are kept exactly as given, even by stores that keep keys as files, and are
+  listed in Unicode code point order. It counts writes retried after a concurrent change to the same name in
+  `resourcefull.s3.retries`, and is tested against SeaweedFS. See [S3-compatible storage](docs/providers/s3.md).
 - **Uploading in parts.** An upload session stores a large file over several appends, and what's stored survives a
   dropped connection or a restart: `StartUploadAsync`, then `AppendUploadAsync` from each part's offset,
   `GetUploadAsync` to find where to resume, and `CompleteUploadAsync`, which makes the version current with the

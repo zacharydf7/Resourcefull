@@ -84,6 +84,8 @@
     href: providers/sql-server-upgrades.md
   - name: PostgreSQL
     href: providers/postgresql.md
+  - name: S3-compatible storage
+    href: providers/s3.md
   - name: Backups and recovery
     href: backups-and-recovery.md
   - name: Health checks

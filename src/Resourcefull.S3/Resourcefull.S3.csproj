@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <Description>S3-compatible object storage for Resourcefull: Amazon S3 and other stores that speak its API, with versions, content hashes, and create-only and conditional writes, built on the store's conditional puts.</Description>
+    <Title>Resourcefull.S3</Title>
+    <PackageTags>$(PackageTags);s3;object-storage</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="AWSSDK.S3" Version="4.0.103.4" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.14" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Resourcefull\Resourcefull.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Resourcefull.Tests.S3" />
+  </ItemGroup>
+
+</Project>

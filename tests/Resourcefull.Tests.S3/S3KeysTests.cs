@@ -1,0 +1,67 @@
+using System.Text;
+using Resourcefull.S3;
+
+namespace Resourcefull.Tests.S3;
+
+public class S3KeysTests
+{
+    private static readonly S3Keys Keys = new("resourcefull/");
+
+    /// <summary>A name's head key, past the part every head key in the container shares.</summary>
+    private static string KeyOf(string name) => Keys.Head("c", name)[Keys.Heads("c").Length..];
+
+    public static TheoryData<string> Names => new()
+    {
+        "report.pdf", "..", ".", "./b", "a/../b", "a//b", "/b", "b/", @"a\b", "[A]", "a b", "!", "~", "名前", "😀/😀",
+        "a\uD800", "\uDC00b", new string('a', 256), new string('.', 256), new string('名', 256),
+        string.Concat(Enumerable.Repeat("😀", 128))
+    };
+
+    [Theory]
+    [MemberData(nameof(Names))]
+    public void Head_ShouldGiveAKeyThatUnescapesToTheNameAndFits_WhenGivenAName(string name)
+    {
+        // Act
+        string key = KeyOf(name);
+
+        // Assert: no dots, backslashes or empty segments, and within what's left of S3's 1,024 bytes after the longest
+        // key prefix and the container's part.
+        Assert.Equal(name, S3Keys.Unescape(key));
+        Assert.DoesNotContain('.', key);
+        Assert.DoesNotContain('\\', key);
+        Assert.All(key.Split('/'), segment => Assert.InRange(Encoding.UTF8.GetByteCount(segment), 1, S3Keys.SegmentBytes));
+        Assert.InRange(Encoding.UTF8.GetByteCount(Keys.Head(new string('0', 32), name)), 1, 1024 - 200 + "resourcefull/".Length);
+    }
+
+    [Fact]
+    public void Head_ShouldGiveAnUnpairedSurrogateAKeyNoStoredNameHas_WhenGivenOne()
+    {
+        // Act & Assert: a lookup with a broken name mustn't find the name it would be read as.
+        Assert.NotEqual(KeyOf("a�"), KeyOf("a\uD800"));
+    }
+
+    [Fact]
+    public void Head_ShouldKeepTheNamesOrderWithNoKeyADirectoryOfAnother_WhenGivenNamesThatDifferWhereASegmentEnds()
+    {
+        // Arrange: names alike up to near the end of a segment, then differing in characters of every width.
+        var random = new Random(1042);
+        string[] tails = ["", "a", "!", ".", "/", "Z", "[", @"\", "]", "~", "é", "名", "😀", "", "�"];
+        var names = new List<string>();
+        for (int prefix = 190; prefix <= 200; prefix++)
+            foreach (string first in tails)
+                foreach (string second in tails)
+                    names.Add(new string('x', prefix) + first + second);
+        for (int i = 0; i < 2000; i++)
+            names.Add(string.Concat(Enumerable.Range(0, random.Next(1, 120)).Select(_ => tails[random.Next(1, tails.Length)])));
+        names = [.. names.Distinct()];
+
+        // Act
+        List<string> byKey = [.. names.OrderBy(KeyOf, CodePointOrder.Instance)];
+
+        // Assert: the store lists keys in their UTF-8 order, which must be the names' own; and no key followed by a "/"
+        // starts another, since a store that keeps keys as files would need the shorter one as a directory.
+        Assert.Equal([.. names.OrderBy(n => n, CodePointOrder.Instance)], byKey);
+        var keys = names.Select(KeyOf).ToHashSet();
+        Assert.DoesNotContain(keys, key => Enumerable.Range(0, key.Length).Any(i => key[i] == '/' && keys.Contains(key[..i])));
+    }
+}
