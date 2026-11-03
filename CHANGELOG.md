@@ -78,6 +78,10 @@
   the link's limits before the body is read, and `CheckUpload` reads a token. Upload and download tokens are sealed
   apart, so neither works as the other. `ResourceContainerPolicy.AllowsContentType` says whether a policy allows a
   type. See [Receiving files through links](docs/upload-links.md).
+- **A dashboard.** `app.MapResourcefullDashboard("/resourcefull").RequireAuthorization("admins")` maps a read-only
+  page showing the health check's result, each container's usage against its policy, and its files, along with the
+  JSON endpoints the page reads, which can serve as an admin API. It refuses to run until authorization is required on
+  it, a fallback policy covers it, or it's marked `AllowAnonymous()`. See [The dashboard](docs/aspnet-core/dashboard.md).
 - **Expiring resources.** `ResourceUploadOptions.ExpiresAt` sets when a version expires, and `UseExpiry` runs a
   background service that deletes expired versions within one interval, on every instance safely. `SetExpiryAsync`
   changes or clears a version's expiry, or the current version's with a `null` version ID. An

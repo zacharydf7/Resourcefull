@@ -50,6 +50,8 @@
     href: aspnet-core/status-codes.md
   - name: MVC, Razor Pages and Blazor
     href: aspnet-core/mvc-razor-blazor.md
+  - name: The dashboard
+    href: aspnet-core/dashboard.md
   - name: URI providers
     href: uri-providers.md
   - name: Sharing files with links

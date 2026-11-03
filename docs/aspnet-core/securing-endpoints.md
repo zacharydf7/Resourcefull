@@ -18,10 +18,10 @@ app.MapGet("/files/{**name}", ...).RequireAuthorization();
 app.MapPut("/files/{**name}", ...).RequireAuthorization();
 ```
 
-Endpoints for administrators, such as [exporting a container](../backup-and-move.md), take a stricter policy:
-`RequireAuthorization("admins")`, where `admins` is a policy you define with `AddAuthorization`. The exceptions are
-the endpoints that serve [shared links](../sharing-links.md) and [upload links](../upload-links.md): the link itself is
-the permission, so they must stay open.
+Endpoints for administrators, such as [exporting a container](../backup-and-move.md) or the [dashboard](dashboard.md),
+take a stricter policy: `RequireAuthorization("admins")`, where `admins` is a policy you define with
+`AddAuthorization`. The exceptions are the endpoints that serve [shared links](../sharing-links.md) and
+[upload links](../upload-links.md): the link itself is the permission, so they must stay open.
 
 ## 2. Pick the container from who's asking
 

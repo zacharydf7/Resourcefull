@@ -13,7 +13,8 @@ namespace Resourcefull.Tests.AspNetCore;
 /// A minimal API over the in-memory provider, served by the test server, with endpoints built from the package the way
 /// an application would: download, download inline under another name, download looked up by the result (which
 /// answers ranges), download through a signed link, upload, upload through a signed link, one that throws a given
-/// exception, and a Razor page that downloads. Each app has Data Protection keys of its own, held in memory, so one app's links don't work in another.
+/// exception, a Razor page that downloads, and the dashboard, open to anyone, with Resourcefull's health check. Each
+/// app has Data Protection keys of its own, held in memory, so one app's links don't work in another.
 /// </summary>
 internal sealed class TestApp : IAsyncDisposable
 {
@@ -52,6 +53,7 @@ internal sealed class TestApp : IAsyncDisposable
             if (policy is not null) options.UseContainerPolicies(policy);
         });
         builder.Services.AddResourcefullExceptionHandler();
+        builder.Services.AddHealthChecks().AddResourcefullCheck();
         builder.Services.AddRazorPages().AddApplicationPart(typeof(TestApp).Assembly);
 
         WebApplication app = builder.Build();
@@ -78,6 +80,7 @@ internal sealed class TestApp : IAsyncDisposable
             Results.SharedUpload(resources, token, name));
         app.MapGet("/throw", () => { throw toThrow!; });
         app.MapRazorPages();
+        app.MapResourcefullDashboard().AllowAnonymous();
 
         await app.StartAsync();
         await app.Services.CreateScope().ServiceProvider.GetRequiredService<IResourceServiceClient>().CreateContainerAsync(Container);

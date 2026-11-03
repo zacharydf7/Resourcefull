@@ -80,6 +80,25 @@ public sealed class PreconditionTelemetryTests
         Assert.Equal(expected, link);
     }
 
+    [Theory]
+    [InlineData("/resourcefull/", "page")]
+    [InlineData("/resourcefull/api/health", "health")]
+    [InlineData("/resourcefull/api/containers", "containers")]
+    [InlineData("/resourcefull/api/container?name=files", "container")]
+    [InlineData("/resourcefull/api/resources?container=files", "resources")]
+    public async Task MapResourcefullDashboard_ShouldRecordTheEndpointOnTheRequestSpan_WhenCalled(string path, string expected)
+    {
+        // Arrange
+        await using TestApp app = await TestApp.StartAsync();
+
+        // Act
+        (HttpStatusCode status, object? endpoint) = await SendAsync(app, new HttpRequestMessage(HttpMethod.Get, path), "resourcefull.dashboard");
+
+        // Assert
+        Assert.Equal(HttpStatusCode.OK, status);
+        Assert.Equal(expected, endpoint);
+    }
+
     [Fact]
     public async Task Resource_ShouldRecordNotModifiedOnTheRequestSpan_WhenIfNoneMatchHolds()
     {

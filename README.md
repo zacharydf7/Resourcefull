@@ -38,6 +38,7 @@ Coming in 4.0, and documented on the site already:
 - **Expiring files:** uploads that delete themselves, with a hook to audit every deletion.
 - **Signed links:** let anyone download one file, or upload files within limits you set, without signing in, until a
   time you choose.
+- **A dashboard:** one line maps a page showing the store's health and each container's usage against its limits.
 - **Backups:** export a container, every version, to a zip file, and import it into another store.
 - **Range downloads:** read part of a file, so videos can seek and downloads can resume.
 - **Health checks and telemetry:** OpenTelemetry spans and metrics for every operation.

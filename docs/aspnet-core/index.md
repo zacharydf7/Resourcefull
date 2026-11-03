@@ -21,6 +21,8 @@ This section covers:
   preconditions, and raising the request size limits for large files.
 - [Turning exceptions into status codes](status-codes.md): one handler that answers 404, 409, 412 and the rest.
 - [MVC, Razor Pages and Blazor](mvc-razor-blazor.md): the same pieces in controllers, pages and Blazor components.
+- [The dashboard](dashboard.md): a page, for administrators, showing the store's health and each container's usage
+  against its limits, with the JSON endpoints behind it.
 - [URIs for your API](../uri-providers.md): giving containers and resources the URLs your endpoints serve them at.
 - [Sharing files with links](../sharing-links.md): links that let anyone download one file, without signing in,
   until they expire.

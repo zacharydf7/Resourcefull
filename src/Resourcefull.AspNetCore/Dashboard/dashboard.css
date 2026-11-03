@@ -1,0 +1,174 @@
+:root {
+  color-scheme: light dark;
+  --text: #1f2328;
+  --muted: #59636e;
+  --background: #ffffff;
+  --surface: #f6f8fa;
+  --border: #d1d9e0;
+  --link: #0969da;
+  --healthy: #1a7f37;
+  --degraded: #9a6700;
+  --unhealthy: #cf222e;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --text: #e6edf3;
+    --muted: #9198a1;
+    --background: #0d1117;
+    --surface: #151b23;
+    --border: #3d444d;
+    --link: #4493f8;
+    --healthy: #3fb950;
+    --degraded: #d29922;
+    --unhealthy: #f85149;
+  }
+}
+
+body {
+  margin: 0;
+  color: var(--text);
+  background: var(--background);
+}
+
+header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 24px;
+  padding: 12px 24px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+h2[tabindex="-1"]:focus {
+  outline: none;
+}
+
+h1 {
+  margin: 0;
+  font-size: 20px;
+}
+
+h1 a {
+  color: inherit;
+  text-decoration: none;
+}
+
+main {
+  padding: 0 24px 32px;
+  max-width: 1200px;
+}
+
+a {
+  color: var(--link);
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px 24px;
+}
+
+.health {
+  margin: 0;
+  color: var(--muted);
+}
+
+.badge {
+  font-weight: 600;
+}
+
+.badge.healthy {
+  color: var(--healthy);
+}
+
+.badge.degraded {
+  color: var(--degraded);
+}
+
+.badge.unhealthy {
+  color: var(--unhealthy);
+}
+
+.table {
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th,
+td {
+  padding: 6px 12px 6px 0;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+
+thead th {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+tbody th {
+  font-weight: normal;
+  overflow-wrap: break-word;
+}
+
+.number {
+  text-align: right;
+  white-space: nowrap;
+}
+
+meter {
+  display: block;
+  width: 120px;
+}
+
+.summary {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 16px;
+}
+
+.summary dt {
+  color: var(--muted);
+}
+
+.summary dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.status {
+  color: var(--muted);
+}
+
+.status.error {
+  color: var(--unhealthy);
+}
+
+input,
+button {
+  font: inherit;
+}
+
+input {
+  max-width: 100%;
+}
+
+@media (max-width: 600px) {
+  header,
+  main {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+}

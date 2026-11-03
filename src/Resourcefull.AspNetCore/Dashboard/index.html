@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>Resourcefull</title>
+  <link rel="stylesheet" href="dashboard.css">
+  <script src="dashboard.js" defer></script>
+</head>
+<body>
+  <header>
+    <h1><a href="#">Resourcefull</a></h1>
+    <p id="health" class="health" aria-live="polite">Checking health…</p>
+  </header>
+
+  <main>
+    <section id="containers-view">
+      <div class="toolbar">
+        <h2 id="containers-heading" tabindex="-1">Containers</h2>
+        <form id="containers-filter" role="search">
+          <label>Names starting with <input name="prefix" type="search" autocomplete="off"></label>
+        </form>
+      </div>
+      <div class="table">
+        <table>
+          <thead>
+            <tr>
+              <th scope="col">Container</th>
+              <th scope="col">Stored</th>
+              <th scope="col">Files</th>
+              <th scope="col" class="number">Versions</th>
+              <th scope="col">Limits</th>
+            </tr>
+          </thead>
+          <tbody id="containers"></tbody>
+        </table>
+      </div>
+      <p class="status" id="containers-status" role="status"></p>
+      <button type="button" id="containers-more" hidden>Show more</button>
+    </section>
+
+    <section id="container-view" hidden>
+      <p><a href="#">← All containers</a></p>
+      <h2 id="container-name" tabindex="-1"></h2>
+      <dl id="container-summary" class="summary"></dl>
+      <div class="toolbar">
+        <h3>Files</h3>
+        <form id="resources-filter" role="search">
+          <label>Names starting with <input name="prefix" type="search" autocomplete="off"></label>
+        </form>
+      </div>
+      <div class="table">
+        <table>
+          <thead>
+            <tr>
+              <th scope="col">Name</th>
+              <th scope="col" class="number">Size</th>
+              <th scope="col">Type</th>
+              <th scope="col">Last modified</th>
+              <th scope="col">Expires</th>
+            </tr>
+          </thead>
+          <tbody id="resources"></tbody>
+        </table>
+      </div>
+      <p class="status" id="resources-status" role="status"></p>
+      <button type="button" id="resources-more" hidden>Show more</button>
+    </section>
+  </main>
+</body>
+</html>

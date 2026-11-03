@@ -5,7 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <Title>Resourcefull.AspNetCore</Title>
-    <Description>ASP.NET Core support for Resourcefull: serve downloads with their headers and conditional responses, accept uploads with the request's preconditions, and turn Resourcefull's exceptions into status codes.</Description>
+    <Description>ASP.NET Core support for Resourcefull: serve downloads with their headers and conditional responses, accept uploads with the request's preconditions, share files with signed links, turn Resourcefull's exceptions into status codes, and see the store on a dashboard.</Description>
     <PackageTags>$(PackageTags);aspnetcore</PackageTags>
   </PropertyGroup>
 
@@ -15,6 +15,11 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Resourcefull\Resourcefull.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Dashboard\index.html;Dashboard\dashboard.js;Dashboard\dashboard.css"
+      LogicalName="Resourcefull.AspNetCore.Dashboard.%(Filename)%(Extension)" />
   </ItemGroup>
 
 </Project>
