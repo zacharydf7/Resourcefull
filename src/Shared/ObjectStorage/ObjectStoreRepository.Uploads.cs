@@ -411,7 +411,9 @@ internal sealed partial class ObjectStoreRepository
     /// Lists every session, and deletes those nothing was appended to since <paramref name="staleBefore"/>, those whose
     /// container was deleted, and segments no record names once they're an hour old: what a cancel or completion left
     /// when deleting them failed. A session that can't be deleted is left for the next sweep, and the others still are.
-    /// It also finishes the moves whose movers stopped before they could, which are left behind the same way.
+    /// It also finishes the moves whose movers stopped before they could, which are left behind the same way. Once a
+    /// day, it also deletes content no head names, which writes and deletes that stopped partway leave behind, and finishes
+    /// purging deleted containers.
     /// </summary>
     public override async Task<int> DeleteAbandonedUploadsAsync(DateTimeOffset staleBefore, CancellationToken cancellationToken = default)
     {
@@ -441,13 +443,21 @@ internal sealed partial class ObjectStoreRepository
             keys.Add(item);
         }
         if (session is not null) await SweepAsync().ConfigureAwait(false);
-        ObjectStoreTelemetry.CountAbandonedUploads(deleted, storeName);
         await SweepMovesAsync(failures, cancellationToken).ConfigureAwait(false);
+        try
+        {
+            deleted += await SweepUnnamedContentAsync(staleBefore, failures, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+        {
+            failures.Add(exception);
+        }
+        ObjectStoreTelemetry.CountAbandonedUploads(deleted, storeName);
 
         if (failures.Count > 0)
         {
-            throw new AggregateException($"{failures.Count} abandoned upload sessions or unfinished moves weren't cleaned up, " +
-                $"and stay for the next sweep; {deleted} sessions were deleted.", failures);
+            throw new AggregateException($"{failures.Count} abandoned upload sessions, unfinished moves or scans for unnamed " +
+                $"content failed, and are left for the next sweep; {deleted} sessions or content objects were deleted.", failures);
         }
         return deleted;
     }

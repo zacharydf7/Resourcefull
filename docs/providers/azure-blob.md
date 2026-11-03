@@ -146,8 +146,12 @@ characters beyond U+FFFF, such as emoji, or from U+E000 to U+FFFF, might list in
   partway, deleting the container again finishes it, and so does creating a container of that name again. Its
   versions' expiry entries are kept apart from it, under `{prefix}x/`, so they stay until they're due, and a sweep
   then drops them.
-- A write interrupted after its content was uploaded, such as by a crash, leaves that content unnamed. It still counts
-  toward the container's stored size until the container is deleted.
+- A write interrupted after its content was uploaded, such as by a crash, leaves that content named by no head, and so
+  does a delete that fails to delete its content. It counts toward the container's stored size until the
+  [expiry](../expiry.md) sweep deletes it: once a day, a sweep reads every head and deletes the content that it and the
+  sweep the day before both found named by no head and over a day old. Two scans are needed because one reads the heads
+  one after another, so a version renamed meanwhile could look unnamed to it. The same daily scan also finishes purging
+  any container whose delete stopped partway.
 - An upload of 8 MiB or more that fails partway leaves the blocks it sent uncommitted, and so does a completion whose
   join fails. Azure discards uncommitted blocks on its own after a week.
 - A move that stops partway, such as by a crash, leaves its marks and its entry. Every read still finds the versions in
@@ -171,12 +175,14 @@ characters beyond U+FFFF, such as emoji, or from U+E000 to U+FFFF, might list in
 - **Usage**, which [container policies](../container-policies.md) check before each write they limit, comes from
   listings alone: the content blobs' sizes, and the number of non-empty heads. That's one list request per five
   thousand blobs in the container.
-- **An expiry sweep** with nothing due is one list request. Each expired version it finds costs three reads to
-  find it (its index entry, its container's record and its head), two more to delete it (the container's record and
-  the head again), a write of the head, and two deletes, of its content and its entry. A version with an expiry costs
-  one more small blob, and an upload with an expiry one more write, for its entry. Changing an expiry reads the
-  container's record and the head, writes the new entry (none when clearing it), reads and writes the head, then
-  deletes the old entry.
+- **An expiry sweep** with nothing due is three list requests (of expiry entries, upload sessions and moves) and one
+  read, of the record of the last scan for unnamed content. Once a day, the sweep runs that scan: it lists every
+  container's record, head and content blob, and reads every move's entry, record and head, several at a time. Each
+  expired version it finds costs three reads to find it (its index entry, its container's record and its head), two more
+  to delete it (the container's record and the head again), a write of the head, and two deletes, of its content and its
+  entry. A version with an expiry costs one more small blob, and an upload with an expiry one more write, for its entry.
+  Changing an expiry reads the container's record and the head, writes the new entry (none when clearing it), reads and
+  writes the head, then deletes the old entry.
 - **A rename** reads both containers' records and both heads, writes the move's entry, marks the source head, writes the
   destination's, and commits the entry; then it reads and writes each head again to clear the marks, deletes the entry,
   and reads the destination container's record: about eight reads, six writes and two deletes. A version with an expiry
@@ -209,5 +215,5 @@ the same names. It counts `resourcefull.azureblob.moves_recovered`: moves the ex
 their mover stopped first, such as after a crash or a lost connection. It also counts
 `resourcefull.azureblob.stale_expiries`: expiry entries a sweep dropped because their version no longer existed or had
 another expiry; and `resourcefull.azureblob.abandoned_uploads`: upload sessions nothing was appended to for a day, or
-whose container was deleted, which the expiry sweep deleted. The Azure SDK can also trace its own requests; see its
-documentation for OpenTelemetry.
+whose container was deleted, and content no head names, which the expiry sweep deleted. The Azure SDK can also trace its
+own requests; see its documentation for OpenTelemetry.

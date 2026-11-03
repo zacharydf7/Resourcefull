@@ -92,6 +92,11 @@ internal sealed class ObjectKeys(string prefix)
     public string Content(string containerId, string blob) => Contents(containerId) + blob;
 
     /// <summary>
+    /// The key of the record of the last scan for content no head names, which also lists what that scan found.
+    /// </summary>
+    public string Scan { get; } = prefix + "s";
+
+    /// <summary>
     /// The prefix of every move's entry, kept apart from the containers' data so deleting a container doesn't take the
     /// entry that decides a move into or out of it.
     /// </summary>

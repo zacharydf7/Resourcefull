@@ -243,7 +243,7 @@ internal sealed partial class ObjectStoreRepository(IObjectStore store, string k
 
     /// <summary>
     /// Takes the versions off the name's head in one write, deciding the conditions there, then deletes their content.
-    /// Content whose delete fails is no longer named by any head, and stays until the container is deleted.
+    /// Content whose delete fails is no longer named by any head, and stays until the sweep deletes it.
     /// </summary>
     public override async Task<bool> DeleteResourceAsync(ResourceLocation resource, string? versionId = null,
         ResourceConditions? conditions = null, CancellationToken cancellationToken = default)
@@ -308,7 +308,7 @@ internal sealed partial class ObjectStoreRepository(IObjectStore store, string k
 
     /// <summary>
     /// Adds up the container's content objects' sizes, and counts the names with versions, from listings alone.
-    /// Content an unfinished write left behind counts until the container is deleted, and while a move is being made, a
+    /// Content an unfinished write left behind counts until the sweep deletes it, and while a move is being made, a
     /// name it moves counts in both places.
     /// </summary>
     public override async Task<ResourceContainerUsage> GetContainerUsageAsync(string resourceContainerName,
@@ -696,7 +696,7 @@ internal sealed partial class ObjectStoreRepository(IObjectStore store, string k
     }
 
     /// <summary>
-    /// Deletes content no head names anymore. If that fails, the content stays until its container is deleted.
+    /// Deletes content no head names anymore. If that fails, the content stays until the sweep deletes it.
     /// </summary>
     private async Task DeleteQuietlyAsync(string[] keys)
     {

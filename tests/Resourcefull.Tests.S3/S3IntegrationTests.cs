@@ -854,6 +854,90 @@ public class S3IntegrationTests(S3Fixture fixture)
     }
 
     [Fact]
+    public async Task DeleteAbandonedUploadsAsync_ShouldDeleteContentNoHeadNames_WhenTwoScansADayApartFindIt()
+    {
+        fixture.SkipIfUnavailable();
+
+        // Arrange: a version; content no head names, as a write that stopped after uploading it would leave; and an object
+        // a deleted container's unfinished purge left behind.
+        string prefix = $"unnamed-{Guid.NewGuid():N}/";
+        var clock = new MovableClock();
+        ObjectStoreRepository repository = await NewRepositoryAsync(prefix, clock);
+        var location = new ResourceLocation("c", "a.txt");
+        await repository.AddResourceAsync(new NewResourceVersion(location, "v1"), new MemoryStream("kept"u8.ToArray()));
+        string named = (await fixture.Client.ListObjectsV2Async(new ListObjectsV2Request
+        {
+            BucketName = fixture.BucketName, Prefix = prefix + "d/"
+        })).S3Objects.Single(o => o.Key.Contains("/b/", StringComparison.Ordinal)).Key;
+        string unnamed = named[..(named.LastIndexOf('/') + 1)] + new string('0', 32);
+        await fixture.Client.PutObjectAsync(new PutObjectRequest { BucketName = fixture.BucketName, Key = unnamed, ContentBody = "x" });
+        await repository.AddContainerAsync("gone", new Dictionary<string, string>());
+        await repository.DeleteContainerAsync("gone");
+        using GetObjectResponse record = await fixture.Client.GetObjectAsync(fixture.BucketName, prefix + "c/gone!");
+        string left = $"{prefix}d/{JsonNode.Parse(record.ResponseStream)!["id"]}/b/{new string('0', 32)}";
+        await fixture.Client.PutObjectAsync(new PutObjectRequest { BucketName = fixture.BucketName, Key = left, ContentBody = "x" });
+
+        var counted = new List<long>();
+        using var listener = new MeterListener();
+        listener.InstrumentPublished = (instrument, l) =>
+        {
+            if (instrument.Name == "resourcefull.s3.abandoned_uploads") l.EnableMeasurementEvents(instrument);
+        };
+        listener.SetMeasurementEventCallback<long>((_, value, _, _) => counted.Add(value));
+        listener.Start();
+
+        // Act: sweeps two days on, half a day after that, and a day after the first.
+        clock.Now = DateTimeOffset.UtcNow.AddDays(2);
+        int first = await repository.DeleteAbandonedUploadsAsync(DateTimeOffset.UtcNow.AddDays(-1));
+        int unnamedAfterFirst = await CountKeysAsync(unnamed);
+        int leftAfterFirst = await CountKeysAsync(left);
+        clock.Now = DateTimeOffset.UtcNow.AddDays(2.5);
+        int tooSoon = await repository.DeleteAbandonedUploadsAsync(DateTimeOffset.UtcNow.AddDays(-1));
+        int unnamedAfterTooSoon = await CountKeysAsync(unnamed);
+        clock.Now = DateTimeOffset.UtcNow.AddDays(3).AddMinutes(1);
+        int second = await repository.DeleteAbandonedUploadsAsync(DateTimeOffset.UtcNow.AddDays(-1));
+
+        // Assert: the first scan only noted the unnamed content, a sweep within the day didn't scan, and the next scan
+        // deleted it and counted it; the deleted container's object went at the first; the named version is untouched.
+        Assert.Equal((0, 1, 0), (first, unnamedAfterFirst, leftAfterFirst));
+        Assert.Equal((0, 1), (tooSoon, unnamedAfterTooSoon));
+        Assert.Equal(1, second);
+        Assert.Equal([1L], counted);
+        Assert.Equal(0, await CountKeysAsync(unnamed));
+        Assert.Equal("kept"u8.ToArray(), await ReadAllAsync(await repository.GetResourceStreamAsync(location)));
+    }
+
+    [Fact]
+    public async Task DeleteAbandonedUploadsAsync_ShouldLeaveContentNoHeadNamesAlone_WhenItIsUnderADayOld()
+    {
+        fixture.SkipIfUnavailable();
+
+        // Arrange: content no head names, and a repository whose real time the test sets.
+        string prefix = $"unnamed-young-{Guid.NewGuid():N}/";
+        var clock = new MovableClock();
+        ObjectStoreRepository repository = await NewRepositoryAsync(prefix, clock);
+        await repository.AddResourceAsync(new NewResourceVersion(new ResourceLocation("c", "a.txt"), "v1"),
+            new MemoryStream("kept"u8.ToArray()));
+        string named = (await fixture.Client.ListObjectsV2Async(new ListObjectsV2Request
+        {
+            BucketName = fixture.BucketName, Prefix = prefix + "d/"
+        })).S3Objects.Single(o => o.Key.Contains("/b/", StringComparison.Ordinal)).Key;
+        string unnamed = named[..(named.LastIndexOf('/') + 1)] + new string('0', 32);
+        await fixture.Client.PutObjectAsync(new PutObjectRequest { BucketName = fixture.BucketName, Key = unnamed, ContentBody = "x" });
+
+        // Act: scans half a day on, while the content is under a day old, then a day and a half on, when it's over a day
+        // old.
+        clock.Now = DateTimeOffset.UtcNow.AddHours(12);
+        await repository.DeleteAbandonedUploadsAsync(DateTimeOffset.UtcNow.AddDays(-1));
+        clock.Now = DateTimeOffset.UtcNow.AddHours(36).AddMinutes(1);
+        int second = await repository.DeleteAbandonedUploadsAsync(DateTimeOffset.UtcNow.AddDays(-1));
+
+        // Assert: the first scan passed over the young content, so the second, the first to find it old, only noted it.
+        Assert.Equal(0, second);
+        Assert.Equal(1, await CountKeysAsync(unnamed));
+    }
+
+    [Fact]
     public async Task DeleteAbandonedUploadsAsync_ShouldDeleteAndCountTheOthers_WhenOneSessionCantBeRead()
     {
         fixture.SkipIfUnavailable();

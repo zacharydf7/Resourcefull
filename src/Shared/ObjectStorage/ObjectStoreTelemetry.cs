@@ -27,7 +27,8 @@ internal static class ObjectStoreTelemetry
 
     private static readonly Counter<long> AbandonedUploads = Meter.CreateCounter<long>($"resourcefull.{Provider}.abandoned_uploads",
         unit: "{upload}",
-        description: "Upload sessions nothing was appended to for a day, or whose container was deleted, deleted by the expiry sweep.");
+        description: "Upload sessions nothing was appended to for a day, or whose container was deleted, and content no head names, "
+            + "deleted by the expiry sweep.");
 
     private static readonly Counter<long> RecoveredMoves = Meter.CreateCounter<long>($"resourcefull.{Provider}.moves_recovered",
         unit: "{move}", description: "Moves the expiry sweep finished or undid because their mover stopped before it could.");
@@ -41,7 +42,7 @@ internal static class ObjectStoreTelemetry
     /// <summary>Counts an expiry entry dropped because its version no longer existed or had another expiry.</summary>
     public static void CountStaleExpiry(string? storeName) => Count(StaleExpiries, storeName);
 
-    /// <summary>Counts the abandoned upload sessions a sweep deleted.</summary>
+    /// <summary>Counts the abandoned upload sessions and unnamed content objects a sweep deleted.</summary>
     public static void CountAbandonedUploads(int deleted, string? storeName)
     {
         if (deleted > 0) Count(AbandonedUploads, storeName, deleted);
