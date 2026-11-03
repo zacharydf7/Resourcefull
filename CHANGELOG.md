@@ -86,12 +86,15 @@
   the link's limits before the body is read, and `CheckUpload` reads a token. Upload and download tokens are sealed
   apart, so neither works as the other. `ResourceContainerPolicy.AllowsContentType` says whether a policy allows a
   type. See [Receiving files through links](docs/upload-links.md).
-- **A dashboard.** `app.MapResourcefullDashboard("/resourcefull").RequireAuthorization("admins")` maps a read-only
+- **A dashboard.** `app.MapResourcefullDashboard("/resourcefull").RequireAuthorization("admins")` maps a
   page showing the health check's result, how many expired versions are waiting for the sweep, each container's usage
   against its policy, its largest versions, the versions that expire soonest, its files, and each file's versions,
   along with the JSON endpoints the page reads, which can serve as an admin API. It refuses to run until
-  authorization is required on it, a fallback policy covers it, or it's marked `AllowAnonymous()`. See
-  [The dashboard](docs/aspnet-core/dashboard.md).
+  authorization is required on it, a fallback policy covers it, or it's marked `AllowAnonymous()`. For development,
+  `ResourcefullDashboardOptions.AllowChanges` lets it upload, delete and restore files and versions, change a
+  version's expiry, content type and metadata, and create and delete containers. `DownloadLinkPath` and
+  `UploadLinkPath` let it create links. Each change needs a header that the dashboard's page sends and another site's
+  page can't, and is logged with the user who made it. See [The dashboard](docs/aspnet-core/dashboard.md).
 - **Versions by size or expiry.** `GetTopVersionsAsync(ResourceVersionOrder.LargestFirst)` lists a container's
   largest versions, current and older, to show what's filling it, and `ResourceVersionOrder.ExpiringFirst` the ones
   that expire soonest. `IResourceServiceClient.GetExpiredVersionsAsync` lists the expired versions the sweep hasn't

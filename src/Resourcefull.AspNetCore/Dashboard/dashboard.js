@@ -94,6 +94,68 @@ function showError(status, error) {
   status.classList.add("error");
 }
 
+// What the dashboard may change, as the app mapped it; nothing until the features endpoint answers.
+let features = { changes: false, downloadLinks: false, uploadLinks: false };
+
+// Sends a change. The header tells the server the change came from this page, since another site's page can't send it.
+async function send(method, path, parameters, body) {
+  const query = new URLSearchParams();
+  for (const [name, value] of Object.entries(parameters || {})) {
+    if (value !== null && value !== undefined) query.set(name, value);
+  }
+  const headers = { "X-Resourcefull-Dashboard": "1", Accept: "application/json" };
+  let content = body;
+  // A file goes as it is, with its own type; anything else as JSON.
+  if (body !== undefined && !(body instanceof Blob)) {
+    headers["Content-Type"] = "application/json";
+    content = JSON.stringify(body);
+  }
+  const response = await fetch("api/" + path + (query.size ? "?" + query : ""), { method, headers, body: content });
+  if (response.status === 404) throw new Error("This no longer exists.");
+  const json = (response.headers.get("Content-Type") || "").includes("json") ? await response.json() : null;
+  if (!response.ok) {
+    throw new Error(json && json.title ? json.title : response.status === 401 || response.status === 403
+      ? "You aren't allowed to change this."
+      : "The change failed (" + response.status + ").");
+  }
+  return json;
+}
+
+// Runs a change, saying in the status what it's doing and then what it did or why it failed. The result isn't shown if
+// stillShown says the view the change started from was left meanwhile, since the status then belongs to another view.
+async function attempt(status, work, stillShown = () => true) {
+  status.textContent = "Working…";
+  status.classList.remove("error");
+  try {
+    const message = await work();
+    if (stillShown()) status.textContent = message;
+    return true;
+  } catch (error) {
+    if (stillShown()) showError(status, error);
+    return false;
+  }
+}
+
+// A form's field by name. form.elements.namedItem avoids clashes between field names and the form's own members, such
+// as name or reset.
+function field(form, name) {
+  return form.elements.namedItem(name);
+}
+
+function actionButton(text, action, className) {
+  const button = element("button", text, className);
+  button.type = "button";
+  button.addEventListener("click", action);
+  return button;
+}
+
+// A time as a datetime-local input takes it, in the browser's time zone.
+function toLocalInput(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+}
+
 // A table that loads a page at a time, with a filter and a "Show more" button.
 function pagedTable({ body, status, more, filter, load, row, empty }) {
   let token = null;
@@ -229,8 +291,12 @@ async function fillList(id, path, parameters, current, row, empty) {
   }
 }
 
+// The container the change forms were last shown for, so reloading it after a change keeps what the change said.
+let formsContainer = null;
+
 async function showContainer(name, focus) {
   shownContainer = name;
+  shownFile = null;
   showView("container-view");
   const heading = document.getElementById("container-name");
   heading.textContent = name;
@@ -238,6 +304,16 @@ async function showContainer(name, focus) {
   document.title = name + " · Resourcefull";
   const summary = document.getElementById("container-summary");
   summary.replaceChildren();
+  // Switching containers clears what the forms showed for the last one, such as an upload link.
+  if (name !== formsContainer) {
+    formsContainer = name;
+    for (const form of [uploadForm, uploadLinkForm]) {
+      form.reset();
+      form.querySelector(".status").textContent = "";
+    }
+    field(uploadLinkForm, "url").hidden = true;
+    document.getElementById("delete-container-status").textContent = "";
+  }
   document.getElementById("resources-filter").prefix.value = "";
   resources.reload();
   const current = ++viewRequest;
@@ -270,9 +346,19 @@ async function showContainer(name, focus) {
   }
 }
 
+let shownFile = null;
+
 function showVersions(container, name, focus) {
   shownContainer = null;
+  // A change's status message survives reloading the same file; the download link and the edit form don't.
+  if (!isShown({ container, name })) {
+    document.getElementById("versions-change").textContent = "";
+    document.getElementById("versions-change").classList.remove("error");
+  }
+  shownFile = { container, name };
   showView("versions-view");
+  document.getElementById("edit-form").hidden = true;
+  document.getElementById("download-link").hidden = true;
   document.getElementById("versions-container").textContent = container;
   document.getElementById("versions-back").href = "#container=" + encodeURIComponent(container);
   const heading = document.getElementById("versions-name");
@@ -288,12 +374,135 @@ function showVersions(container, name, focus) {
       element("td", version.contentType),
       element("td", formatDate(version.lastModified)),
       element("td", formatDate(version.expiresAt)));
+    if (features.changes) tr.append(versionActions(version));
     return tr;
   }, "No versions.");
 }
 
+function versionActions(version) {
+  const cell = element("td", null, "actions");
+  if (!version.isLatest) cell.append(actionButton("Restore", () => restoreVersion(version)));
+  cell.append(actionButton("Edit", () => editVersion(version)));
+  if (features.downloadLinks) cell.append(actionButton("Link", () => downloadLink(version)));
+  cell.append(actionButton("Delete", () => deleteVersion(version), "danger"));
+  return cell;
+}
+
+function fileParameters(versionId) {
+  return { container: shownFile.container, name: shownFile.name, versionId };
+}
+
+// Whether the versions view shows this file, even if it was left and opened again since.
+function isShown(file) {
+  return shownFile !== null && shownFile.container === file.container && shownFile.name === file.name;
+}
+
+// Shows the file's versions again after a change to them, unless another view is shown.
+function reloadVersions(file) {
+  if (isShown(file)) showVersions(file.container, file.name, false);
+}
+
+async function restoreVersion(version) {
+  const file = shownFile;
+  const status = document.getElementById("versions-change");
+  if (await attempt(status, async () => {
+    await send("POST", "restore", fileParameters(version.versionId));
+    return "Restored version " + version.versionId + " as a new current version.";
+  }, () => isShown(file))) reloadVersions(file);
+}
+
+async function deleteVersion(version) {
+  if (!confirm("Delete version " + version.versionId + "?")) return;
+  const file = shownFile;
+  const status = document.getElementById("versions-change");
+  if (await attempt(status, async () => {
+    await send("DELETE", "resource", fileParameters(version.versionId));
+    return "Deleted version " + version.versionId + ".";
+  }, () => isShown(file))) reloadVersions(file);
+}
+
+async function downloadLink(version) {
+  const file = shownFile;
+  const output = document.getElementById("download-link");
+  output.hidden = true;
+  await attempt(document.getElementById("versions-change"), async () => {
+    const link = await send("POST", "download-link", fileParameters(version.versionId), { expiresInMinutes: 60 });
+    if (isShown(file)) {
+      output.value = link.url;
+      output.hidden = false;
+      output.select();
+    }
+    return "Anyone with this link can download version " + version.versionId + " until " + formatDate(link.expiresAt) + ".";
+  }, () => isShown(file));
+}
+
+let editing = null;
+
+function editVersion(version) {
+  editing = version;
+  const form = document.getElementById("edit-form");
+  document.getElementById("edit-heading").textContent = "Edit version " + version.versionId;
+  field(form, "contentType").value = version.contentType || "";
+  field(form, "expiresAt").value = toLocalInput(version.expiresAt);
+  field(form, "metadata").value = Object.entries(version.metadata).map(([key, value]) => key + "=" + value).join("\n");
+  form.querySelector(".status").textContent = "";
+  form.hidden = false;
+  field(form, "contentType").focus();
+}
+
+function parseMetadata(text) {
+  const metadata = {};
+  for (const line of text.split("\n").map(l => l.trim()).filter(l => l)) {
+    const equals = line.indexOf("=");
+    if (equals <= 0) throw new Error("Each line of metadata needs a key, then =, then its value.");
+    metadata[line.slice(0, equals).trim()] = line.slice(equals + 1).trim();
+  }
+  return metadata;
+}
+
+document.getElementById("edit-form").addEventListener("submit", async event => {
+  event.preventDefault();
+  const form = event.target;
+  const version = editing;
+  const file = shownFile;
+  const parameters = fileParameters(version.versionId);
+  if (await attempt(form.querySelector(".status"), async () => {
+    const metadata = parseMetadata(field(form, "metadata").value);
+    const contentType = field(form, "contentType").value.trim() || null;
+    const expires = field(form, "expiresAt").value;
+    // Only what changed is sent, since each is a write of its own, and a container may refuse one of them.
+    if (contentType !== (version.contentType || null)) await send("PUT", "content-type", parameters, { contentType });
+    if (expires !== toLocalInput(version.expiresAt)) {
+      await send("PUT", "expiry", parameters, { expiresAt: expires ? new Date(expires).toISOString() : null });
+    }
+    if (JSON.stringify(metadata) !== JSON.stringify(version.metadata)) await send("PUT", "metadata", parameters, { metadata });
+    return "Saved.";
+  }, () => isShown(file)) && isShown(file)) {
+    // Reloading the versions closes the form, so the confirmation goes in the status above the table.
+    document.getElementById("versions-change").textContent = "Saved changes to version " + version.versionId + ".";
+    reloadVersions(file);
+  }
+});
+
+document.getElementById("edit-cancel").addEventListener("click", () => {
+  document.getElementById("edit-form").hidden = true;
+});
+
+document.getElementById("delete-file").addEventListener("click", async () => {
+  const file = shownFile;
+  const { container, name } = file;
+  if (!confirm("Delete every version of " + name + "?")) return;
+  if (await attempt(document.getElementById("versions-change"), async () => {
+    await send("DELETE", "resource", { container, name });
+    return "Deleted " + name + ".";
+  }, () => isShown(file)) && isShown(file)) {
+    location.hash = "#container=" + encodeURIComponent(container);
+  }
+});
+
 function showContainers(focus) {
   shownContainer = null;
+  shownFile = null;
   viewRequest++;
   showView("containers-view");
   document.title = "Resourcefull";
@@ -337,6 +546,97 @@ async function showExpiry() {
   }
 }
 
+const createForm = document.getElementById("create-container");
+createForm.addEventListener("submit", async event => {
+  event.preventDefault();
+  const name = field(createForm, "name").value;
+  if (await attempt(createForm.querySelector(".status"), async () => {
+    await send("POST", "containers", null, { name });
+    return "Created " + name + ".";
+  })) {
+    field(createForm, "name").value = "";
+    containers.reload();
+  }
+});
+
+const uploadForm = document.getElementById("upload-form");
+// The name starts as the file's, until it's changed by hand.
+let suggestedName = "";
+field(uploadForm, "file").addEventListener("change", () => {
+  const file = field(uploadForm, "file").files[0];
+  const name = field(uploadForm, "name");
+  if (file && (name.value === "" || name.value === suggestedName)) name.value = suggestedName = file.name;
+});
+uploadForm.addEventListener("submit", async event => {
+  event.preventDefault();
+  const container = shownContainer;
+  const name = field(uploadForm, "name").value;
+  if (await attempt(uploadForm.querySelector(".status"), async () => {
+    await send("PUT", "upload", { container, name, replace: field(uploadForm, "replace").checked ? "true" : null },
+      field(uploadForm, "file").files[0]);
+    return "Uploaded " + name + ".";
+  }, () => shownContainer === container) && shownContainer === container) {
+    // Only on the container uploaded to: another one's form may hold a file picked since.
+    uploadForm.reset();
+    suggestedName = "";
+    showContainer(container, false);
+  }
+});
+
+const uploadLinkForm = document.getElementById("upload-link-form");
+uploadLinkForm.addEventListener("submit", async event => {
+  event.preventDefault();
+  const output = field(uploadLinkForm, "url");
+  output.hidden = true;
+  const container = shownContainer;
+  const name = field(uploadLinkForm, "name").value;
+  const prefix = field(uploadLinkForm, "prefix").checked;
+  await attempt(uploadLinkForm.querySelector(".status"), async () => {
+    const link = await send("POST", "upload-link", { container }, {
+      name: prefix ? null : name,
+      namePrefix: prefix ? name : null,
+      expiresInMinutes: Number(field(uploadLinkForm, "minutes").value),
+      replace: field(uploadLinkForm, "replace").checked
+    });
+    if (shownContainer === container) {
+      output.value = link.url;
+      output.hidden = false;
+      output.select();
+    }
+    return "Anyone with this link can upload until " + formatDate(link.expiresAt) + ".";
+  }, () => shownContainer === container);
+});
+
+document.getElementById("delete-container").addEventListener("click", async () => {
+  const name = shownContainer;
+  const typed = prompt("This deletes every file in " + name + ". Type the container's name to delete it.");
+  if (typed === null) return;
+  const status = document.getElementById("delete-container-status");
+  if (typed !== name) {
+    showError(status, new Error("The name didn't match, so nothing was deleted."));
+    return;
+  }
+  if (await attempt(status, async () => {
+    await send("DELETE", "container", { name });
+    return "Deleted " + name + ".";
+  }, () => shownContainer === name)) {
+    if (shownContainer === name) location.hash = "#";
+    containers.reload();
+  }
+});
+
+// Shows the forms and buttons for the changes the app allows. Until the features endpoint answers, the dashboard only
+// reads.
+async function loadFeatures() {
+  try {
+    features = await api("features");
+  } catch {
+    return;
+  }
+  for (const node of document.querySelectorAll("[data-change]")) node.hidden = !features.changes;
+  for (const node of document.querySelectorAll("[data-upload-links]")) node.hidden = !features.uploadLinks;
+}
+
 function route(focus) {
   const parameters = new URLSearchParams(location.hash.slice(1));
   const container = parameters.get("container");
@@ -350,4 +650,5 @@ window.addEventListener("hashchange", () => route(true));
 showHealth();
 showExpiry();
 containers.reload();
-route(false);
+// The views show their change buttons only if they know the changes are allowed.
+loadFeatures().then(() => route(false));

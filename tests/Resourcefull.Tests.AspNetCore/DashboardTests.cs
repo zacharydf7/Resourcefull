@@ -21,11 +21,12 @@ namespace Resourcefull.Tests.AspNetCore;
 public class DashboardTests
 {
     /// <summary>
-    /// Starts an app with the dashboard, where a request with an <c>X-User</c> header is signed in, and returns a client
-    /// for it.
+    /// Starts an app with the dashboard, where a request with an <c>X-User</c> header is signed in as that name, and one
+    /// with <c>X-User-Id</c> with only that ID, and returns a client for it.
     /// </summary>
     private static async Task<(WebApplication App, HttpClient Client)> StartAsync(Action<RouteGroupBuilder> configureDashboard,
-        Action<AuthorizationOptions>? configureAuthorization = null, Action<IServiceCollection>? configureServices = null)
+        Action<AuthorizationOptions>? configureAuthorization = null, Action<IServiceCollection>? configureServices = null,
+        ResourcefullDashboardOptions? dashboardOptions = null)
     {
         WebApplicationBuilder builder = WebApplication.CreateSlimBuilder();
         builder.WebHost.UseTestServer();
@@ -37,7 +38,7 @@ public class DashboardTests
         WebApplication app = builder.Build();
         app.UseAuthentication();
         app.UseAuthorization();
-        configureDashboard(app.MapResourcefullDashboard());
+        configureDashboard(app.MapResourcefullDashboard(options: dashboardOptions));
         await app.StartAsync();
         return (app, app.GetTestClient());
     }
@@ -311,6 +312,34 @@ public class DashboardTests
     }
 
     [Fact]
+    public async Task Changes_ShouldLogTheUsersNameOrId_WhenASignedInUserMakesThem()
+    {
+        // Arrange: one user signed in with a name, and one whose token carries only an ID.
+        var logs = new RecordingLoggerProvider();
+        (WebApplication app, HttpClient client) = await StartAsync(dashboard => dashboard.RequireAuthorization(),
+            configureServices: services => services.AddSingleton<ILoggerProvider>(logs),
+            dashboardOptions: new ResourcefullDashboardOptions { AllowChanges = true });
+        await using WebApplication _ = app;
+        HttpRequestMessage Create(string header, string user, string container)
+        {
+            HttpRequestMessage request = new(HttpMethod.Post, "/resourcefull/api/containers") { Content = JsonContent.Create(new { name = container }) };
+            request.Headers.Add("X-Resourcefull-Dashboard", "1");
+            request.Headers.Add(header, user);
+            return request;
+        }
+
+        // Act
+        HttpResponseMessage named = await client.SendAsync(Create("X-User", "admin", "a"));
+        HttpResponseMessage identified = await client.SendAsync(Create("X-User-Id", "user-42", "b"));
+
+        // Assert
+        Assert.Equal((HttpStatusCode.Created, HttpStatusCode.Created), (named.StatusCode, identified.StatusCode));
+        string[] changes = [.. logs.Messages.Where(m => m.Category == "Resourcefull.AspNetCore.Dashboard").Select(m => m.Message)];
+        Assert.Contains(changes, m => m.Contains("create_container by admin in container a", StringComparison.Ordinal));
+        Assert.Contains(changes, m => m.Contains("create_container by user-42 in container b", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task Health_ShouldReportTheResourcefullCheck_WhenItsRegistered()
     {
         // Arrange
@@ -347,9 +376,11 @@ public class DashboardTests
         public const string SchemeName = "Header";
 
         protected override Task<AuthenticateResult> HandleAuthenticateAsync() =>
-            Task.FromResult(Request.Headers.TryGetValue("X-User", out var user)
-                ? AuthenticateResult.Success(new AuthenticationTicket(
-                    new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.Name, user.ToString())], SchemeName)), SchemeName))
+            Task.FromResult(Request.Headers.TryGetValue("X-User", out var user) ? SignedIn(new Claim(ClaimTypes.Name, user.ToString()))
+                : Request.Headers.TryGetValue("X-User-Id", out var id) ? SignedIn(new Claim(ClaimTypes.NameIdentifier, id.ToString()))
                 : AuthenticateResult.NoResult());
+
+        private static AuthenticateResult SignedIn(Claim claim) =>
+            AuthenticateResult.Success(new AuthenticationTicket(new ClaimsPrincipal(new ClaimsIdentity([claim], SchemeName)), SchemeName));
     }
 }

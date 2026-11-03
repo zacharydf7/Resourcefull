@@ -39,12 +39,48 @@
       </div>
       <p class="status" id="containers-status" role="status"></p>
       <button type="button" id="containers-more" hidden>Show more</button>
+      <form id="create-container" class="change" data-change hidden>
+        <h3>New container</h3>
+        <label>Name <input name="name" required autocomplete="off"></label>
+        <button type="submit">Create</button>
+        <p class="status" role="status"></p>
+      </form>
     </section>
 
     <section id="container-view" hidden>
       <p><a href="#">← All containers</a></p>
       <h2 id="container-name" tabindex="-1"></h2>
       <dl id="container-summary" class="summary"></dl>
+      <div class="changes" data-change hidden>
+        <form id="upload-form" class="change">
+          <h3>Upload a file</h3>
+          <label>File <input name="file" type="file" required></label>
+          <label>Name <input name="name" required autocomplete="off"></label>
+          <label><input name="replace" type="checkbox"> Replace the file if one has that name</label>
+          <button type="submit">Upload</button>
+          <p class="status" role="status"></p>
+        </form>
+        <form id="upload-link-form" class="change" data-upload-links hidden>
+          <h3>Create an upload link</h3>
+          <label>Name <input name="name" required autocomplete="off"></label>
+          <label><input name="prefix" type="checkbox"> Let the holder upload any name that starts with this</label>
+          <label><input name="replace" type="checkbox"> Let uploads replace a file</label>
+          <label>Works for <select name="minutes">
+            <option value="60">an hour</option>
+            <option value="1440">a day</option>
+            <option value="10080">seven days</option>
+          </select></label>
+          <button type="submit">Create link</button>
+          <p class="status" role="status"></p>
+          <input class="link" name="url" readonly hidden aria-label="Upload link">
+        </form>
+        <div class="change">
+          <h3>Delete this container</h3>
+          <p>Deletes every file and version in it.</p>
+          <button type="button" id="delete-container" class="danger">Delete container</button>
+          <p class="status" id="delete-container-status" role="status"></p>
+        </div>
+      </div>
       <div class="lists">
         <section aria-labelledby="largest-heading">
           <h3 id="largest-heading">Largest versions</h3>
@@ -106,6 +142,11 @@
     <section id="versions-view" hidden>
       <p><a id="versions-back" href="#">← <span id="versions-container"></span></a></p>
       <h2 id="versions-name" tabindex="-1"></h2>
+      <p data-change hidden>
+        <button type="button" id="delete-file" class="danger">Delete every version</button>
+      </p>
+      <p class="status" id="versions-change" role="status"></p>
+      <input class="link" id="download-link" readonly hidden aria-label="Download link">
       <div class="table">
         <table>
           <thead>
@@ -115,12 +156,22 @@
               <th scope="col">Type</th>
               <th scope="col">Last modified</th>
               <th scope="col">Expires</th>
+              <th scope="col" data-change hidden>Actions</th>
             </tr>
           </thead>
           <tbody id="versions"></tbody>
         </table>
       </div>
       <p class="status" id="versions-status" role="status"></p>
+      <form id="edit-form" class="change" hidden>
+        <h3 id="edit-heading"></h3>
+        <label>Content type <input name="contentType" autocomplete="off"></label>
+        <label>Expires <input name="expiresAt" type="datetime-local"> (leave it empty for never)</label>
+        <label>Metadata, one <code>key=value</code> per line <textarea name="metadata" rows="4"></textarea></label>
+        <button type="submit">Save</button>
+        <button type="button" id="edit-cancel">Cancel</button>
+        <p class="status" role="status"></p>
+      </form>
     </section>
   </main>
 </body>

@@ -22,6 +22,30 @@ public sealed class ResourcefullDashboardOptions
     /// Resourcefull's health checks are registered under unless you give them another.
     /// </summary>
     public IReadOnlyCollection<string> HealthChecks { get; init; } = ["resourcefull"];
+
+    /// <summary>
+    /// Whether the dashboard can change what's stored: upload, delete and restore files and versions, change a version's
+    /// expiry, content type and metadata, and create and delete containers. Off by default, so the dashboard only
+    /// reads. It's meant for development: map the dashboard with it only where every user the dashboard's authorization
+    /// lets in may make those changes. Each change is logged, with the user who made it.
+    /// </summary>
+    public bool AllowChanges { get; init; }
+
+    /// <summary>
+    /// With <see cref="AllowChanges"/>, the path of your application's endpoint that serves download links with
+    /// <c>Results.SharedResource</c>, with <c>{token}</c> where the token goes, such as <c>/shared/{token}</c>. The
+    /// dashboard then creates download links, and needs <c>AddResourcefullLinks</c>. <see langword="null"/>, the default,
+    /// leaves them out.
+    /// </summary>
+    public string? DownloadLinkPath { get; init; }
+
+    /// <summary>
+    /// With <see cref="AllowChanges"/>, the path of your application's endpoint that serves upload links with
+    /// <c>Results.SharedUpload</c>, with <c>{token}</c> where the token goes, such as <c>/upload/{token}</c>: the holder
+    /// of a link for a name prefix adds <c>/</c> and a file name to the URL. The dashboard then creates upload links, and
+    /// needs <c>AddResourcefullLinks</c>. <see langword="null"/>, the default, leaves them out.
+    /// </summary>
+    public string? UploadLinkPath { get; init; }
 }
 
 /// <summary>
@@ -30,7 +54,7 @@ public sealed class ResourcefullDashboardOptions
 /// the JSON endpoints it reads.
 /// <para>Coming in 4.0.</para>
 /// </summary>
-public static class ResourcefullDashboardEndpointRouteBuilderExtensions
+public static partial class ResourcefullDashboardEndpointRouteBuilderExtensions
 {
     /// <summary>How many containers or files one page of the dashboard's JSON endpoints holds.</summary>
     internal const int PageSize = 50;
@@ -46,22 +70,35 @@ public static class ResourcefullDashboardEndpointRouteBuilderExtensions
     private static readonly ConcurrentDictionary<string, byte[]> Files = new();
 
     /// <summary>
-    /// Maps the dashboard at <paramref name="pattern"/>: the page at <c>{pattern}/</c>, and read-only JSON endpoints under
-    /// <c>{pattern}/api/</c> that can serve as an admin API. The dashboard shows container and file names, which can be
-    /// personal data, so its endpoints throw <see cref="InvalidOperationException"/> until the group returned requires
-    /// authorization, such as with <c>RequireAuthorization("admins")</c>, or a fallback authorization policy covers it.
-    /// To show it to anyone, for a tool that only runs locally, call <c>AllowAnonymous()</c> on the group.
+    /// Maps the dashboard at <paramref name="pattern"/>: the page at <c>{pattern}/</c>, and JSON endpoints under
+    /// <c>{pattern}/api/</c> that can serve as an admin API. They only read, unless
+    /// <see cref="ResourcefullDashboardOptions.AllowChanges"/> is set. The dashboard shows container and file names,
+    /// which can be personal data, so its endpoints throw <see cref="InvalidOperationException"/> until the group
+    /// returned requires authorization, such as with <c>RequireAuthorization("admins")</c>, or a fallback authorization
+    /// policy covers it. To show it to anyone, for a tool that only runs locally, call <c>AllowAnonymous()</c> on the
+    /// group.
     /// </summary>
     /// <param name="endpoints">The application's endpoints.</param>
     /// <param name="pattern">Where to map the dashboard.</param>
     /// <param name="options">What it shows; <see langword="null"/> for the defaults.</param>
     /// <returns>The group the dashboard's endpoints are in, to require authorization on.</returns>
+    /// <exception cref="ArgumentException">
+    /// <see cref="ResourcefullDashboardOptions.DownloadLinkPath"/> or <see cref="ResourcefullDashboardOptions.UploadLinkPath"/>
+    /// doesn't start with <c>/</c> or doesn't hold <c>{token}</c>.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// Changes and a link path are set, but <c>AddResourcefullLinks</c> wasn't called, so links can't be signed.
+    /// </exception>
     public static RouteGroupBuilder MapResourcefullDashboard(this IEndpointRouteBuilder endpoints, string pattern = "/resourcefull",
         ResourcefullDashboardOptions? options = null)
     {
         ArgumentNullException.ThrowIfNull(endpoints);
         ArgumentNullException.ThrowIfNull(pattern);
-        IReadOnlyCollection<string> healthChecks = (options ?? new ResourcefullDashboardOptions()).HealthChecks;
+        options ??= new ResourcefullDashboardOptions();
+        ThrowIfBadLinkPath(options.DownloadLinkPath, nameof(options.DownloadLinkPath));
+        ThrowIfBadLinkPath(options.UploadLinkPath, nameof(options.UploadLinkPath));
+        ThrowIfLinksCantBeSigned(endpoints, options);
+        IReadOnlyCollection<string> healthChecks = options.HealthChecks;
         // A provider that doesn't support expiry won't start supporting it while the app runs, so after the first
         // NotSupportedException the dashboard stops asking, rather than recording a failed operation each time the page loads.
         bool expiryUnsupported = false;
@@ -81,6 +118,13 @@ public static class ResourcefullDashboardEndpointRouteBuilderExtensions
         });
         group.MapGet("/dashboard.js", () => File("dashboard.js", "text/javascript; charset=utf-8"));
         group.MapGet("/dashboard.css", () => File("dashboard.css", "text/css; charset=utf-8"));
+
+        group.MapGet("/api/features", (HttpContext httpContext) =>
+        {
+            Record(httpContext, "features");
+            return Results.Json(new FeaturesView(options.AllowChanges, options.AllowChanges && options.DownloadLinkPath is not null,
+                options.AllowChanges && options.UploadLinkPath is not null), Json);
+        });
 
         group.MapGet("/api/health", async (HttpContext httpContext, CancellationToken cancellationToken) =>
         {
@@ -167,6 +211,7 @@ public static class ResourcefullDashboardEndpointRouteBuilderExtensions
             return versions.Count == 0 ? Results.NotFound() : Results.Json(new ListView<ResourceView>([.. versions.Select(View)]), Json);
         });
 
+        if (options.AllowChanges) MapChanges(group, options);
         return group;
     }
 
@@ -235,7 +280,7 @@ public static class ResourcefullDashboardEndpointRouteBuilderExtensions
     }
 
     private static ResourceView View(ResourceInfo resource) => new(resource.Name, resource.VersionId, resource.IsLatest,
-        resource.ContentType, resource.ContentLength, resource.LastModified, resource.ExpiresAt);
+        resource.ContentType, resource.ContentLength, resource.LastModified, resource.ExpiresAt, resource.Metadata);
 
     private static async Task<ContainerView> ViewAsync(IResourceServiceClient resources, ContainerInfo container,
         CancellationToken cancellationToken)
@@ -267,5 +312,7 @@ public static class ResourcefullDashboardEndpointRouteBuilderExtensions
         IReadOnlyCollection<string>? AllowedContentTypes, int? MaxVersions);
 
     private sealed record ResourceView(string Name, string VersionId, bool IsLatest, string? ContentType, long? ContentLength,
-        DateTimeOffset LastModified, DateTimeOffset? ExpiresAt);
+        DateTimeOffset LastModified, DateTimeOffset? ExpiresAt, IReadOnlyDictionary<string, string> Metadata);
+
+    private sealed record FeaturesView(bool Changes, bool DownloadLinks, bool UploadLinks);
 }
