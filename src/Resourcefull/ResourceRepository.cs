@@ -611,4 +611,54 @@ public abstract class ResourceRepository
 
         return new ResourceContainerUsage(storedBytes, resources.Count, versionCount);
     }
+
+    /// <summary>
+    /// Lists up to <paramref name="count"/> of a container's versions, current and older, in <paramref name="order"/>,
+    /// each with <see cref="ResourceInfo.IsLatest"/> set: the largest first, or the ones that expire soonest first,
+    /// leaving out versions without an expiry. Ties are in version ID order, ordinally, and with
+    /// <see cref="ResourceVersionOrder.LargestFirst"/>, a version without a <see cref="ResourceInfo.ContentLength"/> comes
+    /// after every version with one. It's for showing an administrator what fills a container or expires next, so it
+    /// needn't be fast, but a provider that can should answer it in one query. The default implementation reads every
+    /// version through <see cref="GetVersionPageAsync"/>, keeping the top <paramref name="count"/>.
+    /// </summary>
+    /// <param name="resourceContainerName">The container.</param>
+    /// <param name="order">Which versions come first.</param>
+    /// <param name="count">The most versions to return, from 1 to 1,000.</param>
+    /// <param name="cancellationToken">Cancels the listing.</param>
+    /// <returns>The versions; empty when there are none, or the container does not exist.</returns>
+    public virtual async Task<IReadOnlyList<ResourceInfo>> GetTopVersionsAsync(string resourceContainerName,
+        ResourceVersionOrder order, int count, CancellationToken cancellationToken = default)
+    {
+        IComparer<ResourceInfo> ranking = Ranking(order);
+        // The kept version that ranks last is on top, so a version that ranks below it is dropped after one comparison.
+        var kept = new PriorityQueue<ResourceInfo, ResourceInfo>(count, Comparer<ResourceInfo>.Create((x, y) => ranking.Compare(y, x)));
+        string? afterName = null;
+        while (true)
+        {
+            IReadOnlyList<ResourceInfo> page = await GetVersionPageAsync(resourceContainerName, afterName,
+                ResourceListOptions.DefaultPageSize, cancellationToken).ConfigureAwait(false);
+            if (page.Count == 0) break;
+            foreach (ResourceInfo version in page)
+            {
+                if (order == ResourceVersionOrder.ExpiringFirst && version.ExpiresAt is null) continue;
+                if (kept.Count < count) kept.Enqueue(version, version);
+                else kept.EnqueueDequeue(version, version);
+            }
+            afterName = page[^1].Name;
+        }
+        return [.. kept.UnorderedItems.Select(item => item.Element).Order(ranking)];
+    }
+
+    /// <summary>The order <see cref="GetTopVersionsAsync"/> lists versions in, for versions it lists.</summary>
+    private static IComparer<ResourceInfo> Ranking(ResourceVersionOrder order) => order == ResourceVersionOrder.LargestFirst
+        ? Comparer<ResourceInfo>.Create((x, y) => (x.ContentLength, y.ContentLength) switch
+        {
+            (null, not null) => 1,
+            (not null, null) => -1,
+            ({ } a, { } b) when a != b => b.CompareTo(a),
+            _ => string.CompareOrdinal(x.VersionId, y.VersionId)
+        })
+        : Comparer<ResourceInfo>.Create((x, y) => x.ExpiresAt != y.ExpiresAt
+            ? x.ExpiresAt!.Value.CompareTo(y.ExpiresAt!.Value)
+            : string.CompareOrdinal(x.VersionId, y.VersionId));
 }

@@ -5,7 +5,7 @@ namespace Resourcefull.Tests.Integration;
 
 /// <summary>
 /// The SQL Server provider on what early releases stored: versions with no recorded length or hash, for its
-/// usage query and for copies.
+/// usage query, its largest-first listing and copies.
 /// </summary>
 [Collection(SqlServerCollection.Name)]
 public class ContainerUsageIntegrationTests(SqlServerFixture fixture)
@@ -34,6 +34,32 @@ public class ContainerUsageIntegrationTests(SqlServerFixture fixture)
 
         // Assert
         Assert.Equal(new ResourceContainerUsage(150_010, 1, 2), usage);
+    }
+
+    [Fact]
+    public async Task GetTopVersionsAsync_ShouldListAVersionWithoutARecordedLengthLast_WhenGivenLargestFirst()
+    {
+        fixture.SkipIfUnavailable();
+
+        // Arrange: a large version with its recorded length removed, and a small one.
+        using ServiceProvider provider = fixture.BuildServiceProvider(o => o.UseVersioning());
+        string containerName = $"c-{Guid.NewGuid():N}";
+        IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>().CreateContainerAsync(containerName);
+        ResourceInfo legacy = await container.UploadAsync("a", new MemoryStream(new byte[150_000]));
+        ResourceInfo small = await container.UploadAsync("a", new MemoryStream(new byte[10]), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace });
+        await using (SqlConnection connection = await fixture.OpenConnectionAsync())
+        await using (SqlCommand command = connection.CreateCommand())
+        {
+            command.CommandText = "UPDATE [Resources] SET [ContentLength] = NULL WHERE [VersionId] = @v";
+            command.Parameters.AddWithValue("@v", legacy.VersionId);
+            await command.ExecuteNonQueryAsync();
+        }
+
+        // Act
+        IReadOnlyList<ResourceInfo> top = await container.GetTopVersionsAsync(ResourceVersionOrder.LargestFirst);
+
+        // Assert
+        Assert.Equal([small.VersionId, legacy.VersionId], top.Select(v => v.VersionId));
     }
 
     [Fact]

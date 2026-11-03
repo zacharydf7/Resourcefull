@@ -298,6 +298,14 @@ throws `NotSupportedException`.
 store can add up a container's versions in one query, override it. Count every version in `StoredSize` and
 `VersionCount`, and each name once in `ResourceCount`.
 
+`GetTopVersionsAsync` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> lists a container's
+largest versions, or those that expire soonest, for the [dashboard](../aspnet-core/dashboard.md) and an
+administrator's own tools. Its default reads every version through `GetVersionPageAsync` and keeps the top ones, so it
+works with any provider. If your store can sort a container's versions by length or expiry, override it with one
+query. For `LargestFirst`, order by `ContentLength` descending, with versions that have none last. For
+`ExpiringFirst`, leave out versions without an `ExpiresAt` and order by it ascending. In both, break ties by version
+ID, ordinally.
+
 ## A database to provision
 
 <div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 4.0</span></div>

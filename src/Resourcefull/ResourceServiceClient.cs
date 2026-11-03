@@ -147,6 +147,19 @@ internal class ResourceServiceClient(ResourceRepository resourceRepository, IOpt
                 new Dictionary<string, string>(metadata), cancellationToken).ConfigureAwait(false);
         });
 
+    public Task<IReadOnlyList<ResourceInfo>> GetExpiredVersionsAsync(int maxVersions = 100, CancellationToken cancellationToken = default)
+        => _telemetry.RunAsync<IReadOnlyList<ResourceInfo>>("list_expired", null, null, async () =>
+        {
+            ArgumentOutOfRangeException.ThrowIfLessThan(maxVersions, 1);
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(maxVersions, ResourceContainerClient.MaxListedVersions);
+            IReadOnlyList<ResourceInfo> expired = await resourceRepository.GetExpiredAsync((timeProvider ?? TimeProvider.System).GetUtcNow(),
+                maxVersions, null, cancellationToken).ConfigureAwait(false);
+            return [.. expired.Select(v => v with
+            {
+                Uri = uriProvider?.GetAbsoluteUri(new ResourcefullContext(v.ContainerName, v.Name, v.VersionId))
+            })];
+        });
+
     public async Task<int> DeleteExpiredAsync(CancellationToken cancellationToken = default)
     {
         DateTimeOffset now = (timeProvider ?? TimeProvider.System).GetUtcNow();

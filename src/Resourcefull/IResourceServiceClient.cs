@@ -208,6 +208,25 @@ public interface IResourceServiceClient
         => throw new NotSupportedException($"{GetType().Name} doesn't support expiry.");
 
     /// <summary>
+    /// Lists versions, in every container, whose <see cref="ResourceInfo.ExpiresAt"/> has passed but that
+    /// <see cref="DeleteExpiredAsync"/> hasn't deleted yet, each with <see cref="ResourceInfo.IsLatest"/> set: the ones that
+    /// expired first come first, and those that expired at the same time are in version ID order. Use it to see whether
+    /// the expiry sweep is keeping up. A read-only container's expired versions are listed too, since the sweep keeps
+    /// them until the container is writable again.
+    /// <para>Coming in 4.0.</para>
+    /// </summary>
+    /// <param name="maxVersions">The most versions to return, from 1 to 1,000.</param>
+    /// <param name="cancellationToken">Cancels the listing.</param>
+    /// <returns>The versions; empty when none are waiting.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="maxVersions"/> is outside 1 to 1,000.</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
+    /// <exception cref="NotSupportedException">
+    /// The provider doesn't support expiry, or this is the default implementation.
+    /// </exception>
+    public Task<IReadOnlyList<ResourceInfo>> GetExpiredVersionsAsync(int maxVersions = 100, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException($"{GetType().Name} doesn't support expiry.");
+
+    /// <summary>
     /// Prunes every resource in the container to its <see cref="ResourceContainerPolicy.MaxVersions"/>,
     /// as each upload prunes its own name, telling the <see cref="IResourceCleanupHandler"/> as a prune does. Run it after
     /// an import, which keeps every version it was given, or after a prune failed and its name hasn't been written since.

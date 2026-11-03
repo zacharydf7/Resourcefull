@@ -71,6 +71,24 @@ function limitsText(policy) {
   return limits.join("; ");
 }
 
+// A link to a file's versions; both names are encoded, so either can hold "&" or "=".
+function fileLink(container, name) {
+  const link = element("a", name);
+  link.href = "#container=" + encodeURIComponent(container) + "&file=" + encodeURIComponent(name);
+  return link;
+}
+
+function nameCell(container, name) {
+  const cell = element("th");
+  cell.scope = "row";
+  cell.append(fileLink(container, name));
+  return cell;
+}
+
+function versionText(version) {
+  return version.isLatest ? "current" : "older";
+}
+
 function showError(status, error) {
   status.textContent = error.message;
   status.classList.add("error");
@@ -153,7 +171,20 @@ const containers = pagedTable({
 });
 
 let shownContainer = null;
-let summaryRequest = 0;
+// Goes up each time a view is shown. A response that arrives after its view was left, or after the same view was
+// opened again, is dropped, so it isn't shown in the wrong view or shown twice.
+let viewRequest = 0;
+// Cancels the current view's lists when another view is shown: the server reads every version in a container for the
+// largest and expiring lists, so a list no one will see shouldn't keep it busy.
+let viewLoads = new AbortController();
+
+const views = ["containers-view", "container-view", "versions-view"];
+
+function showView(id) {
+  for (const view of views) document.getElementById(view).hidden = view !== id;
+  viewLoads.abort();
+  viewLoads = new AbortController();
+}
 
 const resources = pagedTable({
   body: document.getElementById("resources"),
@@ -164,9 +195,7 @@ const resources = pagedTable({
   empty: "No files.",
   row(resource) {
     const tr = element("tr");
-    const name = element("th", resource.name);
-    name.scope = "row";
-    tr.append(name,
+    tr.append(nameCell(shownContainer, resource.name),
       element("td", formatSize(resource.contentLength), "number"),
       element("td", resource.contentType),
       element("td", formatDate(resource.lastModified)),
@@ -179,10 +208,30 @@ function summaryItem(list, term, description) {
   list.append(element("dt", term), element("dd", description));
 }
 
+// Fills a table from an endpoint that answers a single list, unless another view was shown meanwhile.
+async function fillList(id, path, parameters, current, row, empty) {
+  const body = document.getElementById(id);
+  const status = document.getElementById(id + "-status");
+  body.replaceChildren();
+  status.textContent = "Loading…";
+  status.classList.remove("error");
+  try {
+    const list = await api(path, parameters, viewLoads.signal);
+    if (current !== viewRequest) return;
+    if (list === null) {
+      status.textContent = "This no longer exists.";
+      return;
+    }
+    body.append(...list.items.map(row));
+    status.textContent = list.items.length === 0 ? empty : "";
+  } catch (error) {
+    if (current === viewRequest && error.name !== "AbortError") showError(status, error);
+  }
+}
+
 async function showContainer(name, focus) {
   shownContainer = name;
-  document.getElementById("containers-view").hidden = true;
-  document.getElementById("container-view").hidden = false;
+  showView("container-view");
   const heading = document.getElementById("container-name");
   heading.textContent = name;
   if (focus) heading.focus();
@@ -191,11 +240,21 @@ async function showContainer(name, focus) {
   summary.replaceChildren();
   document.getElementById("resources-filter").prefix.value = "";
   resources.reload();
-  // Reopening the same container before its summary arrives mustn't show the summary twice.
-  const current = ++summaryRequest;
+  const current = ++viewRequest;
+  fillList("largest", "largest", { container: name }, current, version => {
+    const tr = element("tr");
+    tr.append(nameCell(name, version.name), element("td", formatSize(version.contentLength), "number"),
+      element("td", versionText(version)));
+    return tr;
+  }, "No files.");
+  fillList("expiring", "expiring", { container: name }, current, version => {
+    const tr = element("tr");
+    tr.append(nameCell(name, version.name), element("td", formatDate(version.expiresAt)), element("td", versionText(version)));
+    return tr;
+  }, "Nothing expires.");
   try {
     const container = await api("container", { name });
-    if (current !== summaryRequest) return;
+    if (current !== viewRequest) return;
     if (container === null) {
       summaryItem(summary, "Container", "This container no longer exists.");
       return;
@@ -207,15 +266,36 @@ async function showContainer(name, focus) {
     summaryItem(summary, "Limits", limitsText(policy) || "none");
     for (const [key, value] of Object.entries(container.metadata)) summaryItem(summary, key, value);
   } catch (error) {
-    if (current === summaryRequest) summaryItem(summary, "Container", error.message);
+    if (current === viewRequest) summaryItem(summary, "Container", error.message);
   }
+}
+
+function showVersions(container, name, focus) {
+  shownContainer = null;
+  showView("versions-view");
+  document.getElementById("versions-container").textContent = container;
+  document.getElementById("versions-back").href = "#container=" + encodeURIComponent(container);
+  const heading = document.getElementById("versions-name");
+  heading.textContent = name;
+  if (focus) heading.focus();
+  document.title = name + " · " + container + " · Resourcefull";
+  fillList("versions", "versions", { container, name }, ++viewRequest, version => {
+    const tr = element("tr");
+    const id = element("th", version.versionId + " (" + versionText(version) + ")");
+    id.scope = "row";
+    tr.append(id,
+      element("td", formatSize(version.contentLength), "number"),
+      element("td", version.contentType),
+      element("td", formatDate(version.lastModified)),
+      element("td", formatDate(version.expiresAt)));
+    return tr;
+  }, "No versions.");
 }
 
 function showContainers(focus) {
   shownContainer = null;
-  summaryRequest++;
-  document.getElementById("container-view").hidden = true;
-  document.getElementById("containers-view").hidden = false;
+  viewRequest++;
+  showView("containers-view");
   document.title = "Resourcefull";
   if (focus) document.getElementById("containers-heading").focus();
 }
@@ -237,13 +317,37 @@ async function showHealth() {
   }
 }
 
+// How many expired versions the sweep hasn't deleted yet, store-wide. A provider without expiry shows nothing.
+async function showExpiry() {
+  const expiry = document.getElementById("expiry");
+  try {
+    const expired = await api("expired");
+    if (!expired.supported) return;
+    expiry.hidden = false;
+    if (expired.count === 0) {
+      expiry.textContent = "No expired versions are waiting for the sweep.";
+      return;
+    }
+    const count = expired.more ? "More than " + expired.count.toLocaleString() : expired.count.toLocaleString();
+    expiry.textContent = count + (expired.count === 1 && !expired.more ? " expired version is" : " expired versions are") +
+      " waiting for the sweep; the oldest expired " + formatDate(expired.oldestExpiry) + ".";
+  } catch (error) {
+    expiry.hidden = false;
+    showError(expiry, error);
+  }
+}
+
 function route(focus) {
-  const match = /^#container=(.*)$/.exec(location.hash);
-  if (match) showContainer(decodeURIComponent(match[1]), focus);
+  const parameters = new URLSearchParams(location.hash.slice(1));
+  const container = parameters.get("container");
+  const file = parameters.get("file");
+  if (container !== null && file !== null) showVersions(container, file, focus);
+  else if (container !== null) showContainer(container, focus);
   else showContainers(focus);
 }
 
 window.addEventListener("hashchange", () => route(true));
 showHealth();
+showExpiry();
 containers.reload();
 route(false);

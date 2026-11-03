@@ -25,14 +25,21 @@ public sealed class ResourcefullDashboardOptions
 }
 
 /// <summary>
-/// Maps the Resourcefull dashboard: a page showing the store's health, and each container's usage against its limits
-/// and its files, with the JSON endpoints it reads.
+/// Maps the Resourcefull dashboard: a page showing the store's health and expiry backlog, and each container's usage
+/// against its limits, its largest versions, the versions that expire soonest, and its files and their versions, with
+/// the JSON endpoints it reads.
 /// <para>Coming in 4.0.</para>
 /// </summary>
 public static class ResourcefullDashboardEndpointRouteBuilderExtensions
 {
     /// <summary>How many containers or files one page of the dashboard's JSON endpoints holds.</summary>
     internal const int PageSize = 50;
+
+    /// <summary>How many versions the largest and expiring lists hold.</summary>
+    internal const int TopCount = 20;
+
+    /// <summary>How many expired versions waiting for the sweep the dashboard counts; past that, it shows "More than" this many.</summary>
+    internal const int ExpiredCounted = 100;
 
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
@@ -55,6 +62,9 @@ public static class ResourcefullDashboardEndpointRouteBuilderExtensions
         ArgumentNullException.ThrowIfNull(endpoints);
         ArgumentNullException.ThrowIfNull(pattern);
         IReadOnlyCollection<string> healthChecks = (options ?? new ResourcefullDashboardOptions()).HealthChecks;
+        // A provider that doesn't support expiry won't start supporting it while the app runs, so after the first
+        // NotSupportedException the dashboard stops asking, rather than recording a failed operation each time the page loads.
+        bool expiryUnsupported = false;
 
         RouteGroupBuilder group = endpoints.MapGroup(pattern);
         group.AddEndpointFilter(ThrowUnlessAuthorizationIsDecided);
@@ -81,6 +91,26 @@ public static class ResourcefullDashboardEndpointRouteBuilderExtensions
             return Results.Json(new HealthView(report.Entries.Count == 0 ? null : report.Status.ToString(),
                 [.. report.Entries.Select(e => new HealthCheckView(e.Key, e.Value.Status.ToString(),
                     e.Value.Description ?? e.Value.Exception?.Message, e.Value.Data))]), Json);
+        });
+
+        group.MapGet("/api/expired", async (IResourceServiceClient resources, HttpContext httpContext,
+            CancellationToken cancellationToken) =>
+        {
+            Record(httpContext, "expired");
+            if (expiryUnsupported) return Results.Json(new ExpiredView(false, 0, false, null), Json);
+            IReadOnlyList<ResourceInfo> expired;
+            try
+            {
+                // One more than it counts, to tell whether there are more.
+                expired = await resources.GetExpiredVersionsAsync(ExpiredCounted + 1, cancellationToken).ConfigureAwait(false);
+            }
+            catch (NotSupportedException)
+            {
+                expiryUnsupported = true;
+                return Results.Json(new ExpiredView(false, 0, false, null), Json);
+            }
+            return Results.Json(new ExpiredView(true, Math.Min(expired.Count, ExpiredCounted), expired.Count > ExpiredCounted,
+                expired.Count == 0 ? null : expired[0].ExpiresAt), Json);
         });
 
         group.MapGet("/api/containers", async (string? prefix, string? continuationToken, IResourceServiceClient resources,
@@ -111,8 +141,30 @@ public static class ResourcefullDashboardEndpointRouteBuilderExtensions
             if (!await resources.ContainerExistsAsync(container, cancellationToken).ConfigureAwait(false)) return Results.NotFound();
             ResourcePage page = await resources.GetContainerClient(container).GetResourcePageAsync(
                 new ResourceListOptions { Prefix = prefix, PageSize = PageSize }, continuationToken, cancellationToken).ConfigureAwait(false);
-            return Results.Json(new PageView<ResourceView>([.. page.Resources.Select(r => new ResourceView(r.Name, r.VersionId,
-                r.ContentType, r.ContentLength, r.LastModified, r.ExpiresAt))], page.ContinuationToken), Json);
+            return Results.Json(new PageView<ResourceView>([.. page.Resources.Select(View)], page.ContinuationToken), Json);
+        });
+
+        group.MapGet("/api/largest", (string container, IResourceServiceClient resources, HttpContext httpContext,
+            CancellationToken cancellationToken) =>
+        {
+            Record(httpContext, "largest");
+            return TopAsync(resources, container, ResourceVersionOrder.LargestFirst, cancellationToken);
+        });
+
+        group.MapGet("/api/expiring", (string container, IResourceServiceClient resources, HttpContext httpContext,
+            CancellationToken cancellationToken) =>
+        {
+            Record(httpContext, "expiring");
+            return TopAsync(resources, container, ResourceVersionOrder.ExpiringFirst, cancellationToken);
+        });
+
+        group.MapGet("/api/versions", async (string container, string name, IResourceServiceClient resources,
+            HttpContext httpContext, CancellationToken cancellationToken) =>
+        {
+            Record(httpContext, "versions");
+            IReadOnlyList<ResourceInfo> versions = await resources.GetContainerClient(container)
+                .GetResourceVersionsAsync(name, cancellationToken).ConfigureAwait(false);
+            return versions.Count == 0 ? Results.NotFound() : Results.Json(new ListView<ResourceView>([.. versions.Select(View)]), Json);
         });
 
         return group;
@@ -173,6 +225,18 @@ public static class ResourcefullDashboardEndpointRouteBuilderExtensions
         return bytes.ToArray();
     }), contentType);
 
+    private static async Task<IResult> TopAsync(IResourceServiceClient resources, string container, ResourceVersionOrder order,
+        CancellationToken cancellationToken)
+    {
+        if (!await resources.ContainerExistsAsync(container, cancellationToken).ConfigureAwait(false)) return Results.NotFound();
+        IReadOnlyList<ResourceInfo> versions = await resources.GetContainerClient(container)
+            .GetTopVersionsAsync(order, TopCount, cancellationToken).ConfigureAwait(false);
+        return Results.Json(new ListView<ResourceView>([.. versions.Select(View)]), Json);
+    }
+
+    private static ResourceView View(ResourceInfo resource) => new(resource.Name, resource.VersionId, resource.IsLatest,
+        resource.ContentType, resource.ContentLength, resource.LastModified, resource.ExpiresAt);
+
     private static async Task<ContainerView> ViewAsync(IResourceServiceClient resources, ContainerInfo container,
         CancellationToken cancellationToken)
     {
@@ -191,6 +255,10 @@ public static class ResourcefullDashboardEndpointRouteBuilderExtensions
 
     private sealed record PageView<T>(IReadOnlyList<T> Items, string? ContinuationToken);
 
+    private sealed record ListView<T>(IReadOnlyList<T> Items);
+
+    private sealed record ExpiredView(bool Supported, int Count, bool More, DateTimeOffset? OldestExpiry);
+
     private sealed record ContainerView(string Name, IDictionary<string, string> Metadata, UsageView Usage, PolicyView Policy);
 
     private sealed record UsageView(long StoredSize, long ResourceCount, long VersionCount);
@@ -198,6 +266,6 @@ public static class ResourcefullDashboardEndpointRouteBuilderExtensions
     private sealed record PolicyView(long? MaxResourceSize, long? MaxContainerSize, long? MaxResourceCount, bool ReadOnly,
         IReadOnlyCollection<string>? AllowedContentTypes, int? MaxVersions);
 
-    private sealed record ResourceView(string Name, string VersionId, string? ContentType, long? ContentLength,
+    private sealed record ResourceView(string Name, string VersionId, bool IsLatest, string? ContentType, long? ContentLength,
         DateTimeOffset LastModified, DateTimeOffset? ExpiresAt);
 }

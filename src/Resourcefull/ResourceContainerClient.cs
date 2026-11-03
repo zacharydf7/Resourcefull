@@ -689,6 +689,24 @@ internal partial class ResourceContainerClient(ResourceRepository resourceReposi
                 : ContainerPolicies.Merge(await policies.GetAsync(ContainerName, _telemetry, cancellationToken).ConfigureAwait(false), storeWide);
         });
 
+    /// <summary>The most versions that <see cref="GetTopVersionsAsync"/> and the service client's <c>GetExpiredVersionsAsync</c> return.</summary>
+    internal const int MaxListedVersions = 1000;
+
+    public Task<IReadOnlyList<ResourceInfo>> GetTopVersionsAsync(ResourceVersionOrder order, int count = 20,
+        CancellationToken cancellationToken = default)
+        => _telemetry.RunAsync<IReadOnlyList<ResourceInfo>>("list_top", ContainerName, null, async () =>
+        {
+            if (!Enum.IsDefined(order)) throw new ArgumentOutOfRangeException(nameof(order), order, null);
+            ArgumentOutOfRangeException.ThrowIfLessThan(count, 1);
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(count, MaxListedVersions);
+            return WithUris(await resourceRepository.GetTopVersionsAsync(ContainerName, order, count, cancellationToken).ConfigureAwait(false));
+        }, "resourcefull.order", order switch
+        {
+            ResourceVersionOrder.LargestFirst => "largest_first",
+            ResourceVersionOrder.ExpiringFirst => "expiring_first",
+            _ => null
+        });
+
     public Task<bool> ExistsAsync(string resourceName, string? versionId = null,
         CancellationToken cancellationToken = default)
         => _telemetry.RunAsync("exists", ContainerName, resourceName, async () =>

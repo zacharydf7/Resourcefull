@@ -26,6 +26,7 @@
     ],
     "resource": [
       { "files": [ "assets/icon.png", "assets/icon.svg", "assets/logo.svg", "assets/logo-dark.svg" ] },
+      { "files": [ "docs/images/**.png" ] },
       { "files": [ "**.html" ], "src": "redirects" }
     ],
     "output": "_site",

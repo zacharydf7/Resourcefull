@@ -157,6 +157,18 @@ With SQL Server it's one query over the container's version rows, without readin
 limits read it once per write they check, so for containers with very many versions, expect each limited upload to
 cost that query too.
 
+When a container nears its `MaxContainerSize`, `GetTopVersionsAsync`
+<span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> shows what's filling it: its largest versions,
+current and older alike, since the stored size counts every version.
+
+```csharp
+IReadOnlyList<ResourceInfo> largest = await container.GetTopVersionsAsync(ResourceVersionOrder.LargestFirst, 10, cancellationToken);
+// Each one's Name, VersionId, ContentLength, and IsLatest: false for an older version
+```
+
+It's meant for an administrator looking now and then, such as on the [dashboard](aspnet-core/dashboard.md), not
+for every request: it reads all of the container's versions, in one query with SQL Server and PostgreSQL.
+
 ## Over HTTP
 
 With [`AddResourcefullExceptionHandler`](aspnet-core/status-codes.md), a refused write

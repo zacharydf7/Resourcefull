@@ -86,6 +86,23 @@ builder.Services.AddResourcefull(options => options.UseSqlServer(connectionStrin
 - **Your own deletes aren't reported:** audit those where your code makes them.
 - **It's a scoped service,** so it can use your other services.
 
+## Seeing what expires
+<span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>
+
+To see what a container loses next, list the versions that expire soonest. To check that the sweep is keeping up,
+list the expired versions it hasn't deleted yet, in every container:
+
+```csharp
+IReadOnlyList<ResourceInfo> next = await container.GetTopVersionsAsync(ResourceVersionOrder.ExpiringFirst, 20, cancellationToken);
+IReadOnlyList<ResourceInfo> waiting = await resources.GetExpiredVersionsAsync(100, cancellationToken);
+```
+
+The first lists current and older versions alike, and leaves out versions without an expiry. The second lists them
+in the order they expired, oldest first, so if the first one expired long ago, the sweep isn't running or isn't
+keeping up. It
+includes a read-only container's expired versions, which the sweep keeps until the container is writable again. The
+[dashboard](aspnet-core/dashboard.md) shows both.
+
 ## With a provider of your own
 
 Expiry needs a provider that stores each version's `ExpiresAt` and can list and delete expired versions. Both built-in

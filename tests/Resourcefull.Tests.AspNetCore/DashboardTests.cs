@@ -12,6 +12,7 @@ using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Moq;
 using Resourcefull.AspNetCore;
 using Resourcefull.InMemory;
 
@@ -24,11 +25,12 @@ public class DashboardTests
     /// for it.
     /// </summary>
     private static async Task<(WebApplication App, HttpClient Client)> StartAsync(Action<RouteGroupBuilder> configureDashboard,
-        Action<AuthorizationOptions>? configureAuthorization = null)
+        Action<AuthorizationOptions>? configureAuthorization = null, Action<IServiceCollection>? configureServices = null)
     {
         WebApplicationBuilder builder = WebApplication.CreateSlimBuilder();
         builder.WebHost.UseTestServer();
         builder.Services.AddResourcefull(options => options.UseInMemory());
+        configureServices?.Invoke(builder.Services);
         builder.Services.AddAuthentication(HeaderAuthentication.SchemeName)
             .AddScheme<AuthenticationSchemeOptions, HeaderAuthentication>(HeaderAuthentication.SchemeName, null);
         builder.Services.AddAuthorization(configureAuthorization ?? (_ => { }));
@@ -203,6 +205,109 @@ public class DashboardTests
             file.GetProperty("contentLength").GetInt64(), file.GetProperty("contentType").GetString()));
         Assert.Equal(expiresAt, file.GetProperty("expiresAt").GetDateTimeOffset());
         Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);
+    }
+
+    /// <summary>Each item's name, size and whether it's the current version.</summary>
+    private static List<(string?, long, bool)> Versions(JsonElement list) => [.. list.GetProperty("items").EnumerateArray()
+        .Select(v => (v.GetProperty("name").GetString(), v.GetProperty("contentLength").GetInt64(), v.GetProperty("isLatest").GetBoolean()))];
+
+    [Fact]
+    public async Task Largest_ShouldListTheContainersLargestVersionsOrAnswerNotFound_WhenGivenAContainer()
+    {
+        // Arrange: an older version among the current ones.
+        await using TestApp app = await TestApp.StartAsync();
+        await app.Files.UploadAsync("a.txt", BinaryData.FromString("abc"));
+        await app.Files.UploadAsync("a.txt", BinaryData.FromString("abcdefghij"), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace });
+        await app.Files.UploadAsync("b.txt", BinaryData.FromString("abcde"));
+
+        // Act
+        JsonElement largest = await app.Client.GetFromJsonAsync<JsonElement>($"/resourcefull/api/largest?container={TestApp.Container}");
+        HttpResponseMessage missing = await app.Client.GetAsync("/resourcefull/api/largest?container=missing");
+
+        // Assert
+        Assert.Equal([("a.txt", 10L, true), ("b.txt", 5L, true), ("a.txt", 3L, false)], Versions(largest));
+        Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);
+    }
+
+    [Fact]
+    public async Task Expiring_ShouldListTheVersionsThatExpireSoonestFirst_WhenGivenAContainer()
+    {
+        // Arrange
+        await using TestApp app = await TestApp.StartAsync();
+        var expiresAt = new DateTimeOffset(2030, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        await app.Files.UploadAsync("later.txt", BinaryData.FromString("a"), new ResourceUploadOptions { ExpiresAt = expiresAt.AddDays(1) });
+        await app.Files.UploadAsync("sooner.txt", BinaryData.FromString("b"), new ResourceUploadOptions { ExpiresAt = expiresAt });
+        await app.Files.UploadAsync("kept.txt", BinaryData.FromString("c"));
+
+        // Act
+        JsonElement expiring = await app.Client.GetFromJsonAsync<JsonElement>($"/resourcefull/api/expiring?container={TestApp.Container}");
+
+        // Assert
+        Assert.Equal(["sooner.txt", "later.txt"], expiring.GetProperty("items").EnumerateArray().Select(v => v.GetProperty("name").GetString()));
+        Assert.Equal(expiresAt, expiring.GetProperty("items")[0].GetProperty("expiresAt").GetDateTimeOffset());
+    }
+
+    [Fact]
+    public async Task Versions_ShouldListAFilesVersionsOrAnswerNotFoundOrBadRequest_WhenGivenAName()
+    {
+        // Arrange: a name with characters the query string has to escape.
+        await using TestApp app = await TestApp.StartAsync();
+        await app.Files.UploadAsync("a&b=c.txt", BinaryData.FromString("abc"));
+        await app.Files.UploadAsync("a&b=c.txt", BinaryData.FromString("abcdefghij"), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace });
+
+        // Act
+        JsonElement versions = await app.Client.GetFromJsonAsync<JsonElement>(
+            $"/resourcefull/api/versions?container={TestApp.Container}&name={Uri.EscapeDataString("a&b=c.txt")}");
+        HttpResponseMessage missing = await app.Client.GetAsync($"/resourcefull/api/versions?container={TestApp.Container}&name=missing.txt");
+        HttpResponseMessage invalid = await app.Client.GetAsync($"/resourcefull/api/versions?container={TestApp.Container}&name=%20a");
+
+        // Assert
+        Assert.Equal([("a&b=c.txt", 10L, true), ("a&b=c.txt", 3L, false)], Versions(versions));
+        Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
+    }
+
+    [Fact]
+    public async Task Expired_ShouldCountTheExpiredVersionsWaitingForTheSweep_WhenSomeHaveExpired()
+    {
+        // Arrange: two expired versions in one store, and 101 in another, more than the dashboard counts.
+        await using TestApp few = await TestApp.StartAsync();
+        await using TestApp many = await TestApp.StartAsync();
+        var oldest = new DateTimeOffset(2020, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        await few.Files.UploadAsync("a.txt", BinaryData.FromString("a"), new ResourceUploadOptions { ExpiresAt = oldest.AddDays(1) });
+        await few.Files.UploadAsync("b.txt", BinaryData.FromString("b"), new ResourceUploadOptions { ExpiresAt = oldest });
+        await few.Files.UploadAsync("c.txt", BinaryData.FromString("c"));
+        for (int i = 0; i < 101; i++)
+            await many.Files.UploadAsync($"{i}.txt", BinaryData.FromString("x"), new ResourceUploadOptions { ExpiresAt = oldest });
+
+        // Act
+        JsonElement someExpired = await few.Client.GetFromJsonAsync<JsonElement>("/resourcefull/api/expired");
+        JsonElement manyExpired = await many.Client.GetFromJsonAsync<JsonElement>("/resourcefull/api/expired");
+
+        // Assert
+        Assert.Equal((true, 2, false), (someExpired.GetProperty("supported").GetBoolean(), someExpired.GetProperty("count").GetInt32(),
+            someExpired.GetProperty("more").GetBoolean()));
+        Assert.Equal(oldest, someExpired.GetProperty("oldestExpiry").GetDateTimeOffset());
+        Assert.Equal((100, true), (manyExpired.GetProperty("count").GetInt32(), manyExpired.GetProperty("more").GetBoolean()));
+    }
+
+    [Fact]
+    public async Task Expired_ShouldSayExpiryIsNotSupportedAndAskOnlyOnce_WhenTheProviderDoesNotSupportIt()
+    {
+        // Arrange: a service client whose expiry members keep their defaults, which refuse.
+        var resources = new Mock<IResourceServiceClient> { CallBase = true };
+        (WebApplication app, HttpClient client) = await StartAsync(dashboard => dashboard.AllowAnonymous(),
+            configureServices: services => services.AddScoped(_ => resources.Object));
+        await using WebApplication _ = app;
+
+        // Act
+        JsonElement first = await client.GetFromJsonAsync<JsonElement>("/resourcefull/api/expired");
+        JsonElement second = await client.GetFromJsonAsync<JsonElement>("/resourcefull/api/expired");
+
+        // Assert
+        Assert.False(first.GetProperty("supported").GetBoolean());
+        Assert.False(second.GetProperty("supported").GetBoolean());
+        resources.Verify(r => r.GetExpiredVersionsAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]

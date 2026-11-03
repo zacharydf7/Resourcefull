@@ -438,6 +438,29 @@ public interface IResourceContainerClient
         => throw new NotSupportedException($"{GetType().Name} doesn't report its policy.");
 
     /// <summary>
+    /// Lists the container's largest versions, or the ones that expire soonest, current and older versions alike, each
+    /// with <see cref="ResourceInfo.IsLatest"/> set. Use it to see what's filling a container as it nears
+    /// <see cref="ResourceContainerPolicy.MaxContainerSize"/>, which counts every version, or what expiry deletes next.
+    /// It's meant for an administrator looking now and then: the store may read all of the container's versions to
+    /// answer it.
+    /// <para>Coming in 4.0.</para>
+    /// </summary>
+    /// <param name="order">Which versions come first; <see cref="ResourceVersionOrder"/> says how ties are ordered.</param>
+    /// <param name="count">The most versions to return, from 1 to 1,000.</param>
+    /// <param name="cancellationToken">Cancels the listing.</param>
+    /// <returns>The versions, in <paramref name="order"/>; empty when there are none, or the container doesn't exist.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <paramref name="order"/> isn't one of the values defined, or <paramref name="count"/> is outside 1 to 1,000.
+    /// </exception>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
+    /// <exception cref="NotSupportedException">
+    /// This default implementation doesn't list versions by size or expiry.
+    /// </exception>
+    public Task<IReadOnlyList<ResourceInfo>> GetTopVersionsAsync(ResourceVersionOrder order, int count = 20,
+        CancellationToken cancellationToken = default)
+        => throw new NotSupportedException($"{GetType().Name} doesn't list versions by size or expiry.");
+
+    /// <summary>
     /// Starts an upload session: a version of <paramref name="resourceName"/> whose content arrives over several
     /// appends, which can resume after a dropped connection, even from another process, and which becomes current only
     /// when <see cref="CompleteUploadAsync"/> is called. Nothing shows the version until then. A session nothing is

@@ -53,6 +53,7 @@ public abstract partial class ResourcefullContractTests
         IReadOnlyList<ResourceInfo> versions = await container.GetResourceVersionsAsync("a");
         List<ResourceInfo> listed = await container.ListResourcesAsync().ToListAsync();
         ResourceContainerUsage usage = await container.GetUsageAsync();
+        IReadOnlyList<ResourceInfo> largest = await container.GetTopVersionsAsync(ResourceVersionOrder.LargestFirst);
         ResourceUpload? session = await container.GetUploadAsync("a", upload.UploadId);
 
         // Assert
@@ -60,6 +61,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Empty(versions);
         Assert.Empty(listed);
         Assert.Equal((0L, 0L), (usage.VersionCount, usage.StoredSize.Bytes));
+        Assert.Empty(largest);
         Assert.Equal(3, session!.Offset);
     }
 

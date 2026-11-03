@@ -1596,6 +1596,20 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
         return new ResourceContainerUsage(storedSize, usage.ResourceCount, usage.VersionCount);
     }
 
+    public override async Task<IReadOnlyList<ResourceInfo>> GetTopVersionsAsync(string resourceContainerName,
+        ResourceVersionOrder order, int count, CancellationToken cancellationToken = default)
+    {
+        using ResourceDbContext dbContext = dbContextFactory.CreateDbContext();
+
+        // One query over the container's version rows. Neither order has an index of its own, so it reads them all, as
+        // usage does. SQL Server sorts NULL lowest, so a version an early release stored without a length comes last.
+        IQueryable<ResourceModel> versions = dbContext.Resources.Where(r => r.ContainerName == resourceContainerName);
+        versions = order == ResourceVersionOrder.LargestFirst
+            ? versions.OrderByDescending(r => r.ContentLength).ThenBy(r => r.VersionId)
+            : versions.Where(r => r.ExpiresAt != null).OrderBy(r => r.ExpiresAt).ThenBy(r => r.VersionId);
+        return await versions.Take(count).Select(AsResourceInfo).ToListAsync(cancellationToken).ConfigureAwait(false);
+    }
+
     public override async Task<bool> DeleteContainerAsync(string resourceContainerName,
         CancellationToken cancellationToken = default)
     {

@@ -112,6 +112,8 @@ metrics. It also has:
 | `expire` | `DeleteExpiredAsync`, and each sweep of [`UseExpiry`](expiry.md), when it finds expired versions, read-only containers' included | `resourcefull.expired`: how many versions it deleted; `resourcefull.batches`: how many batches of up to 100 it deleted them in; `resourcefull.batch_fallbacks`, when a batch failed and its versions were deleted one at a time instead: how many. Each failed batch's exception is recorded too, as on a failed operation, but the span isn't marked failed: the sweep carried on |
 | `list_page` | `GetResourcePageAsync`, and each page `ListResourcesAsync` fetches | `resourcefull.page_size` |
 | `list_versions` | `GetResourceVersionsAsync` | |
+| `list_top` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | `GetTopVersionsAsync` | `resourcefull.order`: `largest_first` or `expiring_first` |
+| `list_expired` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | `GetExpiredVersionsAsync` | |
 | `delete` | `DeleteResourceIfExistsAsync` | `resourcefull.conditional` |
 | `create_container` | `CreateContainerAsync`, `CreateContainerIfNotExistsAsync` | |
 | `get_container` | `GetContainerInfoAsync` | |

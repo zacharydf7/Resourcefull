@@ -87,9 +87,17 @@
   apart, so neither works as the other. `ResourceContainerPolicy.AllowsContentType` says whether a policy allows a
   type. See [Receiving files through links](docs/upload-links.md).
 - **A dashboard.** `app.MapResourcefullDashboard("/resourcefull").RequireAuthorization("admins")` maps a read-only
-  page showing the health check's result, each container's usage against its policy, and its files, along with the
-  JSON endpoints the page reads, which can serve as an admin API. It refuses to run until authorization is required on
-  it, a fallback policy covers it, or it's marked `AllowAnonymous()`. See [The dashboard](docs/aspnet-core/dashboard.md).
+  page showing the health check's result, how many expired versions are waiting for the sweep, each container's usage
+  against its policy, its largest versions, the versions that expire soonest, its files, and each file's versions,
+  along with the JSON endpoints the page reads, which can serve as an admin API. It refuses to run until
+  authorization is required on it, a fallback policy covers it, or it's marked `AllowAnonymous()`. See
+  [The dashboard](docs/aspnet-core/dashboard.md).
+- **Versions by size or expiry.** `GetTopVersionsAsync(ResourceVersionOrder.LargestFirst)` lists a container's
+  largest versions, current and older, to show what's filling it, and `ResourceVersionOrder.ExpiringFirst` the ones
+  that expire soonest. `IResourceServiceClient.GetExpiredVersionsAsync` lists the expired versions the sweep hasn't
+  deleted yet, in every container, to show whether it's keeping up. Providers answer the first through a new
+  `ResourceRepository.GetTopVersionsAsync`, whose default reads every version; SQL Server and PostgreSQL answer it in
+  one query. The two methods record `list_top` and `list_expired` operations.
 - **Expiring resources.** `ResourceUploadOptions.ExpiresAt` sets when a version expires, and `UseExpiry` runs a
   background service that deletes expired versions within one interval, on every instance safely. `SetExpiryAsync`
   changes or clears a version's expiry, or the current version's with a `null` version ID. An

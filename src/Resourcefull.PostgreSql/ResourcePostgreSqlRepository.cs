@@ -1586,6 +1586,22 @@ internal class ResourcePostgreSqlRepository(IDbContextFactory<ResourceDbContext>
         return new ResourceContainerUsage(usage.StoredSize, usage.ResourceCount, usage.VersionCount);
     }
 
+    public override async Task<IReadOnlyList<ResourceInfo>> GetTopVersionsAsync(string resourceContainerName,
+        ResourceVersionOrder order, int count, CancellationToken cancellationToken = default)
+    {
+        if (HasNul(resourceContainerName)) return [];
+        using ResourceDbContext dbContext = dbContextFactory.CreateDbContext();
+
+        // One query over the container's version rows. Neither order has an index of its own, so it reads them all, as
+        // usage does. Every version has a length: only a staged upload's has none until it's current, and the query filter
+        // leaves staged rows out.
+        IQueryable<ResourceModel> versions = dbContext.Resources.Where(r => r.ContainerName == resourceContainerName);
+        versions = order == ResourceVersionOrder.LargestFirst
+            ? versions.OrderByDescending(r => r.ContentLength).ThenBy(r => r.VersionId)
+            : versions.Where(r => r.ExpiresAt != null).OrderBy(r => r.ExpiresAt).ThenBy(r => r.VersionId);
+        return await versions.Take(count).Select(AsResourceInfo).ToListAsync(cancellationToken).ConfigureAwait(false);
+    }
+
     public override async Task<bool> DeleteContainerAsync(string resourceContainerName,
         CancellationToken cancellationToken = default)
     {

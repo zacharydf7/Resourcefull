@@ -105,6 +105,7 @@ public abstract partial class ResourcefullContractTests
         // Act & Assert
         await Assert.ThrowsAsync<NotSupportedException>(() => container.SetExpiryAsync("a", null, DateTimeOffset.UtcNow));
         await Assert.ThrowsAsync<NotSupportedException>(() => ServiceOf(provider).DeleteExpiredAsync());
+        await Assert.ThrowsAsync<NotSupportedException>(() => ServiceOf(provider).GetExpiredVersionsAsync());
         Assert.Null((await container.GetResourceInfoAsync("a"))!.ExpiresAt);
     }
 }
