@@ -25,6 +25,11 @@
 	  <ProjectReference Include="..\Resourcefull\Resourcefull.csproj" />
 	</ItemGroup>
 
+  <!-- The repository and its helpers, compiled from source; shared with Resourcefull.PostgreSql next. -->
+  <ItemGroup>
+    <Compile Include="..\Shared\EntityFramework\*.cs" Link="EntityFramework\%(Filename)%(Extension)" />
+  </ItemGroup>
+
   <!-- The provisioning and upgrade scripts ship in the package's scripts folder for operators to run; they are not
        added to the projects that reference the package. -->
   <ItemGroup>
