@@ -189,7 +189,7 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
         {
             using ResourceDbContext attempt = NewWriteContext();
 
-            // A retry after a commit whose acknowledgement was lost finds its own version staged. A first attempt skips
+            // A retry after a commit whose acknowledgment was lost finds its own version staged. A first attempt skips
             // the look, a round trip on every write: the insert below is refused if the name already has the version.
             // The in-memory provider the SQL Server unit tests use doesn't enforce the unique index.
             if (committing || !attempt.Database.IsRelational())
@@ -300,7 +300,7 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
         WrittenContent? written = null;
         return WriteNameAsync(resourceContainerName, resourceName, async (attempt, ct) =>
         {
-            // A retry after a commit whose acknowledgement was lost finds it current, which the filter lets it see.
+            // A retry after a commit whose acknowledgment was lost finds it current, which the filter lets it see.
             if (written is not null && await attempt.Resources.AsNoTracking()
                 .FirstOrDefaultAsync(r => r.Id == staged.Id, ct).ConfigureAwait(false) is { } stored)
             {
@@ -342,7 +342,7 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
             await using var transactionDisposal = transaction.ConfigureAwait(false);
 
             // Locked as it's read, so an upload can't make it current, or move its stamp forward, before it goes. A retry
-            // after a commit whose acknowledgement was lost finds it gone.
+            // after a commit whose acknowledgment was lost finds it gone.
             List<int> chunks = attempt.Database.IsRelational()
                 ? await LockStagedVersionAsync(attempt, resourceId, staleBefore, ct).ConfigureAwait(false)
                 : await attempt.Resources.IgnoreQueryFilters()
@@ -377,7 +377,7 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
             await dbContext.Database.CreateExecutionStrategy().ExecuteAsync(async ct =>
             {
                 using ResourceDbContext attempt = NewWriteContext();
-                // A retry after a commit whose acknowledgement was lost finds the session it started.
+                // A retry after a commit whose acknowledgment was lost finds the session it started.
                 if (sentBefore && await Session(attempt, version.Location, version.VersionId).AnyAsync(ct).ConfigureAwait(false))
                     return;
                 sentBefore = true;
@@ -474,7 +474,7 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
             if (moved == 0)
             {
                 long? current = await SessionLengthAsync(attempt, resourceId, ct).ConfigureAwait(false);
-                // A retry after a commit whose acknowledgement was lost finds its own batch stored.
+                // A retry after a commit whose acknowledgment was lost finds its own batch stored.
                 if (current is null || (retry && current == after)) return current;
                 throw OffsetNotAtEnd(resource, versionId, expected, current.Value);
             }
@@ -525,7 +525,7 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
         {
             // Locked as it's read, so an append can't store a batch the measured length and hash don't cover.
             SessionRow? staged = await LockSessionAsync(attempt, resource, versionId, ct).ConfigureAwait(false);
-            // A retry after a commit whose acknowledgement was lost finds the session gone, made current, which the
+            // A retry after a commit whose acknowledgment was lost finds the session gone, made current, which the
             // filter lets it see; one whose earlier attempt rolled back, and that something else deleted, finds nothing.
             if (staged is null)
             {
@@ -711,7 +711,7 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
         {
             return await WriteNamesAsync([source, destination.Location], async (attempt, ct) =>
             {
-                // A retry after a commit whose acknowledgement was lost finds the copy already stored.
+                // A retry after a commit whose acknowledgment was lost finds the copy already stored.
                 if (await attempt.Resources.AnyAsync(r => r.ContainerName == destinationContainer && r.Name == destinationName
                     && r.VersionId == destination.VersionId, ct).ConfigureAwait(false))
                 {
@@ -757,7 +757,7 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
             {
                 ResourceModel? current = await attempt.Resources.AsNoTracking().FirstOrDefaultAsync(r => r.ContainerName == source.ContainerName
                     && r.Name == source.ResourceName && r.IsLatest, ct).ConfigureAwait(false);
-                // A retry after a commit whose acknowledgement was lost finds the resource already moved.
+                // A retry after a commit whose acknowledgment was lost finds the resource already moved.
                 if (current is null) return moved;
                 if (sourceConditions is not null)
                 {
@@ -874,7 +874,7 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
     /// Inserts a batch of chunks in one statement, committed as it runs, and empties the batch; with
     /// <paramref name="stamp"/>, the same round trip moves the version's <see cref="ResourceModel.StagedAt"/> forward.
     /// After a transient failure the strategy sends the batch again from the same buffers, and a retry after a commit
-    /// whose acknowledgement was lost, refused because the chunks are already stored, has nothing left to do. The
+    /// whose acknowledgment was lost, refused because the chunks are already stored, has nothing left to do. The
     /// command is sent straight through the database's driver: tracking each chunk, or sending the command through EF
     /// Core's raw SQL, more than doubled what an upload allocated on SQL Server.
     /// </summary>
@@ -1288,7 +1288,7 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
         // promotion of the next version can't race a write, and the conditions hold until the delete commits.
         return WriteNameAsync(resourceContainerName, resourceName, async (dbContext, ct) =>
         {
-            // A retry after a commit whose acknowledgement was lost finds what it deleted gone. The conditions it met
+            // A retry after a commit whose acknowledgment was lost finds what it deleted gone. The conditions it met
             // no longer hold then, and it mustn't report that nothing was deleted.
             if (deletedInAnEarlierAttempt && !await dbContext.Resources.AnyAsync(r => r.ContainerName == resourceContainerName
                 && r.Name == resourceName && r.VersionId == versionId, ct).ConfigureAwait(false))
@@ -1320,7 +1320,7 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
             // Under the name's lock, so a batch can't race a write that makes a version current.
             deleted += await WriteNameAsync(resourceContainerName, resourceName, async (dbContext, ct) =>
             {
-                // A retry after a commit whose acknowledgement was lost keeps the list it took, and doesn't check the
+                // A retry after a commit whose acknowledgment was lost keeps the list it took, and doesn't check the
                 // conditions again: with versions deleted, they may no longer hold.
                 bool firstBatch = versions.Count == 0;
                 if (firstBatch)
@@ -1463,7 +1463,7 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
         // Under the name's lock, so a change to the expiry can't come between the check and the delete.
         return WriteNameAsync(resource.ContainerName, resource.ResourceName, async (dbContext, ct) =>
         {
-            // A retry after a commit whose acknowledgement was lost finds the version gone.
+            // A retry after a commit whose acknowledgment was lost finds the version gone.
             if (await ResolveWithChunksAsync(dbContext.Resources, resource.ContainerName, resource.ResourceName, versionId, ct).ConfigureAwait(false) is not { } found)
                 return deletedInAnEarlierAttempt;
             if (!(found.Version.ExpiresAt <= now) || !IsDeletable(found.Version, now)) return false;
@@ -1481,7 +1481,7 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
         List<(ResourceLocation Resource, string VersionId)> batch = [.. versions.Distinct()];
         while (batch.Count > 0)
         {
-            // What an earlier attempt deleted, should a retry follow a commit whose acknowledgement was lost.
+            // What an earlier attempt deleted, should a retry follow a commit whose acknowledgment was lost.
             List<(ResourceLocation, string)> deletedInAnEarlierAttempt = [];
 
             // A transaction under the batch's names' locks, so a change to an expiry can't come between the check and
@@ -1634,7 +1634,7 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
             IQueryable<ResourceModel> targets = versionId is null
                 ? Versions(dbContext.Resources, resourceContainerName, resourceName)
                 : Version(dbContext.Resources, resourceContainerName, resourceName, versionId);
-            // A retry after a commit whose acknowledgement was lost finds what it deleted in the bin. The conditions it
+            // A retry after a commit whose acknowledgment was lost finds what it deleted in the bin. The conditions it
             // met no longer hold then, and it mustn't report that nothing was deleted.
             if (deletedInAnEarlierAttempt && !await targets.AnyAsync(ct).ConfigureAwait(false)) return true;
 
@@ -1731,7 +1731,7 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
         return WriteNameAsync(resource.ContainerName, resource.ResourceName, async (dbContext, ct) =>
         {
             List<ResourceModel> returning = await Binned(dbContext, resource, versionId).ToListAsync(ct).ConfigureAwait(false);
-            // A retry after a commit whose acknowledgement was lost finds them back already.
+            // A retry after a commit whose acknowledgment was lost finds them back already.
             if (returning.Count == 0) return undeletedInAnEarlierAttempt;
 
             bool hasCurrent = await Version(dbContext.Resources, resource.ContainerName, resource.ResourceName, null)
@@ -1764,7 +1764,7 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
                 IQueryable<ResourceModel> binned = Binned(dbContext, resource, versionId);
                 if (dueBy is { } due) binned = binned.Where(r => r.PurgeAt <= due);
                 var found = await binned.OrderBy(r => r.Id).Select(r => new { r.Id, Chunks = r.Chunks!.Count }).ToListAsync(ct).ConfigureAwait(false);
-                // A retry after a commit whose acknowledgement was lost finds what it purged gone.
+                // A retry after a commit whose acknowledgment was lost finds what it purged gone.
                 if (found.Count == 0) return (purgedInAnEarlierAttempt, false);
 
                 var batch = found.Take(CountWithinDeleteBudget(found.Select(f => f.Chunks))).ToList();
@@ -1861,7 +1861,7 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
             }
             catch (DbUpdateException exception) when (IsUniqueViolation(exception))
             {
-                // A retry after a commit whose acknowledgement was lost finds the container it created. It can't tell
+                // A retry after a commit whose acknowledgment was lost finds the container it created. It can't tell
                 // that from a commit that failed while another caller created the name, which counts as created too.
                 if (created) return true;
                 throw new ResourceConflictException($"The container {resourceContainerName} already exists.",
@@ -2034,7 +2034,7 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
         async Task<bool?> RemoveIfEmptyAsync(ResourceDbContext attempt, CancellationToken ct)
         {
             ResourceContainerModel? container = await attempt.ResourceContainers.FirstOrDefaultAsync(x => x.Name == resourceContainerName, ct).ConfigureAwait(false);
-            // A retry after a commit whose acknowledgement was lost finds the container gone.
+            // A retry after a commit whose acknowledgment was lost finds the container gone.
             if (container is null) return deleted;
             if (attempt.Database.IsRelational()
                 ? !await LockEmptyContainerAsync(attempt, resourceContainerName, ct).ConfigureAwait(false)

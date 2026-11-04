@@ -15,7 +15,7 @@ namespace Resourcefull.Tests.PostgreSql;
 
 /// <summary>
 /// Writes that the execution strategy runs again after a transient failure: one simulated at a chosen point, where the
-/// commit went through but its acknowledgement was lost, and a real deadlock between two sessions' name locks.
+/// commit went through but its acknowledgment was lost, and a real deadlock between two sessions' name locks.
 /// </summary>
 [Collection(PostgreSqlCollection.Name)]
 public sealed class RetryIntegrationTests(PostgreSqlFixture fixture)
@@ -27,7 +27,7 @@ public sealed class RetryIntegrationTests(PostgreSqlFixture fixture)
         ResourceChunker.ChunkSize * (ResourcePostgreSqlRepository.ChunksPerUploadBatch + 4L);
 
     [Fact]
-    public async Task AddResourceAsync_ShouldStoreTheContentOnce_WhenABatchIsStoredButItsAcknowledgementIsLost()
+    public async Task AddResourceAsync_ShouldStoreTheContentOnce_WhenABatchIsStoredButItsAcknowledgmentIsLost()
     {
         fixture.SkipIfUnavailable();
 
@@ -47,7 +47,7 @@ public sealed class RetryIntegrationTests(PostgreSqlFixture fixture)
     }
 
     [Fact]
-    public async Task AddResourceAsync_ShouldKeepItsStagedVersion_WhenItsInsertIsStoredButItsAcknowledgementIsLost()
+    public async Task AddResourceAsync_ShouldKeepItsStagedVersion_WhenItsInsertIsStoredButItsAcknowledgmentIsLost()
     {
         fixture.SkipIfUnavailable();
 
@@ -68,7 +68,7 @@ public sealed class RetryIntegrationTests(PostgreSqlFixture fixture)
     }
 
     [Fact]
-    public async Task AddResourceAsync_ShouldReturnWhatWasStoredWithoutStoringItAgain_WhenTheCommitSucceedsButItsAcknowledgementIsLost()
+    public async Task AddResourceAsync_ShouldReturnWhatWasStoredWithoutStoringItAgain_WhenTheCommitSucceedsButItsAcknowledgmentIsLost()
     {
         fixture.SkipIfUnavailable();
 
@@ -89,7 +89,7 @@ public sealed class RetryIntegrationTests(PostgreSqlFixture fixture)
     }
 
     [Fact]
-    public async Task AddContainerAsync_ShouldCreateTheContainer_WhenTheCommitSucceedsButItsAcknowledgementIsLost()
+    public async Task AddContainerAsync_ShouldCreateTheContainer_WhenTheCommitSucceedsButItsAcknowledgmentIsLost()
     {
         fixture.SkipIfUnavailable();
 
@@ -108,11 +108,11 @@ public sealed class RetryIntegrationTests(PostgreSqlFixture fixture)
     }
 
     [Fact]
-    public async Task AppendStagedContentAsync_ShouldStoreEachBatchOnce_WhenABatchCommitsButItsAcknowledgementIsLost()
+    public async Task AppendStagedContentAsync_ShouldStoreEachBatchOnce_WhenABatchCommitsButItsAcknowledgmentIsLost()
     {
         fixture.SkipIfUnavailable();
 
-        // Arrange: a session's first batch commits, then its acknowledgement is lost, so it's sent again and finds
+        // Arrange: a session's first batch commits, then its acknowledgment is lost, so it's sent again and finds
         // itself stored.
         var failure = new FailOnceAfterCommitInterceptor();
         (ResourcePostgreSqlRepository repository, string c) = await NewRepositoryAsync(failure);
@@ -133,11 +133,11 @@ public sealed class RetryIntegrationTests(PostgreSqlFixture fixture)
     }
 
     [Fact]
-    public async Task CompleteStagedVersionAsync_ShouldReturnWhatItStored_WhenItCommitsButItsAcknowledgementIsLost()
+    public async Task CompleteStagedVersionAsync_ShouldReturnWhatItStored_WhenItCommitsButItsAcknowledgmentIsLost()
     {
         fixture.SkipIfUnavailable();
 
-        // Arrange: the completion commits, then its acknowledgement is lost, so the retry finds the session gone, made
+        // Arrange: the completion commits, then its acknowledgment is lost, so the retry finds the session gone, made
         // current.
         var failure = new FailOnceAfterCommitInterceptor();
         (ResourcePostgreSqlRepository repository, string c) = await NewRepositoryAsync(failure);
@@ -157,7 +157,7 @@ public sealed class RetryIntegrationTests(PostgreSqlFixture fixture)
     }
 
     [Fact]
-    public async Task CopyResourceAsync_ShouldReturnWhatItStoredWithoutCopyingAgain_WhenTheCommitSucceedsButItsAcknowledgementIsLost()
+    public async Task CopyResourceAsync_ShouldReturnWhatItStoredWithoutCopyingAgain_WhenTheCommitSucceedsButItsAcknowledgmentIsLost()
     {
         fixture.SkipIfUnavailable();
 

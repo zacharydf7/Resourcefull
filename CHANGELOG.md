@@ -421,7 +421,7 @@ check is a test that expects exactly `ArgumentException` for a bad name; it's no
 
 ### Fixed
 
-- With SQL Server, a delete whose commit succeeded but whose acknowledgement was lost to a transient error, and was
+- With SQL Server, a delete whose commit succeeded but whose acknowledgment was lost to a transient error, and was
   retried, reported that nothing was deleted. It now reports the delete.
 
 ## [3.0.0] - 2026-10-29

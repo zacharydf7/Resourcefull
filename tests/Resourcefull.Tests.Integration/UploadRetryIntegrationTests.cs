@@ -26,7 +26,7 @@ public class UploadRetryIntegrationTests(SqlServerFixture fixture)
         ResourceChunker.ChunkSize * (ResourceSqlRepository.ChunksPerUploadBatch + 4L);
 
     [Fact]
-    public async Task AddResourceAsync_ShouldStoreTheContentOnce_WhenABatchIsStoredButItsAcknowledgementIsLost()
+    public async Task AddResourceAsync_ShouldStoreTheContentOnce_WhenABatchIsStoredButItsAcknowledgmentIsLost()
     {
         fixture.SkipIfUnavailable();
 
@@ -46,7 +46,7 @@ public class UploadRetryIntegrationTests(SqlServerFixture fixture)
     }
 
     [Fact]
-    public async Task AddResourceAsync_ShouldKeepItsStagedVersion_WhenItsInsertIsStoredButItsAcknowledgementIsLost()
+    public async Task AddResourceAsync_ShouldKeepItsStagedVersion_WhenItsInsertIsStoredButItsAcknowledgmentIsLost()
     {
         fixture.SkipIfUnavailable();
 
@@ -119,7 +119,7 @@ public class UploadRetryIntegrationTests(SqlServerFixture fixture)
     }
 
     [Fact]
-    public async Task AddResourceAsync_ShouldReturnWhatWasStoredWithoutStoringItAgain_WhenTheCommitSucceedsButItsAcknowledgementIsLost()
+    public async Task AddResourceAsync_ShouldReturnWhatWasStoredWithoutStoringItAgain_WhenTheCommitSucceedsButItsAcknowledgmentIsLost()
     {
         fixture.SkipIfUnavailable();
 
@@ -158,7 +158,7 @@ public class UploadRetryIntegrationTests(SqlServerFixture fixture)
     }
 
     [Fact]
-    public async Task DeleteResourceAsync_ShouldReportTheDelete_WhenAConditionalDeleteCommitsButItsAcknowledgementIsLost()
+    public async Task DeleteResourceAsync_ShouldReportTheDelete_WhenAConditionalDeleteCommitsButItsAcknowledgmentIsLost()
     {
         fixture.SkipIfUnavailable();
 
@@ -178,7 +178,7 @@ public class UploadRetryIntegrationTests(SqlServerFixture fixture)
     }
 
     [Fact]
-    public async Task AddContainerAsync_ShouldCreateTheContainer_WhenTheCommitSucceedsButItsAcknowledgementIsLost()
+    public async Task AddContainerAsync_ShouldCreateTheContainer_WhenTheCommitSucceedsButItsAcknowledgmentIsLost()
     {
         fixture.SkipIfUnavailable();
 
@@ -196,7 +196,7 @@ public class UploadRetryIntegrationTests(SqlServerFixture fixture)
     }
 
     [Fact]
-    public async Task DeleteContainerAsync_ShouldReportTheDelete_WhenTheCommitSucceedsButItsAcknowledgementIsLost()
+    public async Task DeleteContainerAsync_ShouldReportTheDelete_WhenTheCommitSucceedsButItsAcknowledgmentIsLost()
     {
         fixture.SkipIfUnavailable();
 
@@ -214,11 +214,11 @@ public class UploadRetryIntegrationTests(SqlServerFixture fixture)
     }
 
     [Fact]
-    public async Task AppendStagedContentAsync_ShouldStoreEachBatchOnce_WhenABatchCommitsButItsAcknowledgementIsLost()
+    public async Task AppendStagedContentAsync_ShouldStoreEachBatchOnce_WhenABatchCommitsButItsAcknowledgmentIsLost()
     {
         fixture.SkipIfUnavailable();
 
-        // Arrange: a session's first batch commits, then its acknowledgement is lost, so it's sent again and finds
+        // Arrange: a session's first batch commits, then its acknowledgment is lost, so it's sent again and finds
         // itself stored.
         var failure = new FailOnceInterceptor(failAfterCommit: true);
         (ResourceSqlRepository repository, string c) = await NewRepositoryAsync(failure, arm: false);
@@ -239,11 +239,11 @@ public class UploadRetryIntegrationTests(SqlServerFixture fixture)
     }
 
     [Fact]
-    public async Task CompleteStagedVersionAsync_ShouldReturnWhatItStored_WhenItCommitsButItsAcknowledgementIsLost()
+    public async Task CompleteStagedVersionAsync_ShouldReturnWhatItStored_WhenItCommitsButItsAcknowledgmentIsLost()
     {
         fixture.SkipIfUnavailable();
 
-        // Arrange: the completion commits, then its acknowledgement is lost, so the retry finds the session gone, made
+        // Arrange: the completion commits, then its acknowledgment is lost, so the retry finds the session gone, made
         // current.
         var failure = new FailOnceInterceptor(failAfterCommit: true);
         (ResourceSqlRepository repository, string c) = await NewRepositoryAsync(failure, arm: false);
@@ -263,7 +263,7 @@ public class UploadRetryIntegrationTests(SqlServerFixture fixture)
     }
 
     [Fact]
-    public async Task CopyResourceAsync_ShouldReturnWhatItStoredWithoutCopyingAgain_WhenTheCommitSucceedsButItsAcknowledgementIsLost()
+    public async Task CopyResourceAsync_ShouldReturnWhatItStoredWithoutCopyingAgain_WhenTheCommitSucceedsButItsAcknowledgmentIsLost()
     {
         fixture.SkipIfUnavailable();
 
@@ -306,7 +306,7 @@ public class UploadRetryIntegrationTests(SqlServerFixture fixture)
     }
 
     [Fact]
-    public async Task MoveResourceAsync_ShouldReportTheMove_WhenTheCommitSucceedsButItsAcknowledgementIsLost()
+    public async Task MoveResourceAsync_ShouldReportTheMove_WhenTheCommitSucceedsButItsAcknowledgmentIsLost()
     {
         fixture.SkipIfUnavailable();
 
@@ -327,7 +327,7 @@ public class UploadRetryIntegrationTests(SqlServerFixture fixture)
     }
 
     [Fact]
-    public async Task SetExpiryAsync_ShouldReportTheChange_WhenTheCommitSucceedsButItsAcknowledgementIsLost()
+    public async Task SetExpiryAsync_ShouldReportTheChange_WhenTheCommitSucceedsButItsAcknowledgmentIsLost()
     {
         fixture.SkipIfUnavailable();
 
@@ -348,7 +348,7 @@ public class UploadRetryIntegrationTests(SqlServerFixture fixture)
     }
 
     [Fact]
-    public async Task DeleteExpiredVersionAsync_ShouldReportTheDelete_WhenTheCommitSucceedsButItsAcknowledgementIsLost()
+    public async Task DeleteExpiredVersionAsync_ShouldReportTheDelete_WhenTheCommitSucceedsButItsAcknowledgmentIsLost()
     {
         fixture.SkipIfUnavailable();
 
@@ -369,12 +369,12 @@ public class UploadRetryIntegrationTests(SqlServerFixture fixture)
     }
 
     [Fact]
-    public async Task DeleteExpiredVersionsAsync_ShouldReportEveryDelete_WhenALaterTransactionsAcknowledgementIsLost()
+    public async Task DeleteExpiredVersionsAsync_ShouldReportEveryDelete_WhenALaterTransactionsAcknowledgmentIsLost()
     {
         fixture.SkipIfUnavailable();
 
         // Arrange: five expired names of 64 chunks each, more than one transaction deletes, so the second's
-        // acknowledgement is lost.
+        // acknowledgment is lost.
         var failure = new FailOnceInterceptor(failAfterCommit: true, commitsBeforeFailing: 1);
         (ResourceSqlRepository repository, string c) = await NewRepositoryAsync(failure, arm: false);
         var expiresAt = new DateTimeOffset(2000, 1, 1, 0, 0, 0, TimeSpan.Zero);

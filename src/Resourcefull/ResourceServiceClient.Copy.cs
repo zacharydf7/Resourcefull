@@ -171,7 +171,7 @@ internal partial class ResourceServiceClient
             ResourceNames.ThrowIfInvalidContainerName(resourceContainerName);
             ArgumentNullException.ThrowIfNull(destination);
             string destinationName = destinationContainerName ?? resourceContainerName;
-            if (destination is ResourceServiceClient { _options.StoreName: { } store }) activity?.SetTag("resourcefull.destination_store", store);
+            if (destination.StoreName is { } store) activity?.SetTag("resourcefull.destination_store", store);
             ContainerInfo container = await resourceRepository.GetContainerInfoAsync(resourceContainerName, cancellationToken).ConfigureAwait(false)
                 ?? throw new ResourceContainerNotFoundException($"The container {resourceContainerName} doesn't exist.")
                 {
@@ -251,7 +251,7 @@ internal partial class ResourceServiceClient
             if (!Enum.IsDefined(options.OnFailure))
                 throw new ArgumentOutOfRangeException(nameof(options), options.OnFailure, $"{options.OnFailure} isn't a {nameof(StoreCopyFailures)} value.");
             string? prefix = string.IsNullOrEmpty(options.Prefix) ? null : options.Prefix;
-            if (destination is ResourceServiceClient { _options.StoreName: { } store }) activity?.SetTag("resourcefull.destination_store", store);
+            if (destination.StoreName is { } store) activity?.SetTag("resourcefull.destination_store", store);
 
             var copied = new List<ContainerCopyResult>();
             var updated = new List<ContainerUpdateResult>();

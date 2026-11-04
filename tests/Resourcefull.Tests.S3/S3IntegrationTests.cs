@@ -7,6 +7,7 @@ using Amazon.S3.Model;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Time.Testing;
 using Resourcefull.ObjectStorage;
+using Resourcefull.Tests.ObjectStorage;
 using Resourcefull.Providers;
 using Resourcefull.S3;
 using ResourceLocation = Resourcefull.Providers.ResourceLocation;
@@ -400,11 +401,11 @@ public class S3IntegrationTests(S3Fixture fixture)
 
     /// <summary>A repository on the test bucket under <paramref name="prefix"/>, with a container named c.</summary>
     private async Task<ObjectStoreRepository> NewRepositoryAsync(string prefix, TimeProvider? realTime = null, int? segmentSize = null,
-        IObjectStore? store = null, long copyPartSize = ObjectParts.MaxJoinedPartSize)
+        IObjectStore? store = null)
     {
         var repository = new ObjectStoreRepository(store ?? new S3ObjectStore(fixture.Client, fixture.BucketName), prefix, null, null)
         {
-            RealTime = realTime ?? TimeProvider.System, SegmentSize = segmentSize ?? 64 * 1024 * 1024, CopyPartSize = copyPartSize
+            RealTime = realTime ?? TimeProvider.System, SegmentSize = segmentSize ?? 64 * 1024 * 1024
         };
         await repository.AddContainerAsync("c", new Dictionary<string, string>());
         return repository;
@@ -612,147 +613,6 @@ public class S3IntegrationTests(S3Fixture fixture)
         Assert.Equal(0, onceOld);
         Assert.Equal(2, await CountKeysAsync(prefix + "u/"));
         Assert.NotNull(await repository.GetStagedVersionAsync(live, "v1"));
-    }
-
-    [Fact]
-    public async Task UploadSession_ShouldJoinItsSegmentsInTheStoreAndComplete_WhenTheyTakeAsManyPartsAsTheStoreJoins()
-    {
-        fixture.SkipIfUnavailable();
-
-        // Arrange: a store that joins at most three parts, segments of up to 9 MiB, and 40 MiB of content.
-        string prefix = $"session-stages-{Guid.NewGuid():N}/";
-        var store = new InterferingStore(new S3ObjectStore(fixture.Client, fixture.BucketName)) { MaxParts = 3 };
-        ObjectStoreRepository repository = await NewRepositoryAsync(prefix, segmentSize: 9 * 1024 * 1024, store: store);
-        var location = new ResourceLocation("c", "big.bin");
-        byte[] payload = new byte[40 * 1024 * 1024];
-        new Random(160).NextBytes(payload);
-        await repository.StartStagedVersionAsync(new NewResourceVersion(location, "v1"));
-
-        // Act
-        long? stored = await repository.AppendStagedContentAsync(location, "v1", 0, new MemoryStream(payload));
-        int segments = (await fixture.Client.ListObjectsV2Async(new ListObjectsV2Request
-        {
-            BucketName = fixture.BucketName, Prefix = prefix + "u/"
-        })).S3Objects.Count(o => o.Key.Contains("/p/", StringComparison.Ordinal));
-        WrittenContent? written = await repository.CompleteStagedVersionAsync(location, "v1", payload.LongLength, "sha256:test");
-
-        // Assert: the first three segments were joined into one, leaving three to join at completion, and the content reads
-        // back whole.
-        Assert.Equal(payload.LongLength, stored);
-        Assert.Equal(3, segments);
-        Assert.Equal(payload.LongLength, written!.ContentLength);
-        Assert.Equal(payload, await ReadAllAsync(await repository.GetResourceStreamAsync(location)));
-    }
-
-    [Fact]
-    public async Task UploadSession_ShouldJoinOnlyTheSegmentsSinceTheLastJoin_WhenTheyTakeAsManyPartsAsTheStoreJoinsAgain()
-    {
-        fixture.SkipIfUnavailable();
-
-        // Arrange: a store that joins at most four parts, joins in parts of up to 16 MiB, segments of up to 9 MiB, and
-        // 63 MiB of content: four segments join into one of 36 MiB, which takes two parts, then two more into one of 18.
-        string prefix = $"session-joins-{Guid.NewGuid():N}/";
-        var store = new InterferingStore(new S3ObjectStore(fixture.Client, fixture.BucketName)) { MaxParts = 4 };
-        ObjectStoreRepository repository = await NewRepositoryAsync(prefix, segmentSize: 9 * 1024 * 1024, store: store,
-            copyPartSize: 2 * ObjectParts.PartSize);
-        var location = new ResourceLocation("c", "big.bin");
-        byte[] payload = new byte[63 * 1024 * 1024];
-        new Random(1601).NextBytes(payload);
-        await repository.StartStagedVersionAsync(new NewResourceVersion(location, "v1"));
-
-        // Act
-        long? stored = await repository.AppendStagedContentAsync(location, "v1", 0, new MemoryStream(payload));
-        long copied = store.JoinedLength;
-        WrittenContent? written = await repository.CompleteStagedVersionAsync(location, "v1", payload.LongLength, "sha256:test");
-
-        // Assert: the 36 MiB segment wasn't copied again by the second join, and the content reads back whole.
-        Assert.Equal(payload.LongLength, stored);
-        Assert.Equal(54L * 1024 * 1024, copied);
-        Assert.Equal(payload.LongLength, written!.ContentLength);
-        Assert.Equal(payload, await ReadAllAsync(await repository.GetResourceStreamAsync(location)));
-    }
-
-    [Fact]
-    public async Task AppendStagedContentAsync_ShouldThrowUploadLimitExceptionWithoutJoining_WhenJoiningWouldLeaveNoRoom()
-    {
-        fixture.SkipIfUnavailable();
-
-        // Arrange: a store that joins at most two parts, joins in parts of 8 MiB, and a session holding two segments of
-        // 9 MiB, which joined would still take two.
-        string prefix = $"session-full-{Guid.NewGuid():N}/";
-        var store = new InterferingStore(new S3ObjectStore(fixture.Client, fixture.BucketName)) { MaxParts = 2 };
-        ObjectStoreRepository repository = await NewRepositoryAsync(prefix, segmentSize: 9 * 1024 * 1024, store: store,
-            copyPartSize: ObjectParts.PartSize);
-        var location = new ResourceLocation("c", "big.bin");
-        await repository.StartStagedVersionAsync(new NewResourceVersion(location, "v1"));
-        long stored = (await repository.AppendStagedContentAsync(location, "v1", 0, new MemoryStream(new byte[18 * 1024 * 1024])))!.Value;
-
-        // Act
-        ResourceUploadLimitException refused = await Assert.ThrowsAsync<ResourceUploadLimitException>(() =>
-            repository.AppendStagedContentAsync(location, "v1", stored, new MemoryStream("a"u8.ToArray())));
-
-        // Assert: refused before copying anything, with what the session stored kept, which still completes.
-        Assert.Equal(("c", "big.bin"), (refused.ContainerName, refused.ResourceName));
-        Assert.Equal(0, store.JoinedLength);
-        Assert.Equal(stored, (await repository.GetStagedVersionAsync(location, "v1"))!.StoredLength);
-        Assert.NotNull(await repository.CompleteStagedVersionAsync(location, "v1", stored, "sha256:test"));
-    }
-
-    [Fact]
-    public async Task AppendStagedContentAsync_ShouldThrowOffsetException_WhenAnotherAppendFromTheSameOffsetJoinsTheSegmentsFirst()
-    {
-        fixture.SkipIfUnavailable();
-
-        // Arrange: a store that joins at most two parts, a session holding two segments of 9 MiB, and, as the next
-        // append's join starts, another append from the same offset that joins them and stores one byte.
-        string prefix = $"session-join-race-{Guid.NewGuid():N}/";
-        var store = new InterferingStore(new S3ObjectStore(fixture.Client, fixture.BucketName)) { MaxParts = 2 };
-        ObjectStoreRepository repository = await NewRepositoryAsync(prefix, segmentSize: 9 * 1024 * 1024, store: store);
-        var location = new ResourceLocation("c", "big.bin");
-        byte[] payload = new byte[18 * 1024 * 1024];
-        new Random(1602).NextBytes(payload);
-        await repository.StartStagedVersionAsync(new NewResourceVersion(location, "v1"));
-        await repository.AppendStagedContentAsync(location, "v1", 0, new MemoryStream(payload));
-        bool raced = false;
-        store.BeforeJoin = async () =>
-        {
-            if (raced) return;
-            raced = true;
-            await repository.AppendStagedContentAsync(location, "v1", payload.LongLength, new MemoryStream("b"u8.ToArray()));
-        };
-
-        // Act
-        ResourceUploadOffsetException refused = await Assert.ThrowsAsync<ResourceUploadOffsetException>(() =>
-            repository.AppendStagedContentAsync(location, "v1", payload.LongLength, new MemoryStream("a"u8.ToArray())));
-        WrittenContent? written = await repository.CompleteStagedVersionAsync(location, "v1", payload.LongLength + 1, "sha256:test");
-
-        // Assert: refused with the other append's length, which is what the session holds.
-        Assert.Equal(payload.LongLength + 1, refused.CurrentOffset);
-        Assert.NotNull(written);
-        Assert.Equal(payload.Append((byte)'b'), await ReadAllAsync(await repository.GetResourceStreamAsync(location)));
-    }
-
-    [Fact]
-    public async Task AppendStagedContentAsync_ShouldReturnNull_WhenTheSessionIsDeletedWhileItsSegmentsAreJoined()
-    {
-        fixture.SkipIfUnavailable();
-
-        // Arrange: a store that joins at most two parts, a session holding two segments of 9 MiB, and the session
-        // deleted as the next append's join starts.
-        string prefix = $"session-join-deleted-{Guid.NewGuid():N}/";
-        var store = new InterferingStore(new S3ObjectStore(fixture.Client, fixture.BucketName)) { MaxParts = 2 };
-        ObjectStoreRepository repository = await NewRepositoryAsync(prefix, segmentSize: 9 * 1024 * 1024, store: store);
-        var location = new ResourceLocation("c", "big.bin");
-        await repository.StartStagedVersionAsync(new NewResourceVersion(location, "v1"));
-        long stored = (await repository.AppendStagedContentAsync(location, "v1", 0, new MemoryStream(new byte[18 * 1024 * 1024])))!.Value;
-        store.BeforeJoin = () => repository.DeleteStagedVersionAsync(location, "v1");
-
-        // Act
-        long? appended = await repository.AppendStagedContentAsync(location, "v1", stored, new MemoryStream("a"u8.ToArray()));
-
-        // Assert: nothing of the session is left.
-        Assert.Null(appended);
-        Assert.Equal(0, await CountKeysAsync(prefix + "u/"));
     }
 
     [Fact]
@@ -1333,103 +1193,6 @@ public class S3IntegrationTests(S3Fixture fixture)
         Assert.IsType<IOException>(Assert.Single(failed.InnerExceptions));
         Assert.Equal([1L], counted);
         Assert.Equal(2, await CountKeysAsync(prefix + "u/"));
-    }
-
-    /// <summary>
-    /// A store that can fail reads of some keys, and whose first join, once done, can wait for <see cref="Release"/>, so
-    /// a test can act meanwhile.
-    /// </summary>
-    private sealed class InterferingStore(IObjectStore inner) : IObjectStore
-    {
-        private readonly TaskCompletionSource _joined = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        private readonly TaskCompletionSource _released = new(TaskCreationOptions.RunContinuationsAsynchronously);
-
-        /// <summary>Whether the first join waits for <see cref="Release"/> once it's done.</summary>
-        public bool HoldFirstJoin { get; init; }
-
-        /// <summary>The keys whose reads fail, as a store that can't be reached fails them.</summary>
-        public Func<string, bool>? FailReads { get; set; }
-
-        /// <summary>The keys whose writes and deletes fail, as a store that can't be reached fails them.</summary>
-        public Func<string, bool>? FailWrites { get; set; }
-
-        /// <summary>Called before each conditional write, with its key and body; it may throw, as a failed write does.</summary>
-        public Func<string, byte[], Task>? BeforePut { get; set; }
-
-        /// <summary>Called before each join.</summary>
-        public Func<Task>? BeforeJoin { get; set; }
-
-        /// <summary>How many bytes the joins were given to copy.</summary>
-        public long JoinedLength { get; private set; }
-
-        /// <summary>Completes when the first join is done.</summary>
-        public Task Joined => _joined.Task;
-
-        public void Release() => _released.TrySetResult();
-
-        public string ConditionalWrites => inner.ConditionalWrites;
-
-        /// <summary>The most parts a join takes, in place of the store's own limit.</summary>
-        public int? MaxParts { get; init; }
-
-        public int MaxJoinedParts => MaxParts ?? inner.MaxJoinedParts;
-
-        public int KeySegmentBytes => inner.KeySegmentBytes;
-
-        public long MaxUploadLength => inner.MaxUploadLength;
-
-        /// <summary>The most an object holds, in place of the store's own limit.</summary>
-        public long? MaxObject { get; init; }
-
-        public long MaxObjectLength => MaxObject ?? inner.MaxObjectLength;
-
-        /// <summary>Changes what a listing says of each object, as for objects written longer ago.</summary>
-        public Func<ObjectListing, ObjectListing>? MapListing { get; set; }
-
-        public async Task JoinAsync(string key, IReadOnlyList<ObjectRange> parts, CancellationToken cancellationToken)
-        {
-            if (BeforeJoin is not null) await BeforeJoin();
-            ThrowIfFailing(key);
-            JoinedLength += parts.Sum(p => p.Length);
-            await inner.JoinAsync(key, parts, cancellationToken);
-            if (HoldFirstJoin && _joined.TrySetResult()) await _released.Task.WaitAsync(cancellationToken);
-        }
-
-        public Task<(byte[]? Body, string? ETag)> GetAsync(string key, CancellationToken cancellationToken) =>
-            FailReads?.Invoke(key) == true ? throw new IOException($"Reading {key} failed.") : inner.GetAsync(key, cancellationToken);
-
-        public async Task<bool> TryPutAsync(string key, byte[] body, string? etag)
-        {
-            if (BeforePut is not null) await BeforePut(key, body);
-            ThrowIfFailing(key);
-            return await inner.TryPutAsync(key, body, etag);
-        }
-
-        public Task UploadAsync(string key, Stream content, CancellationToken cancellationToken)
-        {
-            ThrowIfFailing(key);
-            return inner.UploadAsync(key, content, cancellationToken);
-        }
-
-        public Task<ObjectRead?> OpenReadAsync(string key, long start, long end, long length, CancellationToken cancellationToken) =>
-            inner.OpenReadAsync(key, start, end, length, cancellationToken);
-
-        public IAsyncEnumerable<ObjectListing> ListAsync(string prefix, string? startAfter, CancellationToken cancellationToken) =>
-            MapListing is { } map ? inner.ListAsync(prefix, startAfter, cancellationToken).Select(map)
-                : inner.ListAsync(prefix, startAfter, cancellationToken);
-
-        public Task DeleteAsync(IReadOnlyList<string> keys, CancellationToken cancellationToken)
-        {
-            foreach (string key in keys) ThrowIfFailing(key);
-            return inner.DeleteAsync(keys, cancellationToken);
-        }
-
-        public bool IsStoreFailure(Exception exception) => inner.IsStoreFailure(exception);
-
-        private void ThrowIfFailing(string key)
-        {
-            if (FailWrites?.Invoke(key) == true) throw new IOException($"Writing {key} failed.");
-        }
     }
 
     /// <summary>A stream whose first read waits for <see cref="Release"/>, so a test can act while it's being read.</summary>

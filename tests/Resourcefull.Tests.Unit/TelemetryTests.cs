@@ -381,6 +381,42 @@ public sealed class TelemetryTests : IDisposable
     }
 
     [Fact]
+    public async Task CopyContainerToAndCopyStoreToAsync_ShouldTagTheDestinationStore_WhenTheDestinationWrapsANamedStoresClient()
+    {
+        // Arrange: a named store, reached through a client that wraps the store's own client.
+        using ServiceProvider provider = new ServiceCollection().AddResourcefull(o => o.UseInMemory())
+            .AddKeyedResourcefull("archive", o => o.UseInMemory()).BuildServiceProvider();
+        IResourceServiceClient service = provider.GetRequiredService<IResourceServiceClient>();
+        await (await service.CreateContainerAsync("c")).UploadAsync("a", BinaryData.FromString("x"));
+        IResourceServiceClient archive = WrappingClient.Wrap(provider.GetRequiredKeyedService<IResourceServiceClient>("archive"));
+        using Activity root = TestSource.StartActivity("test")!;
+
+        // Act
+        await service.CopyContainerToAsync("c", archive);
+        await service.CopyStoreToAsync(archive, new StoreCopyOptions { Existing = ExistingContainers.SkipMatching });
+
+        // Assert
+        Activity container = Assert.Single(SpansIn(root), s => s.OperationName == "resourcefull copy_container");
+        Activity store = Assert.Single(SpansIn(root), s => s.OperationName == "resourcefull copy_store");
+        Assert.All(new[] { container, store }, s => Assert.Equal("archive", s.GetTagItem("resourcefull.destination_store")));
+    }
+
+    /// <summary>A client that passes every call to another, as a decorator in an application would.</summary>
+    public class WrappingClient : DispatchProxy
+    {
+        private IResourceServiceClient _inner = null!;
+
+        public static IResourceServiceClient Wrap(IResourceServiceClient inner)
+        {
+            IResourceServiceClient wrapper = Create<IResourceServiceClient, WrappingClient>();
+            ((WrappingClient)(object)wrapper)._inner = inner;
+            return wrapper;
+        }
+
+        protected override object? Invoke(MethodInfo? targetMethod, object?[]? args) => targetMethod!.Invoke(_inner, args);
+    }
+
+    [Fact]
     public async Task PropertyChanges_ShouldRecordTheirSpansAndAskThePolicyProvider_WhenCalled()
     {
         // Arrange: no caching, so each change asks the policy provider.

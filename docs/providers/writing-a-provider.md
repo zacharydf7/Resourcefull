@@ -266,7 +266,7 @@ while its content arrives.
   arrives, so an append that fails partway keeps what it stored. Make the check and the store one step, as SQL Server's
   provider does by moving the stored length forward only from the length it expects, in the transaction that stores each
   batch, so two appends from the same offset can't both succeed. When your provider retries a batch after a transient
-  failure, and the earlier attempt's commit succeeded but its acknowledgement was lost, the retry must recognize its own
+  failure, and the earlier attempt's commit succeeded but its acknowledgment was lost, the retry must recognize its own
   stored batch rather than refuse it.
 - **`GetStagedStreamAsync`** reads the staged content from the start. The clients read it once, to measure, hash and
   inspect it, before they complete the session.
