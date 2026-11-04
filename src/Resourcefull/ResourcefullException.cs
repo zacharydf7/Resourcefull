@@ -314,3 +314,18 @@ public sealed class ResourceRetainedException : ResourcefullException
         };
     }
 }
+
+/// <summary>
+/// Thrown when an upload's version is deleted before the upload completes, by a container delete running at the same
+/// time or by the sweep of abandoned uploads, which deletes an upload that has stored nothing for a day. Nothing was
+/// stored, and the upload can be tried again; if the container was deleted, the next try throws
+/// <see cref="ResourceContainerNotFoundException"/>. Maps naturally to an HTTP 409.
+/// <para>Coming in 4.0.</para>
+/// </summary>
+public sealed class ResourceUploadInterruptedException : ResourcefullException
+{
+    /// <summary>Creates the exception with a message and the exception that caused it.</summary>
+    /// <param name="message">The message that describes the error.</param>
+    /// <param name="innerException">The exception that caused this one.</param>
+    public ResourceUploadInterruptedException(string message, Exception innerException) : base(message, innerException) { }
+}

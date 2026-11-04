@@ -308,8 +308,10 @@
   locks and the transaction log for as long as it takes, and a transient failure partway sends the batch again rather
   than failing the upload, even from a stream that can't seek, such as a request body. A canceled or failed upload
   deletes what it stored; the expiry sweep deletes what an upload whose process died left behind, a day after it
-  last stored anything. Each upload costs about one round trip more. The `Resourcefull_AddStagedAt` migration adds a
-  nullable column and an index. Providers get `DeleteAbandonedUploadsAsync`, whose default does nothing. The upload
+  last stored anything. An upload whose staged version is deleted before it completes, as by a container delete at the
+  same time, throws `ResourceUploadInterruptedException` (409 with the ASP.NET Core exception handler) and stores
+  nothing. Each upload costs about one round trip more. The `Resourcefull_AddStagedAt` migration adds a nullable column
+  and an index. Providers get `DeleteAbandonedUploadsAsync`, whose default does nothing. The upload
   span gains `resourcefull.batches`, and the `expire` span `resourcefull.abandoned_uploads`. See
   [Uploads, connections and the log](docs/providers/sql-server-operations.md#uploads-connections-and-the-log).
 - **`UseVersioning` with fewer than one version** throws `ArgumentOutOfRangeException`, as `UseExpiry` and

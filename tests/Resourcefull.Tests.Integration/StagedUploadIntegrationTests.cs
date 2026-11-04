@@ -96,7 +96,7 @@ public class StagedUploadIntegrationTests(SqlServerFixture fixture)
         content.Resume();
 
         // Assert
-        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => upload);
+        var exception = await Assert.ThrowsAsync<ResourceUploadInterruptedException>(() => upload);
         Assert.Contains("deleted before it was complete", exception.Message);
         Assert.Equal(0, await StoredRowsAsync(container.Name));
     }

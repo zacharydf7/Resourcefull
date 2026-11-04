@@ -63,6 +63,10 @@ public interface IResourceContainerClient
     /// <exception cref="ResourceContainerNotFoundException">
     /// The container does not exist: it was never created, or it was deleted before the write.
     /// </exception>
+    /// <exception cref="ResourceUploadInterruptedException">
+    /// The upload's version was deleted before the upload completed, as by a container delete running at the same time;
+    /// nothing was stored.
+    /// </exception>
     /// <exception cref="NotSupportedException">
     /// <see cref="ResourceUploadOptions.Conditions"/> is set and the storage provider doesn't support conditional uploads.
     /// </exception>

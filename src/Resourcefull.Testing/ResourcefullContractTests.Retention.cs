@@ -459,7 +459,8 @@ public abstract partial class ResourcefullContractTests
                     await container.UploadAsync("a", BinaryData.FromString("a"), new ResourceUploadOptions { LegalHold = true });
                     return true;
                 }
-                catch (Exception exception) when (exception is ResourceContainerNotFoundException or InvalidOperationException)
+                catch (ResourcefullException exception)
+                    when (exception is ResourceContainerNotFoundException or ResourceUploadInterruptedException)
                 {
                     // Overtaken by the delete: a provider that stages content first finds its version deleted.
                     return false;

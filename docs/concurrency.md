@@ -15,7 +15,10 @@ the same guarantees:
 - **Creating a container is decided by the write too.** Of several concurrent `CreateContainerAsync` calls for
   one name, exactly one succeeds. `CreateContainerIfNotExistsAsync` returns a client to every caller.
 - **An upload never succeeds into a missing container.** A container deleted while an upload into it runs makes the
-  upload throw `ResourceContainerNotFoundException`, not report success.
+  upload throw `ResourceContainerNotFoundException`, not report success. With SQL Server, PostgreSQL and SQLite, the
+  upload can throw `ResourceUploadInterruptedException` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>
+  instead, when the delete reaches the upload's version before it removes the container. Either way, nothing was
+  stored.
 - **Pruning never leaves more than `MaxVersions`**, even with concurrent uploads, because each prune works from the
   versions as they stand after its own write. (With [expiry](expiry.md) on <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>, the extra versions expire
   five minutes later instead of being deleted at once.) A prune that fails leaves the extra versions until a later upload of the

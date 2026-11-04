@@ -63,6 +63,10 @@ public abstract class ResourceRepository
     /// <paramref name="version"/> declares a content length that differs from the stream; nothing was stored.
     /// </exception>
     /// <exception cref="ResourceContainerNotFoundException">The named container does not exist.</exception>
+    /// <exception cref="ResourceUploadInterruptedException">
+    /// The version was deleted before the upload completed, as by a container delete running at the same time, on a
+    /// provider that stores the version before it's complete; nothing was stored.
+    /// </exception>
     /// <exception cref="ResourceConflictException">
     /// <see cref="ResourceWriteCondition.CreateOnly"/> is set and the name already exists, or the name already has a
     /// version with this <see cref="NewResourceVersion.VersionId"/>.
@@ -437,6 +441,10 @@ public abstract class ResourceRepository
     /// <param name="cancellationToken">Cancels the write; a canceled write stores nothing.</param>
     /// <returns>What was stored.</returns>
     /// <exception cref="ResourceConflictException">The name already has a version with that ID.</exception>
+    /// <exception cref="ResourceUploadInterruptedException">
+    /// The version was deleted before the import completed, as by a container delete running at the same time, on a
+    /// provider that stores the version before it's complete; nothing was stored.
+    /// </exception>
     /// <exception cref="NotSupportedException">The provider doesn't import versions.</exception>
     public virtual Task<WrittenContent> ImportVersionAsync(NewResourceVersion version, Stream content,
         CancellationToken cancellationToken = default)

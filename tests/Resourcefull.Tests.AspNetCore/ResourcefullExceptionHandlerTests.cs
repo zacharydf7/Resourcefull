@@ -11,6 +11,7 @@ public class ResourcefullExceptionHandlerTests
         { new ResourceConflictException("Resource report.txt already exists."), HttpStatusCode.Conflict },
         { new ResourceUploadOffsetException("The upload has 10 bytes stored, not 5.", 10), HttpStatusCode.Conflict },
         { new ResourceRetainedException("Version v1 is under a legal hold.", "v1", null, true), HttpStatusCode.Conflict },
+        { new ResourceUploadInterruptedException("Its version was deleted.", new InvalidOperationException()), HttpStatusCode.Conflict },
         { new ResourceContainerNotFoundException("Resource Container files does not exist."), HttpStatusCode.NotFound },
         { new ResourceContentLengthMismatchException("The length doesn't match."), HttpStatusCode.BadRequest },
         { new ResourceNameException("Name must not start or end with whitespace.", "resourceName"), HttpStatusCode.BadRequest },

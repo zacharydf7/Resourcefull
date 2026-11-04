@@ -153,8 +153,11 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
             // gone, as the sweep of abandoned uploads takes one whose upload stored nothing for a day.
             await ThrowIfContainerMissingAsync(resourceContainerName, exception, cancellationToken).ConfigureAwait(false);
             if (staged is null) throw;
-            throw new InvalidOperationException($"The resource {resourceName} wasn't stored in the container " +
-                $"{resourceContainerName}: its version was deleted before it was complete.", exception);
+            throw new ResourceUploadInterruptedException($"The resource {resourceName} wasn't stored in the container " +
+                $"{resourceContainerName}: its version was deleted before it was complete.", exception)
+            {
+                ContainerName = resourceContainerName, ResourceName = resourceName
+            };
         }
         finally
         {
