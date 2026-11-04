@@ -7,7 +7,8 @@ container later, in the same store or another one. Use it to:
 
 - **keep a copy** of one container before a risky change (to back up the whole store, see
   [Backups and recovery](backups-and-recovery.md));
-- **move** a container between environments, such as from production to a staging copy;
+- **move** a container between environments, such as from production to a staging copy (to move a whole store to
+  another provider, see [Moving to another provider](moving-providers.md));
 - **hand over** a customer's files, or keep a copy when you close their account.
 
 ```csharp
@@ -114,8 +115,10 @@ app.MapPost("/admin/containers/{name}/import", async (string name, HttpRequest r
   import can still delete what it stored. Only a failure while it sets them leaves versions that
   [can't be deleted](deleting-safely.md) yet: lift their holds, and the container can be deleted once their dates pass.
 - **An unfinished import is marked.** While an import fills its container, the container's metadata has
-  `resourcefull.import` set to `in-progress`, and the import removes it once every version is stored. A container that
-  still has it after the import has stopped didn't finish; delete it and import again. (The mark is set just after the
+  `resourcefull.import` set to `in-progress`, and the import removes it once every version is stored. The import also
+  writes the time to `resourcefull.import_at` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> as it starts, and again every five minutes, so a mark more than half
+  an hour old belongs to an import that stopped. A container that still has the mark after the import has stopped
+  didn't finish; delete it and import again. (The mark is set just after the
   container is created, so an import stopped in that moment leaves an empty container without it. With a
   [provider of your own](providers/writing-a-provider.md#importing-versions) that doesn't override
   `SetContainerMetadataAsync`, imports aren't marked.) This finds them:

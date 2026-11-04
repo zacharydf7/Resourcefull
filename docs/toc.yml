@@ -72,6 +72,8 @@
     href: duplicate-content.md
   - name: Backing up and moving containers
     href: backup-and-move.md
+  - name: Moving to another provider
+    href: moving-providers.md
   - name: Several stores
     href: several-stores.md
 - name: Running in production

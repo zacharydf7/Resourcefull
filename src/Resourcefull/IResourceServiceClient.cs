@@ -187,6 +187,115 @@ public interface IResourceServiceClient
         => throw new NotSupportedException($"{GetType().Name} doesn't import containers.");
 
     /// <summary>
+    /// Creates a container from versions another store holds, each as it was: its ID,
+    /// <see cref="ResourceInfo.LastModified"/>, content and attributes. They're stored in the order given, each as its
+    /// name's newest, so give each name's versions oldest first. Each content is checked against its hash as it's stored,
+    /// and the container's policy applies. While it fills, the container's metadata marks it unfinished, with
+    /// <c>resourcefull.import</c> set to <c>in-progress</c>, and the time in <c>resourcefull.import_at</c> is written again
+    /// every five minutes, so a copy can tell an import still running from one that stopped. If anything fails, the
+    /// container is deleted again. <see cref="CopyContainerToAsync"/> imports through it.
+    /// <para>Coming in 4.0.</para>
+    /// </summary>
+    /// <param name="resourceContainerName">The container to create, which mustn't exist.</param>
+    /// <param name="versions">The versions to store, each name's oldest first.</param>
+    /// <param name="metadata">The container's metadata; <see langword="null"/> for none.</param>
+    /// <param name="cancellationToken">Cancels the import, which then deletes what it created.</param>
+    /// <returns>How many resources and versions it stored, and how much content.</returns>
+    /// <exception cref="ResourceConflictException">The container already exists, or a name has two versions with one ID.</exception>
+    /// <exception cref="InvalidDataException">A version's content doesn't match its hash.</exception>
+    /// <exception cref="AggregateException">
+    /// The import failed, and so did deleting what it had imported; it holds both failures. Delete the container before
+    /// importing it again.
+    /// </exception>
+    /// <exception cref="ResourcePolicyViolationException">The container's policy refuses a version.</exception>
+    /// <exception cref="ArgumentException"><paramref name="resourceContainerName"/> breaks the name rules, or <paramref name="versions"/> is null.</exception>
+    /// <exception cref="NotSupportedException">
+    /// The provider doesn't import versions, or a version is retained or held and the provider doesn't support
+    /// retention, or this is the default implementation.
+    /// </exception>
+    public Task<ResourceImportResult> ImportContainerAsync(string resourceContainerName, IAsyncEnumerable<ImportedVersion> versions,
+        IReadOnlyDictionary<string, string>? metadata = null, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException($"{GetType().Name} doesn't import containers.");
+
+    /// <summary>
+    /// Adds versions another store holds to a container that exists, each as it was, as
+    /// <see cref="ImportContainerAsync(string, IAsyncEnumerable{ImportedVersion}, IReadOnlyDictionary{string, string}?, CancellationToken)"/>
+    /// stores them: in the order given, each as its name's newest. A copy with
+    /// <see cref="ExistingContainers.Update"/> brings a container up to date through it. Unlike an import into a new
+    /// container, the versions stored before a failure stay.
+    /// <para>Coming in 4.0.</para>
+    /// </summary>
+    /// <param name="resourceContainerName">The container, which must exist.</param>
+    /// <param name="versions">The versions to store, each name's oldest first.</param>
+    /// <param name="cancellationToken">Cancels the import; the versions already stored stay.</param>
+    /// <returns>How many resources and versions it stored, and how much content.</returns>
+    /// <exception cref="ResourceContainerNotFoundException">The container doesn't exist.</exception>
+    /// <exception cref="ResourceConflictException">A version's ID is already used by another version of its name, including one in the bin.</exception>
+    /// <exception cref="InvalidDataException">A version's content doesn't match its hash.</exception>
+    /// <exception cref="ResourcePolicyViolationException">The container's policy refuses a version.</exception>
+    /// <exception cref="ArgumentException"><paramref name="resourceContainerName"/> breaks the name rules, or <paramref name="versions"/> is null.</exception>
+    /// <exception cref="NotSupportedException">
+    /// The provider doesn't import versions, or a version is retained or held and the provider doesn't support
+    /// retention, or this is the default implementation.
+    /// </exception>
+    public Task<ResourceImportResult> ImportVersionsAsync(string resourceContainerName, IAsyncEnumerable<ImportedVersion> versions,
+        CancellationToken cancellationToken = default)
+        => throw new NotSupportedException($"{GetType().Name} doesn't import versions.");
+
+    /// <summary>
+    /// Copies a container to another store, such as one with another provider, every version of every resource as it
+    /// was: version IDs, <see cref="ResourceInfo.LastModified"/>, content types, metadata, origins, expiries, retention
+    /// dates and legal holds, and the container's metadata. It reads this store a page of names at a time, as an export
+    /// does, and stores through the destination's
+    /// <see cref="ImportContainerAsync(string, IAsyncEnumerable{ImportedVersion}, IReadOnlyDictionary{string, string}?, CancellationToken)"/>,
+    /// so each content is checked against its hash as it's stored, the destination's policies apply, and a copy that
+    /// fails deletes what it created. The destination's container is visible while it fills, marked unfinished. A
+    /// version stored here after its name was read isn't copied; <see cref="CopyStoreToAsync"/> with
+    /// <see cref="ExistingContainers.Update"/> catches up. Upload sessions in progress and the
+    /// <see cref="ResourceContainerPolicy.KeepDeletedFor">bin</see> aren't copied.
+    /// <para>Coming in 4.0.</para>
+    /// </summary>
+    /// <param name="resourceContainerName">The container to copy.</param>
+    /// <param name="destination">The store to copy it to, which may be this one, for a copy under another name.</param>
+    /// <param name="destinationContainerName">The name it gets there, which mustn't exist; <see langword="null"/> for its own.</param>
+    /// <param name="cancellationToken">Cancels the copy, which then deletes what it created.</param>
+    /// <returns>What it copied.</returns>
+    /// <exception cref="ResourceContainerNotFoundException">The container doesn't exist here.</exception>
+    /// <exception cref="ResourceConflictException">The destination already has a container with that name.</exception>
+    /// <exception cref="ArgumentException">A name breaks the name rules, or <paramref name="destination"/> is null.</exception>
+    /// <exception cref="NotSupportedException">
+    /// The destination can't import versions, or this is the default implementation.
+    /// </exception>
+    public Task<ContainerCopyResult> CopyContainerToAsync(string resourceContainerName, IResourceServiceClient destination,
+        string? destinationContainerName = null, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException($"{GetType().Name} doesn't copy containers.");
+
+    /// <summary>
+    /// Copies every container, or those whose names start with <see cref="StoreCopyOptions.Prefix"/>, to another store,
+    /// one at a time, as <see cref="CopyContainerToAsync"/> does. <see cref="StoreCopyOptions.Existing"/> decides what
+    /// happens to a container the destination already has: whether it fails, is skipped once it's found to match version
+    /// for version, or is brought up to date in place. A destination container still being filled by another copy or
+    /// import fails, whatever <see cref="StoreCopyOptions.Existing"/> says; one whose copy stopped partway can be
+    /// finished with <see cref="ExistingContainers.Update"/>. Run it again after it stops to go on from there.
+    /// <para>Coming in 4.0.</para>
+    /// </summary>
+    /// <param name="destination">The store to copy to.</param>
+    /// <param name="options">The prefix, what to do with existing containers and failures, and progress; <see langword="null"/> for the defaults.</param>
+    /// <param name="cancellationToken">Cancels the copy. A container being copied is deleted again; those done stay.</param>
+    /// <returns>What it did with each container, and the destination's containers this store doesn't have.</returns>
+    /// <exception cref="StoreCopyException">
+    /// A container failed, with <see cref="StoreCopyFailures.Stop"/>; it holds what the copy did before.
+    /// </exception>
+    /// <exception cref="ArgumentException">
+    /// <paramref name="destination"/> is null, or <paramref name="options"/> has a value that isn't defined.
+    /// </exception>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
+    /// <exception cref="NotSupportedException">This is the default implementation.</exception>
+    public Task<StoreCopyResult> CopyStoreToAsync(IResourceServiceClient destination, StoreCopyOptions? options = null,
+        CancellationToken cancellationToken = default)
+        => throw new NotSupportedException($"{GetType().Name} doesn't copy stores.");
+
+    /// <summary>
     /// Deletes every version, in every container that isn't read-only, whose <see cref="ResourceInfo.ExpiresAt"/> has
     /// passed, as a delete of that version would, a batch at a time, telling the <see cref="IResourceCleanupHandler"/>
     /// about each one first. A read-only container keeps its expired versions until it's writable again.

@@ -329,3 +329,23 @@ public sealed class ResourceUploadInterruptedException : ResourcefullException
     /// <param name="innerException">The exception that caused this one.</param>
     public ResourceUploadInterruptedException(string message, Exception innerException) : base(message, innerException) { }
 }
+
+/// <summary>
+/// Thrown when <see cref="IResourceServiceClient.CopyStoreToAsync"/> stops at a container that failed, with
+/// <see cref="StoreCopyFailures.Stop"/>. <see cref="Exception.InnerException"/> says why, and <see cref="Result"/> holds
+/// what the copy did before it stopped, with the container that failed. What was copied stays copied, so running the copy
+/// again goes on from there.
+/// <para>Coming in 4.0.</para>
+/// </summary>
+public sealed class StoreCopyException : ResourcefullException
+{
+    /// <summary>Creates the exception with a message, what the copy did, and the exception that stopped it.</summary>
+    /// <param name="message">The message that describes the error.</param>
+    /// <param name="result">What the copy did before it stopped.</param>
+    /// <param name="innerException">The exception that stopped it.</param>
+    public StoreCopyException(string message, StoreCopyResult result, Exception innerException) : base(message, innerException) =>
+        Result = result;
+
+    /// <summary>What the copy did before it stopped, with the container that failed in <see cref="StoreCopyResult.Failed"/>.</summary>
+    public StoreCopyResult Result { get; }
+}

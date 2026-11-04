@@ -9,7 +9,7 @@ using Resourcefull.Providers;
 
 namespace Resourcefull;
 
-internal class ResourceServiceClient(ResourceRepository resourceRepository, IOptions<ResourcefullOptions> options, IUriProvider? uriProvider = null,
+internal partial class ResourceServiceClient(ResourceRepository resourceRepository, IOptions<ResourcefullOptions> options, IUriProvider? uriProvider = null,
     ILogger<ResourceContainerClient>? containerLogger = null, ContainerPolicies? policies = null,
     IResourceCleanupHandler? cleanupHandler = null, TimeProvider? timeProvider = null, ExpirySettings? expiry = null,
     IResourceUploadInspector? uploadInspector = null) : IResourceServiceClient
@@ -462,40 +462,10 @@ internal class ResourceServiceClient(ResourceRepository resourceRepository, IOpt
                 cancellationToken).ConfigureAwait(false);
             await using var zipDisposal = zip.ConfigureAwait(false);
             ContainerArchive.Manifest manifest = await ContainerArchive.ReadManifestAsync(zip, cancellationToken).ConfigureAwait(false);
+            ContainerArchive.ThrowIfUnimportable(manifest, resourceRepository);
             // Without the mark of an import the exported container may have been in the middle of.
-            var metadata = new Dictionary<string, string>(manifest.Metadata);
-            metadata.Remove(ImportMarkerKey);
-            await CreateContainerCoreAsync(resourceContainerName, metadata, cancellationToken).ConfigureAwait(false);
-            ResourceImportResult imported;
-            try
-            {
-                // Marked while it fills, so a container whose import never finished, such as when the application
-                // stopped partway, can be told from a finished one. A provider that can't change metadata goes unmarked.
-                bool marked = await TrySetMetadataAsync(resourceContainerName,
-                    new Dictionary<string, string>(metadata) { [ImportMarkerKey] = ImportMarkerValue }, cancellationToken).ConfigureAwait(false);
-                imported = await ContainerArchive.ImportAsync(zip, manifest, resourceContainerName, resourceRepository, policies,
-                    _telemetry, uploadInspector, cancellationToken).ConfigureAwait(false);
-                if (marked) await resourceRepository.SetContainerMetadataAsync(resourceContainerName, metadata, cancellationToken).ConfigureAwait(false);
-            }
-            catch (Exception failure)
-            {
-                // Nothing is left half-imported; the caller's token may be what stopped it, so it isn't used here.
-                try
-                {
-                    await resourceRepository.DeleteContainerAsync(resourceContainerName, CancellationToken.None).ConfigureAwait(false);
-                }
-                catch (Exception cleanupFailure)
-                {
-                    throw new AggregateException($"The import of {resourceContainerName} failed, and deleting what it had imported failed too: " +
-                        "delete the container before importing it again.", failure, cleanupFailure);
-                }
-
-                throw;
-            }
-
-            activity?.SetTag("resourcefull.resources", imported.ResourceCount);
-            activity?.SetTag("resourcefull.versions", imported.VersionCount);
-            return imported;
+            return await ImportNewContainerAsync(resourceContainerName, WithoutImportMark(manifest.Metadata),
+                ContainerArchive.VersionsOf(zip, manifest).ToAsyncEnumerable(), "the export", activity, cancellationToken).ConfigureAwait(false);
         });
 
     /// <summary>The container metadata that marks an import still filling its container.</summary>

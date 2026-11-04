@@ -22,6 +22,7 @@ provider aims for every feature. This page shows, in one place, where each one s
 | [Finding resources by metadata](../listing.md#finding-resources-by-metadata) | Indexed | Indexed | Indexed | Indexed | Indexed | Indexed | By reading every name |
 | [Uploading in parts](../uploading-in-parts.md) | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
 | [Export and import](../backup-and-move.md) | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| [Copying to another store](../moving-providers.md), as source or destination | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
 | [Container policies](../container-policies.md) | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
 | [Health check](../health-checks.md) | Its own | Its own | Its own | The generic one | The generic one | The generic one | The generic one |
 

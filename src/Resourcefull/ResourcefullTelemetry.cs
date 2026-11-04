@@ -78,6 +78,9 @@ internal static class Telemetry
     public static readonly Counter<long> Undeleted = Meter.CreateCounter<long>("resourcefull.client.undeleted",
         unit: "{version}", description: "Versions UndeleteAsync brought back from a bin.");
 
+    public static readonly Counter<long> CopiedVersions = Meter.CreateCounter<long>("resourcefull.client.copy.versions",
+        unit: "{version}", description: "Versions copies to another store imported, changed or deleted there, with resourcefull.copy_action.");
+
     public static readonly Counter<long> LastKnownPolicyUses = Meter.CreateCounter<long>(
         "resourcefull.client.policy.last_known_uses", unit: "{use}",
         description: "Times a container's last known policy was used because the policy provider failed.");
@@ -274,6 +277,15 @@ internal sealed class ClientTelemetry(string provider, ResourcefullOptions optio
     public void CountUndeleted(int versions)
     {
         if (versions > 0 && Telemetry.Undeleted.Enabled) Telemetry.Undeleted.Add(versions, StoreTags());
+    }
+
+    /// <summary>Counts versions a copy <paramref name="action"/> in its destination: <c>imported</c>, <c>changed</c> or <c>deleted</c>.</summary>
+    public void CountCopied(string action, long versions)
+    {
+        if (versions <= 0 || !Telemetry.CopiedVersions.Enabled) return;
+        TagList tags = StoreTags();
+        tags.Add("resourcefull.copy_action", action);
+        Telemetry.CopiedVersions.Add(versions, tags);
     }
 
     /// <summary>Tells the cleanup handler about a version, counting the call as failed if it throws.</summary>

@@ -724,13 +724,57 @@ public class ResourceServiceClientTests
         repository.Setup(r => r.ImportVersionAsync( It.IsAny<NewResourceVersion>(), It.IsAny<Stream>(), It.IsAny<CancellationToken>()))
             .Callback((NewResourceVersion version, Stream _, CancellationToken _) => steps.Add("version: " + version.Location.ResourceName))
             .ReturnsAsync(Hello);
-        var client = new ResourceServiceClient(repository.Object, Options.Create(new ResourcefullOptions()));
+        var clock = new Testing.ManualTimeProvider { Now = new DateTimeOffset(2026, 11, 4, 12, 0, 0, TimeSpan.Zero) };
+        var client = new ResourceServiceClient(repository.Object, Options.Create(new ResourcefullOptions()), timeProvider: clock);
 
         // Act
         await client.ImportContainerAsync("d", await OneFileExportAsync());
 
-        // Assert
-        Assert.Equal(["metadata: resourcefull.import=in-progress, team=billing", "version: a", "metadata: team=billing"], steps);
+        // Assert: with the time it was marked, so a copy can tell whether the import is still running.
+        Assert.Equal(["metadata: resourcefull.import=in-progress, resourcefull.import_at=2026-11-04T12:00:00.0000000+00:00, team=billing",
+            "version: a", "metadata: team=billing"], steps);
+    }
+
+    [Fact]
+    public async Task ImportContainerAsync_ShouldWriteItsMarkAgainAndFinish_WhenARewriteOfTheMarkTimesOut()
+    {
+        // Arrange: an import whose one version waits while the clock moves, and a provider whose first rewrite of the mark
+        // times out, as an HTTP client's request does.
+        var time = new Microsoft.Extensions.Time.Testing.FakeTimeProvider(DateTimeOffset.UtcNow);
+        var marks = new List<string>();
+        var repository = new Mock<ResourceRepository>();
+        repository.Setup(r => r.SetContainerMetadataAsync("d", It.IsAny<IReadOnlyDictionary<string, string>>(), It.IsAny<CancellationToken>()))
+            .Returns((string _, IReadOnlyDictionary<string, string> metadata, CancellationToken _) =>
+            {
+                lock (marks) marks.Add(metadata.GetValueOrDefault("resourcefull.import_at") ?? "cleared");
+                return marks.Count == 2 ? Task.FromException<bool>(new TaskCanceledException("Timed out.")) : Task.FromResult(true);
+            });
+        repository.Setup(r => r.ImportVersionAsync(It.IsAny<NewResourceVersion>(), It.IsAny<Stream>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Hello);
+        var client = new ResourceServiceClient(repository.Object, Options.Create(new ResourcefullOptions()), timeProvider: time);
+        var release = new TaskCompletionSource();
+        var version = new ResourceInfo { ContainerName = "", Name = "a", VersionId = "v1", LastModified = DateTimeOffset.UnixEpoch };
+        ImportedVersion[] versions = [new(version, async _ =>
+        {
+            await release.Task;
+            return new MemoryStream("hello"u8.ToArray());
+        })];
+
+        // Act: the clock moves on until the mark has been written again after the rewrite that timed out.
+        Task<ResourceImportResult> importing = client.ImportContainerAsync("d", versions.ToAsyncEnumerable());
+        for (int turn = 0; turn < 1000 && marks.Count < 3; turn++)
+        {
+            time.Advance(TimeSpan.FromMinutes(1));
+            await Task.Delay(5);
+        }
+        release.SetResult();
+        ResourceImportResult imported = await importing;
+
+        // Assert: marked, rewritten after the timeout, then cleared once the version was stored.
+        Assert.Equal(1, imported.VersionCount);
+        Assert.True(marks.Count >= 4);
+        Assert.Equal("cleared", marks[^1]);
+        Assert.True(DateTimeOffset.Parse(marks[2]) > DateTimeOffset.Parse(marks[0]));
     }
 
     [Fact]

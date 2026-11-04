@@ -116,6 +116,17 @@
   rather than holding it in memory; providers can answer it in one query, and its default asks for each name's
   versions in turn. See
   [Backing up and moving containers](docs/backup-and-move.md).
+- **Moving to another provider.** `CopyContainerToAsync` copies a container to another store, such as one with another
+  provider, with every version as it was. It stores through the destination's new `ImportContainerAsync` overload,
+  which imports from a stream of versions rather than a zip. `CopyStoreToAsync` copies every container. By default a
+  container the destination already has fails; with `ExistingContainers.SkipMatching` it's skipped once it's found to
+  match version for version, and with `ExistingContainers.Update` it's brought up to date in place through the new
+  `ImportVersionsAsync`. `Update` never deletes the container. `StoreCopyFailures.Stop`, the default, stops at the
+  first failure with a `StoreCopyException`; `Continue` reports every failure in the result. An import's mark now
+  carries the time it was last written, in `resourcefull.import_at`, so a copy can tell an import still running from
+  one that stopped. Copies record `copy_container` and `copy_store` spans and count versions in
+  `resourcefull.client.copy.versions`; `ImportVersionsAsync` records an `import_versions` span. See
+  [Moving to another provider](docs/moving-providers.md).
 - **Signed, expiring links.** `Resourcefull.AspNetCore` can create links that let anyone download one file, without
   signing in, until they expire: `AddResourcefullLinks`, `IResourceLinkSigner.CreateTokenAsync` and
   `Results.SharedResource`. Links are sealed with ASP.NET Core Data Protection, can't be changed or read, and show the

@@ -16,7 +16,8 @@ namespace Resourcefull;
 public sealed record ResourceExportResult(long ResourceCount, long VersionCount, ResourceSize ContentSize);
 
 /// <summary>
-/// What <see cref="IResourceServiceClient.ImportContainerAsync"/> stored.
+/// What an import stored: <see cref="IResourceServiceClient.ImportContainerAsync(string, Stream, CancellationToken)"/>, or
+/// another import of versions.
 /// <para>Coming in 4.0.</para>
 /// </summary>
 /// <param name="ResourceCount">How many resources (names) it imported.</param>
@@ -190,96 +191,152 @@ internal static class ContainerArchive
         return new ResourceExportResult(resourceCount, versionCount, contentSize);
     }
 
-    /// <summary>Stores every version an export describes in <paramref name="containerName"/>, which must exist and be empty.</summary>
-    public static async Task<ResourceImportResult> ImportAsync(ZipArchive zip, Manifest manifest, string containerName,
-        ResourceRepository repository, ContainerPolicies? policies, ClientTelemetry telemetry,
-        IResourceUploadInspector? inspector, CancellationToken cancellationToken)
+    /// <summary>
+    /// Throws before anything is stored if the export holds what the provider can't keep: a retained or held version
+    /// without retention, or a value it can't index for search.
+    /// </summary>
+    public static void ThrowIfUnimportable(Manifest manifest, ResourceRepository repository)
     {
-        // Retention and holds go on once every version is stored, so an import that fails can still delete what it stored.
-        List<(string Name, ManifestVersion Version)> protectedVersions =
-            [.. manifest.Resources.SelectMany(r => r.Versions.Where(v => v.RetainUntil is not null || v.LegalHold).Select(v => (r.Name, v)))];
-        if (protectedVersions.Count > 0 && !repository.SupportsRetention)
+        if (!repository.SupportsRetention && manifest.Resources.SelectMany(r => r.Versions).Any(v => v.RetainUntil is not null || v.LegalHold))
             throw new NotSupportedException($"{repository.GetType().Name} doesn't support retention, which the export's versions have.");
         foreach (ManifestVersion version in manifest.Resources.SelectMany(r => r.Versions))
             repository.ThrowIfUnsearchable(version.Metadata, "source");
+    }
 
-        // The container is new, so its usage is what the import has stored so far: counted here, so a policy's limits
-        // don't add up the container again before each version.
-        long versionCount = 0, contentSize = 0, resourceCount = 0;
+    /// <summary>Every version an export describes, in its order, each opening its content from the zip.</summary>
+    public static IEnumerable<ImportedVersion> VersionsOf(ZipArchive zip, Manifest manifest)
+    {
         foreach (ManifestResource resource in manifest.Resources)
         {
             foreach (ManifestVersion version in resource.Versions)
             {
                 ZipArchiveEntry entry = zip.GetEntry(version.Content)
                     ?? throw new InvalidDataException($"The export has no content for version {version.VersionId} of {resource.Name}.");
-                var info = new NewResourceVersion(new ResourceLocation(containerName, resource.Name), version.VersionId)
+                var info = new ResourceInfo
                 {
+                    ContainerName = "",
+                    Name = resource.Name,
+                    VersionId = version.VersionId,
                     LastModified = version.LastModified,
                     ContentType = version.ContentType,
-                    // Not declared: the entry's stream refuses content longer than the manifest's length, and the hash
-                    // check below catches any other change.
+                    ContentLength = version.ContentLength,
+                    ContentHash = version.ContentHash,
                     Metadata = version.Metadata,
-                    CopiedFrom = version.CopiedFrom is { } from
-                        ? new ResourceOrigin(from.ContainerName, from.ResourceName, from.VersionId)
-                        : null,
-                    ExpiresAt = version.ExpiresAt
+                    CopiedFrom = version.CopiedFrom is { } from ? new ResourceOrigin(from.ContainerName, from.ResourceName, from.VersionId) : null,
+                    ExpiresAt = version.ExpiresAt,
+                    RetainUntil = version.RetainUntil,
+                    LegalHold = version.LegalHold
                 };
-
                 // Able to go back to its start, so a provider that retries a transient failure can read it again, unless
                 // an upload inspector reads it too: the content is then read once.
-                Stream content = new RewindableEntryStream(entry, await entry.OpenAsync(cancellationToken).ConfigureAwait(false),
-                    version.ContentLength);
-                await using var contentDisposal = content.ConfigureAwait(false);
-                var usage = new ResourceContainerUsage(contentSize, resourceCount, versionCount);
-                Stream checkedContent = policies is not null && await policies.CheckNewVersionAsync(containerName, resource.Name, restore: false,
-                    version.ContentType, version.ContentLength, telemetry, cancellationToken, usage).ConfigureAwait(false) is { Limit: { } limit }
-                    ? new LimitedContentStream(content, limit)
-                    : content;
-                // Disposed in a finally rather than with await using, since ConfigureAwait's wrapper can't dispose
-                // null.
-                InspectedContentStream? inspected = inspector is null
-                    ? null
-                    : InspectedContentStream.Start(inspector, info, version.ContentLength, checkedContent, telemetry, "import",
-                        cancellationToken);
-                WrittenContent stored;
+                yield return new ImportedVersion(info, async ct =>
+                    new RewindableEntryStream(entry, await entry.OpenAsync(ct).ConfigureAwait(false), version.ContentLength));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Stores <paramref name="versions"/> in <paramref name="containerName"/>, which must exist, each as it was, in the
+    /// order given, so each name's newest ends up current. With <paramref name="newContainer"/>, the container is one the
+    /// import just created, so its usage is counted here rather than read before each version a policy limits. Error
+    /// messages name what the versions come from as <paramref name="source"/>, such as "the export".
+    /// </summary>
+    public static async Task<ResourceImportResult> ImportAsync(IAsyncEnumerable<ImportedVersion> versions, string containerName,
+        bool newContainer, string source, ResourceRepository repository, ContainerPolicies? policies, ClientTelemetry telemetry,
+        IResourceUploadInspector? inspector, CancellationToken cancellationToken)
+    {
+        // In a new container, retention and holds go on once every version is stored, so an import that fails can still
+        // delete what it stored. In one that exists, the versions stored before a failure stay, so each version gets them
+        // as it's stored.
+        var protectedVersions = new List<(string Name, ResourceInfo Version)>();
+        long versionCount = 0, contentSize = 0;
+        // A set, so a name whose versions aren't next to each other in the stream is still counted once, and a policy's
+        // count limit sees the right number.
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        await foreach (ImportedVersion imported in versions.WithCancellation(cancellationToken).ConfigureAwait(false))
+        {
+            ResourceInfo version = imported.Version;
+            bool protects = version.RetainUntil is not null || version.LegalHold;
+            if (protects && !repository.SupportsRetention)
+                throw new NotSupportedException($"{repository.GetType().Name} doesn't support retention, which {source}'s versions have.");
+            repository.ThrowIfUnsearchable(version.Metadata, "source");
+
+            Stream? opened = await imported.OpenContentAsync(cancellationToken).ConfigureAwait(false);
+            // Gone from the source since it was listed.
+            if (opened is null) continue;
+            await using var openedDisposal = opened.ConfigureAwait(false);
+            var info = new NewResourceVersion(new ResourceLocation(containerName, version.Name), version.VersionId)
+            {
+                LastModified = version.LastModified,
+                ContentType = version.ContentType,
+                // Not declared: the hash check below catches content of another length.
+                Metadata = version.Metadata,
+                CopiedFrom = version.CopiedFrom,
+                ExpiresAt = version.ExpiresAt
+            };
+
+            // A new container's usage is what the import has stored so far; a name is counted once its first version is
+            // stored, and a policy's count limit lets a name it already has take more versions.
+            ResourceContainerUsage? usage = newContainer ? new ResourceContainerUsage(contentSize, names.Count, versionCount) : null;
+            Stream checkedContent = policies is not null && await policies.CheckNewVersionAsync(containerName, version.Name, restore: false,
+                version.ContentType, version.ContentLength, telemetry, cancellationToken, usage).ConfigureAwait(false) is { Limit: { } limit }
+                ? new LimitedContentStream(opened, limit)
+                : opened;
+            // Disposed in a finally rather than with await using, since ConfigureAwait's wrapper can't dispose null.
+            InspectedContentStream? inspected = inspector is null
+                ? null
+                : InspectedContentStream.Start(inspector, info, version.ContentLength, checkedContent, telemetry, "import",
+                    cancellationToken);
+            WrittenContent stored;
+            try
+            {
+                stored = await repository.ImportVersionAsync(info, inspected ?? checkedContent, cancellationToken).ConfigureAwait(false);
                 try
                 {
-                    stored = await repository.ImportVersionAsync(info, inspected ?? checkedContent, cancellationToken).ConfigureAwait(false);
-                    // A refusal fails the import, which deletes the container, so a version stored before the answer
-                    // goes too.
                     if (inspected is not null) await inspected.ThrowIfStoredUnansweredAsync(cancellationToken).ConfigureAwait(false);
+                    if (version.ContentHash is { } expected && stored.ContentHash != expected)
+                    {
+                        throw new InvalidDataException(
+                            $"The content of version {version.VersionId} of {version.Name} doesn't match its hash: {source} was damaged or changed.");
+                    }
                 }
-                finally
+                catch when (!newContainer)
                 {
-                    if (inspected is not null) await inspected.DisposeAsync().ConfigureAwait(false);
+                    // A refused version, or one whose content doesn't match its hash, fails the import. A new container
+                    // is then deleted with everything in it; in one that exists, only this version is deleted, as a
+                    // refused upload's is.
+                    await repository.DeleteResourceAsync(info.Location, info.VersionId, null, CancellationToken.None).ConfigureAwait(false);
+                    throw;
                 }
-
-                if (stored.ContentHash != version.ContentHash)
-                {
-                    throw new InvalidDataException(
-                        $"The content of version {version.VersionId} of {resource.Name} doesn't match its hash: the export was damaged or changed.");
-                }
-
-                telemetry.RecordUploaded("import", stored.ContentLength);
-
-                versionCount++;
-                contentSize += stored.ContentLength;
+            }
+            finally
+            {
+                if (inspected is not null) await inspected.DisposeAsync().ConfigureAwait(false);
             }
 
-            // Counted once its versions are stored, so its own later versions don't count it against the limit.
-            if (resource.Versions.Count > 0) resourceCount++;
+            telemetry.RecordUploaded("import", stored.ContentLength);
+            names.Add(version.Name);
+            versionCount++;
+            contentSize += stored.ContentLength;
+            if (!protects) continue;
+            if (newContainer) protectedVersions.Add((version.Name, version));
+            else await ProtectAsync(repository, info.Location, version, cancellationToken).ConfigureAwait(false);
         }
 
-        foreach ((string name, ManifestVersion version) in protectedVersions)
-        {
-            var location = new ResourceLocation(containerName, name);
-            if (version.RetainUntil is { } retainUntil)
-                await repository.SetRetentionAsync(location, version.VersionId, retainUntil, cancellationToken).ConfigureAwait(false);
-            if (version.LegalHold)
-                await repository.SetLegalHoldAsync(location, version.VersionId, true, cancellationToken).ConfigureAwait(false);
-        }
+        foreach ((string name, ResourceInfo version) in protectedVersions)
+            await ProtectAsync(repository, new ResourceLocation(containerName, name), version, cancellationToken).ConfigureAwait(false);
 
-        return new ResourceImportResult(manifest.Resources.Count, versionCount, contentSize);
+        return new ResourceImportResult(names.Count, versionCount, contentSize);
+    }
+
+    /// <summary>Gives an imported version the retention date and hold it had.</summary>
+    private static async Task ProtectAsync(ResourceRepository repository, ResourceLocation location, ResourceInfo version,
+        CancellationToken cancellationToken)
+    {
+        if (version.RetainUntil is { } retainUntil)
+            await repository.SetRetentionAsync(location, version.VersionId, retainUntil, cancellationToken).ConfigureAwait(false);
+        if (version.LegalHold)
+            await repository.SetLegalHoldAsync(location, version.VersionId, true, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>Reads an export's manifest, checking that it is one this release can read.</summary>
