@@ -68,6 +68,8 @@
     href: expiry.md
   - name: Deleting safely
     href: deleting-safely.md
+  - name: Finding content stored twice
+    href: duplicate-content.md
   - name: Backing up and moving containers
     href: backup-and-move.md
   - name: Several stores
