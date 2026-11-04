@@ -32,6 +32,7 @@ public class MinimalProviderContractTests : ResourcefullContractTests
     protected override bool SupportsExpiry => false;
     protected override bool SupportsUploadSessions => false;
     protected override bool SupportsRetention => false;
+    protected override bool SupportsSoftDelete => false;
 
     /// <summary>Passes on only the members every provider must implement, leaving the rest to their defaults.</summary>
     private sealed class MinimalRepository(ResourceRepository inner) : ResourceRepository

@@ -33,6 +33,15 @@ internal class ResourceModel
     /// </summary>
     public DateTimeOffset? StagedAt { get; set; }
 
+    /// <summary>
+    /// Set while the version is in the bin: when it was deleted. A version in the bin is invisible to every query but
+    /// the bin's own and the deletes of its container.
+    /// </summary>
+    public DateTimeOffset? DeletedAt { get; set; }
+
+    /// <summary>When the sweep purges the version from the bin; null while it isn't there.</summary>
+    public DateTimeOffset? PurgeAt { get; set; }
+
     // Navigation properties
     public virtual ResourceContainerModel? ResourceContainer { get; set; }
     public virtual ICollection<ResourceChunkModel>? Chunks { get; set; }

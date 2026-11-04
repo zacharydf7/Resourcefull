@@ -133,6 +133,9 @@ namespace Resourcefull.PostgreSql.Migrations
                     b.Property<long?>("DeclaredLength")
                         .HasColumnType("bigint");
 
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<DateTimeOffset?>("ExpiresAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -154,6 +157,9 @@ namespace Resourcefull.PostgreSql.Migrations
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)")
                         .UseCollation("C");
+
+                    b.Property<DateTimeOffset?>("PurgeAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<DateTimeOffset?>("RetainUntil")
                         .HasColumnType("timestamp with time zone");
@@ -192,6 +198,15 @@ namespace Resourcefull.PostgreSql.Migrations
                     b.HasIndex("ExpiresAt", "VersionId")
                         .HasDatabaseName("IX_Resources_ExpiresAt")
                         .HasFilter("\"ExpiresAt\" IS NOT NULL");
+
+                    b.HasIndex("PurgeAt", "VersionId")
+                        .HasDatabaseName("IX_Resources_PurgeAt")
+                        .HasFilter("\"PurgeAt\" IS NOT NULL");
+
+                    b.HasIndex("ContainerName", "DeletedAt", "VersionId")
+                        .IsDescending(false, true, false)
+                        .HasDatabaseName("IX_Resources_DeletedAt")
+                        .HasFilter("\"DeletedAt\" IS NOT NULL");
 
                     b.HasIndex("ContainerName", "Name", "VersionId")
                         .IsUnique()

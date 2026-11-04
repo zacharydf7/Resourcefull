@@ -29,7 +29,7 @@ Without `UseContainerPolicies` or `UsePolicyProvider`, nothing is checked and no
 | `MaxContainerSize` | upload, restore, copy and move in | is refused before any content is read, if its declared length won't fit in what's left; otherwise it stops as soon as its content passes what's left |
 | `MaxResourceCount` | upload, copy or move in of a new name | is refused when the container already holds that many resources; a new version of an existing name never is |
 | `AllowedContentTypes` | upload, copy and move in, changing a content type <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | is refused before any content is read when its type isn't in the list, declares no type, or isn't a single valid type (such as `image/png, text/html`). `image/*` includes SVG images, which can run scripts when shown, so list exact types for files you display |
-| `ReadOnly` | upload, restore, copy and move in or out, delete, deleting the container, changing an expiry, metadata <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> or content type <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>, changing the container's metadata <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | is refused before anything changes; and [expiry](expiry.md) leaves its expired versions until it's writable again |
+| `ReadOnly` | upload, restore, copy and move in or out, delete, deleting the container, changing an expiry, metadata <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> or content type <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>, changing the container's metadata <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>, bringing back or purging a version from the [bin](deleting-safely.md#the-bin) <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | is refused before anything changes; and [expiry](expiry.md) leaves its expired versions, and its bin, until it's writable again |
 
 A refused write throws `ResourcePolicyViolationException`, whose `Rule` says which rule it broke, and stores nothing.
 A restore, copy or move is checked for every version it brings, by its stored length (measured from its content,
@@ -51,6 +51,10 @@ reports those.
 - **`RetainFor`** <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> isn't one either: it's how long each new version in the container can't be deleted, counted
   from when its write starts, unless the write gives its own `RetainUntil`. Versions already stored keep their dates.
   See [Deleting safely](deleting-safely.md).
+- **`KeepDeletedFor`** <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> isn't one either: it's how long a deleted or pruned version stays in the container's
+  [bin](deleting-safely.md#the-bin), where it can be brought back, before the expiry sweep purges it. It needs
+  [`UseExpiry`](expiry.md). The bin doesn't count toward `MaxContainerSize` or `MaxResourceCount`, so deleting makes
+  room, and bringing versions back is checked against both.
 - **Writes at the same time can go slightly over.** The size and count limits read what the container holds once per
   write, so uploads running at the same moment can together pass `MaxContainerSize` or `MaxResourceCount` by up to
   one upload each. Set `MaxResourceSize` alongside `MaxContainerSize` to bound that: without it, each of those uploads

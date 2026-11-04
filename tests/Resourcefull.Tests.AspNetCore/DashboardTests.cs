@@ -144,8 +144,9 @@ public class DashboardTests
         JsonElement files = Assert.Single(filtered.GetProperty("items").EnumerateArray());
         Assert.Equal(TestApp.Container, files.GetProperty("name").GetString());
         JsonElement usage = files.GetProperty("usage");
-        Assert.Equal((5L, 1L, 1L), (usage.GetProperty("storedSize").GetInt64(), usage.GetProperty("resourceCount").GetInt64(),
-            usage.GetProperty("versionCount").GetInt64()));
+        Assert.Equal((5L, 1L, 1L, 0L, 0L), (usage.GetProperty("storedSize").GetInt64(), usage.GetProperty("resourceCount").GetInt64(),
+            usage.GetProperty("versionCount").GetInt64(), usage.GetProperty("deletedSize").GetInt64(),
+            usage.GetProperty("deletedVersionCount").GetInt64()));
         JsonElement policy = files.GetProperty("policy");
         Assert.Equal((1L << 20, 10L, false), (policy.GetProperty("maxContainerSize").GetInt64(),
             policy.GetProperty("maxResourceCount").GetInt64(), policy.GetProperty("readOnly").GetBoolean()));

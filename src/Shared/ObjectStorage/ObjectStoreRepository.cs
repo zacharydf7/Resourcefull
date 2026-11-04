@@ -9,8 +9,8 @@ namespace Resourcefull.ObjectStorage;
 /// <summary>
 /// Keeps resources in an object store, using only conditional writes for consistency, so it works on any store
 /// <see cref="IObjectStore"/> can reach. Each container has a record, and each name a head object listing its versions'
-/// attributes in the order they were stored, the last one current; every change to a name is a compare-and-swap of its
-/// head, retried when another writer got there first. Content goes in objects of its own, written before the head names
+/// attributes in the order they were stored, the last one current, and the versions in its bin; every change to a name is
+/// a compare-and-swap of its head, retried when another writer got there first. Content goes in objects of its own, written before the head names
 /// them. See <see cref="ObjectKeys"/> for the layout.
 /// </summary>
 /// <remarks>
@@ -85,7 +85,7 @@ internal sealed partial class ObjectStoreRepository(IObjectStore store, string k
         // Checked again by the head write; this only spares uploading content that would be refused.
         if (condition.CreateOnly || condition.Conditions is not null)
         {
-            Head? existing = await ReadHeadAsync(headKey, cancellationToken).ConfigureAwait(false);
+            Head? existing = await ReadStoredHeadAsync(headKey, cancellationToken).ConfigureAwait(false);
             ThrowUnlessAddable(location, existing, version.VersionId, condition);
         }
 
@@ -105,19 +105,23 @@ internal sealed partial class ObjectStoreRepository(IObjectStore store, string k
             if (expiryKey is not null) await PutEntryAsync(expiryKey, location, cancellationToken).ConfigureAwait(false);
             if (protectionKey is not null) await PutEntryAsync(protectionKey, location, cancellationToken).ConfigureAwait(false);
             await PutSearchEntriesAsync(searchKeys, cancellationToken).ConfigureAwait(false);
-            await ChangeHeadAsync(headKey, head =>
+            // With the bin, whose version IDs stay taken.
+            await ChangeStoredHeadAsync(headKey, head =>
             {
                 // An earlier try already added this version: it landed, but another writer changed the head before it
                 // could be confirmed.
                 if (head?.Versions.Any(v => v.Blob == blob) == true) return null;
                 ThrowUnlessAddable(location, head, version.VersionId, condition);
-                replacedSearchKeys = [.. SearchKeysOf(container.Id, location.ResourceName, head?.Versions[^1]).Except(searchKeys)];
+                replacedSearchKeys = [.. SearchKeysOf(container.Id, location.ResourceName, head?.Versions.LastOrDefault()).Except(searchKeys)];
                 // Stamped as the version becomes current. A wrong declared length throws here, before the head names it.
                 written = hashing.Complete(version.DeclaredLength, lastModified ?? _clock.GetUtcNow());
-                return new Head([.. head?.Versions ?? [], new StoredVersion(version.VersionId, blob, written.ContentLength,
-                    written.ContentHash, version.ContentType, new Dictionary<string, string>(version.Metadata),
-                    written.LastModified, version.ExpiresAt, version.CopiedFrom, expiryToken, version.RetainUntil, version.LegalHold,
-                    protectionToken)]);
+                return (head ?? new Head([])) with
+                {
+                    Versions = [.. head?.Versions ?? [], new StoredVersion(version.VersionId, blob, written.ContentLength,
+                        written.ContentHash, version.ContentType, new Dictionary<string, string>(version.Metadata),
+                        written.LastModified, version.ExpiresAt, version.CopiedFrom, expiryToken, version.RetainUntil, version.LegalHold,
+                        protectionToken)]
+                };
             }, cancellationToken).ConfigureAwait(false);
         }
         catch
@@ -138,11 +142,15 @@ internal sealed partial class ObjectStoreRepository(IObjectStore store, string k
         return written!;
     }
 
+    /// <summary>
+    /// Throws unless a version with <paramref name="versionId"/> may be added to the name: a version ID in its bin, which
+    /// a head read with its bin holds, is taken too.
+    /// </summary>
     private static void ThrowUnlessAddable(ResourceLocation location, Head? head, string versionId, ResourceWriteCondition condition)
     {
-        StoredVersion? current = head?.Versions[^1];
+        StoredVersion? current = head?.Versions.LastOrDefault();
         if (condition.CreateOnly && current is not null) throw ResourceExists(location);
-        if (head?.Versions.Any(v => v.VersionId == versionId) == true)
+        if (head?.Versions.Concat(head.Deleted ?? []).Any(v => v.VersionId == versionId) == true)
         {
             throw new ResourceConflictException($"The resource {location.ResourceName} in the container " +
                 $"{location.ContainerName} already has a version {versionId}.")
@@ -301,8 +309,8 @@ internal sealed partial class ObjectStoreRepository(IObjectStore store, string k
         {
             foreach ((string key, Head? read) in await ReadAllAsync<Head>(keys, cancellationToken).ConfigureAwait(false))
             {
-                Head? head = read?.Move is null ? read : await ReadHeadAsync(key, cancellationToken).ConfigureAwait(false);
-                // A name whose versions were deleted, or moved, since it was listed is left out.
+                Head? head = read?.Move is null ? Live(read) : await ReadHeadAsync(key, cancellationToken).ConfigureAwait(false);
+                // A name whose versions were deleted, or moved, since it was listed is left out, as is one with only a bin.
                 if (head is not null)
                     page.Add(ToInfo(resourceContainerName, ObjectKeys.Unescape(key[heads.Length..]), head.Versions[^1], true));
             }
@@ -425,9 +433,10 @@ internal sealed partial class ObjectStoreRepository(IObjectStore store, string k
     }
 
     /// <summary>
-    /// Adds up the container's content objects' sizes, and counts the names with versions, from listings alone.
-    /// Content an unfinished write left behind counts until the sweep deletes it, and while a move is being made, a
-    /// name it moves counts in both places.
+    /// Adds up the container's content objects' sizes, and counts the names with versions, from listings alone: the
+    /// bin's entries hold each version's length, so its content is taken out and counted apart, and its marks of names
+    /// left with only a bin take those out of the names. Content an unfinished write left behind counts until the sweep
+    /// deletes it, and while a move is being made, a name it moves counts in both places.
     /// </summary>
     public override async Task<ResourceContainerUsage> GetContainerUsageAsync(string resourceContainerName,
         CancellationToken cancellationToken = default)
@@ -445,7 +454,17 @@ internal sealed partial class ObjectStoreRepository(IObjectStore store, string k
         {
             if (head.Size > EmptyHeadSize) resources++;
         }
-        return new ResourceContainerUsage(storedBytes, resources, versions);
+        long deletedBytes = 0, deletedVersions = 0;
+        string bin = _keys.Bin(container.Id);
+        await foreach (ObjectListing entry in store.ListAsync(bin, null, cancellationToken).ConfigureAwait(false))
+        {
+            deletedBytes += ObjectKeys.ParseBinEntry(entry.Key[bin.Length..]).ContentLength;
+            deletedVersions++;
+        }
+        await foreach (ObjectListing _ in store.ListAsync(_keys.EmptiedNames(container.Id), null, cancellationToken).ConfigureAwait(false))
+            resources--;
+        return new ResourceContainerUsage(Math.Max(0, storedBytes - deletedBytes), Math.Max(0, resources),
+            Math.Max(0, versions - deletedVersions), deletedBytes, deletedVersions);
     }
 
     // Expiry: an index of the versions that expire, one entry each under {prefix}x/, keyed by expiry time, so a sweep
@@ -715,23 +734,62 @@ internal sealed partial class ObjectStoreRepository(IObjectStore store, string k
             : null;
 
     /// <summary>
-    /// Changes a name's head with <paramref name="change"/>, which gets the head (or <see langword="null"/> for a name
-    /// with no versions) and returns the new one, or <see langword="null"/> to change nothing. When another writer
-    /// changes the head first, it reads it again and calls <paramref name="change"/> again. For a head a move marked,
-    /// <paramref name="change"/> gets the head as the move decided it, after abandoning the move if it's still pending.
+    /// Changes a name's versions with <paramref name="change"/>, which gets the head without its bin (or
+    /// <see langword="null"/> for a name with no versions outside it) and returns the new one, or <see langword="null"/>
+    /// to change nothing. The bin stays as it is. See <see cref="ChangeStoredHeadAsync"/>.
     /// </summary>
     /// <returns>Whether the head changed.</returns>
-    private async Task<bool> ChangeHeadAsync(string key, Func<Head?, Head?> change, CancellationToken cancellationToken)
+    private Task<bool> ChangeHeadAsync(string key, Func<Head?, Head?> change, CancellationToken cancellationToken) =>
+        ChangeStoredHeadAsync(key, head => change(Live(head)) is { } changed ? changed with { Deleted = head?.Deleted } : null,
+            cancellationToken);
+
+    /// <summary>
+    /// Changes a name's head with <paramref name="change"/>, which gets the head with its bin (or <see langword="null"/>
+    /// for a name with neither) and returns the new one, or <see langword="null"/> to change nothing. When another writer
+    /// changes the head first, it reads it again and calls <paramref name="change"/> again. For a head a move marked,
+    /// <paramref name="change"/> gets the head as the move decided it, after abandoning the move if it's still pending.
+    /// Once the head is written, the mark of a name left with only a bin follows it.
+    /// </summary>
+    /// <returns>Whether the head changed.</returns>
+    private async Task<bool> ChangeStoredHeadAsync(string key, Func<Head?, Head?> change, CancellationToken cancellationToken)
     {
         for (int attempt = 1; ; attempt++)
         {
             (Stored<Head> current, Head? head) = await ReadHeadToChangeAsync(key, cancellationToken).ConfigureAwait(false);
             if (change(head) is not { } changed) return false;
             if (await TryPutAsync(key, id => Serialize(changed with { WriteId = id, Move = null }), current.ETag).ConfigureAwait(false))
+            {
+                if (IsBinOnly(changed) != IsBinOnly(head)) await MarkEmptiedQuietlyAsync(key, IsBinOnly(changed)).ConfigureAwait(false);
                 return true;
+            }
 
             ObjectStoreTelemetry.CountRetry(storeName);
             await WaitToRetryAsync(key, attempt, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>A head as readers see it: its versions outside the bin, or <see langword="null"/> when it has none.</summary>
+    private static Head? Live(Head? head) =>
+        head is { Versions.Count: > 0 } ? head.Deleted is null ? head : head with { Deleted = null } : null;
+
+    /// <summary>Whether a head has versions in its bin and none outside it.</summary>
+    private static bool IsBinOnly(Head? head) => head is { Versions.Count: 0, Deleted.Count: > 0 };
+
+    /// <summary>
+    /// Puts or deletes the mark of a name left with only a bin, which takes the name out of the usage figures. If that
+    /// fails, the name is counted wrongly until its head changes again or the daily scan for unnamed content fixes it.
+    /// </summary>
+    private async Task MarkEmptiedQuietlyAsync(string headKey, bool emptied)
+    {
+        string key = _keys.EmptiedFor(headKey);
+        try
+        {
+            if (emptied) await store.UploadAsync(key, new MemoryStream([]), CancellationToken.None).ConfigureAwait(false);
+            else await store.DeleteAsync([key], CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (Exception exception) when (store.IsStoreFailure(exception))
+        {
+            // Only the usage figures read it.
         }
     }
 
@@ -863,9 +921,11 @@ internal sealed partial class ObjectStoreRepository(IObjectStore store, string k
         }
     }
 
-    /// <summary>A head as stored: JSON, or for a name with no versions, just the write ID.</summary>
+    /// <summary>A head as stored: JSON, or for a name with no versions, in its bin or out, just the write ID.</summary>
     private static byte[] Serialize(Head head) =>
-        head.Versions.Count == 0 ? Encoding.UTF8.GetBytes(head.WriteId!) : JsonSerializer.SerializeToUtf8Bytes(head);
+        head.Versions.Count == 0 && head.Deleted is not { Count: > 0 }
+            ? Encoding.UTF8.GetBytes(head.WriteId!)
+            : JsonSerializer.SerializeToUtf8Bytes(head);
 
     private static byte[] Serialize(ContainerRecord record) => JsonSerializer.SerializeToUtf8Bytes(record);
 
@@ -883,7 +943,9 @@ internal sealed partial class ObjectStoreRepository(IObjectStore store, string k
         CopiedFrom = version.CopiedFrom,
         ExpiresAt = version.ExpiresAt,
         RetainUntil = version.RetainUntil,
-        LegalHold = version.LegalHold
+        LegalHold = version.LegalHold,
+        DeletedAt = version.DeletedAt,
+        PurgeAt = version.PurgeAt
     };
 
     private static ContainerInfo ToInfo(string name, ContainerRecord record) => new()
@@ -925,13 +987,15 @@ internal sealed partial class ObjectStoreRepository(IObjectStore store, string k
         [property: JsonPropertyName("n")] string ResourceName);
 
     /// <summary>
-    /// A name's versions, in the order they were stored; the last is current. A head a move is changing holds the move's
-    /// ID, and the move's entry decides whether the versions are here.
+    /// A name's versions, in the order they were stored, the last one current, and the versions in its bin. A head a move
+    /// is changing holds the move's ID, and the move's entry decides whether the versions are here; the bin stays either
+    /// way.
     /// </summary>
     private sealed record Head(
         [property: JsonPropertyName("v")] List<StoredVersion> Versions,
         [property: JsonPropertyName("w")] string? WriteId = null,
-        [property: JsonPropertyName("mv"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] HeadMove? Move = null);
+        [property: JsonPropertyName("mv"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] HeadMove? Move = null,
+        [property: JsonPropertyName("d"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] List<StoredVersion>? Deleted = null);
 
     /// <summary>One version's attributes, and the key of its content.</summary>
     private sealed record StoredVersion(
@@ -947,5 +1011,8 @@ internal sealed partial class ObjectStoreRepository(IObjectStore store, string k
         [property: JsonPropertyName("xt")] string? ExpiryToken = null,
         [property: JsonPropertyName("ru"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] DateTimeOffset? RetainUntil = null,
         [property: JsonPropertyName("lh"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool LegalHold = false,
-        [property: JsonPropertyName("pt"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? ProtectionToken = null);
+        [property: JsonPropertyName("pt"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? ProtectionToken = null,
+        [property: JsonPropertyName("da"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] DateTimeOffset? DeletedAt = null,
+        [property: JsonPropertyName("pa"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] DateTimeOffset? PurgeAt = null,
+        [property: JsonPropertyName("bt"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? BinToken = null);
 }

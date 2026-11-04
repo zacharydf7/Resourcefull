@@ -2,8 +2,8 @@ namespace Resourcefull;
 
 /// <summary>
 /// Hears about every version Resourcefull deletes by itself, before it's deleted: expired versions, which
-/// <see cref="ResourcefullOptionsBuilder.UseExpiry"/> deletes, and older versions pruned past
-/// the container's <see cref="ResourceContainerPolicy.MaxVersions"/>. Use it to record them in an audit system. The application's own
+/// <see cref="ResourcefullOptionsBuilder.UseExpiry"/> deletes, older versions pruned past
+/// the container's <see cref="ResourceContainerPolicy.MaxVersions"/>, and versions it purges from a bin. Use it to record them in an audit system. The application's own
 /// deletes aren't included. Register one with <see cref="ResourcefullOptionsBuilder.UseCleanupHandler{THandler}"/>;
 /// it's a scoped service, so it can depend on the application's own.
 /// <para>Coming in 4.0.</para>
@@ -47,7 +47,16 @@ public enum ResourceCleanupReason
     /// <see cref="ResourcefullOptionsBuilder.UseExpiry"/> and a provider that supports it, such a version is set to
     /// expire five minutes later instead, and
     /// is reported as <see cref="Expired"/> when the sweep deletes it, or as <see cref="Pruned"/> if, in a container
-    /// that keeps one version, it's deleted sooner along with the version that replaced it.
+    /// that keeps one version, it's deleted sooner along with the version that replaced it. In a container with a
+    /// <see cref="ResourceContainerPolicy.KeepDeletedFor"/>, it goes to the bin straight away.
     /// </summary>
-    Pruned
+    Pruned,
+
+    /// <summary>
+    /// Its <see cref="ResourceInfo.PurgeAt"/> has passed, and the sweep of <see cref="ResourcefullOptionsBuilder.UseExpiry"/>
+    /// is purging it from the bin for good. If it was pruned into the bin, it was reported then too, as
+    /// <see cref="Pruned"/>; if the application deleted it, this is the first report.
+    /// <para>Coming in 4.0.</para>
+    /// </summary>
+    Purged
 }

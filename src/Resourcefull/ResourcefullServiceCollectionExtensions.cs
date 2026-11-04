@@ -75,6 +75,7 @@ public static class ResourcefullServiceCollectionExtensions
         {
             throw new InvalidOperationException("No provider configured.");
         }
+        builder.ThrowIfInconsistent();
 
         return services;
     }

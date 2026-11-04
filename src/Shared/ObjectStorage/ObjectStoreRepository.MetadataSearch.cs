@@ -83,7 +83,7 @@ internal sealed partial class ObjectStoreRepository
         {
             foreach ((string key, Head? read) in await ReadAllAsync<Head>(keys, cancellationToken).ConfigureAwait(false))
             {
-                Head? head = read?.Move is null ? read : await ReadHeadAsync(key, cancellationToken).ConfigureAwait(false);
+                Head? head = read?.Move is null ? Live(read) : await ReadHeadAsync(key, cancellationToken).ConfigureAwait(false);
                 if (head is null) continue;
                 await PutSearchEntriesAsync(SearchKeysOf(container.Id, ObjectKeys.Unescape(key[heads.Length..]), head.Versions[^1]),
                     cancellationToken).ConfigureAwait(false);
@@ -99,22 +99,27 @@ internal sealed partial class ObjectStoreRepository
     /// <paramref name="change"/> on the head as it reads now says which. If another writer then changes the head so the
     /// change leaves a version current whose entries weren't written, it starts again. Afterward, the entries only the
     /// version current before needed are deleted. <paramref name="change"/> may be called more than once, as for
-    /// <see cref="ChangeHeadAsync"/>.
+    /// <see cref="ChangeHeadAsync"/>; with <paramref name="withBin"/>, it gets the head with its bin, as for
+    /// <see cref="ChangeStoredHeadAsync"/>.
     /// </summary>
     private async Task<bool> ChangeHeadKeepingSearchAsync(string containerId, string resourceName, Func<Head?, Head?> change,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken, bool withBin = false)
     {
         string headKey = _keys.Head(containerId, resourceName);
-        if (SearchableMetadataKeys.Count == 0) return await ChangeHeadAsync(headKey, change, cancellationToken).ConfigureAwait(false);
+        Task<bool> ChangeAsync(Func<Head?, Head?> apply) =>
+            withBin ? ChangeStoredHeadAsync(headKey, apply, cancellationToken) : ChangeHeadAsync(headKey, apply, cancellationToken);
+        if (SearchableMetadataKeys.Count == 0) return await ChangeAsync(change).ConfigureAwait(false);
         while (true)
         {
-            Head? read = await ReadHeadAsync(headKey, cancellationToken).ConfigureAwait(false);
+            Head? read = withBin
+                ? await ReadStoredHeadAsync(headKey, cancellationToken).ConfigureAwait(false)
+                : await ReadHeadAsync(headKey, cancellationToken).ConfigureAwait(false);
             HashSet<string> written = EntriesToWrite(containerId, resourceName, read, read is null ? null : change(read));
             await PutSearchEntriesAsync(written, cancellationToken).ConfigureAwait(false);
 
             bool unwritten = false;
             List<string> dropped = [];
-            bool changed = await ChangeHeadAsync(headKey, head =>
+            bool changed = await ChangeAsync(head =>
             {
                 Head? next = change(head);
                 if (next is null) return null;
@@ -123,10 +128,10 @@ internal sealed partial class ObjectStoreRepository
                     unwritten = true;
                     return null;
                 }
-                dropped = [.. SearchKeysOf(containerId, resourceName, head?.Versions[^1])
+                dropped = [.. SearchKeysOf(containerId, resourceName, head?.Versions.LastOrDefault())
                     .Except(SearchKeysOf(containerId, resourceName, next.Versions.LastOrDefault()))];
                 return next;
-            }, cancellationToken).ConfigureAwait(false);
+            }).ConfigureAwait(false);
             if (unwritten) continue;
             if (changed) await SettleSearchEntriesAsync(containerId, resourceName, written, dropped).ConfigureAwait(false);
             return changed;

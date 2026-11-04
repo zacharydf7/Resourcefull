@@ -71,6 +71,33 @@ public class ExpiryTests
         Assert.True(service.ExecuteTask!.IsCompletedSuccessfully);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ExpiryService_ShouldPurgeTheBinEverySweep_WhenDeletingExpiredVersionsSucceedsOrFails(bool expiryFails)
+    {
+        // Arrange: the first purge fails, and the sweep goes on to a second.
+        (ExpiryService service, Mock<IResourceServiceClient> client) = NewService(
+            _ => expiryFails ? throw new InvalidOperationException("Storage is down.") : Task.FromResult(0), TimeSpan.FromMilliseconds(20));
+        var secondPurge = new TaskCompletionSource();
+        int purges = 0;
+        client.Setup(c => c.PurgeDeletedAsync(It.IsAny<CancellationToken>())).Returns(() =>
+        {
+            if (++purges == 1) throw new InvalidOperationException("Storage is down.");
+            secondPurge.TrySetResult();
+            return Task.FromResult(0);
+        });
+
+        // Act
+        await service.StartAsync(CancellationToken.None);
+        Task reached = await Task.WhenAny(secondPurge.Task, Task.Delay(TimeSpan.FromSeconds(10)));
+        await service.StopAsync(CancellationToken.None);
+
+        // Assert
+        Assert.Same(secondPurge.Task, reached);
+        Assert.True(service.ExecuteTask!.IsCompletedSuccessfully);
+    }
+
     [Fact]
     public async Task ExpiryService_ShouldStop_WhenTheProviderDoesNotSupportExpiry()
     {

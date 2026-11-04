@@ -1232,6 +1232,43 @@ public class S3IntegrationTests(S3Fixture fixture)
     }
 
     [Fact]
+    public async Task DeleteAbandonedUploadsAsync_ShouldPutTheBinsIndexRight_WhenAScanFindsItWrong()
+    {
+        fixture.SkipIfUnavailable();
+
+        // Arrange: a.txt is in the bin and b.txt isn't. Then the index goes wrong three ways: a bin entry no version
+        // records (as a failed delete leaves), a mark for b.txt as if it had only a bin, and no mark for a.txt (as a
+        // failed write leaves).
+        string prefix = $"bin-index-{Guid.NewGuid():N}/";
+        var clock = new MovableClock();
+        ObjectStoreRepository repository = await NewRepositoryAsync(prefix, clock);
+        await repository.AddResourceAsync(new NewResourceVersion(new ResourceLocation("c", "a.txt"), "v1"), new MemoryStream("a"u8.ToArray()));
+        await repository.SoftDeleteResourceAsync(new ResourceLocation("c", "a.txt"), null, null, DateTimeOffset.UtcNow.AddDays(30));
+        await repository.AddResourceAsync(new NewResourceVersion(new ResourceLocation("c", "b.txt"), "v1"), new MemoryStream("b"u8.ToArray()));
+        List<string> keys = [.. (await fixture.Client.ListObjectsV2Async(new ListObjectsV2Request
+        {
+            BucketName = fixture.BucketName, Prefix = prefix + "d/"
+        })).S3Objects.Select(o => o.Key)];
+        string entry = keys.Single(k => k.Contains("/t/", StringComparison.Ordinal));
+        string markOfA = keys.Single(k => k.Contains("/e/", StringComparison.Ordinal));
+        string stale = $"{entry[..(entry.IndexOf("/t/", StringComparison.Ordinal) + 3)]}0000000000000000001/v9!/{new string('0', 32)}/5";
+        string markOfB = markOfA.Replace("a!2Etxt!", "b!2Etxt!", StringComparison.Ordinal);
+        await fixture.Client.PutObjectAsync(new PutObjectRequest { BucketName = fixture.BucketName, Key = stale, ContentBody = "" });
+        await fixture.Client.PutObjectAsync(new PutObjectRequest { BucketName = fixture.BucketName, Key = markOfB, ContentBody = "" });
+        await fixture.Client.DeleteObjectAsync(fixture.BucketName, markOfA);
+
+        // Act: a scan two days on.
+        clock.Now = DateTimeOffset.UtcNow.AddDays(2);
+        await repository.DeleteAbandonedUploadsAsync(DateTimeOffset.UtcNow.AddDays(-1));
+
+        // Assert
+        Assert.Equal((1, 0, 1, 0), (await CountKeysAsync(entry), await CountKeysAsync(stale), await CountKeysAsync(markOfA),
+            await CountKeysAsync(markOfB)));
+        ResourceContainerUsage usage = await repository.GetContainerUsageAsync("c");
+        Assert.Equal((1L, 1L, 1L, 1L), (usage.ResourceCount, usage.VersionCount, usage.DeletedVersionCount, usage.DeletedSize.Bytes));
+    }
+
+    [Fact]
     public async Task DeleteAbandonedUploadsAsync_ShouldLeaveContentNoHeadNamesAlone_WhenItIsUnderADayOld()
     {
         fixture.SkipIfUnavailable();

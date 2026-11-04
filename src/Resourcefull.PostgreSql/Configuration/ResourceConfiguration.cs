@@ -72,10 +72,22 @@ internal class ResourceConfiguration : IEntityTypeConfiguration<ResourceModel>
             .HasFilter("\"LegalHold\" = true")
             .HasDatabaseName("IX_Resources_LegalHold");
 
-        // A version an upload is still storing is left out of every query, so nothing sees it until it's complete; only
-        // the upload and the deletes, of a container or of abandoned uploads, ask for it with IgnoreQueryFilters. Reads
-        // of a name's current version skip the filter too, since a current version is never staged.
-        builder.HasQueryFilter(r => r.StagedAt == null);
+        // A version an upload is still storing, or one in the bin, is left out of every query, so nothing sees it; only
+        // the upload, the bin's own queries and the deletes, of a container or of abandoned uploads, ask for it with
+        // IgnoreQueryFilters. Reads of a name's current version skip the filter too, since a current version is never
+        // staged or in the bin.
+        builder.HasQueryFilter(r => r.StagedAt == null && r.DeletedAt == null);
+
+        // Only the versions in bins, newest deletion first in each container, as the bin lists them.
+        builder.HasIndex(r => new { r.ContainerName, r.DeletedAt, r.VersionId })
+            .IsDescending(false, true, false)
+            .HasFilter("\"DeletedAt\" IS NOT NULL")
+            .HasDatabaseName("IX_Resources_DeletedAt");
+
+        // Only the versions in bins, in the order the sweep purges them, so a sweep that finds none due reads nothing else.
+        builder.HasIndex(r => new { r.PurgeAt, r.VersionId })
+            .HasFilter("\"PurgeAt\" IS NOT NULL")
+            .HasDatabaseName("IX_Resources_PurgeAt");
 
         // Only the versions being stored, so the sweep for abandoned uploads reads nothing else; with their IDs, so it
         // can find them from the index alone.

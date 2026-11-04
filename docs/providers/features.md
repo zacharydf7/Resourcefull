@@ -18,6 +18,7 @@ provider aims for every feature. This page shows, in one place, where each one s
 | Changing a version's metadata or content type | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
 | [Expiry](../expiry.md) | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
 | [Retention and legal holds](../deleting-safely.md) | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| [The bin](../deleting-safely.md#the-bin) | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
 | [Finding resources by metadata](../listing.md#finding-resources-by-metadata) | Indexed | Indexed | Indexed | Indexed | Indexed | Indexed | By reading every name |
 | [Uploading in parts](../uploading-in-parts.md) | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
 | [Export and import](../backup-and-move.md) | Yes | Yes | Yes | Yes | Yes | Yes | Yes |

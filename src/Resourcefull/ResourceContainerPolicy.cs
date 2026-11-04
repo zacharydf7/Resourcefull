@@ -81,6 +81,26 @@ public sealed class ResourceContainerPolicy
     private readonly TimeSpan? _retainFor;
 
     /// <summary>
+    /// How long a deleted version stays in the container's bin, where
+    /// <see cref="IResourceContainerClient.UndeleteAsync"/> can bring it back, before the sweep of
+    /// <see cref="ResourcefullOptionsBuilder.UseExpiry"/> purges it for good. Deletes and pruned versions go to the bin;
+    /// expired versions and container deletes skip it. The bin doesn't count toward <see cref="MaxContainerSize"/> or
+    /// <see cref="MaxResourceCount"/>. A version's purge time is fixed when it's deleted, so a change applies to later
+    /// deletes. <see cref="TimeSpan.Zero"/> makes deletes permanent, as they are without a bin.
+    /// <para>Coming in 4.0.</para>
+    /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">It's set to less than zero.</exception>
+    public TimeSpan? KeepDeletedFor
+    {
+        get => _keepDeletedFor;
+        init => _keepDeletedFor = value < TimeSpan.Zero
+            ? throw new ArgumentOutOfRangeException(nameof(KeepDeletedFor), value, "A deleted version can't be kept for a negative time.")
+            : value;
+    }
+
+    private readonly TimeSpan? _keepDeletedFor;
+
+    /// <summary>
     /// Whether <see cref="AllowedContentTypes"/> lets an upload declare <paramref name="contentType"/>, matched the same
     /// way the policy checks an upload's type. It's <see langword="true"/> for any type, or none, when <see cref="AllowedContentTypes"/> is
     /// <see langword="null"/>.
@@ -142,4 +162,10 @@ public enum ResourcePolicyRule
 /// </param>
 /// <param name="ResourceCount">How many resources (names) it holds.</param>
 /// <param name="VersionCount">How many versions it holds, current and older.</param>
-public sealed record ResourceContainerUsage(ResourceSize StoredSize, long ResourceCount, long VersionCount);
+/// <param name="DeletedSize">
+/// The size of the versions in its bin, which <see cref="StoredSize"/> leaves out; see
+/// <see cref="ResourceContainerPolicy.KeepDeletedFor"/>.
+/// </param>
+/// <param name="DeletedVersionCount">How many versions its bin holds, which <see cref="VersionCount"/> leaves out.</param>
+public sealed record ResourceContainerUsage(ResourceSize StoredSize, long ResourceCount, long VersionCount,
+    ResourceSize DeletedSize = default, long DeletedVersionCount = 0);

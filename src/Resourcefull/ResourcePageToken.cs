@@ -37,6 +37,35 @@ internal static class ResourcePageToken
         }
     }
 
+    private const string DeletedVersion = "d1";
+
+    public static string EncodeDeleted(string? prefix, (DateTimeOffset DeletedAt, string VersionId) next) =>
+        $"{DeletedVersion}.{next.DeletedAt.UtcTicks}.{Base64Url.EncodeToString(Encoding.UTF8.GetBytes(next.VersionId))}.{Fingerprint(prefix, null)}";
+
+    /// <summary>Where the token's listing of a bin continues: after this deletion time and version ID.</summary>
+    /// <exception cref="ArgumentException">
+    /// The token is malformed, or belongs to another listing: of another prefix, or of current resources.
+    /// </exception>
+    public static (DateTimeOffset DeletedAt, string VersionId) DecodeDeleted(string token, string? prefix, string paramName)
+    {
+        string[] parts = token.Split('.');
+        if (parts.Length != 4 || parts[0] != DeletedVersion
+            || !long.TryParse(parts[1], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out long ticks)
+            || ticks > DateTimeOffset.MaxValue.UtcTicks)
+            throw new ArgumentException("The continuation token isn't one a listing of the bin returned.", paramName);
+        if (parts[3] != Fingerprint(prefix, null))
+            throw new ArgumentException("The continuation token belongs to a listing of another prefix.", paramName);
+
+        try
+        {
+            return (new DateTimeOffset(ticks, TimeSpan.Zero), Encoding.UTF8.GetString(Base64Url.DecodeFromChars(parts[2])));
+        }
+        catch (FormatException exception)
+        {
+            throw new ArgumentException("The continuation token isn't one a listing of the bin returned.", paramName, exception);
+        }
+    }
+
     // A listing without a metadata match keeps the fingerprint it had before metadata search, so its tokens still work.
     private static string Fingerprint(string? prefix, ResourceMetadataMatch? match) =>
         Base64Url.EncodeToString(SHA256.HashData(Encoding.UTF8.GetBytes(

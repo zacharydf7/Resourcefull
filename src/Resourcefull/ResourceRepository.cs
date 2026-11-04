@@ -731,6 +731,127 @@ public abstract class ResourceRepository
         CancellationToken cancellationToken = default)
         => throw new NotSupportedException($"{GetType().Name} doesn't support retention.");
 
+    // The bin
+
+    /// <summary>
+    /// Whether the provider can keep deleted versions in a bin: <see langword="false"/> by default, and the clients then
+    /// refuse every delete in a container with a <see cref="ResourceContainerPolicy.KeepDeletedFor"/>, so nothing meant
+    /// to be kept is deleted for good.
+    /// <para>Coming in 4.0.</para>
+    /// </summary>
+    /// <remarks>
+    /// A provider that returns <see langword="true"/> must override every member in this section, and support expiry,
+    /// whose sweep purges the bin. A version in the bin is left out of every other member: reads, listings, version
+    /// lists, usage figures but for <see cref="ResourceContainerUsage.DeletedSize"/> and
+    /// <see cref="ResourceContainerUsage.DeletedVersionCount"/>, searches, expiry and moves. A name whose versions are all
+    /// in the bin is free, so a create-only write succeeds, but each version ID in the bin stays taken: a write with one
+    /// is refused as for any version the name has. Deleting a container deletes its bin too.
+    /// </remarks>
+    public virtual bool SupportsSoftDelete => false;
+
+    /// <summary>
+    /// Deletes as <see cref="DeleteResourceAsync"/> does, deciding the conditions and retention the same way, but keeps
+    /// the versions in the container's bin, each with <see cref="ResourceInfo.DeletedAt"/> set to now and
+    /// <see cref="ResourceInfo.PurgeAt"/> to <paramref name="purgeAt"/>. Their content stays, so a download already
+    /// reading one can finish.
+    /// <para>Coming in 4.0.</para>
+    /// </summary>
+    /// <param name="resource">The resource.</param>
+    /// <param name="versionId">The version to delete, or <see langword="null"/> for every version.</param>
+    /// <param name="conditions">What the name's current version must be like; <see langword="null"/> for no condition.</param>
+    /// <param name="purgeAt">When the sweep purges the versions for good.</param>
+    /// <param name="cancellationToken">Cancels the delete.</param>
+    /// <returns><see langword="true"/> if anything was deleted; <see langword="false"/> if there was nothing to delete.</returns>
+    /// <exception cref="ResourcePreconditionFailedException">
+    /// The name's current version doesn't meet <paramref name="conditions"/>, or the name doesn't exist; nothing was deleted.
+    /// </exception>
+    /// <exception cref="ResourceRetainedException">A version it would delete is retained or held.</exception>
+    /// <exception cref="NotSupportedException">The provider has no bin, as by default.</exception>
+    public virtual Task<bool> SoftDeleteResourceAsync(ResourceLocation resource, string? versionId, ResourceConditions? conditions,
+        DateTimeOffset purgeAt, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException($"{GetType().Name} doesn't keep deleted versions.");
+
+    /// <summary>
+    /// Lists the versions in a container's bin, newest deletion first, and those deleted at the same time by version ID
+    /// (ordinally), each with <see cref="ResourceInfo.DeletedAt"/> and <see cref="ResourceInfo.PurgeAt"/> set and
+    /// <see cref="ResourceInfo.IsLatest"/> unset. When <paramref name="prefix"/> leaves versions out, it may look at more
+    /// than <paramref name="pageSize"/> to fill the page, but a provider should bound how many, and return a short page
+    /// rather than read the whole bin.
+    /// <para>Coming in 4.0.</para>
+    /// </summary>
+    /// <param name="resourceContainerName">The container.</param>
+    /// <param name="prefix">Only versions of names that start with this, ordinally; <see langword="null"/> for all.</param>
+    /// <param name="after">
+    /// The previous page's <see cref="DeletedVersionPage.Next"/>; <see langword="null"/> for the first page.
+    /// </param>
+    /// <param name="pageSize">The most versions to return.</param>
+    /// <param name="cancellationToken">Cancels the listing.</param>
+    /// <returns>The versions found, and where the next page starts.</returns>
+    /// <exception cref="NotSupportedException">The provider has no bin, as by default.</exception>
+    public virtual Task<DeletedVersionPage> GetDeletedPageAsync(string resourceContainerName, string? prefix,
+        (DateTimeOffset DeletedAt, string VersionId)? after, int pageSize, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException($"{GetType().Name} doesn't keep deleted versions.");
+
+    /// <summary>
+    /// Lists one name's versions in the bin, in the order <see cref="GetDeletedPageAsync"/> lists them.
+    /// <para>Coming in 4.0.</para>
+    /// </summary>
+    /// <param name="resource">The resource.</param>
+    /// <param name="cancellationToken">Cancels the listing.</param>
+    /// <exception cref="NotSupportedException">The provider has no bin, as by default.</exception>
+    public virtual Task<IReadOnlyList<ResourceInfo>> GetDeletedVersionsAsync(ResourceLocation resource,
+        CancellationToken cancellationToken = default)
+        => throw new NotSupportedException($"{GetType().Name} doesn't keep deleted versions.");
+
+    /// <summary>
+    /// Takes one version, or with no <paramref name="versionId"/> every version of the name, out of the bin. Each comes
+    /// back as an older version, placed among the older versions in the order they were first stored, so the current
+    /// version stays current; if the name has no current version, the most recently stored of them becomes current.
+    /// <para>Coming in 4.0.</para>
+    /// </summary>
+    /// <param name="resource">The resource.</param>
+    /// <param name="versionId">The version, or <see langword="null"/> for every version of the name in the bin.</param>
+    /// <param name="cancellationToken">Cancels the undelete.</param>
+    /// <returns>How many versions came back; 0 if the bin has none of them.</returns>
+    /// <exception cref="NotSupportedException">The provider has no bin, as by default.</exception>
+    public virtual Task<int> UndeleteAsync(ResourceLocation resource, string? versionId, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException($"{GetType().Name} doesn't keep deleted versions.");
+
+    /// <summary>
+    /// Deletes one version in the bin for good, or with no <paramref name="versionId"/> every version of the name in the
+    /// bin; with <paramref name="dueBy"/>, only those whose <see cref="ResourceInfo.PurgeAt"/> is at or before it,
+    /// decided by the purge itself, since an undelete may have taken a version out of the bin since it was listed.
+    /// <para>Coming in 4.0.</para>
+    /// </summary>
+    /// <param name="resource">The resource.</param>
+    /// <param name="versionId">The version, or <see langword="null"/> for every version of the name in the bin.</param>
+    /// <param name="dueBy">Purge only versions due by this time; <see langword="null"/> purges them however long they have left.</param>
+    /// <param name="cancellationToken">Cancels the purge.</param>
+    /// <returns>How many versions were purged.</returns>
+    /// <exception cref="NotSupportedException">The provider has no bin, as by default.</exception>
+    public virtual Task<int> PurgeDeletedAsync(ResourceLocation resource, string? versionId, DateTimeOffset? dueBy,
+        CancellationToken cancellationToken = default)
+        => throw new NotSupportedException($"{GetType().Name} doesn't keep deleted versions.");
+
+    /// <summary>
+    /// Lists up to <paramref name="maxVersions"/> versions, in every container's bin, whose
+    /// <see cref="ResourceInfo.PurgeAt"/> is at or before <paramref name="now"/>, ordered by it and then by version ID
+    /// (ordinally). The sweep calls it every interval, so a provider should answer it from an index, as it answers
+    /// <see cref="GetExpiredAsync"/>.
+    /// <para>Coming in 4.0.</para>
+    /// </summary>
+    /// <param name="now">The time to compare purge times with.</param>
+    /// <param name="maxVersions">The most versions to return.</param>
+    /// <param name="after">
+    /// The purge time and version ID of the previous batch's last version, to list the ones after it;
+    /// <see langword="null"/> to start from the first.
+    /// </param>
+    /// <param name="cancellationToken">Cancels the listing.</param>
+    /// <exception cref="NotSupportedException">The provider has no bin, as by default.</exception>
+    public virtual Task<IReadOnlyList<ResourceInfo>> GetPurgeableAsync(DateTimeOffset now, int maxVersions,
+        (DateTimeOffset PurgeAt, string VersionId)? after = null, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException($"{GetType().Name} doesn't keep deleted versions.");
+
     /// <summary>
     /// Gets what a container holds: the total <see cref="ResourceInfo.ContentLength"/> of every version, and how many
     /// resources and versions there are. Container policies read it before each write they limit, so a provider should

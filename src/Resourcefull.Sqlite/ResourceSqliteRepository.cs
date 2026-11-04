@@ -178,15 +178,18 @@ internal class ResourceSqliteRepository(IDbContextFactory<ResourceDbContext> dbC
     protected override async Task<ResourceContainerUsage> MeasureContainerAsync(ResourceDbContext dbContext, string resourceContainerName,
         CancellationToken cancellationToken)
     {
-        // One aggregate over the container's version rows, from their recorded lengths, which doesn't touch the chunks.
+        // One aggregate over the container's version rows, from their recorded lengths, which doesn't touch the chunks;
+        // the bin's rows are added up apart.
         UsageRow usage = (await dbContext.Database.SqlQuery<UsageRow>($"""
-            SELECT COALESCE(SUM(r."ContentLength"), 0) AS "StoredSize",
+            SELECT COALESCE(SUM(CASE WHEN r."DeletedAt" IS NULL THEN r."ContentLength" END), 0) AS "StoredSize",
                 COUNT(CASE WHEN r."IsLatest" THEN 1 END) AS "ResourceCount",
-                COUNT(*) AS "VersionCount"
+                COUNT(CASE WHEN r."DeletedAt" IS NULL THEN 1 END) AS "VersionCount",
+                COALESCE(SUM(CASE WHEN r."DeletedAt" IS NOT NULL THEN r."ContentLength" END), 0) AS "DeletedSize",
+                COUNT(r."DeletedAt") AS "DeletedVersionCount"
             FROM "Resources" r
             WHERE r."ContainerName" = {resourceContainerName} AND r."StagedAt" IS NULL
             """).ToListAsync(cancellationToken).ConfigureAwait(false))[0];
-        return new ResourceContainerUsage(usage.StoredSize, usage.ResourceCount, usage.VersionCount);
+        return new ResourceContainerUsage(usage.StoredSize, usage.ResourceCount, usage.VersionCount, usage.DeletedSize, usage.DeletedVersionCount);
     }
 
     protected override Task<bool> LockVersionInContainerAsync(ResourceDbContext attempt, long resourceId,
@@ -219,5 +222,7 @@ internal class ResourceSqliteRepository(IDbContextFactory<ResourceDbContext> dbC
         public long StoredSize { get; set; }
         public long ResourceCount { get; set; }
         public long VersionCount { get; set; }
+        public long DeletedSize { get; set; }
+        public long DeletedVersionCount { get; set; }
     }
 }

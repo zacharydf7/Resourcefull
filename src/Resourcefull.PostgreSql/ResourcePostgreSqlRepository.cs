@@ -143,15 +143,18 @@ internal class ResourcePostgreSqlRepository(IDbContextFactory<ResourceDbContext>
     protected override async Task<ResourceContainerUsage> MeasureContainerAsync(ResourceDbContext dbContext, string resourceContainerName,
         CancellationToken cancellationToken)
     {
-        // One aggregate over the container's version rows, from their recorded lengths, which doesn't touch the chunks.
+        // One aggregate over the container's version rows, from their recorded lengths, which doesn't touch the chunks;
+        // the bin's rows are added up apart.
         UsageRow usage = (await dbContext.Database.SqlQuery<UsageRow>(dbContext.QualifyTables($"""
-            SELECT COALESCE(SUM(r."ContentLength"), 0)::bigint AS "StoredSize",
+            SELECT COALESCE(SUM(r."ContentLength") FILTER (WHERE r."DeletedAt" IS NULL), 0)::bigint AS "StoredSize",
                 COUNT(*) FILTER (WHERE r."IsLatest") AS "ResourceCount",
-                COUNT(*) AS "VersionCount"
+                COUNT(*) FILTER (WHERE r."DeletedAt" IS NULL) AS "VersionCount",
+                COALESCE(SUM(r."ContentLength") FILTER (WHERE r."DeletedAt" IS NOT NULL), 0)::bigint AS "DeletedSize",
+                COUNT(r."DeletedAt") AS "DeletedVersionCount"
             FROM "Resources" r
             WHERE r."ContainerName" = {resourceContainerName} AND r."StagedAt" IS NULL
             """)).ToListAsync(cancellationToken).ConfigureAwait(false))[0];
-        return new ResourceContainerUsage(usage.StoredSize, usage.ResourceCount, usage.VersionCount);
+        return new ResourceContainerUsage(usage.StoredSize, usage.ResourceCount, usage.VersionCount, usage.DeletedSize, usage.DeletedVersionCount);
     }
 
     protected override async Task<bool> LockVersionInContainerAsync(ResourceDbContext attempt, long resourceId,
@@ -219,5 +222,7 @@ internal class ResourcePostgreSqlRepository(IDbContextFactory<ResourceDbContext>
         public long StoredSize { get; set; }
         public long ResourceCount { get; set; }
         public long VersionCount { get; set; }
+        public long DeletedSize { get; set; }
+        public long DeletedVersionCount { get; set; }
     }
 }

@@ -25,6 +25,9 @@ internal static class ObjectStoreTelemetry
     private static readonly Counter<long> StaleExpiries = Meter.CreateCounter<long>($"resourcefull.{Provider}.stale_expiries",
         unit: "{entry}", description: "Expiry entries dropped because their version no longer existed or had another expiry.");
 
+    private static readonly Counter<long> StaleBinEntries = Meter.CreateCounter<long>($"resourcefull.{Provider}.stale_bin_entries",
+        unit: "{entry}", description: "Bin and purge entries dropped because their version was no longer in its bin.");
+
     private static readonly Counter<long> StaleSearchEntries = Meter.CreateCounter<long>($"resourcefull.{Provider}.stale_search_entries",
         unit: "{entry}", description: "Metadata search entries dropped because their name's current version no longer had the value.");
 
@@ -53,6 +56,15 @@ internal static class ObjectStoreTelemetry
     public static void CountStaleExpiry(string? storeName) => Count(StaleExpiries, storeName);
 
     public static void CountStaleSearchEntry(string? storeName) => Count(StaleSearchEntries, storeName);
+
+    /// <summary>Counts a bin or purge entry dropped because its version was no longer in its bin.</summary>
+    public static void CountStaleBinEntry(string? storeName) => Count(StaleBinEntries, storeName);
+
+    /// <summary>Counts the bin entries the scan for unnamed content dropped because their versions were no longer in a bin.</summary>
+    public static void CountStaleBinEntries(int dropped, string? storeName)
+    {
+        if (dropped > 0) Count(StaleBinEntries, storeName, dropped);
+    }
 
     /// <summary>Counts the abandoned upload sessions and unnamed content objects a sweep deleted.</summary>
     public static void CountAbandonedUploads(int deleted, string? storeName)

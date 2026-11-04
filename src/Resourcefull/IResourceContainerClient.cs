@@ -224,7 +224,9 @@ public interface IResourceContainerClient
     /// Deletes a resource and all its versions, or one version of it, if it exists. A storage provider may delete a
     /// resource with many versions in several steps, oldest first and the current version last: if the delete is
     /// canceled or fails partway, every version it didn't reach is still whole, the resource still has its current
-    /// version, and calling it again finishes the job. A version uploaded while it runs may remain.
+    /// version, and calling it again finishes the job. A version uploaded while it runs may remain. In a container
+    /// with a <see cref="ResourceContainerPolicy.KeepDeletedFor"/>, the versions go to the container's bin instead,
+    /// where <see cref="UndeleteAsync"/> can bring them back.
     /// </summary>
     /// <param name="resourceName">The name of the resource to delete.</param>
     /// <param name="versionId">
@@ -251,6 +253,13 @@ public interface IResourceContainerClient
     /// many large versions was under way.
     /// </exception>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
+    /// <exception cref="NotSupportedException">
+    /// The container has a <see cref="ResourceContainerPolicy.KeepDeletedFor"/>, and the provider has no bin.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// The container has a <see cref="ResourceContainerPolicy.KeepDeletedFor"/>, and the store doesn't use
+    /// <see cref="ResourcefullOptionsBuilder.UseExpiry"/>, whose sweep purges the bin.
+    /// </exception>
     public Task<bool> DeleteResourceIfExistsAsync(string resourceName, string? versionId = null,
         ResourceConditions? conditions = null, CancellationToken cancellationToken = default);
 
@@ -473,6 +482,116 @@ public interface IResourceContainerClient
     public Task<bool> SetLegalHoldAsync(string resourceName, string? versionId, bool hold,
         CancellationToken cancellationToken = default)
         => throw new NotSupportedException($"{GetType().Name} doesn't support retention.");
+
+    /// <summary>
+    /// Lists the versions in the container's bin, newest deletion first, fetching a page at a time as you enumerate.
+    /// In a container with a <see cref="ResourceContainerPolicy.KeepDeletedFor"/>, a deleted or pruned version goes to
+    /// the bin, where <see cref="UndeleteAsync"/> can bring it back until its <see cref="ResourceInfo.PurgeAt"/>.
+    /// <para>Coming in 4.0.</para>
+    /// </summary>
+    /// <param name="options">
+    /// The prefix and page size; <see langword="null"/> lists everything, 1,000 at a time. A metadata match isn't
+    /// supported.
+    /// </param>
+    /// <param name="cancellationToken">Cancels the listing.</param>
+    /// <returns>The deleted versions, each with <see cref="ResourceInfo.DeletedAt"/> and <see cref="ResourceInfo.PurgeAt"/> set.</returns>
+    /// <exception cref="ArgumentException">
+    /// <see cref="ResourceListOptions.PageSize"/> is outside 1 to <see cref="ResourceListOptions.MaxPageSize"/>, or
+    /// <see cref="ResourceListOptions.Metadata"/> is set.
+    /// </exception>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
+    /// <exception cref="NotSupportedException">
+    /// The provider has no bin, or this is the default implementation.
+    /// </exception>
+    /// <remarks>
+    /// The default implementation fetches the pages through <see cref="GetDeletedPageAsync"/>.
+    /// </remarks>
+    public async IAsyncEnumerable<ResourceInfo> ListDeletedAsync(ResourceListOptions? options = null,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        string? continuationToken = null;
+        do
+        {
+            ResourcePage page = await GetDeletedPageAsync(options, continuationToken, cancellationToken).ConfigureAwait(false);
+            foreach (ResourceInfo resource in page.Resources) yield return resource;
+            continuationToken = page.ContinuationToken;
+        }
+        while (continuationToken is not null);
+    }
+
+    /// <summary>
+    /// Gets one page of the versions in the container's bin, newest deletion first, for an API that hands the
+    /// continuation token to its own callers. With a prefix, a page can hold fewer versions than
+    /// <see cref="ResourceListOptions.PageSize"/>, or none, while more follow: only the continuation token says when the
+    /// listing is done.
+    /// <para>Coming in 4.0.</para>
+    /// </summary>
+    /// <param name="options">
+    /// The prefix and page size; <see langword="null"/> lists everything, 1,000 at a time. A metadata match isn't
+    /// supported.
+    /// </param>
+    /// <param name="continuationToken">
+    /// The previous page's <see cref="ResourcePage.ContinuationToken"/>, or <see langword="null"/> for the first page.
+    /// It must come from a listing of the bin with the same prefix; the page size can change.
+    /// </param>
+    /// <param name="cancellationToken">Cancels the listing.</param>
+    /// <returns>The page, and the token for the next one if there is one.</returns>
+    /// <exception cref="ArgumentException">
+    /// <paramref name="continuationToken"/> is malformed or comes from another listing, or
+    /// <see cref="ResourceListOptions.Metadata"/> is set.
+    /// </exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <see cref="ResourceListOptions.PageSize"/> is outside 1 to <see cref="ResourceListOptions.MaxPageSize"/>.
+    /// </exception>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
+    /// <exception cref="NotSupportedException">
+    /// The provider has no bin, or this is the default implementation.
+    /// </exception>
+    public Task<ResourcePage> GetDeletedPageAsync(ResourceListOptions? options = null, string? continuationToken = null,
+        CancellationToken cancellationToken = default)
+        => throw new NotSupportedException($"{GetType().Name} doesn't keep deleted versions.");
+
+    /// <summary>
+    /// Brings a version back from the container's bin, or with no <paramref name="versionId"/> every version of the
+    /// name there. Each comes back as an older version, so the name's current version stays current; if the name has
+    /// none, the most recently stored version that came back becomes current. To make one of them current, restore it with
+    /// <see cref="RestoreVersionAsync"/>, as for any older version.
+    /// <para>Coming in 4.0.</para>
+    /// </summary>
+    /// <param name="resourceName">The resource.</param>
+    /// <param name="versionId">The version, or <see langword="null"/> for every version of the name in the bin.</param>
+    /// <param name="cancellationToken">Cancels the undelete.</param>
+    /// <returns><see langword="true"/> if anything came back; <see langword="false"/> if the bin has none of it.</returns>
+    /// <exception cref="ResourcePolicyViolationException">
+    /// The container is read-only, or what comes back wouldn't fit its <see cref="ResourceContainerPolicy.MaxContainerSize"/>
+    /// or <see cref="ResourceContainerPolicy.MaxResourceCount"/>, which the bin doesn't count toward; nothing came back.
+    /// </exception>
+    /// <exception cref="ArgumentException"><paramref name="resourceName"/> breaks the name rules.</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
+    /// <exception cref="NotSupportedException">
+    /// The provider has no bin, or this is the default implementation.
+    /// </exception>
+    public Task<bool> UndeleteAsync(string resourceName, string? versionId = null, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException($"{GetType().Name} doesn't keep deleted versions.");
+
+    /// <summary>
+    /// Deletes a version in the container's bin for good, or with no <paramref name="versionId"/> every version of the
+    /// name there, before its <see cref="ResourceInfo.PurgeAt"/>: for example, to erase personal data straight away.
+    /// The <see cref="IResourceCleanupHandler"/> isn't told, as it isn't told about the application's own deletes.
+    /// <para>Coming in 4.0.</para>
+    /// </summary>
+    /// <param name="resourceName">The resource.</param>
+    /// <param name="versionId">The version, or <see langword="null"/> for every version of the name in the bin.</param>
+    /// <param name="cancellationToken">Cancels the purge.</param>
+    /// <returns><see langword="true"/> if anything was purged; <see langword="false"/> if the bin has none of it.</returns>
+    /// <exception cref="ResourcePolicyViolationException">The container is read-only; nothing was purged.</exception>
+    /// <exception cref="ArgumentException"><paramref name="resourceName"/> breaks the name rules.</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
+    /// <exception cref="NotSupportedException">
+    /// The provider has no bin, or this is the default implementation.
+    /// </exception>
+    public Task<bool> PurgeDeletedAsync(string resourceName, string? versionId = null, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException($"{GetType().Name} doesn't keep deleted versions.");
 
     /// <summary>
     /// Gets what the container holds: the size of every version, and how many resources and versions there are. Use it

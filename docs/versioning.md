@@ -69,6 +69,9 @@ that are still waiting too, so replaced content doesn't come back; if deleting t
 failed prune and they stay until they expire. In a container that keeps more, deleting the current version makes the
 previous one current, as always, and that can be one waiting to be deleted.
 
+In a container with a [bin](deleting-safely.md#the-bin) <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>, a pruned version goes to the bin at once, without
+the five minutes, since its content stays readable there; it can be brought back until the bin's time is up.
+
 A version that's [retained or under a legal hold](deleting-safely.md) <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> isn't pruned: it stays past the limit,
 and once it's no longer protected, the next prune removes it. So an upload that replaces a retained version always succeeds,
 and the retained version stays on as an older one, even in a container that keeps one version.

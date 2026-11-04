@@ -125,6 +125,9 @@ namespace Resourcefull.Sqlite.Migrations
                     b.Property<long?>("DeclaredLength")
                         .HasColumnType("INTEGER");
 
+                    b.Property<long?>("DeletedAt")
+                        .HasColumnType("INTEGER");
+
                     b.Property<long?>("ExpiresAt")
                         .HasColumnType("INTEGER");
 
@@ -146,6 +149,9 @@ namespace Resourcefull.Sqlite.Migrations
                         .HasMaxLength(256)
                         .HasColumnType("TEXT")
                         .UseCollation("BINARY");
+
+                    b.Property<long?>("PurgeAt")
+                        .HasColumnType("INTEGER");
 
                     b.Property<long?>("RetainUntil")
                         .HasColumnType("INTEGER");
@@ -182,6 +188,15 @@ namespace Resourcefull.Sqlite.Migrations
                     b.HasIndex("ExpiresAt", "VersionId")
                         .HasDatabaseName("IX_Resources_ExpiresAt")
                         .HasFilter("\"ExpiresAt\" IS NOT NULL");
+
+                    b.HasIndex("PurgeAt", "VersionId")
+                        .HasDatabaseName("IX_Resources_PurgeAt")
+                        .HasFilter("\"PurgeAt\" IS NOT NULL");
+
+                    b.HasIndex("ContainerName", "DeletedAt", "VersionId")
+                        .IsDescending(false, true, false)
+                        .HasDatabaseName("IX_Resources_DeletedAt")
+                        .HasFilter("\"DeletedAt\" IS NOT NULL");
 
                     b.HasIndex("ContainerName", "Name", "VersionId")
                         .IsUnique()

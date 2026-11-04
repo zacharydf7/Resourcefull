@@ -320,8 +320,9 @@ internal sealed partial class ObjectStoreRepository
         WrittenContent? added = null;
         try
         {
-            // Added by a completion that stopped before deleting the session, or by one that's still running.
-            Head? existing = await ReadHeadAsync(headKey, cancellationToken).ConfigureAwait(false);
+            // Added by a completion that stopped before deleting the session, or by one that's still running. The read
+            // includes the bin, since a deleted version's ID stays taken.
+            Head? existing = await ReadStoredHeadAsync(headKey, cancellationToken).ConfigureAwait(false);
             if (Completed(existing, versionId) is { } completed)
             {
                 await DeleteUploadQuietlyAsync(container.Id, versionId).ConfigureAwait(false);
@@ -336,7 +337,7 @@ internal sealed partial class ObjectStoreRepository
             if (expiryKey is not null) await PutEntryAsync(expiryKey, resource, cancellationToken).ConfigureAwait(false);
             if (protectionKey is not null) await PutEntryAsync(protectionKey, resource, cancellationToken).ConfigureAwait(false);
             await PutSearchEntriesAsync(searchKeys, cancellationToken).ConfigureAwait(false);
-            bool changed = await ChangeHeadAsync(headKey, head =>
+            bool changed = await ChangeStoredHeadAsync(headKey, head =>
             {
                 // Added by an earlier try of this write, which landed before another writer changed the head, or by
                 // another completion. Either way, the version the head has is the one to report.
@@ -346,11 +347,14 @@ internal sealed partial class ObjectStoreRepository
                     return null;
                 }
                 ThrowUnlessAddable(resource, head, versionId, condition);
-                replacedSearchKeys = [.. SearchKeysOf(container.Id, resource.ResourceName, head?.Versions[^1]).Except(searchKeys)];
+                replacedSearchKeys = [.. SearchKeysOf(container.Id, resource.ResourceName, head?.Versions.LastOrDefault()).Except(searchKeys)];
                 added = new WrittenContent(contentLength, contentHash, _clock.GetUtcNow());
-                return new Head([.. head?.Versions ?? [], new StoredVersion(versionId, blob, contentLength, contentHash,
-                    record.ContentType, new Dictionary<string, string>(record.Metadata), added.LastModified, record.ExpiresAt, null,
-                    expiryToken, record.RetainUntil, record.LegalHold, protectionToken)]);
+                return (head ?? new Head([])) with
+                {
+                    Versions = [.. head?.Versions ?? [], new StoredVersion(versionId, blob, contentLength, contentHash,
+                        record.ContentType, new Dictionary<string, string>(record.Metadata), added.LastModified, record.ExpiresAt, null,
+                        expiryToken, record.RetainUntil, record.LegalHold, protectionToken)]
+                };
             }, cancellationToken).ConfigureAwait(false);
             // The content this completion joined is named by nothing, unless the head's version is its own, added by an
             // earlier try.

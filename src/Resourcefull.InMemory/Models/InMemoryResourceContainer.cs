@@ -8,6 +8,9 @@ internal class InMemoryResourceContainer
     /// <summary>Every stored version of each resource, keyed by resource name; a name with no versions has no entry.</summary>
     public Dictionary<string, List<InMemoryResource>> Resources { get; } = new(StringComparer.Ordinal);
 
+    /// <summary>The versions in the bin, keyed by resource name; a name with none there has no entry.</summary>
+    public Dictionary<string, List<InMemoryResource>> Deleted { get; } = new(StringComparer.Ordinal);
+
     /// <summary>The versions upload sessions are storing, keyed by resource name and version ID.</summary>
     public Dictionary<(string Name, string VersionId), InMemoryStagedVersion> Staged { get; } = [];
 }

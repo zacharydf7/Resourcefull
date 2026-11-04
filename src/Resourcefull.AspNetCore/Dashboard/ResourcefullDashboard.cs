@@ -289,7 +289,7 @@ public static partial class ResourcefullDashboardEndpointRouteBuilderExtensions
         ResourceContainerUsage usage = await client.GetUsageAsync(cancellationToken).ConfigureAwait(false);
         ResourceContainerPolicy policy = await client.GetPolicyAsync(cancellationToken).ConfigureAwait(false);
         return new ContainerView(container.Name, container.Metadata,
-            new UsageView(usage.StoredSize.Bytes, usage.ResourceCount, usage.VersionCount),
+            new UsageView(usage.StoredSize.Bytes, usage.ResourceCount, usage.VersionCount, usage.DeletedSize.Bytes, usage.DeletedVersionCount),
             new PolicyView(policy.MaxResourceSize?.Bytes, policy.MaxContainerSize?.Bytes, policy.MaxResourceCount,
                 policy.ReadOnly == true, policy.AllowedContentTypes, policy.MaxVersions));
     }
@@ -306,7 +306,7 @@ public static partial class ResourcefullDashboardEndpointRouteBuilderExtensions
 
     private sealed record ContainerView(string Name, IDictionary<string, string> Metadata, UsageView Usage, PolicyView Policy);
 
-    private sealed record UsageView(long StoredSize, long ResourceCount, long VersionCount);
+    private sealed record UsageView(long StoredSize, long ResourceCount, long VersionCount, long DeletedSize, long DeletedVersionCount);
 
     private sealed record PolicyView(long? MaxResourceSize, long? MaxContainerSize, long? MaxResourceCount, bool ReadOnly,
         IReadOnlyCollection<string>? AllowedContentTypes, int? MaxVersions);

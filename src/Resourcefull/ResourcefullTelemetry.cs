@@ -69,6 +69,15 @@ internal static class Telemetry
     public static readonly Counter<long> ExpireFailures = Meter.CreateCounter<long>("resourcefull.client.expire.failures",
         unit: "{version}", description: "Expired versions a sweep failed to delete; they stay for the next sweep.");
 
+    public static readonly Counter<long> Purged = Meter.CreateCounter<long>("resourcefull.client.purged",
+        unit: "{version}", description: "Versions purged from a bin for good, by sweeps and by PurgeDeletedAsync.");
+
+    public static readonly Counter<long> PurgeFailures = Meter.CreateCounter<long>("resourcefull.client.purge.failures",
+        unit: "{version}", description: "Versions due to leave a bin that a sweep failed to purge; they stay for the next sweep.");
+
+    public static readonly Counter<long> Undeleted = Meter.CreateCounter<long>("resourcefull.client.undeleted",
+        unit: "{version}", description: "Versions UndeleteAsync brought back from a bin.");
+
     public static readonly Counter<long> LastKnownPolicyUses = Meter.CreateCounter<long>(
         "resourcefull.client.policy.last_known_uses", unit: "{use}",
         description: "Times a container's last known policy was used because the policy provider failed.");
@@ -257,6 +266,16 @@ internal sealed class ClientTelemetry(string provider, ResourcefullOptions optio
         if (Telemetry.Expired.Enabled) Telemetry.Expired.Add(1, StoreTags());
     }
 
+    public void CountPurged(int versions)
+    {
+        if (versions > 0 && Telemetry.Purged.Enabled) Telemetry.Purged.Add(versions, StoreTags());
+    }
+
+    public void CountUndeleted(int versions)
+    {
+        if (versions > 0 && Telemetry.Undeleted.Enabled) Telemetry.Undeleted.Add(versions, StoreTags());
+    }
+
     /// <summary>Tells the cleanup handler about a version, counting the call as failed if it throws.</summary>
     public async Task NotifyCleanupAsync(IResourceCleanupHandler handler, ResourceCleanup cleanup, CancellationToken cancellationToken)
     {
@@ -267,7 +286,12 @@ internal sealed class ClientTelemetry(string provider, ResourcefullOptions optio
         catch (Exception exception) when (exception is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
             CountFailure(Telemetry.CleanupHandlerFailures, exception, "resourcefull.cleanup_reason",
-                cleanup.Reason == ResourceCleanupReason.Expired ? "expired" : "pruned");
+                cleanup.Reason switch
+                {
+                    ResourceCleanupReason.Expired => "expired",
+                    ResourceCleanupReason.Pruned => "pruned",
+                    _ => "purged"
+                });
             throw;
         }
     }

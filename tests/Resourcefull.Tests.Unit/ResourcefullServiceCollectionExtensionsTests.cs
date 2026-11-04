@@ -76,7 +76,7 @@ public class ResourcefullServiceCollectionExtensionsTests
                   "Defaults": {
                     "MaxResourceSize": "100 MB", "MaxContainerSize": "5 GB", "MaxResourceCount": 1000,
                     "AllowedContentTypes": [ "application/pdf", "image/png" ], "ReadOnly": false, "MaxVersions": 5,
-                    "RetainFor": "7.00:00:00"
+                    "RetainFor": "7.00:00:00", "KeepDeletedFor": "30.00:00:00"
                   },
                   "CacheFor": "00:00:10",
                   "KeepLastKnownFor": "00:01:00"
@@ -96,7 +96,7 @@ public class ResourcefullServiceCollectionExtensionsTests
         {
             MaxResourceSize = ResourceSize.Megabytes(100), MaxContainerSize = ResourceSize.Gigabytes(5),
             MaxResourceCount = 1000, AllowedContentTypes = ["application/pdf", "image/png"], ReadOnly = false, MaxVersions = 5,
-            RetainFor = TimeSpan.FromDays(7)
+            RetainFor = TimeSpan.FromDays(7), KeepDeletedFor = TimeSpan.FromDays(30)
         }, policies.Defaults);
     }
 
@@ -161,6 +161,9 @@ public class ResourcefullServiceCollectionExtensionsTests
         "Resourcefull:ContainerPolicies aren't valid")]
     [InlineData("""{ "ContainerPolicies": { "Defaults": { "RetainFor": "-1.00:00:00" } } }""",
         "Resourcefull:ContainerPolicies aren't valid")]
+    [InlineData("""{ "ContainerPolicies": { "Defaults": { "KeepDeletedFor": "-1.00:00:00" } } }""",
+        "Resourcefull:ContainerPolicies aren't valid")]
+    [InlineData("""{ "ContainerPolicies": { "Defaults": { "KeepDeletedFor": "30.00:00:00" } } }""", "call UseExpiry too")]
     [InlineData("""{ "ContainerPolicies": { "CacheFor": "-00:00:01" } }""",
         "Resourcefull:ContainerPolicies aren't valid")]
     public void UseConfiguration_ShouldThrowNamingTheSetting_WhenGivenOneItCantUse(string section, string named)

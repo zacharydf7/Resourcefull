@@ -18,6 +18,9 @@ public class ResourcefullOptionsBuilder
 {
     private bool _expiryRegistered;
 
+    /// <summary>Whether the default policy keeps deleted versions, which needs the sweep of <see cref="UseExpiry"/>.</summary>
+    private bool _defaultsKeepDeleted;
+
     /// <summary>
     /// Gets whether a storage provider has been configured. Exactly one must be, through a provider package's
     /// <c>Use…</c> extension or <see cref="UseProvider{TRepository}(ServiceLifetime)"/>.
@@ -181,6 +184,7 @@ public class ResourcefullOptionsBuilder
                 "The time can't be negative.");
         }
 
+        _defaultsKeepDeleted = defaults?.KeepDeletedFor > TimeSpan.Zero;
         Replace(new ServiceDescriptor(typeof(ContainerPolicySettings), StoreName, (_, _) => new ContainerPolicySettings(
             defaults ?? new ResourceContainerPolicy(), cacheFor ?? TimeSpan.FromSeconds(5), keepLastKnownFor ?? TimeSpan.FromMinutes(5)),
             ServiceLifetime.Singleton));
@@ -343,7 +347,7 @@ public class ResourcefullOptionsBuilder
                 nameof(ResourceContainerPolicy.MaxResourceSize), nameof(ResourceContainerPolicy.MaxContainerSize),
                 nameof(ResourceContainerPolicy.MaxResourceCount), nameof(ResourceContainerPolicy.AllowedContentTypes),
                 nameof(ResourceContainerPolicy.ReadOnly), nameof(ResourceContainerPolicy.MaxVersions),
-                nameof(ResourceContainerPolicy.RetainFor));
+                nameof(ResourceContainerPolicy.RetainFor), nameof(ResourceContainerPolicy.KeepDeletedFor));
             int? maxVersions = defaults is null ? null : Read<int>(defaults, nameof(ResourceContainerPolicy.MaxVersions));
             TimeSpan? cacheFor = Read<TimeSpan>(policies, "CacheFor");
             TimeSpan? keepLastKnownFor = Read<TimeSpan>(policies, "KeepLastKnownFor");
@@ -356,10 +360,25 @@ public class ResourcefullOptionsBuilder
                 AllowedContentTypes = ReadList(defaults, nameof(ResourceContainerPolicy.AllowedContentTypes)),
                 ReadOnly = Read<bool>(defaults, nameof(ResourceContainerPolicy.ReadOnly)),
                 MaxVersions = maxVersions,
-                RetainFor = Read<TimeSpan>(defaults, nameof(ResourceContainerPolicy.RetainFor))
+                RetainFor = Read<TimeSpan>(defaults, nameof(ResourceContainerPolicy.RetainFor)),
+                KeepDeletedFor = Read<TimeSpan>(defaults, nameof(ResourceContainerPolicy.KeepDeletedFor))
             }, cacheFor, keepLastKnownFor));
         }
         return this;
+    }
+
+    /// <summary>
+    /// Checks the settings that only make sense together, once they're all made: a default policy that keeps deleted
+    /// versions needs <see cref="UseExpiry"/>, whose sweep purges them.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">They don't fit together.</exception>
+    internal void ThrowIfInconsistent()
+    {
+        if (_defaultsKeepDeleted && !_expiryRegistered)
+        {
+            throw new InvalidOperationException($"The default container policy sets {nameof(ResourceContainerPolicy.KeepDeletedFor)}, " +
+                $"but nothing would purge the deleted versions it keeps: call {nameof(UseExpiry)} too, whose sweep does.");
+        }
     }
 
     /// <summary>

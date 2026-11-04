@@ -155,6 +155,32 @@ internal sealed class ContainerPolicies(ContainerPolicySettings settings, Resour
         }
     }
 
+    /// <summary>
+    /// Checks versions coming back from the bin into <paramref name="resourceName"/>: the container mustn't be read-only,
+    /// and since the bin counts toward neither limit, it needs room for their content, and for the name if it has no
+    /// current version. Every version's <see cref="ResourceInfo.ContentLength"/> must be set.
+    /// </summary>
+    public async Task CheckUndeleteAsync(string containerName, string resourceName, IReadOnlyList<ResourceInfo> versions,
+        ClientTelemetry telemetry, CancellationToken cancellationToken)
+    {
+        ResourceContainerPolicy policy = await GetAsync(containerName, telemetry, cancellationToken).ConfigureAwait(false);
+        ThrowIfReadOnly(containerName, policy);
+        ResourceContainerUsage? usage = policy.MaxContainerSize is not null || policy.MaxResourceCount is not null
+            ? await repository.GetContainerUsageAsync(containerName, cancellationToken).ConfigureAwait(false)
+            : null;
+        if (policy.MaxResourceCount is { } maxCount && usage!.ResourceCount >= maxCount
+            && await repository.GetResourceInfoAsync(new ResourceLocation(containerName, resourceName), null, cancellationToken).ConfigureAwait(false) is null)
+        {
+            throw CountExceeded(containerName, usage, maxCount);
+        }
+        if (policy.MaxContainerSize is { } maxContainerSize
+            && usage!.StoredSize.Bytes + versions.Sum(v => v.ContentLength ?? 0) > maxContainerSize.Bytes)
+        {
+            throw new ResourcePolicyViolationException(NoRoomMessage(containerName, usage, maxContainerSize),
+                ResourcePolicyRule.MaxContainerSize, maxContainerSize.Bytes) { ContainerName = containerName };
+        }
+    }
+
     private static void ThrowIfReadOnly(string containerName, ResourceContainerPolicy policy)
     {
         if (policy.ReadOnly == true)
@@ -236,7 +262,8 @@ internal sealed class ContainerPolicies(ContainerPolicySettings settings, Resour
         AllowedContentTypes = own.AllowedContentTypes ?? defaults.AllowedContentTypes,
         ReadOnly = own.ReadOnly ?? defaults.ReadOnly,
         MaxVersions = own.MaxVersions ?? defaults.MaxVersions,
-        RetainFor = own.RetainFor ?? defaults.RetainFor
+        RetainFor = own.RetainFor ?? defaults.RetainFor,
+        KeepDeletedFor = own.KeepDeletedFor ?? defaults.KeepDeletedFor
     };
 
     /// <summary>The cache key of a container's policy as the provider last gave it.</summary>

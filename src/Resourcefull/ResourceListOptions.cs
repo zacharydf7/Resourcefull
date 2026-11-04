@@ -49,13 +49,14 @@ public sealed record ResourceMetadataMatch(string Key, string Value)
 }
 
 /// <summary>
-/// One page of a listing: current resources ordered by name, and where to continue.
+/// One page of a listing, and where to continue: current resources ordered by name, or the versions in a bin, newest
+/// deletion first.
 /// </summary>
 /// <param name="resources">The page's resources.</param>
 /// <param name="continuationToken">Where the next page starts, or <see langword="null"/> when this is the last page.</param>
 public sealed class ResourcePage(IReadOnlyList<ResourceInfo> resources, string? continuationToken)
 {
-    /// <summary>The page's resources, ordered by name.</summary>
+    /// <summary>The page's resources, in the listing's order.</summary>
     public IReadOnlyList<ResourceInfo> Resources { get; } = resources;
 
     /// <summary>

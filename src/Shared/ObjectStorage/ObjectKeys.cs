@@ -6,7 +6,7 @@ namespace Resourcefull.ObjectStorage;
 
 /// <summary>
 /// Where things are kept in the object store, under the key prefix: each container's record, and under the container's
-/// ID, each name's head and each version's content.
+/// ID, each name's head, each version's content and the indexes of what's in its bin.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -57,7 +57,18 @@ internal sealed class ObjectKeys(string prefix, int segmentBytes = ObjectKeys.Se
     public string ExpiriesAfter(DateTimeOffset expiresAt, string versionId) =>
         $"{Expiries}{expiresAt.UtcTicks:D19}/{Escape(versionId)}{End}0";
 
-    /// <summary>What an expiry entry's key, after <see cref="Expiries"/>, says.</summary>
+    /// <summary>The prefix of the purge entries, which sort by when their versions leave a bin, as expiry entries sort.</summary>
+    public string Purges { get; } = prefix + "t/";
+
+    /// <summary>The key of a version's purge entry, in the form of an expiry entry's key, by its purge time.</summary>
+    public string Purge(DateTimeOffset purgeAt, string versionId, string token, string containerId, string blob) =>
+        $"{Purges}{purgeAt.UtcTicks:D19}/{Escape(versionId)}{End}/{token}/{containerId}/{blob}";
+
+    /// <summary>What a listing of the purge entries after <paramref name="purgeAt"/> and <paramref name="versionId"/> starts after.</summary>
+    public string PurgesAfter(DateTimeOffset purgeAt, string versionId) =>
+        $"{Purges}{purgeAt.UtcTicks:D19}/{Escape(versionId)}{End}0";
+
+    /// <summary>What an expiry entry's key, after <see cref="Expiries"/>, or a purge entry's after <see cref="Purges"/>, says.</summary>
     internal static (DateTimeOffset ExpiresAt, string VersionId, string Token, string ContainerId, string Blob) ParseExpiry(string key)
     {
         // An escape of a character is ! and two hex digits, so the version ID ends at the first ! that a / follows.
@@ -108,6 +119,57 @@ internal sealed class ObjectKeys(string prefix, int segmentBytes = ObjectKeys.Se
 
     /// <summary>The key of a version's protection entry, by the token the version records for it.</summary>
     public string Protection(string containerId, string token) => Protections(containerId) + token;
+
+    /// <summary>
+    /// The prefix of a container's bin entries, one for each version in its bin, newest deletion first: the deletion
+    /// time counts down from <see cref="DateTimeOffset.MaxValue"/>, so keys sort that way.
+    /// </summary>
+    public string Bin(string containerId) => Data(containerId) + "t/";
+
+    /// <summary>
+    /// The key of a version's bin entry: when it was deleted, then its version ID, so versions deleted at once sort as
+    /// the contract lists them, then the token the version records for its entries, then its content's length, so the
+    /// usage figures can add up the bin from a listing.
+    /// </summary>
+    public string BinEntry(string containerId, DateTimeOffset deletedAt, string versionId, string token, long contentLength) =>
+        $"{Bin(containerId)}{DateTimeOffset.MaxValue.UtcTicks - deletedAt.UtcTicks:D19}/{Escape(versionId)}{End}/{token}/{contentLength}";
+
+    /// <summary>
+    /// What a listing of the bin entries after <paramref name="deletedAt"/> and <paramref name="versionId"/>, in the bin's
+    /// order, starts after, as <see cref="ExpiriesAfter"/> does for expiry entries.
+    /// </summary>
+    public string BinAfter(string containerId, DateTimeOffset deletedAt, string versionId) =>
+        $"{Bin(containerId)}{DateTimeOffset.MaxValue.UtcTicks - deletedAt.UtcTicks:D19}/{Escape(versionId)}{End}0";
+
+    /// <summary>What a bin entry's key, after <see cref="Bin"/>, says.</summary>
+    internal static (DateTimeOffset DeletedAt, string VersionId, string Token, long ContentLength) ParseBinEntry(string key)
+    {
+        int versionEnd = key.IndexOf(End + "/", 20, StringComparison.Ordinal);
+        string[] rest = key[(versionEnd + 2)..].Split('/');
+        long ticks = DateTimeOffset.MaxValue.UtcTicks - long.Parse(key[..19], System.Globalization.CultureInfo.InvariantCulture);
+        return (new DateTimeOffset(ticks, TimeSpan.Zero), Unescape(key[20..versionEnd]), rest[0],
+            long.Parse(rest[1], System.Globalization.CultureInfo.InvariantCulture));
+    }
+
+    /// <summary>The prefix of a container's marks of names left with only a bin, which the usage figures don't count.</summary>
+    public string EmptiedNames(string containerId) => Data(containerId) + "e/";
+
+    /// <summary>The key of the mark of the name whose head is at <paramref name="headKey"/>, beside its head.</summary>
+    public string EmptiedFor(string headKey) => OfKind(headKey, 'e');
+
+    /// <summary>The key of the head of the name whose mark is at <paramref name="markKey"/>.</summary>
+    public string HeadForEmptied(string markKey) => OfKind(markKey, 'h');
+
+    /// <summary>
+    /// <paramref name="key"/>, a key under a container's data, with its kind letter (<c>h</c> for a head, <c>e</c> for a
+    /// bin-only mark) replaced by <paramref name="kind"/>.
+    /// </summary>
+    private string OfKind(string key, char kind)
+    {
+        // A container's ID has no /, so the one after it starts the key's own part.
+        int at = key.IndexOf('/', prefix.Length + 2) + 1;
+        return string.Concat(key.AsSpan(0, at), [kind], key.AsSpan(at + 1));
+    }
 
     /// <summary>The prefix of every version's content in a container.</summary>
     public string Contents(string containerId) => Data(containerId) + "b/";

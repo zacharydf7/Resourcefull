@@ -230,7 +230,8 @@ Forbidden for a read-only container, and 404 Not Found when what they change doe
 | `POST api/upload-link?container=` | With `UploadLinkPath`: creates an upload link for the body's `name` or its `namePrefix` (exactly one of them), that works for `expiresInMinutes` (an hour if it's left out, seven days at most), and lets uploads replace a file if `replace` is `true`. Answers with its `url` and `expiresAt`. |
 
 A container holds `name`, `metadata`, `usage` and `policy`. `usage` holds `storedSize` in bytes, `resourceCount` and
-`versionCount`. `policy` holds `maxResourceSize` and `maxContainerSize` in bytes, `maxResourceCount` and
+`versionCount`, and <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> `deletedSize` in bytes and `deletedVersionCount`, what the container's
+[bin](../deleting-safely.md#the-bin) holds. `policy` holds `maxResourceSize` and `maxContainerSize` in bytes, `maxResourceCount` and
 `allowedContentTypes`, each `null` when there's no limit, plus `readOnly` and `maxVersions`, the versions kept per
 name. A file or version holds `name`, `versionId`, `isLatest` (whether it's the current version), `contentType`,
 `contentLength`, `lastModified`, `expiresAt` and `metadata`.

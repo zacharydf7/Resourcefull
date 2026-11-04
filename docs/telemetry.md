@@ -41,19 +41,22 @@ Container and resource names aren't metric tags: there can be any number of them
 ### Work that happens out of sight
 
 Some of Resourcefull's work doesn't fail the call that started it, so it would go unnoticed without a counter of its
-own. Each carries `resourcefull.provider`. The four that count a failure in Resourcefull's clients (`prune.failures`,
-`expire.failures`, `policy.last_known_uses` and `cleanup_handler.failures`) and the SQL Server and PostgreSQL `retries`
-also carry `error.type`:
+own. Each carries `resourcefull.provider`. The five that count a failure in Resourcefull's clients (`prune.failures`,
+`expire.failures`, `purge.failures`, `policy.last_known_uses` and `cleanup_handler.failures`) and the SQL Server and
+PostgreSQL `retries` also carry `error.type`:
 
 | Instrument | Unit | What it counts |
 |---|---|---|
 | `resourcefull.client.prune.failures` | {failure} | prunes of older versions that failed after the upload, restore or copy was stored, or for a resource `PruneContainerAsync` couldn't prune; the older versions stay until a later prune |
 | `resourcefull.client.expired` | {version} | expired versions that [expiry](expiry.md) sweeps deleted |
 | `resourcefull.client.expire.failures` | {version} | expired versions a sweep failed to delete; they stay for the next sweep |
+| `resourcefull.client.purged` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | {version} | versions purged from a [bin](deleting-safely.md#the-bin) for good, by sweeps and by `PurgeDeletedAsync` |
+| `resourcefull.client.purge.failures` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | {version} | versions due to leave a bin that a sweep failed to purge; they stay for the next sweep |
+| `resourcefull.client.undeleted` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | {version} | versions `UndeleteAsync` brought back from a bin |
 | `resourcefull.client.policy.last_known_uses` | {use} | times a container's last known [policy](container-policies.md) was used because the policy provider failed, at most once per container each `cacheFor` |
 | `resourcefull.client.delete.refused` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | {delete} | deletes, container deletes and prunes refused because a version they'd delete is [retained or under a legal hold](deleting-safely.md), with `resourcefull.operation` (`delete`, `delete_container` or `prune`) and `resourcefull.refusal_reason`: `retain_until` or `legal_hold`. A prune is counted only when a hold or date was set after it read the versions; it skips versions it already knows are protected |
 | `resourcefull.client.metadata.indexed` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | {version} | versions `IndexMetadataAsync` indexed for [searching by metadata](listing.md#finding-resources-by-metadata) |
-| `resourcefull.client.cleanup_handler.failures` | {failure} | calls to your [cleanup handler](expiry.md#auditing-whats-deleted) that threw, with `resourcefull.cleanup_reason`: `expired` or `pruned`. A handler failure also counts as a failed prune or expired version, since the version stays |
+| `resourcefull.client.cleanup_handler.failures` | {failure} | calls to your [cleanup handler](expiry.md#auditing-whats-deleted) that threw, with `resourcefull.cleanup_reason`: `expired`, `pruned` or `purged`. A handler failure also counts as a failed prune, expired version or purge, since the version stays |
 | `resourcefull.sqlserver.abandoned_uploads` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | {upload} | staged versions of uploads that stopped partway, which the [expiry](expiry.md) sweep deleted a day after they last stored anything; upload sessions nothing was added to are counted here too |
 | `resourcefull.sqlserver.retries` | {retry} | SQL Server calls retried after a transient failure, such as a deadlock or a dropped connection, with `db.response.status_code`: the SQL Server error number, such as `1205` for a deadlock |
 | `resourcefull.postgresql.abandoned_uploads` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | {upload} | as `resourcefull.sqlserver.abandoned_uploads`, for [PostgreSQL](providers/postgresql.md) |
@@ -73,6 +76,7 @@ also carry `error.type`:
 | `resourcefull.filesystem.session_joins` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | {join} | the same, with the [file system](providers/file-system.md#telemetry), where it stays at zero |
 | `resourcefull.s3.stale_search_entries`, `resourcefull.azureblob.stale_search_entries`, `resourcefull.filesystem.stale_search_entries` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | {entry} | metadata search entries a search dropped because their name's current version no longer had the value; see [Finding resources by metadata](listing.md#finding-resources-by-metadata) |
 | `resourcefull.s3.stale_expiries`, `resourcefull.azureblob.stale_expiries`, `resourcefull.filesystem.stale_expiries` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | {entry} | expiry entries a sweep dropped because their version no longer existed or had another expiry; see [S3-compatible storage](providers/s3.md#how-it-stores-things) or [Azure Blob Storage](providers/azure-blob.md#how-it-stores-things) |
+| `resourcefull.s3.stale_bin_entries`, `resourcefull.azureblob.stale_bin_entries`, `resourcefull.filesystem.stale_bin_entries` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | {entry} | bin and purge entries a listing of the bin, a sweep or the daily scan for unnamed content dropped because their version was no longer in its [bin](deleting-safely.md#the-bin) |
 
 What to alert on:
 
@@ -135,6 +139,10 @@ metrics. It also has:
 | `list_versions` | `GetResourceVersionsAsync` | |
 | `list_top` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | `GetTopVersionsAsync` | `resourcefull.order`: `largest_first` or `expiring_first` |
 | `list_expired` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | `GetExpiredVersionsAsync` | |
+| `list_deleted` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | `GetDeletedPageAsync`, and each page of the [bin](deleting-safely.md#the-bin) that `ListDeletedAsync` fetches | `resourcefull.page_size` |
+| `undelete` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | `UndeleteAsync` | |
+| `purge_deleted` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | `PurgeDeletedAsync` on a container client | |
+| `purge` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | `PurgeDeletedAsync` on the service client, and each sweep of [`UseExpiry`](expiry.md), when it finds versions due to leave a bin | `resourcefull.purged`: how many versions it purged |
 | `delete` | `DeleteResourceIfExistsAsync` | `resourcefull.conditional`; when a [retained or held](deleting-safely.md) version refuses it, `resourcefull.refusal_reason` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> |
 | `create_container` | `CreateContainerAsync`, `CreateContainerIfNotExistsAsync` | |
 | `get_container` | `GetContainerInfoAsync` | |
@@ -148,7 +156,7 @@ metrics. It also has:
 `GetContainerClient` doesn't contact storage, so it records nothing. With
 [container policies](container-policies.md), every operation that checks one (`upload`, `restore`, `copy`, `move`,
 `delete`, `delete_container`, `prune_container`, `set_metadata`, `set_content_type`, `set_retention`,
-`set_legal_hold`, `set_container_metadata` and `get_container_policy`) records a `resourcefull get_policy` child span when it asks the policy provider, and
+`set_legal_hold`, `set_container_metadata`, `undelete`, `purge_deleted` and `get_container_policy`) records a `resourcefull get_policy` child span when it asks the policy provider, and
 `resourcefull.policy_rule` when the policy refuses it. When the provider fails and the container's last known policy is
 used instead, the `get_policy` span records the failure and `resourcefull.policy_last_known`.
 

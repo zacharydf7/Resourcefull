@@ -165,6 +165,18 @@
   `resourcefull.client.delete.refused`. Providers get `SupportsRetention`, `SetRetentionAsync` and
   `SetLegalHoldAsync`, and with one that doesn't support them, a write that would protect a version throws
   `NotSupportedException`. See [Deleting safely](docs/deleting-safely.md).
+- **The bin.** `ResourceContainerPolicy.KeepDeletedFor` keeps deleted and pruned versions in their container's bin for
+  that long. `UndeleteAsync` brings them back as older versions, and `ListDeletedAsync` and `GetDeletedPageAsync` list
+  them, newest deletion first, with `ResourceInfo.DeletedAt` and `PurgeAt`. The expiry sweep
+  purges each version at its `PurgeAt`, fixed when it was deleted, telling the cleanup handler first
+  (`ResourceCleanupReason.Purged`), and `PurgeDeletedAsync` purges one early. Expired versions and container deletes
+  skip the bin, and the bin doesn't count toward `MaxContainerSize` or `MaxResourceCount`: `ResourceContainerUsage`
+  reports it separately, as `DeletedSize` and `DeletedVersionCount`, and so does the dashboard. `KeepDeletedFor` needs
+  `UseExpiry`. Every provider has a bin; the `Resourcefull_AddBin` migration adds two columns and two small indexes.
+  The bin records `list_deleted`, `undelete`, `purge_deleted` and `purge` spans and the `resourcefull.client.purged`,
+  `purge.failures` and `undeleted` counters. Providers get `SupportsSoftDelete` and six members, and with one that
+  doesn't have a bin, a delete in a container that keeps deleted versions throws `NotSupportedException`. See
+  [Deleting safely](docs/deleting-safely.md#the-bin).
 - **Finding resources by metadata.** `UseMetadataSearch("customer")` names the metadata keys a listing can search by,
   and `ResourceListOptions.Metadata = new ResourceMetadataMatch("customer", "42")` lists the resources whose current
   version has that value, in name order, by page, with a prefix if you like. Every provider supports it: SQL Server,

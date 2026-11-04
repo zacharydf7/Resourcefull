@@ -339,6 +339,10 @@ async function showContainer(name, focus) {
     summaryItem(summary, "Stored", ofLimit(usage.storedSize, policy.maxContainerSize, formatSize));
     summaryItem(summary, "Files", ofLimit(usage.resourceCount, policy.maxResourceCount, n => n.toLocaleString()));
     summaryItem(summary, "Versions", usage.versionCount.toLocaleString());
+    if (usage.deletedVersionCount > 0) {
+      summaryItem(summary, "In the bin",
+        `${usage.deletedVersionCount.toLocaleString()} ${usage.deletedVersionCount === 1 ? "version" : "versions"}, ${formatSize(usage.deletedSize)}`);
+    }
     summaryItem(summary, "Limits", limitsText(policy) || "none");
     for (const [key, value] of Object.entries(container.metadata)) summaryItem(summary, key, value);
   } catch (error) {

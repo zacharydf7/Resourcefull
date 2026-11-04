@@ -79,6 +79,13 @@ for each `/` in a key:
   naming it.
 - **Each version that expires has an entry** under `x/`, keyed by when it expires, so the [expiry](../expiry.md) sweep
   reads only what's due.
+- **Each version in a [bin](../deleting-safely.md#the-bin)** <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> stays in its name's head, separately from the
+  name's versions, and its content stays where it was. It has two entries, written just before the head write that puts it in
+  the bin: one under `d/{id}/t/`, newest deletion first, whose key holds its content's length, for listings
+  of the bin and the usage figures, and one under `t/`, keyed by when it's purged, for the sweep. Both are
+  checked against the head when read, and one whose version is no longer in the bin is dropped once it's over an hour
+  old, as expiry entries are; the daily scan for content no head names also drops stale bin entries that no listing reaches. A name left with only a
+  bin has a mark under `d/{id}/e/`, so the usage figures can leave it out of the names, and the same scan fixes any mark a failed write left wrong.
 - **Each [upload session](../uploading-in-parts.md)** has a record under `u/` and a file per segment beside it. Each
   append stores its content in segments of up to 64 MiB; completing copies them, in order, into the version's content
   file.
@@ -165,7 +172,8 @@ Besides the operations every provider records (see [Telemetry](../telemetry.md))
 writer changed it first. A few are normal when writers share names; a steady rise means many writers are contending
 for the same names. It counts `resourcefull.filesystem.moves_recovered`: moves the expiry sweep finished or undid
 because their mover stopped first, such as after a crash. It also counts `resourcefull.filesystem.stale_expiries`:
-expiry entries a sweep dropped because their version no longer existed or had another expiry; and
-`resourcefull.filesystem.abandoned_uploads`: upload sessions nothing was appended to for a day, or whose container was
+expiry entries a sweep dropped because their version no longer existed or had another expiry;
+`resourcefull.filesystem.stale_bin_entries`: bin and purge entries dropped because their version was no longer in its
+bin; and `resourcefull.filesystem.abandoned_uploads`: upload sessions nothing was appended to for a day, or whose container was
 deleted, and content no head names, which the expiry sweep deleted. Upload sessions never need joining in the store, so
 `resourcefull.filesystem.session_joins` stays at zero.

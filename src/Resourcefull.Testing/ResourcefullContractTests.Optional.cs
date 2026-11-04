@@ -117,6 +117,26 @@ public abstract partial class ResourcefullContractTests
     }
 
     [Fact]
+    public async Task TheBin_ShouldThrowNotSupportedExceptionAndDeleteNothing_WhenTheProviderDoesNotSupportIt()
+    {
+        Assert.SkipWhen(SupportsSoftDelete, "The provider keeps deleted versions.");
+
+        // Arrange
+        using ServiceProvider provider = BuildServiceProvider(o =>
+            o.UseExpiry().UseContainerPolicies(new ResourceContainerPolicy { KeepDeletedFor = TimeSpan.FromDays(1) }));
+        IResourceContainerClient container = await NewContainerAsync(provider);
+        await container.UploadAsync("a", BinaryData.FromString("a"));
+
+        // Act & Assert: a delete meant to be kept isn't made for good.
+        await Assert.ThrowsAsync<NotSupportedException>(() => container.DeleteResourceIfExistsAsync("a"));
+        await Assert.ThrowsAsync<NotSupportedException>(() => container.ListDeletedAsync().ToListAsync().AsTask());
+        await Assert.ThrowsAsync<NotSupportedException>(() => container.UndeleteAsync("a"));
+        await Assert.ThrowsAsync<NotSupportedException>(() => container.PurgeDeletedAsync("a"));
+        Assert.Equal(0, await ServiceOf(provider).PurgeDeletedAsync());
+        Assert.True(await container.ExistsAsync("a"));
+    }
+
+    [Fact]
     public async Task SetExpiryAndDeleteExpiredAsync_ShouldThrowNotSupportedException_WhenTheProviderDoesNotSupportExpiry()
     {
         Assert.SkipWhen(SupportsExpiry, "The provider supports expiry.");

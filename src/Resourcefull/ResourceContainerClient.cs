@@ -231,14 +231,17 @@ internal partial class ResourceContainerClient(ResourceRepository resourceReposi
         IReadOnlyList<ResourceInfo> versions = await resourceRepository.GetResourceVersionsAsync(
             new ResourceLocation(containerName, resourceName), cancellationToken).ConfigureAwait(false);
         DateTimeOffset now = (timeProvider ?? TimeProvider.System).GetUtcNow();
+        DateTimeOffset? purgeAt = versions.Count > keep ? await PurgeAtAsync(containerName, now, cancellationToken).ConfigureAwait(false) : null;
         foreach (ResourceInfo version in versions.Skip(keep))
         {
             // A retained or held version stays past the limit until it's no longer protected; then the next prune removes it.
             if (!version.IsDeletableAt(now)) continue;
 
             // With expiry on, a version past the limit stays a few minutes more, so a download reading it can finish; the
-            // sweep deletes it, telling the cleanup handler then. A provider without expiry deletes it now.
-            if (expiry is not null && await TryExpireAsync(containerName, version, now + PruneGracePeriod, cancellationToken).ConfigureAwait(false))
+            // sweep deletes it, telling the cleanup handler then. A provider without expiry deletes it now. With a bin,
+            // it goes there at once instead, since its content stays readable there.
+            if (purgeAt is null && expiry is not null
+                && await TryExpireAsync(containerName, version, now + PruneGracePeriod, cancellationToken).ConfigureAwait(false))
                 continue;
 
             await DeletePrunedAsync(version, now, cancellationToken).ConfigureAwait(false);
@@ -306,8 +309,8 @@ internal partial class ResourceContainerClient(ResourceRepository resourceReposi
             await _telemetry.NotifyCleanupAsync(cleanupHandler, new ResourceCleanup(version, ResourceCleanupReason.Pruned, now), cancellationToken).ConfigureAwait(false);
         try
         {
-            await resourceRepository.DeleteResourceAsync(new ResourceLocation(version.ContainerName, version.Name), version.VersionId,
-                null, cancellationToken).ConfigureAwait(false);
+            await DeleteAsync(new ResourceLocation(version.ContainerName, version.Name), version.VersionId, null,
+                await PurgeAtAsync(version.ContainerName, now, cancellationToken).ConfigureAwait(false), cancellationToken).ConfigureAwait(false);
         }
         catch (ResourceRetainedException refusal)
         {
@@ -346,6 +349,36 @@ internal partial class ResourceContainerClient(ResourceRepository resourceReposi
                 DateTimeOffset now = (timeProvider ?? TimeProvider.System).GetUtcNow();
                 foreach (ResourceInfo version in waiting) await DeletePrunedAsync(version, now, CancellationToken.None).ConfigureAwait(false);
             });
+
+    /// <summary>
+    /// When a version deleted from <paramref name="containerName"/> at <paramref name="now"/> leaves the bin: its
+    /// policy's <see cref="ResourceContainerPolicy.KeepDeletedFor"/> from now, or <see langword="null"/> when it has
+    /// none, and deletes are permanent.
+    /// </summary>
+    /// <exception cref="NotSupportedException">The container keeps deleted versions, and the provider can't.</exception>
+    /// <exception cref="InvalidOperationException">The container keeps deleted versions, and nothing would purge them.</exception>
+    private async ValueTask<DateTimeOffset?> PurgeAtAsync(string containerName, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        if (policies is null
+            || (await policies.GetAsync(containerName, _telemetry, cancellationToken).ConfigureAwait(false)).KeepDeletedFor is not { } keep
+            || keep <= TimeSpan.Zero)
+            return null;
+        if (!resourceRepository.SupportsSoftDelete)
+            throw new NotSupportedException($"{resourceRepository.GetType().Name} doesn't keep deleted versions, which the container {containerName}'s policy asks for.");
+        if (expiry is null)
+        {
+            throw new InvalidOperationException($"The container {containerName}'s policy keeps deleted versions, but nothing would purge them: " +
+                $"turn on {nameof(ResourcefullOptionsBuilder.UseExpiry)}, whose sweep does.");
+        }
+        return now + keep;
+    }
+
+    /// <summary>Deletes into the bin, until <paramref name="purgeAt"/>, or for good when that's <see langword="null"/>.</summary>
+    private Task<bool> DeleteAsync(ResourceLocation resource, string? versionId, ResourceConditions? conditions, DateTimeOffset? purgeAt,
+        CancellationToken cancellationToken) =>
+        purgeAt is { } at
+            ? resourceRepository.SoftDeleteResourceAsync(resource, versionId, conditions, at, cancellationToken)
+            : resourceRepository.DeleteResourceAsync(resource, versionId, conditions, cancellationToken);
 
     /// <summary>
     /// How many versions of each name <paramref name="containerName"/> keeps: its policy's, or the store-wide default.
@@ -550,8 +583,8 @@ internal partial class ResourceContainerClient(ResourceRepository resourceReposi
             DateTimeOffset now = (timeProvider ?? TimeProvider.System).GetUtcNow();
             if (Retained(waiting, now) is { } retained)
                 throw ResourceRetainedException.Create(At(resourceName), retained.VersionId, retained.RetainUntil, retained.LegalHold, now);
-            bool deleted = await resourceRepository.DeleteResourceAsync(At(resourceName), versionId,
-                conditions is { IsEmpty: false } ? conditions : null, cancellationToken).ConfigureAwait(false);
+            bool deleted = await DeleteAsync(At(resourceName), versionId, conditions is { IsEmpty: false } ? conditions : null,
+                await PurgeAtAsync(ContainerName, now, cancellationToken).ConfigureAwait(false), cancellationToken).ConfigureAwait(false);
             if (deleted) await DeleteWaitingAsync(resourceName, waiting).ConfigureAwait(false);
             return deleted;
         }, "resourcefull.conditional", conditions is { IsEmpty: false });
@@ -762,6 +795,52 @@ internal partial class ResourceContainerClient(ResourceRepository resourceReposi
             if (policies is not null) await policies.ThrowIfReadOnlyAsync(ContainerName, _telemetry, cancellationToken).ConfigureAwait(false);
             return await resourceRepository.SetLegalHoldAsync(At(resourceName), versionId, hold, cancellationToken).ConfigureAwait(false);
         }, "resourcefull.legal_hold", hold);
+
+    public Task<ResourcePage> GetDeletedPageAsync(ResourceListOptions? options = null, string? continuationToken = null,
+        CancellationToken cancellationToken = default)
+        => _telemetry.RunAsync("list_deleted", ContainerName, null, async () =>
+        {
+            options ??= new ResourceListOptions();
+            ArgumentOutOfRangeException.ThrowIfLessThan(options.PageSize, 1, nameof(options));
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(options.PageSize, ResourceListOptions.MaxPageSize, nameof(options));
+            if (options.Metadata is not null)
+                throw new ArgumentException("A listing of the bin can't look for metadata.", nameof(options));
+            string? prefix = string.IsNullOrEmpty(options.Prefix) ? null : options.Prefix;
+            (DateTimeOffset, string)? after = continuationToken is null
+                ? null
+                : ResourcePageToken.DecodeDeleted(continuationToken, prefix, nameof(continuationToken));
+
+            DeletedVersionPage page = await resourceRepository.GetDeletedPageAsync(ContainerName, prefix, after, options.PageSize,
+                cancellationToken).ConfigureAwait(false);
+            // Without URIs: a deleted version can't be downloaded.
+            return new ResourcePage(page.Versions, page.Next is { } next ? ResourcePageToken.EncodeDeleted(prefix, next) : null);
+        }, "resourcefull.page_size", options?.PageSize ?? ResourceListOptions.DefaultPageSize);
+
+    public Task<bool> UndeleteAsync(string resourceName, string? versionId = null, CancellationToken cancellationToken = default)
+        => _telemetry.RunAsync("undelete", ContainerName, resourceName, async () =>
+        {
+            ResourceNames.ThrowIfInvalidResourceName(resourceName);
+            if (policies is not null)
+            {
+                List<ResourceInfo> returning = [.. (await resourceRepository.GetDeletedVersionsAsync(At(resourceName), cancellationToken).ConfigureAwait(false))
+                    .Where(v => versionId is null || v.VersionId == versionId)];
+                if (returning.Count == 0) return false;
+                await policies.CheckUndeleteAsync(ContainerName, resourceName, returning, _telemetry, cancellationToken).ConfigureAwait(false);
+            }
+            int undeleted = await resourceRepository.UndeleteAsync(At(resourceName), versionId, cancellationToken).ConfigureAwait(false);
+            _telemetry.CountUndeleted(undeleted);
+            return undeleted > 0;
+        });
+
+    public Task<bool> PurgeDeletedAsync(string resourceName, string? versionId = null, CancellationToken cancellationToken = default)
+        => _telemetry.RunAsync("purge_deleted", ContainerName, resourceName, async () =>
+        {
+            ResourceNames.ThrowIfInvalidResourceName(resourceName);
+            if (policies is not null) await policies.ThrowIfReadOnlyAsync(ContainerName, _telemetry, cancellationToken).ConfigureAwait(false);
+            int purged = await resourceRepository.PurgeDeletedAsync(At(resourceName), versionId, null, cancellationToken).ConfigureAwait(false);
+            _telemetry.CountPurged(purged);
+            return purged > 0;
+        });
 
     public Task<ResourceContainerUsage> GetUsageAsync(CancellationToken cancellationToken = default)
         => _telemetry.RunAsync("get_usage", ContainerName, null, () => resourceRepository.GetContainerUsageAsync(ContainerName, cancellationToken));

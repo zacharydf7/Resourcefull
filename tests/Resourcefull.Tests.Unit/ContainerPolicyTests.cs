@@ -161,6 +161,65 @@ public class ContainerPolicyTests
         Assert.Throws<ArgumentOutOfRangeException>(() => builder.UseContainerPolicies(cacheFor: TimeSpan.FromSeconds(-1)));
     }
 
+    private sealed class KeepsDeletedProvider : IResourcePolicyProvider
+    {
+        public ValueTask<ResourceContainerPolicy?> GetPolicyAsync(string containerName, CancellationToken cancellationToken) =>
+            ValueTask.FromResult<ResourceContainerPolicy?>(new ResourceContainerPolicy { KeepDeletedFor = TimeSpan.FromDays(1) });
+    }
+
+    [Fact]
+    public void AddResourcefull_ShouldThrow_WhenTheDefaultPolicyKeepsDeletedVersionsWithoutExpiry()
+    {
+        // Act
+        void act() => new ServiceCollection().AddResourcefull(o => o.UseInMemory()
+            .UseContainerPolicies(new ResourceContainerPolicy { KeepDeletedFor = TimeSpan.FromDays(1) }));
+
+        // Assert
+        Assert.Contains(nameof(ResourcefullOptionsBuilder.UseExpiry), Assert.Throws<InvalidOperationException>(act).Message);
+    }
+
+    [Fact]
+    public async Task DeleteResourceIfExistsAsync_ShouldRefuseAndDeleteNothing_WhenAContainersPolicyKeepsDeletedVersionsWithoutExpiry()
+    {
+        // Arrange: a provider's policy, which startup can't check.
+        using ServiceProvider provider = new ServiceCollection()
+            .AddResourcefull(o => o.UseInMemory().UsePolicyProvider<KeepsDeletedProvider>())
+            .BuildServiceProvider();
+        IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>().CreateContainerAsync("c");
+        await container.UploadAsync("a", BinaryData.FromString("a"));
+
+        // Act
+        InvalidOperationException refused = await Assert.ThrowsAsync<InvalidOperationException>(() => container.DeleteResourceIfExistsAsync("a"));
+
+        // Assert
+        Assert.Contains(nameof(ResourcefullOptionsBuilder.UseExpiry), refused.Message);
+        Assert.True(await container.ExistsAsync("a"));
+    }
+
+    [Fact]
+    public async Task UndeleteAndPurgeDeletedAsync_ShouldRefuse_WhenTheContainerIsReadOnly()
+    {
+        // Arrange: a version in the bin, and a second store on the same storage whose policy makes it read-only.
+        using ServiceProvider provider = new ServiceCollection()
+            .AddResourcefull(o => o.UseInMemory().UseExpiry()
+                .UseContainerPolicies(new ResourceContainerPolicy { KeepDeletedFor = TimeSpan.FromDays(1) }, TimeSpan.Zero))
+            .BuildServiceProvider();
+        IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>().CreateContainerAsync("c");
+        await container.UploadAsync("a", BinaryData.FromString("a"));
+        await container.DeleteResourceIfExistsAsync("a");
+        ResourceRepository repository = provider.GetRequiredService<ResourceRepository>();
+        using ServiceProvider readOnlyProvider = new ServiceCollection()
+            .AddResourcefull(o => o.UseProvider(_ => repository, ServiceLifetime.Singleton)
+                .UseContainerPolicies(new ResourceContainerPolicy { ReadOnly = true }))
+            .BuildServiceProvider();
+        IResourceContainerClient frozen = readOnlyProvider.GetRequiredService<IResourceServiceClient>().GetContainerClient("c");
+
+        // Act & Assert
+        await Assert.ThrowsAsync<ResourcePolicyViolationException>(() => frozen.UndeleteAsync("a"));
+        await Assert.ThrowsAsync<ResourcePolicyViolationException>(() => frozen.PurgeDeletedAsync("a"));
+        Assert.Single(await container.ListDeletedAsync().ToListAsync());
+    }
+
     private sealed class ReadOnlyProvider : IResourcePolicyProvider
     {
         public ValueTask<ResourceContainerPolicy?> GetPolicyAsync(string containerName, CancellationToken cancellationToken) =>

@@ -8,8 +8,8 @@ namespace Resourcefull;
 internal sealed record ExpirySettings(TimeSpan Interval);
 
 /// <summary>
-/// Deletes expired versions when the application starts and every interval after, each time in a scope of its own,
-/// as <see cref="ResourcefullOptionsBuilder.UseExpiry"/> registers it.
+/// Deletes expired versions, then purges what's due to leave the bin, when the application starts and every interval
+/// after, each time in a scope of its own, as <see cref="ResourcefullOptionsBuilder.UseExpiry"/> registers it.
 /// </summary>
 internal sealed partial class ExpiryService(IServiceScopeFactory scopes, ExpirySettings settings, string? storeName,
     ILogger<ExpiryService> logger) : BackgroundService
@@ -27,8 +27,25 @@ internal sealed partial class ExpiryService(IServiceScopeFactory scopes, ExpiryS
                 {
                     AsyncServiceScope services = scopes.CreateAsyncScope();
                     await using var servicesDisposal = services.ConfigureAwait(false);
-                    await services.ServiceProvider.GetRequiredStoreService<IResourceServiceClient>(storeName)
-                        .DeleteExpiredAsync(stoppingToken).ConfigureAwait(false);
+                    IResourceServiceClient client = services.ServiceProvider.GetRequiredStoreService<IResourceServiceClient>(storeName);
+                    try
+                    {
+                        await client.DeleteExpiredAsync(stoppingToken).ConfigureAwait(false);
+                    }
+                    catch (Exception exception) when (exception is not NotSupportedException && !stoppingToken.IsCancellationRequested)
+                    {
+                        // The next interval tries again: the versions this one didn't reach are still expired. The purge
+                        // still runs, so a failing expiry doesn't keep what's due to leave the bin.
+                        LogFailed(logger, exception);
+                    }
+                    try
+                    {
+                        await client.PurgeDeletedAsync(stoppingToken).ConfigureAwait(false);
+                    }
+                    catch (Exception exception) when (exception is not NotSupportedException && !stoppingToken.IsCancellationRequested)
+                    {
+                        LogPurgeFailed(logger, exception);
+                    }
                 }
                 catch (NotSupportedException exception)
                 {
@@ -37,7 +54,6 @@ internal sealed partial class ExpiryService(IServiceScopeFactory scopes, ExpiryS
                 }
                 catch (Exception exception) when (!stoppingToken.IsCancellationRequested)
                 {
-                    // The next interval tries again: the versions this one didn't reach are still expired.
                     LogFailed(logger, exception);
                 }
             }
@@ -54,4 +70,7 @@ internal sealed partial class ExpiryService(IServiceScopeFactory scopes, ExpiryS
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Deleting expired versions failed; the next interval tries again.")]
     private static partial void LogFailed(ILogger logger, Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Purging versions due to leave the bin failed; the next interval tries again.")]
+    private static partial void LogPurgeFailed(ILogger logger, Exception exception);
 }

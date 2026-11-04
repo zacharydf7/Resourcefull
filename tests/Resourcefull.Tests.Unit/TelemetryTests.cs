@@ -72,14 +72,18 @@ public sealed class TelemetryTests : IDisposable
     [Fact]
     public async Task EveryClientOperation_ShouldEmitASpan_WhenCalled()
     {
-        // Arrange: a container with a version in it, so every operation has something to work on, and an expired version
-        // in another container, which the operations on "c" leave for the expiry sweep to find.
+        // Arrange: a container with a version in it, so every operation has something to work on, and in other
+        // containers, which the operations on "c" leave alone, an expired version for the expiry sweep to find and one
+        // due to leave the bin for the purge to find.
         using ServiceProvider provider = NewServices();
         var service = provider.GetRequiredService<IResourceServiceClient>();
         IResourceContainerClient container = await service.CreateContainerAsync("c");
         ResourceInfo version = await container.UploadAsync("r", BinaryData.FromString("x"));
         await (await service.CreateContainerAsync("expiring")).UploadAsync("r", BinaryData.FromString("x"),
             new ResourceUploadOptions { ExpiresAt = DateTimeOffset.UtcNow.AddDays(-1) });
+        await (await service.CreateContainerAsync("binned")).UploadAsync("r", BinaryData.FromString("x"));
+        await provider.GetRequiredService<ResourceRepository>().SoftDeleteResourceAsync(new ResourceLocation("binned", "r"), null, null,
+            DateTimeOffset.UtcNow.AddDays(-1));
         var silent = new List<string>();
 
         // Act: every public method of both client interfaces, except the ones that don't contact storage.
@@ -964,6 +968,61 @@ public sealed class TelemetryTests : IDisposable
         Assert.Equal("System.InvalidOperationException", failure["error.type"]);
         Assert.Equal("expired", Assert.Single(MeasurementsOf("resourcefull.client.cleanup_handler.failures"))["resourcefull.cleanup_reason"]);
         Assert.Empty(MeasurementsOf("resourcefull.client.expired"));
+    }
+
+    /// <summary>A store whose containers keep deleted versions, and a version in the bin that's due to be purged.</summary>
+    private static async Task<(ServiceProvider Provider, IResourceContainerClient Container)> WithDueBinAsync(
+        Action<ResourcefullOptionsBuilder>? configure = null)
+    {
+        ServiceProvider provider = new ServiceCollection().AddResourcefull(o =>
+        {
+            o.UseInMemory().UseExpiry().UseContainerPolicies(new ResourceContainerPolicy { KeepDeletedFor = TimeSpan.FromDays(1) });
+            configure?.Invoke(o);
+        }).BuildServiceProvider();
+        IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>().CreateContainerAsync("c");
+        await container.UploadAsync("due", BinaryData.FromString("x"));
+        await provider.GetRequiredService<ResourceRepository>().SoftDeleteResourceAsync(new ResourceLocation("c", "due"), null, null,
+            DateTimeOffset.UtcNow.AddDays(-1));
+        return (provider, container);
+    }
+
+    [Fact]
+    public async Task PurgeDeletedAsync_ShouldCountTheVersionsPurgedAndUndeleted_WhenCalled()
+    {
+        // Arrange: besides the due version, one to bring back and one to purge early.
+        (ServiceProvider provider, IResourceContainerClient container) = await WithDueBinAsync();
+        using ServiceProvider disposal = provider;
+        await container.UploadAsync("back", BinaryData.FromString("x"));
+        await container.UploadAsync("early", BinaryData.FromString("x"));
+        await container.DeleteResourceIfExistsAsync("back");
+        await container.DeleteResourceIfExistsAsync("early");
+
+        // Act
+        await provider.GetRequiredService<IResourceServiceClient>().PurgeDeletedAsync();
+        await container.UndeleteAsync("back");
+        await container.PurgeDeletedAsync("early");
+
+        // Assert
+        Assert.Equal(2, MeasurementsOf("resourcefull.client.purged").Count(tags => Equals(tags["resourcefull.provider"], "inmemory")));
+        Assert.Single(MeasurementsOf("resourcefull.client.undeleted"));
+        Assert.Empty(MeasurementsOf("resourcefull.client.purge.failures"));
+    }
+
+    [Fact]
+    public async Task PurgeDeletedAsync_ShouldCountTheFailedVersionsAndCleanupHandler_WhenTheHandlerThrows()
+    {
+        // Arrange
+        (ServiceProvider provider, _) = await WithDueBinAsync(o => o.UseCleanupHandler<FailingCleanupHandler>());
+        using ServiceProvider disposal = provider;
+
+        // Act
+        await Assert.ThrowsAsync<AggregateException>(() => provider.GetRequiredService<IResourceServiceClient>().PurgeDeletedAsync());
+
+        // Assert
+        Dictionary<string, object?> failure = Assert.Single(MeasurementsOf("resourcefull.client.purge.failures"));
+        Assert.Equal("System.InvalidOperationException", failure["error.type"]);
+        Assert.Equal("purged", Assert.Single(MeasurementsOf("resourcefull.client.cleanup_handler.failures"))["resourcefull.cleanup_reason"]);
+        Assert.Empty(MeasurementsOf("resourcefull.client.purged"));
     }
 
     [Fact]

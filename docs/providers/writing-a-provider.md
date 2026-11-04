@@ -320,6 +320,31 @@ throws `NotSupportedException`.
   `DeleteExpiredVersionAsync` and `DeleteExpiredVersionsAsync` leave a protected version as they leave one whose
   expiry was extended.
 
+## The bin
+
+<div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 4.0</span></div>
+
+The [bin](../deleting-safely.md#the-bin) keeps deleted versions for a while. `SupportsSoftDelete` is `false` by
+default, and the clients then refuse every delete in a container whose policy keeps deleted versions, with
+`NotSupportedException`, so nothing meant to be kept is deleted for good. To support it, support
+[expiry](#expiry), whose sweep purges the bin, return `true`, and:
+
+- **Override `SoftDeleteResourceAsync`.** It deletes as `DeleteResourceAsync` does, deciding conditions and retention
+  the same way, but keeps the versions, each with `DeletedAt` set to now and `PurgeAt` to the time it's given, and
+  leaves their content in place.
+- **Leave the bin out of everything else.** A version in the bin isn't returned by any read, listing, version list,
+  search or `GetExpiredAsync`, isn't counted in `GetContainerUsageAsync` but for `DeletedSize` and
+  `DeletedVersionCount`, and isn't moved by `MoveResourceAsync`. A name whose versions are all in the bin is free for
+  a create-only write, but a version ID in the bin stays taken. `DeleteContainerAsync` deletes the bin too.
+- **List it.** `GetDeletedPageAsync` lists a container's bin newest deletion first, then by version ID, and returns
+  where the next page starts; with a prefix, it may stop early and return a short page rather than read the whole
+  bin. `GetDeletedVersionsAsync` lists one name's.
+- **Bring versions back.** `UndeleteAsync` puts them back among the name's older versions in the order they were first
+  stored, so the current version stays current; if the name has none, the most recently stored becomes current.
+- **Purge it.** `PurgeDeletedAsync` deletes versions in the bin for good, and with a time, only those due by then,
+  deciding that in the purge itself. `GetPurgeableAsync` lists what's due across every container for the sweep, so
+  answer it from an index, as `GetExpiredAsync` is.
+
 ## Metadata search
 
 <div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 4.0</span></div>
@@ -346,7 +371,8 @@ a provider whose store can keep an index should override it:
 `ContentLength`, so it reports usage correctly, just slowly for large containers.
 [Container policies](../container-policies.md) call it before each upload they limit by size or count, so if your
 store can add up a container's versions in one query, override it. Count every version in `StoredSize` and
-`VersionCount`, and each name once in `ResourceCount`.
+`VersionCount`, and each name once in `ResourceCount`, leaving out the [bin](#the-bin), which goes in `DeletedSize` and
+`DeletedVersionCount`.
 
 `GetTopVersionsAsync` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> lists a container's
 largest versions, or those that expire soonest, for the [dashboard](../aspnet-core/dashboard.md) and an
@@ -456,6 +482,7 @@ with `NotSupportedException`, changing nothing, rather than seem to succeed:
 | `SupportsExpiry` | `GetExpiredAsync`, `DeleteExpiredVersionAsync` and `SetExpiryAsync` |
 | `SupportsUploadSessions` | the six [upload session](#upload-sessions) members |
 | `SupportsRetention` | `SupportsRetention`, `SetRetentionAsync` and `SetLegalHoldAsync` ([retention and legal holds](#retention-and-legal-holds)) |
+| `SupportsSoftDelete` | `SupportsSoftDelete` and the six other members of [the bin](#the-bin) |
 
 ```csharp
 public class FileSystemContractTests : ResourcefullContractTests

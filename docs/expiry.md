@@ -40,6 +40,11 @@ await container.UploadAsync("exports/report.zip", stream, new ResourceUploadOpti
   whose process died partway.
 - **Retained and held versions wait** <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>. A version that's [retained or under a legal hold](deleting-safely.md)
   is left until both its expiry and its retention date have passed, and its hold is lifted.
+- **Expired versions skip the bin** <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>. In a container with a [bin](deleting-safely.md#the-bin), an expired version
+  is still deleted for good, since an expiry is often set to erase data on time. A version already in the bin doesn't
+  expire there.
+- **It also purges the bin** <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>: after deleting expired versions, each sweep purges, for good, the versions whose time in a
+  [bin](deleting-safely.md#the-bin) is up. `KeepDeletedFor` needs `UseExpiry` for that reason.
 - **Without `UseExpiry`,** expiries are stored, and `IResourceServiceClient.DeleteExpiredAsync()` deletes what has
   expired, and what stopped uploads left behind, whenever you call it, such as from a scheduled job.
 
@@ -63,8 +68,10 @@ stay as they are. It returns `false` when the version is gone, as it is if the s
 ## Auditing what's deleted
 
 To record every version Resourcefull deletes by itself, such as in an audit system, register a cleanup handler. It
-hears about expired versions, and about older versions [pruned](versioning.md#keeping-a-limited-number) past
-`MaxVersions`, before each is deleted. With expiry on, pruning gives a version five minutes before the sweep deletes
+hears about expired versions, about older versions [pruned](versioning.md#keeping-a-limited-number) past
+`MaxVersions`, and <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> about versions the sweep purges from a [bin](deleting-safely.md#the-bin), with the reason
+`Purged`, before each is deleted. In a container with a bin, a pruned version goes to the bin at once, and the handler
+hears about it then, with `Pruned`. Otherwise, with expiry on, pruning gives a version five minutes before the sweep deletes
 it, so the handler hears about it then, with the reason `Expired`, or with `Pruned` if, in a container that keeps one
 version, it's deleted sooner along with the version that replaced it:
 
@@ -86,7 +93,8 @@ builder.Services.AddResourcefull(options => options.UseSqlServer(connectionStrin
   or prune that finds it, or again when its delete failed, and occasionally it isn't deleted after all, when its
   expiry was extended or something else deleted it first. Record reports by version ID to ignore repeats, and check
   `ExistsAsync` if you need to know it's gone.
-- **Your own deletes aren't reported:** audit those where your code makes them.
+- **Your own deletes aren't reported:** audit those where your code makes them. That includes putting a version in a
+  bin, and purging one early with `PurgeDeletedAsync`.
 - **It's a scoped service,** so it can use your other services.
 
 ## Seeing what expires

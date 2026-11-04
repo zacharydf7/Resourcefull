@@ -137,13 +137,16 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
     protected override async Task<ResourceContainerUsage> MeasureContainerAsync(ResourceDbContext dbContext, string resourceContainerName,
         CancellationToken cancellationToken)
     {
-        // One aggregate over the container's version rows, from their recorded lengths, which doesn't touch the chunks.
-        // Only if an early release stored versions without a length are their chunks' lengths added up, separately.
+        // One aggregate over the container's version rows, from their recorded lengths, which doesn't touch the chunks;
+        // the bin's rows are added up apart. Only if an early release stored versions without a length are their chunks'
+        // lengths added up, separately.
         UsageRow usage = (await dbContext.Database.SqlQuery<UsageRow>(dbContext.QualifyTables($"""
-            SELECT COALESCE(SUM(r.[ContentLength]), 0) AS [StoredSize],
+            SELECT COALESCE(SUM(CASE WHEN r.[DeletedAt] IS NULL THEN r.[ContentLength] END), 0) AS [StoredSize],
                 COUNT_BIG(CASE WHEN r.[IsLatest] = 1 THEN 1 END) AS [ResourceCount],
-                COUNT_BIG(*) AS [VersionCount],
-                COUNT_BIG(CASE WHEN r.[ContentLength] IS NULL THEN 1 END) AS [Unmeasured]
+                COUNT_BIG(CASE WHEN r.[DeletedAt] IS NULL THEN 1 END) AS [VersionCount],
+                COUNT_BIG(CASE WHEN r.[ContentLength] IS NULL AND r.[DeletedAt] IS NULL THEN 1 END) AS [Unmeasured],
+                COALESCE(SUM(CASE WHEN r.[DeletedAt] IS NOT NULL THEN r.[ContentLength] END), 0) AS [DeletedSize],
+                COUNT_BIG(r.[DeletedAt]) AS [DeletedVersionCount]
             FROM [Resources] r
             WHERE r.[ContainerName] = {resourceContainerName} AND r.[StagedAt] IS NULL
             """)).ToListAsync(cancellationToken).ConfigureAwait(false))[0];
@@ -154,10 +157,11 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
                 SELECT COALESCE(SUM(CAST(DATALENGTH(ch.[Data]) AS bigint)), 0) AS [Value]
                 FROM [Resources] r JOIN [ResourceChunks] ch ON ch.[ResourceId] = r.[Id]
                 WHERE r.[ContainerName] = {resourceContainerName} AND r.[ContentLength] IS NULL AND r.[StagedAt] IS NULL
+                    AND r.[DeletedAt] IS NULL
                 """)).SingleAsync(cancellationToken).ConfigureAwait(false);
         }
 
-        return new ResourceContainerUsage(storedSize, usage.ResourceCount, usage.VersionCount);
+        return new ResourceContainerUsage(storedSize, usage.ResourceCount, usage.VersionCount, usage.DeletedSize, usage.DeletedVersionCount);
     }
 
     protected override async Task<bool> LockVersionInContainerAsync(ResourceDbContext attempt, long resourceId,
@@ -242,6 +246,8 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
         public long StoredSize { get; set; }
         public long ResourceCount { get; set; }
         public long VersionCount { get; set; }
+        public long DeletedSize { get; set; }
+        public long DeletedVersionCount { get; set; }
         public long Unmeasured { get; set; }
     }
 }

@@ -48,17 +48,18 @@ internal sealed partial class ObjectStoreRepository
         for (int attempt = 1; ; attempt++)
         {
             (Stored<Head> sourceRead, Head? moving) = await ReadHeadToChangeAsync(sourceKey, cancellationToken).ConfigureAwait(false);
-            StoredVersion? current = moving?.Versions[^1];
+            StoredVersion? current = moving?.Versions.LastOrDefault();
             sourceConditions?.ThrowIfNotMet(source, current?.VersionId, current?.ContentHash);
-            if (moving is null) return false;
+            if (current is null) return false;
+            // A destination with only a bin is free; the bin stays there.
             (Stored<Head> destinationRead, Head? existing) = await ReadHeadToChangeAsync(destinationKey, cancellationToken)
                 .ConfigureAwait(false);
-            if (existing is not null) throw ResourceExists(destination);
+            if (Live(existing) is not null) throw ResourceExists(destination);
 
             // Across containers, each version's content is copied under the destination's ID, so the destination's
             // usage counts it and deleting the source container doesn't take it. Every version gets a new expiry entry
             // and protection entry for its new name.
-            List<StoredVersion> moved = [.. moving.Versions.Select(v => v with
+            List<StoredVersion> moved = [.. moving!.Versions.Select(v => v with
             {
                 Blob = across ? Guid.NewGuid().ToString("N") : v.Blob,
                 ExpiryToken = v.ExpiresAt is null ? null : Guid.NewGuid().ToString("N"),
@@ -69,8 +70,8 @@ internal sealed partial class ObjectStoreRepository
             var entry = new MoveEntry(MoveState.Pending, from.Id, source.ResourceName, to.Id, destination.ResourceName,
                 [.. moving.Versions.SelectMany(v => LeftBehind(from.Id, v, across))],
                 [.. moved.SelectMany(v => LeftBehind(to.Id, v, across))]);
-            if (await TryMoveAsync(entry, moving, moved, sourceRead.ETag, destinationRead.ETag, destination, cancellationToken)
-                .ConfigureAwait(false))
+            if (await TryMoveAsync(entry, moving, moved, existing?.Deleted, sourceRead.ETag, destinationRead.ETag, destination,
+                cancellationToken).ConfigureAwait(false))
             {
                 break;
             }
@@ -98,10 +99,13 @@ internal sealed partial class ObjectStoreRepository
     private IEnumerable<string> LeftBehind(string containerId, StoredVersion version, bool across) =>
         across ? KeysOf(containerId, version) : new[] { ExpiryKeyOf(containerId, version), ProtectionKeyOf(containerId, version) }.OfType<string>();
 
-    /// <summary>Makes one try at a move, and finishes it, whichever way it was decided.</summary>
+    /// <summary>
+    /// Makes one try at a move, and finishes it, whichever way it was decided. The destination keeps
+    /// <paramref name="destinationBin"/>, the bin it had.
+    /// </summary>
     /// <returns>Whether the move happened; <see langword="false"/> when another writer changed a head first.</returns>
-    private async Task<bool> TryMoveAsync(MoveEntry entry, Head moving, List<StoredVersion> moved, string? sourceETag,
-        string? destinationETag, ResourceLocation destination, CancellationToken cancellationToken)
+    private async Task<bool> TryMoveAsync(MoveEntry entry, Head moving, List<StoredVersion> moved, List<StoredVersion>? destinationBin,
+        string? sourceETag, string? destinationETag, ResourceLocation destination, CancellationToken cancellationToken)
     {
         string entryKey = _keys.Move(Guid.NewGuid().ToString("N"));
         var mark = new HeadMove(entryKey[_keys.Moves.Length..], false);
@@ -136,7 +140,7 @@ internal sealed partial class ObjectStoreRepository
                 && await TryPutAsync(_keys.Head(entry.SourceContainerId, entry.SourceName),
                     id => Serialize(moving with { WriteId = id, Move = mark }), sourceETag).ConfigureAwait(false)
                 && await TryPutAsync(_keys.Head(entry.DestinationContainerId, entry.DestinationName),
-                    id => Serialize(new Head(moved, id, mark with { Into = true })), destinationETag).ConfigureAwait(false);
+                    id => Serialize(new Head(moved, id, mark with { Into = true }, destinationBin)), destinationETag).ConfigureAwait(false);
             // Not canceled from here, so a move whose heads are marked is always decided.
             decided = await DecideMoveAsync(entryKey, marked ? MoveState.Committed : MoveState.Abandoned, CancellationToken.None)
                 .ConfigureAwait(false);
@@ -336,19 +340,28 @@ internal sealed partial class ObjectStoreRepository
         {
             Stored<Head> read = await GetAsync<Head>(key, cancellationToken).ConfigureAwait(false);
             if (read.Value?.Move?.Id != moveId) return;
-            // A head left with no versions keeps only a write ID, as any emptied head does.
+            // A head left with no versions keeps only a write ID, as any emptied head does, unless it has a bin.
             Head cleared = Decided(read.Value, state) ?? new Head([]);
             if (await TryPutAsync(key, id => Serialize(cleared with { WriteId = id, Move = null }), read.ETag).ConfigureAwait(false))
+            {
+                // The move may have emptied it, or filled it, so its mark is put or deleted whenever it has a bin.
+                if (IsBinOnly(cleared) || read.Value.Deleted is { Count: > 0 }) await MarkEmptiedQuietlyAsync(key, IsBinOnly(cleared)).ConfigureAwait(false);
                 return;
+            }
             ObjectStoreTelemetry.CountRetry(storeName);
             await WaitToRetryAsync(key, attempt, cancellationToken).ConfigureAwait(false);
         }
     }
 
     /// <summary>
-    /// The head as readers see it: as stored, or for one a move marked, as the move's entry decides. It never writes.
+    /// The head as readers see it: as stored, or for one a move marked, as the move's entry decides; without its bin,
+    /// and <see langword="null"/> when it has no versions outside it. It never writes.
     /// </summary>
     private async Task<Head?> ReadHeadAsync(string key, CancellationToken cancellationToken) =>
+        Live(await ReadStoredHeadAsync(key, cancellationToken).ConfigureAwait(false));
+
+    /// <summary>As <see cref="ReadHeadAsync"/>, with the bin, and so not <see langword="null"/> for a head with only a bin.</summary>
+    private async Task<Head?> ReadStoredHeadAsync(string key, CancellationToken cancellationToken) =>
         (await ResolveHeadAsync(key, false, cancellationToken).ConfigureAwait(false)).Head;
 
     /// <summary>
@@ -382,11 +395,14 @@ internal sealed partial class ObjectStoreRepository
 
     /// <summary>
     /// A head a move marked, as the move decided it: the versions are at the destination once it's committed, and at
-    /// the source otherwise. A mark whose entry stays gone belongs to a try the sweep finished as abandoned before the try
-    /// wrote the mark, since a finished move clears its marks before deleting its entry; it reads as abandoned.
+    /// the source otherwise, and each side keeps its own bin. A mark whose entry stays gone belongs to a try the sweep
+    /// finished as abandoned before the try wrote the mark, since a finished move clears its marks before deleting its
+    /// entry; it reads as abandoned.
     /// </summary>
     private static Head? Decided(Head head, MoveState state) =>
-        head.Move!.Into == (state == MoveState.Committed) ? head with { Move = null } : null;
+        head.Move!.Into == (state == MoveState.Committed) ? head with { Move = null }
+        : head.Deleted is { Count: > 0 } ? head with { Versions = [], Move = null }
+        : null;
 
     /// <summary>
     /// Finishes the moves whose movers stopped before they could: it abandons those still pending, then clears the

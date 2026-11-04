@@ -351,6 +351,66 @@ internal class ResourceServiceClient(ResourceRepository resourceRepository, IOpt
         }).ConfigureAwait(false);
     }
 
+    public async Task<int> PurgeDeletedAsync(CancellationToken cancellationToken = default)
+    {
+        // Nothing can be in a bin the provider doesn't have, and expiry still runs.
+        if (!resourceRepository.SupportsSoftDelete) return 0;
+        DateTimeOffset now = (timeProvider ?? TimeProvider.System).GetUtcNow();
+        // Most sweeps find nothing due, and record nothing.
+        if ((await resourceRepository.GetPurgeableAsync(now, 1, null, cancellationToken).ConfigureAwait(false)).Count == 0) return 0;
+
+        return await _telemetry.RunAsync("purge", null, null, async activity =>
+        {
+            int purged = 0, failed = 0;
+            var failures = new List<Exception>();
+            (DateTimeOffset PurgeAt, string VersionId)? after = null;
+            while (true)
+            {
+                IReadOnlyList<ResourceInfo> due = await resourceRepository.GetPurgeableAsync(now, ExpiredPerBatch, after, cancellationToken).ConfigureAwait(false);
+                foreach (ResourceInfo version in due)
+                {
+                    try
+                    {
+                        // A read-only container keeps its bin, as it keeps its expired versions.
+                        if (policies is not null && await policies.IsReadOnlyAsync(version.ContainerName, _telemetry, cancellationToken).ConfigureAwait(false))
+                            continue;
+                        // Told first, so a handler that fails leaves the version for the next sweep rather than purged unreported.
+                        if (cleanupHandler is not null)
+                        {
+                            await _telemetry.NotifyCleanupAsync(cleanupHandler, new ResourceCleanup(version, ResourceCleanupReason.Purged, now),
+                                cancellationToken).ConfigureAwait(false);
+                        }
+                        int count = await resourceRepository.PurgeDeletedAsync(new ResourceLocation(version.ContainerName, version.Name),
+                            version.VersionId, now, cancellationToken).ConfigureAwait(false);
+                        purged += count;
+                        _telemetry.CountPurged(count);
+                    }
+                    catch (Exception exception) when (exception is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+                    {
+                        // One version that keeps failing mustn't hold up the rest; only canceling the sweep stops it.
+                        failed++;
+                        _telemetry.CountFailure(Telemetry.PurgeFailures, exception);
+                        if (failures.Count < FailuresKept) failures.Add(exception);
+                    }
+                }
+
+                if (due.Count < ExpiredPerBatch) break;
+                if (due[^1].VersionId == after?.VersionId)
+                    throw new InvalidOperationException($"{resourceRepository.GetType().Name} listed the same versions to purge again: its GetPurgeableAsync must list the versions after the one given.");
+                after = (due[^1].PurgeAt ?? throw new InvalidOperationException($"{resourceRepository.GetType().Name} listed a version to purge without a purge time: its GetPurgeableAsync must list only versions with a PurgeAt."),
+                    due[^1].VersionId);
+            }
+
+            activity?.SetTag("resourcefull.purged", purged);
+            if (failed > 0)
+            {
+                throw new AggregateException($"{failed} versions due to leave the bin weren't purged, and stay for the next sweep; " +
+                    $"{purged} were. The first {failures.Count} failures follow.", failures);
+            }
+            return purged;
+        }).ConfigureAwait(false);
+    }
+
     /// <summary>
     /// How long after an upload last stored anything the sweep takes it as abandoned: a provider that stages content,
     /// as SQL Server's does, marks an upload as running every 10 minutes while its content keeps arriving. A day, so an
@@ -358,7 +418,10 @@ internal class ResourceServiceClient(ResourceRepository resourceRepository, IOpt
     /// </summary>
     internal static readonly TimeSpan AbandonedUploadAge = TimeSpan.FromHours(24);
 
-    /// <summary>How many expired versions one query lists, so a cleanup holds a bounded batch at a time.</summary>
+    /// <summary>
+    /// How many expired versions, or versions due to leave the bin, one query lists, so a cleanup holds a bounded batch
+    /// at a time.
+    /// </summary>
     private const int ExpiredPerBatch = 100;
 
     /// <summary>

@@ -212,6 +212,28 @@ public interface IResourceServiceClient
         => throw new NotSupportedException($"{GetType().Name} doesn't support expiry.");
 
     /// <summary>
+    /// Purges every version whose <see cref="ResourceInfo.PurgeAt"/> has passed from the bin of each container that isn't
+    /// read-only, telling the <see cref="IResourceCleanupHandler"/> about each one first. A read-only container keeps
+    /// its bin until it's writable again. <see cref="ResourcefullOptionsBuilder.UseExpiry"/> calls it every interval,
+    /// after <see cref="DeleteExpiredAsync"/>; call it yourself to purge another way.
+    /// <para>Coming in 4.0.</para>
+    /// </summary>
+    /// <param name="cancellationToken">Stops the purge; the versions already purged stay purged.</param>
+    /// <returns>How many versions were purged; 0 when the provider has no bin.</returns>
+    /// <exception cref="AggregateException">
+    /// Some versions weren't purged, because the cleanup handler or the purge failed; the others were, and those stay
+    /// for the next call. Its message counts them all, and it holds the first few failures.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// The provider broke its <c>GetPurgeableAsync</c> contract: it listed the same versions twice, or listed one
+    /// without a purge time.
+    /// </exception>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
+    /// <exception cref="NotSupportedException">This is the default implementation.</exception>
+    public Task<int> PurgeDeletedAsync(CancellationToken cancellationToken = default)
+        => throw new NotSupportedException($"{GetType().Name} doesn't keep deleted versions.");
+
+    /// <summary>
     /// Lists versions, in every container, whose <see cref="ResourceInfo.ExpiresAt"/> has passed but that
     /// <see cref="DeleteExpiredAsync"/> hasn't deleted yet, each with <see cref="ResourceInfo.IsLatest"/> set: the ones that
     /// expired first come first, and those that expired at the same time are in version ID order. Use it to see whether

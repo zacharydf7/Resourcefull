@@ -134,6 +134,9 @@ namespace Resourcefull.SqlServer.Migrations
                     b.Property<long?>("DeclaredLength")
                         .HasColumnType("bigint");
 
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("datetimeoffset");
+
                     b.Property<DateTimeOffset?>("ExpiresAt")
                         .HasColumnType("datetimeoffset");
 
@@ -155,6 +158,9 @@ namespace Resourcefull.SqlServer.Migrations
                         .HasMaxLength(256)
                         .HasColumnType("nvarchar(256)")
                         .UseCollation("Latin1_General_100_BIN2");
+
+                    b.Property<DateTimeOffset?>("PurgeAt")
+                        .HasColumnType("datetimeoffset");
 
                     b.Property<DateTimeOffset?>("RetainUntil")
                         .HasColumnType("datetimeoffset");
@@ -195,6 +201,15 @@ namespace Resourcefull.SqlServer.Migrations
                     b.HasIndex("ExpiresAt", "VersionId")
                         .HasDatabaseName("IX_Resources_ExpiresAt")
                         .HasFilter("[ExpiresAt] IS NOT NULL");
+
+                    b.HasIndex("PurgeAt", "VersionId")
+                        .HasDatabaseName("IX_Resources_PurgeAt")
+                        .HasFilter("[PurgeAt] IS NOT NULL");
+
+                    b.HasIndex("ContainerName", "DeletedAt", "VersionId")
+                        .IsDescending(false, true, false)
+                        .HasDatabaseName("IX_Resources_DeletedAt")
+                        .HasFilter("[DeletedAt] IS NOT NULL");
 
                     b.HasIndex("ContainerName", "Name", "VersionId")
                         .IsUnique()

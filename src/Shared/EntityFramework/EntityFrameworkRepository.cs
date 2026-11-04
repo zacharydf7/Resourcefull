@@ -1153,7 +1153,9 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
             : new ResourceOrigin(r.CopiedFromContainerName!, r.CopiedFromName!, r.CopiedFromVersionId),
         ExpiresAt = r.ExpiresAt,
         RetainUntil = r.RetainUntil,
-        LegalHold = r.LegalHold
+        LegalHold = r.LegalHold,
+        DeletedAt = r.DeletedAt,
+        PurgeAt = r.PurgeAt
     };
 
     /// <summary>A stored version already read, as the clients see it.</summary>
@@ -1615,6 +1617,193 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
             await Version(dbContext.Resources, resource.ContainerName, resource.ResourceName, versionId)
                 .ExecuteUpdateAsync(s => s.SetProperty(r => r.LegalHold, hold), ct).ConfigureAwait(false) > 0, cancellationToken);
 
+    public override bool SupportsSoftDelete => true;
+
+    /// <summary>
+    /// Marks the versions deleted, in one transaction under the name's lock that decides the conditions and retention,
+    /// and makes the most recently stored remaining version current if the current one went. Nothing is removed, so
+    /// unlike a delete of a name with many versions, it needs no batches.
+    /// </summary>
+    public override Task<bool> SoftDeleteResourceAsync(ResourceLocation resource, string? versionId, ResourceConditions? conditions,
+        DateTimeOffset purgeAt, CancellationToken cancellationToken = default)
+    {
+        (string resourceContainerName, string resourceName) = resource;
+        bool deletedInAnEarlierAttempt = false;
+        return WriteNameAsync(resourceContainerName, resourceName, async (dbContext, ct) =>
+        {
+            IQueryable<ResourceModel> targets = versionId is null
+                ? Versions(dbContext.Resources, resourceContainerName, resourceName)
+                : Version(dbContext.Resources, resourceContainerName, resourceName, versionId);
+            // A retry after a commit whose acknowledgement was lost finds what it deleted in the bin. The conditions it
+            // met no longer hold then, and it mustn't report that nothing was deleted.
+            if (deletedInAnEarlierAttempt && !await targets.AnyAsync(ct).ConfigureAwait(false)) return true;
+
+            await ThrowIfNotMetAsync(dbContext, conditions ?? new ResourceConditions(), resourceContainerName, resourceName, ct).ConfigureAwait(false);
+            List<ResourceModel> deleting = await targets.ToListAsync(ct).ConfigureAwait(false);
+            if (deleting.Count == 0) return deletedInAnEarlierAttempt = false;
+            DateTimeOffset now = Now();
+            foreach (ResourceModel version in deleting) ThrowIfRetained(version, now);
+
+            bool lostCurrent = deleting.Any(v => v.IsLatest);
+            foreach (ResourceModel version in deleting)
+            {
+                version.DeletedAt = now;
+                version.PurgeAt = purgeAt;
+                version.IsLatest = false;
+            }
+            // Saved before another version becomes current, so the index of current versions never holds two.
+            await dbContext.SaveChangesAsync(ct).ConfigureAwait(false);
+            if (lostCurrent)
+            {
+                ResourceModel? next = await Versions(dbContext.Resources, resourceContainerName, resourceName)
+                    .OrderByDescending(r => r.Id)
+                    .FirstOrDefaultAsync(ct).ConfigureAwait(false);
+                if (next is not null)
+                {
+                    next.IsLatest = true;
+                    await dbContext.SaveChangesAsync(ct).ConfigureAwait(false);
+                }
+                await IndexNameAsync(dbContext, resourceContainerName, resourceName, ct).ConfigureAwait(false);
+            }
+            return deletedInAnEarlierAttempt = true;
+        }, cancellationToken);
+    }
+
+    /// <summary>The versions in bins, which the filter on every other query leaves out.</summary>
+    private static IQueryable<ResourceModel> Bin(ResourceDbContext dbContext) =>
+        dbContext.Resources.IgnoreQueryFilters().Where(r => r.DeletedAt != null);
+
+    /// <summary>A name's versions in the bin, or one of them when <paramref name="versionId"/> is set.</summary>
+    private IQueryable<ResourceModel> Binned(ResourceDbContext dbContext, ResourceLocation resource, string? versionId)
+    {
+        IQueryable<ResourceModel> binned = Versions(Bin(dbContext), resource.ContainerName, resource.ResourceName);
+        if (versionId is null) return binned;
+        return HasNul(versionId) ? binned.Where(r => false) : binned.Where(r => r.VersionId == versionId);
+    }
+
+    /// <summary>A seek on the index of versions in bins, newest deletion first.</summary>
+    public override async Task<DeletedVersionPage> GetDeletedPageAsync(string resourceContainerName, string? prefix,
+        (DateTimeOffset DeletedAt, string VersionId)? after, int pageSize, CancellationToken cancellationToken = default)
+    {
+        if (HasNul(resourceContainerName) || HasNul(prefix)) return new DeletedVersionPage([], null);
+        using ResourceDbContext dbContext = dbContextFactory.CreateDbContext();
+        IQueryable<ResourceModel> bin = Bin(dbContext).Where(r => r.ContainerName == resourceContainerName);
+        if (prefix is not null) bin = WithNamePrefix(bin, prefix, null);
+        if (after is { } last)
+        {
+            DateTimeOffset afterDeleted = last.DeletedAt;
+            string? afterVersion = CutAtNul(last.VersionId);
+            // Written as a range on the index's second column, so it seeks to where the last page ended.
+            bin = bin.Where(r => r.DeletedAt <= afterDeleted
+                && (r.DeletedAt < afterDeleted || string.Compare(r.VersionId, afterVersion) > 0));
+        }
+
+        // One more than a page, to tell whether another follows.
+        List<ResourceInfo> found = await bin
+            .OrderByDescending(r => r.DeletedAt)
+            .ThenBy(r => r.VersionId)
+            .Take(pageSize + 1)
+            .Select(AsResourceInfo)
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
+        if (found.Count <= pageSize) return new DeletedVersionPage(found, null);
+        found.RemoveAt(pageSize);
+        return new DeletedVersionPage(found, (found[^1].DeletedAt!.Value, found[^1].VersionId));
+    }
+
+    public override async Task<IReadOnlyList<ResourceInfo>> GetDeletedVersionsAsync(ResourceLocation resource,
+        CancellationToken cancellationToken = default)
+    {
+        using ResourceDbContext dbContext = dbContextFactory.CreateDbContext();
+        return await Binned(dbContext, resource, null)
+            .OrderByDescending(r => r.DeletedAt)
+            .ThenBy(r => r.VersionId)
+            .Select(AsResourceInfo)
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Takes the versions out of the bin under the name's lock. They keep their row IDs, which order a name's versions,
+    /// so they come back among the older versions in the order they were stored.
+    /// </summary>
+    public override Task<int> UndeleteAsync(ResourceLocation resource, string? versionId, CancellationToken cancellationToken = default)
+    {
+        int undeletedInAnEarlierAttempt = 0;
+        return WriteNameAsync(resource.ContainerName, resource.ResourceName, async (dbContext, ct) =>
+        {
+            List<ResourceModel> returning = await Binned(dbContext, resource, versionId).ToListAsync(ct).ConfigureAwait(false);
+            // A retry after a commit whose acknowledgement was lost finds them back already.
+            if (returning.Count == 0) return undeletedInAnEarlierAttempt;
+
+            bool hasCurrent = await Version(dbContext.Resources, resource.ContainerName, resource.ResourceName, null)
+                .AnyAsync(ct).ConfigureAwait(false);
+            foreach (ResourceModel version in returning)
+            {
+                version.DeletedAt = null;
+                version.PurgeAt = null;
+            }
+            if (!hasCurrent) returning.MaxBy(r => r.Id)!.IsLatest = true;
+            await dbContext.SaveChangesAsync(ct).ConfigureAwait(false);
+            if (!hasCurrent) await IndexNameAsync(dbContext, resource.ContainerName, resource.ResourceName, ct).ConfigureAwait(false);
+            return undeletedInAnEarlierAttempt = returning.Count;
+        }, cancellationToken);
+    }
+
+    /// <summary>
+    /// Deletes the versions under the name's lock, in batches of up to <see cref="ChunksPerDeleteBatch"/> chunks that
+    /// each commit on their own, as a delete of a name does.
+    /// </summary>
+    public override async Task<int> PurgeDeletedAsync(ResourceLocation resource, string? versionId, DateTimeOffset? dueBy,
+        CancellationToken cancellationToken = default)
+    {
+        int purged = 0;
+        while (true)
+        {
+            int purgedInAnEarlierAttempt = 0;
+            (int count, bool more) = await WriteNameAsync(resource.ContainerName, resource.ResourceName, async (dbContext, ct) =>
+            {
+                IQueryable<ResourceModel> binned = Binned(dbContext, resource, versionId);
+                if (dueBy is { } due) binned = binned.Where(r => r.PurgeAt <= due);
+                var found = await binned.OrderBy(r => r.Id).Select(r => new { r.Id, Chunks = r.Chunks!.Count }).ToListAsync(ct).ConfigureAwait(false);
+                // A retry after a commit whose acknowledgement was lost finds what it purged gone.
+                if (found.Count == 0) return (purgedInAnEarlierAttempt, false);
+
+                var batch = found.Take(CountWithinDeleteBudget(found.Select(f => f.Chunks))).ToList();
+                await DeleteLargeVersionsChunksAsync(dbContext, batch.Select(v => (v.Id, v.Chunks)), ct).ConfigureAwait(false);
+                // Removed by key: they were read just now, under the name's lock.
+                List<ResourceModel> versions = [.. batch.Select(v => new ResourceModel
+                {
+                    Id = v.Id, ContainerName = resource.ContainerName, Name = resource.ResourceName
+                })];
+                dbContext.Resources.AttachRange(versions);
+                dbContext.Resources.RemoveRange(versions);
+                await dbContext.SaveChangesAsync(ct).ConfigureAwait(false);
+                return (purgedInAnEarlierAttempt = batch.Count, batch.Count < found.Count);
+            }, cancellationToken).ConfigureAwait(false);
+            purged += count;
+            if (!more) return purged;
+        }
+    }
+
+    /// <summary>A seek on the index of versions in bins by purge time, as <see cref="GetExpiredAsync"/> seeks expiries.</summary>
+    public override async Task<IReadOnlyList<ResourceInfo>> GetPurgeableAsync(DateTimeOffset now, int maxVersions,
+        (DateTimeOffset PurgeAt, string VersionId)? after = null, CancellationToken cancellationToken = default)
+    {
+        using ResourceDbContext dbContext = dbContextFactory.CreateDbContext();
+        IQueryable<ResourceModel> due = Bin(dbContext).Where(r => r.PurgeAt != null && r.PurgeAt <= now);
+        if (after is { } last)
+        {
+            (DateTimeOffset afterPurge, string afterVersion) = last;
+            due = due.Where(r => r.PurgeAt >= afterPurge && (r.PurgeAt > afterPurge || string.Compare(r.VersionId, afterVersion) > 0));
+        }
+
+        return await due
+            .OrderBy(r => r.PurgeAt)
+            .ThenBy(r => r.VersionId)
+            .Take(maxVersions)
+            .Select(AsResourceInfo)
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
+    }
+
     /// <summary>Whether a stored version may be deleted at <paramref name="now"/>: it's neither held nor retained.</summary>
     private static bool IsDeletable(ResourceModel version, DateTimeOffset now) => !version.LegalHold && !(version.RetainUntil > now);
 
@@ -1907,7 +2096,7 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
         if (HasNul(versionId)) return query.Where(r => false);
         query = Versions(query, resourceContainerName, resourceName);
 
-        // A current version is never staged, so the filter on staged versions goes. With its condition, SQL Server
+        // A current version is never staged or in the bin, so the filter on those goes. With its condition, SQL Server
         // was measured caching a scan for this query in some runs, rather than a seek.
         return versionId == null
             ? query.IgnoreQueryFilters().Where(r => r.IsLatest)

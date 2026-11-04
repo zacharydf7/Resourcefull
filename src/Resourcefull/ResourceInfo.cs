@@ -100,4 +100,20 @@ public sealed record ResourceInfo
     /// </summary>
     /// <param name="now">The time to judge by.</param>
     public bool IsDeletableAt(DateTimeOffset now) => !LegalHold && !(RetainUntil > now);
+
+    /// <summary>
+    /// When the version was deleted into the bin, for a version that
+    /// <see cref="IResourceContainerClient.ListDeletedAsync"/> lists; <see langword="null"/> for every other version.
+    /// <para>Coming in 4.0.</para>
+    /// </summary>
+    public DateTimeOffset? DeletedAt { get; init; }
+
+    /// <summary>
+    /// When the version in the bin is purged for good, within one interval, by
+    /// <see cref="ResourcefullOptionsBuilder.UseExpiry"/>: its <see cref="DeletedAt"/> plus the
+    /// <see cref="ResourceContainerPolicy.KeepDeletedFor"/> in force when it was deleted. <see langword="null"/> for a
+    /// version that isn't in the bin.
+    /// <para>Coming in 4.0.</para>
+    /// </summary>
+    public DateTimeOffset? PurgeAt { get; init; }
 }
