@@ -28,6 +28,7 @@ internal class ResourceDbContext(DbContextOptions<ResourceDbContext> options) : 
     internal DbSet<ResourceModel> Resources { get; set; }
     internal DbSet<ResourceChunkModel> ResourceChunks { get; set; }
     internal DbSet<ResourceContainerModel> ResourceContainers { get; set; }
+    internal DbSet<ResourceMetadataModel> ResourceMetadata { get; set; }
 
     /// <summary>
     /// The schema given to <c>UseSqlServer</c>, or <see langword="null"/> without one: the tables' names are then left
@@ -36,7 +37,7 @@ internal class ResourceDbContext(DbContextOptions<ResourceDbContext> options) : 
     internal string? Schema { get; } = options.FindExtension<SchemaOptionsExtension>()?.Schema;
 
     /// <summary>The model's tables, which go in the schema given to <c>UseSqlServer</c> when there is one.</summary>
-    internal static readonly string[] TableNames = ["Resources", "ResourceChunks", "ResourceContainers"];
+    internal static readonly string[] TableNames = ["Resources", "ResourceChunks", "ResourceContainers", "ResourceMetadata"];
 
     private static readonly Regex TableName = new($@"(?<!\.)\[({string.Join("|", TableNames)})\]", RegexOptions.Compiled);
 

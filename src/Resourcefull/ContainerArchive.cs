@@ -200,6 +200,8 @@ internal static class ContainerArchive
             [.. manifest.Resources.SelectMany(r => r.Versions.Where(v => v.RetainUntil is not null || v.LegalHold).Select(v => (r.Name, v)))];
         if (protectedVersions.Count > 0 && !repository.SupportsRetention)
             throw new NotSupportedException($"{repository.GetType().Name} doesn't support retention, which the export's versions have.");
+        foreach (ManifestVersion version in manifest.Resources.SelectMany(r => r.Versions))
+            repository.ThrowIfUnsearchable(version.Metadata, "source");
 
         // The container is new, so its usage is what the import has stored so far: counted here, so a policy's limits
         // don't add up the container again before each version.

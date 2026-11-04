@@ -11,6 +11,8 @@ namespace Resourcefull.Tests.Unit.InMemory;
 /// </summary>
 public class MinimalProviderContractTests : ResourcefullContractTests
 {
+    protected override bool SharesStoreBetweenServiceProviders => false;
+
     protected override ServiceProvider BuildServiceProvider(Action<ResourcefullOptionsBuilder>? configure = null)
     {
         var services = new ServiceCollection();

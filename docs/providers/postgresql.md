@@ -23,9 +23,9 @@ particular to PostgreSQL; [Provider features](features.md) compares the provider
 
 ## Choosing the database
 
-The connection string names the database that holds Resourcefull's tables: `ResourceContainers`, `Resources` and
-`ResourceChunks`, plus EF Core's migration history, `__EFMigrationsHistory`. It can be a database of its own or your
-application's, as long as none of your tables share those names, or Resourcefull's tables are in a
+The connection string names the database that holds Resourcefull's tables: `ResourceContainers`, `Resources`,
+`ResourceChunks` and `ResourceMetadata`, plus EF Core's migration history, `__EFMigrationsHistory`. It can be a database
+of its own or your application's, as long as none of your tables share those names, or Resourcefull's tables are in a
 [schema of their own](#choosing-a-schema). Anything Npgsql accepts in a connection string works; keep it out of source
 control, in user secrets, environment variables or a secrets store.
 

@@ -30,7 +30,23 @@ public class ObjectKeysTests
         Assert.DoesNotContain('.', key);
         Assert.DoesNotContain('\\', key);
         Assert.All(key.Split('/'), segment => Assert.InRange(Encoding.UTF8.GetByteCount(segment), 1, ObjectKeys.SegmentBytes));
-        Assert.InRange(Encoding.UTF8.GetByteCount(Keys.Head(new string('0', 32), name)), 1, 1024 - 200 + "resourcefull/".Length);
+        Assert.InRange(Encoding.UTF8.GetByteCount(Keys.Head(new string('0', 32), name)), 1, 1024 - 190 + "resourcefull/".Length);
+    }
+
+    [Theory]
+    [MemberData(nameof(Names))]
+    public void SearchEntry_ShouldGiveAKeyThatFits_WhenGivenTheLongestKeyAndValue(string name)
+    {
+        // Act
+        string key = Keys.SearchEntry(new string('0', 32), new string('k', ResourceMetadataMatch.MaxKeyLength),
+            new string('名', ResourceMetadataMatch.MaxValueLength), name);
+
+        // Assert: within what's left of S3's 1,024 bytes, and of Azure's 1,024 characters, after the longest key prefix, and
+        // listed under its value's entries.
+        Assert.InRange(Encoding.UTF8.GetByteCount(key), 1, 1024 - 190 + "resourcefull/".Length);
+        Assert.InRange(key.Length, 1, 1024 - 190 + "resourcefull/".Length);
+        Assert.StartsWith(Keys.SearchEntries(new string('0', 32), new string('k', ResourceMetadataMatch.MaxKeyLength),
+            new string('名', ResourceMetadataMatch.MaxValueLength)), key);
     }
 
     [Fact]

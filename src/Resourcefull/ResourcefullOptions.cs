@@ -20,6 +20,15 @@ public class ResourcefullOptions
     /// </summary>
     public ResourcefullTelemetryOptions Telemetry { get; internal set; } = new();
 
+    /// <summary>
+    /// Gets the metadata keys a listing can search for, ordinally. Set through
+    /// <see cref="ResourcefullOptionsBuilder.UseMetadataSearch"/>; empty without it.
+    /// <para>Coming in 4.0.</para>
+    /// </summary>
+    public IReadOnlySet<string> SearchableMetadataKeys => _searchableMetadataKeys;
+
+    internal readonly HashSet<string> _searchableMetadataKeys = new(StringComparer.Ordinal);
+
     /// <summary>The store's name, recorded on its telemetry; null for the store without one.</summary>
     internal string? StoreName { get; set; }
 }

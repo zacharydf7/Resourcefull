@@ -32,6 +32,36 @@ public class ResourcefullServiceCollectionExtensionsTests
             .BuildServiceProvider();
     }
 
+    [Theory]
+    [InlineData("")]
+    [InlineData(" customer")]
+    [InlineData("customer ")]
+    [InlineData("a key longer than a searchable one can be, which is one hundred and twenty-eight characters at the most, so this one is refused now")]
+    public void UseMetadataSearch_ShouldThrowArgumentException_WhenGivenAKeyThatCantBeSearched(string key)
+    {
+        // Arrange
+        var services = new ServiceCollection();
+
+        // Act
+        void act() => services.AddResourcefull(options => options.UseInMemory().UseMetadataSearch("customer", key));
+
+        // Assert
+        Assert.Throws<ArgumentException>(act);
+    }
+
+    [Fact]
+    public void UseMetadataSearch_ShouldAddToTheSearchableKeys_WhenCalledTwice()
+    {
+        // Act
+        using ServiceProvider provider = new ServiceCollection()
+            .AddResourcefull(options => options.UseInMemory().UseMetadataSearch("customer").UseMetadataSearch("status", "customer"))
+            .BuildServiceProvider();
+
+        // Assert
+        Assert.Equal(["customer", "status"],
+            provider.GetRequiredService<IOptions<ResourcefullOptions>>().Value.SearchableMetadataKeys.Order(StringComparer.Ordinal));
+    }
+
     [Fact]
     public void UseConfiguration_ShouldTurnOnAndSetEachFeature_WhenGivenEverySection()
     {

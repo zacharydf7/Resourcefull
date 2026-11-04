@@ -80,7 +80,7 @@ options.UseAzureBlobStorage("files", azure =>
 ```
 
 Don't let anything else write, change or delete blobs under Resourcefull's prefix, and give every instance of the
-application the same blob container and prefix. A prefix can be up to 200 characters long; an empty one puts
+application the same blob container and prefix. A prefix can be up to 190 characters long; an empty one puts
 Resourcefull's blobs at the top of the blob container.
 
 ## Account settings

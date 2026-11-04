@@ -97,17 +97,21 @@ internal sealed partial class ObjectStoreRepository(IObjectStore store, string k
         string? protectionKey = protectionToken is null ? null : _keys.Protection(container.Id, protectionToken);
         using var hashing = new HashingStream(content);
         WrittenContent? written = null;
+        HashSet<string> searchKeys = SearchKeysOf(container.Id, location.ResourceName, version.Metadata);
+        List<string> replacedSearchKeys = [];
         try
         {
             await UploadContentAsync(location, contentKey, hashing, cancellationToken).ConfigureAwait(false);
             if (expiryKey is not null) await PutEntryAsync(expiryKey, location, cancellationToken).ConfigureAwait(false);
             if (protectionKey is not null) await PutEntryAsync(protectionKey, location, cancellationToken).ConfigureAwait(false);
+            await PutSearchEntriesAsync(searchKeys, cancellationToken).ConfigureAwait(false);
             await ChangeHeadAsync(headKey, head =>
             {
                 // An earlier try already added this version: it landed, but another writer changed the head before it
                 // could be confirmed.
                 if (head?.Versions.Any(v => v.Blob == blob) == true) return null;
                 ThrowUnlessAddable(location, head, version.VersionId, condition);
+                replacedSearchKeys = [.. SearchKeysOf(container.Id, location.ResourceName, head?.Versions[^1]).Except(searchKeys)];
                 // Stamped as the version becomes current. A wrong declared length throws here, before the head names it.
                 written = hashing.Complete(version.DeclaredLength, lastModified ?? _clock.GetUtcNow());
                 return new Head([.. head?.Versions ?? [], new StoredVersion(version.VersionId, blob, written.ContentLength,
@@ -130,6 +134,7 @@ internal sealed partial class ObjectStoreRepository(IObjectStore store, string k
             await PurgeQuietlyAsync(container.Id).ConfigureAwait(false);
             throw ContainerMissing(location.ContainerName);
         }
+        await SettleSearchEntriesAsync(container.Id, location.ResourceName, searchKeys, replacedSearchKeys).ConfigureAwait(false);
         return written!;
     }
 
@@ -362,7 +367,7 @@ internal sealed partial class ObjectStoreRepository(IObjectStore store, string k
         }
 
         var removed = new List<StoredVersion>();
-        bool changed = await ChangeHeadAsync(_keys.Head(container.Id, resource.ResourceName), head =>
+        bool changed = await ChangeHeadKeepingSearchAsync(container.Id, resource.ResourceName, head =>
         {
             removed.Clear();
             StoredVersion? current = head?.Versions[^1];
@@ -409,7 +414,7 @@ internal sealed partial class ObjectStoreRepository(IObjectStore store, string k
         CancellationToken cancellationToken)
     {
         if (await GetContainerAsync(resource.ContainerName, cancellationToken).ConfigureAwait(false) is not { } container) return false;
-        return await ChangeHeadAsync(_keys.Head(container.Id, resource.ResourceName), head =>
+        return await ChangeHeadKeepingSearchAsync(container.Id, resource.ResourceName, head =>
         {
             int index = head is null ? -1 : versionId is null ? head.Versions.Count - 1 : head.Versions.FindIndex(v => v.VersionId == versionId);
             if (index < 0) return null;
@@ -511,7 +516,7 @@ internal sealed partial class ObjectStoreRepository(IObjectStore store, string k
     {
         if (await GetContainerAsync(resource.ContainerName, cancellationToken).ConfigureAwait(false) is not { } container) return false;
         StoredVersion? removed = null;
-        bool changed = await ChangeHeadAsync(_keys.Head(container.Id, resource.ResourceName), head =>
+        bool changed = await ChangeHeadKeepingSearchAsync(container.Id, resource.ResourceName, head =>
         {
             removed = head?.Versions.FirstOrDefault(v => v.VersionId == versionId);
             if (removed is not { ExpiresAt: { } expiresAt } || expiresAt > now || !IsDeletable(removed, now)) return null;

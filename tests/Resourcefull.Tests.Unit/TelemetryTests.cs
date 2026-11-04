@@ -874,6 +874,31 @@ public sealed class TelemetryTests : IDisposable
         Assert.Equal("legal_hold", delete.GetTagItem("resourcefull.refusal_reason"));
     }
 
+    [Fact]
+    public async Task GetResourcePageAsync_ShouldTagTheKeyButNotTheValue_WhenSearchingByMetadata()
+    {
+        // Arrange
+        using ServiceProvider provider = new ServiceCollection()
+            .AddResourcefull(o => o.UseInMemory().UseMetadataSearch("customer"))
+            .BuildServiceProvider();
+        IResourceServiceClient service = provider.GetRequiredService<IResourceServiceClient>();
+        IResourceContainerClient container = await service.CreateContainerAsync("c");
+        await container.UploadAsync("a", BinaryData.FromString("x"),
+            new ResourceUploadOptions { Metadata = new Dictionary<string, string> { ["customer"] = "secret-42" } });
+        using Activity root = TestSource.StartActivity("test")!;
+
+        // Act
+        await container.GetResourcePageAsync(new ResourceListOptions { Metadata = new ResourceMetadataMatch("customer", "secret-42") });
+        int indexed = await service.IndexMetadataAsync("c");
+
+        // Assert: the value may be personal data, so no tag carries it.
+        Activity page = SpansIn(root).Single(s => s.OperationName == "resourcefull list_page");
+        Assert.Equal("customer", page.GetTagItem("resourcefull.metadata_key"));
+        Assert.DoesNotContain(SpansIn(root).SelectMany(s => s.Tags), tag => tag.Value == "secret-42");
+        Activity index = SpansIn(root).Single(s => s.OperationName == "resourcefull index_metadata");
+        Assert.Equal((0, 0), (indexed, (int)index.GetTagItem("resourcefull.indexed")!));
+    }
+
     /// <summary>A store where every delete finds its version protected, as when a hold lands just before it.</summary>
     private sealed class RefusingDeletes : ResourceInMemoryRepository
     {

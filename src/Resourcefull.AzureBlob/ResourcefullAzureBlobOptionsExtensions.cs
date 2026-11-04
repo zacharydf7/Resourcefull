@@ -31,9 +31,9 @@ public static class ResourcefullAzureBlobOptionsExtensions
 {
     /// <summary>
     /// The longest key prefix. A blob's name can be 1,024 characters long; an escaped name takes up to 773 of them, and
-    /// the container's ID and the separators another 37.
+    /// the container's ID, the separators and a metadata search entry's token another 60.
     /// </summary>
-    internal const int MaxKeyPrefixLength = 200;
+    internal const int MaxKeyPrefixLength = 190;
 
     /// <summary>
     /// Stores resources in the blob container <paramref name="containerName"/>, which must exist. Every Resourcefull
@@ -50,7 +50,7 @@ public static class ResourcefullAzureBlobOptionsExtensions
     /// </exception>
     /// <exception cref="ArgumentException">
     /// <paramref name="containerName"/> is null, empty or whitespace (<see cref="ArgumentNullException"/> when null), or
-    /// the key prefix is null or longer than 200 characters.
+    /// the key prefix is null or longer than 190 characters.
     /// </exception>
     public static ResourcefullOptionsBuilder UseAzureBlobStorage(this ResourcefullOptionsBuilder builder, string containerName,
         Action<ResourcefullAzureBlobOptions>? configure = null)

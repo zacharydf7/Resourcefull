@@ -13,7 +13,7 @@ public sealed class CustomSchemaIntegrationTests(SqlServerFixture fixture)
 {
     private static readonly ActivitySource TestSource = new("Resourcefull.Tests.Integration.Schema");
 
-    private static readonly string[] Tables = ["__EFMigrationsHistory", "ResourceChunks", "ResourceContainers", "Resources"];
+    private static readonly string[] Tables = ["__EFMigrationsHistory", "ResourceChunks", "ResourceContainers", "ResourceMetadata", "Resources"];
 
     [Fact]
     public async Task MigrateResourcefullDatabaseAsync_ShouldCreateTheSchemaWithTheTablesAndHistory_WhenGivenASchema()

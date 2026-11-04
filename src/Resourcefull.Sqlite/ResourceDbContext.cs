@@ -25,12 +25,13 @@ internal class ResourceDbContext(DbContextOptions<ResourceDbContext> options) : 
     internal DbSet<ResourceModel> Resources { get; set; }
     internal DbSet<ResourceChunkModel> ResourceChunks { get; set; }
     internal DbSet<ResourceContainerModel> ResourceContainers { get; set; }
+    internal DbSet<ResourceMetadataModel> ResourceMetadata { get; set; }
 
     /// <summary>Always <see langword="null"/>: SQLite has no schemas, and the tables' names stay unqualified.</summary>
     internal string? Schema => null;
 
     /// <summary>The model's tables.</summary>
-    internal static readonly string[] TableNames = ["Resources", "ResourceChunks", "ResourceContainers"];
+    internal static readonly string[] TableNames = ["Resources", "ResourceChunks", "ResourceContainers", "ResourceMetadata"];
 
     /// <summary>The SQL unchanged, as SQLite has no schemas to qualify its tables with.</summary>
     internal static string QualifyTables(string sql, string? schema) => sql;

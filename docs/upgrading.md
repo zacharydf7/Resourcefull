@@ -31,6 +31,7 @@ your code, and makes one database change that a 3.x application can't run agains
 | | `Resourcefull_DropStoredUri` | drops the `Uri` columns of `Resources` and `ResourceContainers`, whose values have gone unused since 3.0 | stop every 3.x instance: 3.x still reads and writes the columns, so it fails without them |
 | | `Resourcefull_AddDeclaredLength` | adds the nullable `DeclaredLength` column, the length an [upload session](uploading-in-parts.md) said its version would have | nothing |
 | | `Resourcefull_AddRetention` | adds the nullable `RetainUntil` column and the `LegalHold` column, false for every version already stored, with an index of each for the versions they [protect](deleting-safely.md) | nothing |
+| | `Resourcefull_AddMetadataSearch` | adds the `ResourceMetadata` table, the index of [searchable metadata](listing.md#finding-resources-by-metadata), empty until you name keys; versions stored before then are added when you index them | nothing |
 
 Every migration from 3.0 on only adds columns or indexes, and runs while the application is up, except
 `Resourcefull_DropStoredUri` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>.

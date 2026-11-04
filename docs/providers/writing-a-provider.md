@@ -320,6 +320,26 @@ throws `NotSupportedException`.
   `DeleteExpiredVersionAsync` and `DeleteExpiredVersionsAsync` leave a protected version as they leave one whose
   expiry was extended.
 
+## Metadata search
+
+<div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 4.0</span></div>
+
+[Searching by metadata](../listing.md#finding-resources-by-metadata) works with every provider:
+`FindResourcePageAsync`'s default reads `GetResourcePageAsync`'s pages and keeps the matches. That reads every name, so
+a provider whose store can keep an index should override it:
+
+- **Index the searchable keys.** `SearchableMetadataKeys` holds the keys the application named with
+  `UseMetadataSearch`; the clients set it before they call your provider. Keep an index of each current version's
+  values for those keys, and update it in the same step as any write that changes which version is current or changes
+  the current version's metadata: uploads, copies, restores, imports, completed upload sessions, moves, deletes, expiry
+  and `SetResourceMetadataAsync`. Keys are at most 128 characters. The clients refuse a value over 256 characters for
+  these keys, in writes and searches alike, but a version stored before its key was named can still have one: leave it
+  out of the index.
+- **Override `FindResourcePageAsync`** to list the current versions with the given key and value, as
+  `GetResourcePageAsync` lists them: in name order, with the prefix, after the name given, up to the page size.
+- **Override `IndexMetadataAsync`** to index a container's current versions, for keys added after they were stored. Its
+  default does nothing, which suits a provider without an index.
+
 ## Container usage
 
 `GetContainerUsageAsync`'s default lists every resource's versions, one name at a time, and adds up their
@@ -409,8 +429,14 @@ public class FileSystemContractTests : ResourcefullContractTests
         });
         return services.BuildServiceProvider();
     }
+
+    protected override bool SharesStoreBetweenServiceProviders => false;
 }
 ```
+
+The tests assume that the service providers `BuildServiceProvider` builds share one store, as two instances of an
+application would. This example gives each one a new folder, so it overrides `SharesStoreBetweenServiceProviders` to
+return `false`, and the few tests that store with one service provider and read with another are skipped.
 
 Run `dotnet test`, and xUnit runs every test the class inherits. A store that needs a server, such as a database,
 can skip its tests when none is available: call `Assert.SkipUnless` in `BuildServiceProvider`.

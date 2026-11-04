@@ -58,13 +58,17 @@ public static class ResourcefullServiceCollectionExtensions
         var builder = new ResourcefullOptionsBuilder(services, name);
         services.AddOptions();
         if (name is not null) services.Configure<ResourcefullOptions>(name, options => options.StoreName = name);
-        services.Add(new ServiceDescriptor(typeof(IResourceServiceClient), name, (provider, _) => new ResourceServiceClient(
-            provider.GetRequiredStoreService<ResourceRepository>(name),
-            Options.Create(provider.GetRequiredService<IOptionsMonitor<ResourcefullOptions>>().Get(builder.OptionsName)),
-            provider.GetStoreService<IUriProvider>(name), provider.GetService<ILogger<ResourceContainerClient>>(),
-            provider.GetStoreService<ContainerPolicies>(name), provider.GetStoreService<IResourceCleanupHandler>(name),
-            provider.GetService<TimeProvider>(), provider.GetStoreService<ExpirySettings>(name),
-            provider.GetStoreService<IResourceUploadInspector>(name)), ServiceLifetime.Scoped));
+        services.Add(new ServiceDescriptor(typeof(IResourceServiceClient), name, (provider, _) =>
+        {
+            ResourcefullOptions options = provider.GetRequiredService<IOptionsMonitor<ResourcefullOptions>>().Get(builder.OptionsName);
+            ResourceRepository repository = provider.GetRequiredStoreService<ResourceRepository>(name);
+            // Before any client calls it, so every write indexes the keys listings can search for.
+            repository.SearchableMetadataKeys = options.SearchableMetadataKeys;
+            return new ResourceServiceClient(repository, Options.Create(options), provider.GetStoreService<IUriProvider>(name),
+                provider.GetService<ILogger<ResourceContainerClient>>(), provider.GetStoreService<ContainerPolicies>(name),
+                provider.GetStoreService<IResourceCleanupHandler>(name), provider.GetService<TimeProvider>(),
+                provider.GetStoreService<ExpirySettings>(name), provider.GetStoreService<IResourceUploadInspector>(name));
+        }, ServiceLifetime.Scoped));
         configure.Invoke(builder);
 
         if (!builder.ProviderConfigured)

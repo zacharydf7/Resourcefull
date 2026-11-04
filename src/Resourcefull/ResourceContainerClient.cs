@@ -32,6 +32,7 @@ internal partial class ResourceContainerClient(ResourceRepository resourceReposi
         ResourceNames.ThrowIfInvalidNewResourceName(resourceName);
 
         uploadOptions ??= new ResourceUploadOptions();
+        resourceRepository.ThrowIfUnsearchable(uploadOptions.Metadata.AsReadOnly(), "options");
         ResourceConditions? conditions = uploadOptions.Conditions is { IsEmpty: false } set ? set : null;
         bool createOnly = IsCreate(uploadOptions.Mode, conditions, nameof(ResourceUploadOptions.Conditions), "options");
         NewVersionCheck check = policies is null ? default : await policies.CheckNewVersionAsync(ContainerName, resourceName, restore: false,
@@ -102,6 +103,7 @@ internal partial class ResourceContainerClient(ResourceRepository resourceReposi
 
         ResourceInfo? resourceInfo = await resourceRepository.GetResourceInfoAsync(At(resourceName), versionId, cancellationToken).ConfigureAwait(false);
         if (resourceInfo == null) return null;
+        resourceRepository.ThrowIfUnsearchable(resourceInfo.Metadata, nameof(versionId));
         // As for a copy, the stored length stands in for a declared one: the content doesn't pass through here.
         NewVersionCheck check = default;
         if (policies is not null)
@@ -475,8 +477,12 @@ internal partial class ResourceContainerClient(ResourceRepository resourceReposi
 
     public Task<ResourcePage> GetResourcePageAsync(ResourceListOptions? options = null, string? continuationToken = null,
         CancellationToken cancellationToken = default)
-        => _telemetry.RunAsync("list_page", ContainerName, null, () => GetPageCoreAsync(options, continuationToken, cancellationToken),
-            "resourcefull.page_size", options?.PageSize ?? ResourceListOptions.DefaultPageSize);
+        => _telemetry.RunAsync("list_page", ContainerName, null, activity =>
+        {
+            // The key, never the value, which may be personal data.
+            if (options?.Metadata is { } match) activity?.SetTag("resourcefull.metadata_key", match.Key);
+            return GetPageCoreAsync(options, continuationToken, cancellationToken);
+        }, "resourcefull.page_size", options?.PageSize ?? ResourceListOptions.DefaultPageSize);
 
     private async Task<ResourcePage> GetPageCoreAsync(ResourceListOptions? options, string? continuationToken, CancellationToken cancellationToken)
     {
@@ -484,16 +490,33 @@ internal partial class ResourceContainerClient(ResourceRepository resourceReposi
         ArgumentOutOfRangeException.ThrowIfLessThan(options.PageSize, 1, nameof(options));
         ArgumentOutOfRangeException.ThrowIfGreaterThan(options.PageSize, ResourceListOptions.MaxPageSize, nameof(options));
         string? prefix = string.IsNullOrEmpty(options.Prefix) ? null : options.Prefix;
-        string? afterName = continuationToken is null ? null : ResourcePageToken.Decode(continuationToken, prefix, nameof(continuationToken));
+        ResourceMetadataMatch? match = options.Metadata;
+        if (match is not null)
+        {
+            ArgumentNullException.ThrowIfNull(match.Key, nameof(options));
+            ArgumentNullException.ThrowIfNull(match.Value, nameof(options));
+            if (!resourceRepository.SearchableMetadataKeys.Contains(match.Key))
+            {
+                throw new ArgumentException($"The metadata key {match.Key} can't be searched: name it with " +
+                    $"{nameof(ResourcefullOptionsBuilder.UseMetadataSearch)} to search by it.", nameof(options));
+            }
+            if (match.Value.Length > ResourceMetadataMatch.MaxValueLength)
+            {
+                throw new ArgumentException($"A search can look for a value of at most {ResourceMetadataMatch.MaxValueLength} " +
+                    "characters, as long as a searchable key's value can be.", nameof(options));
+            }
+        }
+        string? afterName = continuationToken is null ? null : ResourcePageToken.Decode(continuationToken, prefix, nameof(continuationToken), match);
 
         // One more than a page, to tell whether another page follows without returning an empty last page.
-        IReadOnlyList<ResourceInfo> resources = await resourceRepository.GetResourcePageAsync(ContainerName, prefix, afterName,
-            options.PageSize + 1, cancellationToken).ConfigureAwait(false);
+        IReadOnlyList<ResourceInfo> resources = match is null
+            ? await resourceRepository.GetResourcePageAsync(ContainerName, prefix, afterName, options.PageSize + 1, cancellationToken).ConfigureAwait(false)
+            : await resourceRepository.FindResourcePageAsync(ContainerName, prefix, afterName, options.PageSize + 1, match, cancellationToken).ConfigureAwait(false);
         string? next = null;
         if (resources.Count > options.PageSize)
         {
             resources = [.. resources.Take(options.PageSize)];
-            next = ResourcePageToken.Encode(prefix, resources[^1].Name);
+            next = ResourcePageToken.Encode(prefix, resources[^1].Name, match);
         }
         return new ResourcePage(WithUris(resources), next);
     }
@@ -553,6 +576,7 @@ internal partial class ResourceContainerClient(ResourceRepository resourceReposi
 
         ResourceInfo? source = await resourceRepository.GetResourceInfoAsync(At(resourceName), copyOptions.VersionId, cancellationToken).ConfigureAwait(false);
         if (source is null) return null;
+        resourceRepository.ThrowIfUnsearchable(source.Metadata, nameof(resourceName));
         // The stored length stands in for a declared one: the content doesn't pass through here to be measured.
         NewVersionCheck check = default;
         if (policies is not null)
@@ -705,9 +729,10 @@ internal partial class ResourceContainerClient(ResourceRepository resourceReposi
         {
             ResourceNames.ThrowIfInvalidResourceName(resourceName);
             ArgumentNullException.ThrowIfNull(metadata);
+            var copy = new Dictionary<string, string>(metadata);
+            resourceRepository.ThrowIfUnsearchable(copy, nameof(metadata));
             if (policies is not null) await policies.ThrowIfReadOnlyAsync(ContainerName, _telemetry, cancellationToken).ConfigureAwait(false);
-            return await resourceRepository.SetResourceMetadataAsync(At(resourceName), versionId,
-                new Dictionary<string, string>(metadata), cancellationToken).ConfigureAwait(false);
+            return await resourceRepository.SetResourceMetadataAsync(At(resourceName), versionId, copy, cancellationToken).ConfigureAwait(false);
         });
 
     public Task<bool> SetContentTypeAsync(string resourceName, string? versionId, string? contentType,

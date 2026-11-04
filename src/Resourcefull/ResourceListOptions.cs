@@ -17,7 +17,35 @@ public sealed class ResourceListOptions
     /// <summary>Resources per page, from 1 to <see cref="MaxPageSize"/>. The default is 1,000.</summary>
     public int PageSize { get; init; } = DefaultPageSize;
 
+    /// <summary>
+    /// Only resources whose current version has this metadata entry, such as <c>new("customer", "42")</c>; the key
+    /// must be one <see cref="ResourcefullOptionsBuilder.UseMetadataSearch"/> named. <see langword="null"/> lists
+    /// resources whatever their metadata.
+    /// <para>Coming in 4.0.</para>
+    /// </summary>
+    public ResourceMetadataMatch? Metadata { get; init; }
+
     internal const int DefaultPageSize = 1000;
+}
+
+/// <summary>
+/// A metadata entry a listing looks for: a key and its value, both compared exactly, ordinally (case-sensitive).
+/// <para>Coming in 4.0.</para>
+/// </summary>
+/// <param name="Key">The metadata key, one that <see cref="ResourcefullOptionsBuilder.UseMetadataSearch"/> named.</param>
+/// <param name="Value">The value the key must have, at most <see cref="MaxValueLength"/> characters.</param>
+public sealed record ResourceMetadataMatch(string Key, string Value)
+{
+    /// <summary>The longest metadata key that can be searched.</summary>
+    public const int MaxKeyLength = 128;
+
+    /// <summary>The longest value a searchable key can have.</summary>
+    public const int MaxValueLength = 256;
+
+    /// <summary>Whether <paramref name="metadata"/> has this entry.</summary>
+    /// <param name="metadata">A version's metadata.</param>
+    public bool IsMatch(IReadOnlyDictionary<string, string> metadata) =>
+        metadata.TryGetValue(Key, out string? value) && value == Value;
 }
 
 /// <summary>

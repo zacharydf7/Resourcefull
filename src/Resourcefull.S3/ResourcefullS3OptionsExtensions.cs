@@ -32,9 +32,9 @@ public static class ResourcefullS3OptionsExtensions
 {
     /// <summary>
     /// The longest key prefix. S3 allows a key 1,024 bytes; an escaped name takes up to 773 of them, and the
-    /// container's ID and the separators another 37.
+    /// container's ID, the separators and a metadata search entry's token another 60.
     /// </summary>
-    internal const int MaxKeyPrefixBytes = 200;
+    internal const int MaxKeyPrefixBytes = 190;
 
     /// <summary>
     /// Stores resources in <paramref name="bucketName"/>, which must exist, in Amazon S3 or another store that speaks
@@ -48,7 +48,7 @@ public static class ResourcefullS3OptionsExtensions
     /// <exception cref="InvalidOperationException">A provider has already been configured.</exception>
     /// <exception cref="ArgumentException">
     /// <paramref name="bucketName"/> is null, empty or whitespace (<see cref="ArgumentNullException"/> when null), or
-    /// the key prefix is null or longer than 200 bytes of UTF-8.
+    /// the key prefix is null or longer than 190 bytes of UTF-8.
     /// </exception>
     public static ResourcefullOptionsBuilder UseS3(this ResourcefullOptionsBuilder builder, string bucketName,
         Action<ResourcefullS3Options>? configure = null)

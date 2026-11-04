@@ -11,11 +11,11 @@ builder.Services.AddResourcefull(options => options
 
 ## Choosing the database
 
-The connection string names the database that holds Resourcefull's tables: `ResourceContainers`, `Resources` and
-`ResourceChunks`, plus EF Core's migration history, `__EFMigrationsHistory`. It can be a database of its own or your
-application's, as long as none of your tables share the first three names, or Resourcefull's tables are in a
-[schema of their own](#choosing-a-schema). Without a schema, the history table can be shared with your own EF Core
-migrations.
+The connection string names the database that holds Resourcefull's tables: `ResourceContainers`, `Resources`,
+`ResourceChunks` and `ResourceMetadata`, plus EF Core's migration history, `__EFMigrationsHistory`. It can be a database
+of its own or your application's, as long as none of your tables share the first four names, or Resourcefull's tables
+are in a [schema of their own](#choosing-a-schema). Without a schema, the history table can be shared with your own EF
+Core migrations.
 
 A database of its own is the better default. Provisioning turns on [`READ_COMMITTED_SNAPSHOT`](#read_committed_snapshot),
 a setting of the whole database, and file content makes the database large, which affects how you back it up (see
@@ -63,6 +63,7 @@ A database provisioned without a schema has Resourcefull's tables in `dbo`. To m
    ALTER SCHEMA [resourcefull] TRANSFER [dbo].[ResourceContainers];
    ALTER SCHEMA [resourcefull] TRANSFER [dbo].[Resources];
    ALTER SCHEMA [resourcefull] TRANSFER [dbo].[ResourceChunks];
+   ALTER SCHEMA [resourcefull] TRANSFER [dbo].[ResourceMetadata];
    CREATE TABLE [resourcefull].[__EFMigrationsHistory] (
        [MigrationId] nvarchar(150) NOT NULL CONSTRAINT [PK___EFMigrationsHistory] PRIMARY KEY,
        [ProductVersion] nvarchar(32) NOT NULL);

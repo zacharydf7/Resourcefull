@@ -108,6 +108,74 @@ public abstract class ResourceRepository
             .OrderBy(r => r.Name, StringComparer.Ordinal)
             .Take(pageSize)];
 
+    // Metadata search
+
+    /// <summary>
+    /// The metadata keys a listing can search for, from <see cref="ResourcefullOptionsBuilder.UseMetadataSearch"/>,
+    /// which the clients set before they call the provider; empty when there are none. A provider that keeps an index for
+    /// <see cref="FindResourcePageAsync"/> indexes these keys of each current version, and only these.
+    /// <para>Coming in 4.0.</para>
+    /// </summary>
+    protected internal IReadOnlySet<string> SearchableMetadataKeys { get; internal set; } = new HashSet<string>();
+
+    /// <summary>
+    /// Lists a page of a container's current versions whose metadata has <paramref name="match"/>'s entry, as
+    /// <see cref="GetResourcePageAsync"/> lists them: ordered by name, and starting after <paramref name="afterName"/>.
+    /// The default implementation reads <see cref="GetResourcePageAsync"/>'s pages and keeps the matches, which works for
+    /// any provider but reads every name; a provider can keep an index of <see cref="SearchableMetadataKeys"/> to read
+    /// only the matches.
+    /// <para>Coming in 4.0.</para>
+    /// </summary>
+    /// <param name="resourceContainerName">The container to list.</param>
+    /// <param name="prefix">Only names that start with this, ordinally; <see langword="null"/> for every name.</param>
+    /// <param name="afterName">Only names after this one, in the listing's order; <see langword="null"/> to start from the first.</param>
+    /// <param name="pageSize">The most versions to return.</param>
+    /// <param name="match">The metadata entry the current version must have; its key is one of <see cref="SearchableMetadataKeys"/>.</param>
+    /// <param name="cancellationToken">Cancels the listing.</param>
+    /// <returns>The versions; empty when there are no more, or the container does not exist.</returns>
+    public virtual async Task<IReadOnlyList<ResourceInfo>> FindResourcePageAsync(string resourceContainerName, string? prefix,
+        string? afterName, int pageSize, ResourceMetadataMatch match, CancellationToken cancellationToken = default)
+    {
+        var found = new List<ResourceInfo>(pageSize);
+        while (found.Count < pageSize)
+        {
+            IReadOnlyList<ResourceInfo> page = await GetResourcePageAsync(resourceContainerName, prefix, afterName,
+                ResourceListOptions.DefaultPageSize, cancellationToken).ConfigureAwait(false);
+            found.AddRange(page.Where(r => match.IsMatch(r.Metadata)).Take(pageSize - found.Count));
+            if (page.Count < ResourceListOptions.DefaultPageSize) break;
+            afterName = page[^1].Name;
+        }
+        return found;
+    }
+
+    /// <summary>
+    /// Indexes <see cref="SearchableMetadataKeys"/> for every current version in the container, such as after a key was
+    /// added to them, a batch at a time. The default implementation does nothing, for a provider that keeps no index.
+    /// <para>Coming in 4.0.</para>
+    /// </summary>
+    /// <param name="resourceContainerName">The container.</param>
+    /// <param name="cancellationToken">Cancels the indexing; what's indexed by then stays indexed.</param>
+    /// <returns>How many versions were indexed.</returns>
+    public virtual Task<int> IndexMetadataAsync(string resourceContainerName, CancellationToken cancellationToken = default) =>
+        Task.FromResult(0);
+
+    /// <summary>
+    /// Throws when <paramref name="metadata"/> gives one of <see cref="SearchableMetadataKeys"/> a value longer than an
+    /// index can hold.
+    /// </summary>
+    internal void ThrowIfUnsearchable(IReadOnlyDictionary<string, string> metadata, string paramName)
+    {
+        if (SearchableMetadataKeys.Count == 0) return;
+        foreach (string key in SearchableMetadataKeys)
+        {
+            if (metadata.TryGetValue(key, out string? value) && value.Length > ResourceMetadataMatch.MaxValueLength)
+            {
+                throw new ArgumentException($"The metadata value of {key} is {value.Length} characters long; a searchable " +
+                    $"key's value can be at most {ResourceMetadataMatch.MaxValueLength}.", paramName);
+            }
+        }
+    }
+
     /// <summary>
     /// Lists every stored version of a resource: the current version first, then the rest from the most recently
     /// stored to the oldest.

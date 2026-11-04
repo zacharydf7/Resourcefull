@@ -769,6 +769,8 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
                     .ExecuteUpdateAsync(s => s
                         .SetProperty(r => r.ContainerName, destination.ContainerName)
                         .SetProperty(r => r.Name, destination.ResourceName), ct).ConfigureAwait(false);
+                await IndexNameAsync(attempt, source.ContainerName, source.ResourceName, ct).ConfigureAwait(false);
+                await IndexNameAsync(attempt, destination.ContainerName, destination.ResourceName, ct).ConfigureAwait(false);
                 return moved = true;
             }, cancellationToken).ConfigureAwait(false);
         }
@@ -807,7 +809,7 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
     /// <paramref name="written"/> gives. The old current version is cleared and saved first, so the unique "latest"
     /// index never holds two rows for the name in the middle of the write.
     /// </summary>
-    private static async Task MakeCurrentAsync(ResourceDbContext attempt, List<ResourceModel> priorLatest,
+    private async Task MakeCurrentAsync(ResourceDbContext attempt, List<ResourceModel> priorLatest,
         ResourceModel version, WrittenContent written, CancellationToken cancellationToken)
     {
         foreach (ResourceModel prior in priorLatest) prior.IsLatest = false;
@@ -818,7 +820,52 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
         version.ContentHash = written.ContentHash;
         version.LastModified = written.LastModified;
         await attempt.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        await IndexNameAsync(attempt, version.ContainerName, version.Name, cancellationToken).ConfigureAwait(false);
     }
+
+    /// <summary>
+    /// Makes the name's searchable metadata entries its current version's, in the caller's transaction, once a change
+    /// that made a version current, or changed its metadata, is saved. Nothing to do without
+    /// <see cref="ResourceRepository.SearchableMetadataKeys"/>.
+    /// </summary>
+    private async Task IndexNameAsync(ResourceDbContext dbContext, string resourceContainerName, string resourceName,
+        CancellationToken cancellationToken)
+    {
+        if (SearchableMetadataKeys.Count == 0) return;
+        List<ResourceMetadataModel> indexed = await dbContext.ResourceMetadata
+            .Where(m => m.ContainerName == resourceContainerName && m.Name == resourceName)
+            .ToListAsync(cancellationToken).ConfigureAwait(false);
+        var current = await dbContext.Resources
+            .Where(r => r.ContainerName == resourceContainerName && r.Name == resourceName && r.IsLatest)
+            .Select(r => new { r.Id, r.Metadata })
+            .FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
+
+        // Changed in place where a row can stay, since removing a row and adding one with its key can't be tracked at once.
+        Dictionary<string, string> wanted = current is null ? [] : SearchableEntries(current.Metadata);
+        foreach (ResourceMetadataModel entry in indexed)
+        {
+            if (entry.ResourceId == current?.Id && wanted.Remove(entry.Key, out string? value)) entry.Value = value;
+            else dbContext.ResourceMetadata.Remove(entry);
+        }
+        foreach ((string key, string value) in wanted)
+        {
+            dbContext.ResourceMetadata.Add(new ResourceMetadataModel
+            {
+                ResourceId = current!.Id, ContainerName = resourceContainerName, Name = resourceName, Key = key, Value = value
+            });
+        }
+        await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// The entries of <paramref name="metadata"/> a search can find: those of <see cref="ResourceRepository.SearchableMetadataKeys"/>,
+    /// leaving out a value longer than a search can look for, which a version stored before its key was named can have,
+    /// and any with U+0000, which some databases can't store. Nothing is lost: no search can look for either.
+    /// </summary>
+    private Dictionary<string, string> SearchableEntries(IDictionary<string, string> metadata) =>
+        SearchableMetadataKeys.Where(key => metadata.TryGetValue(key, out string? value)
+                && value.Length <= ResourceMetadataMatch.MaxValueLength && !HasNul(key) && !HasNul(value))
+            .ToDictionary(key => key, key => metadata[key], StringComparer.Ordinal);
 
     /// <summary>
     /// Inserts a batch of chunks in one statement, committed as it runs, and empties the batch; with
@@ -973,6 +1020,70 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
             .Take(pageSize)
             .Select(AsResourceInfo)
             .ToListAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    public override async Task<IReadOnlyList<ResourceInfo>> FindResourcePageAsync(string resourceContainerName, string? prefix,
+        string? afterName, int pageSize, ResourceMetadataMatch match, CancellationToken cancellationToken = default)
+    {
+        if (HasNul(resourceContainerName) || HasNul(prefix) || HasNul(match.Key) || HasNul(match.Value)) return [];
+        afterName = CutAtNul(afterName);
+        using ResourceDbContext dbContext = dbContextFactory.CreateDbContext();
+
+        // A seek on the search index, which holds (ContainerName, Key, Value, Name), so a page reads only its matches. An
+        // index row counts only while its version is still the current one at that container and name. SQL Server
+        // compares as if the shorter string were padded with spaces, so "42 " equals "42" there: each version found is
+        // checked exactly here, and another batch follows if that leaves a page short.
+        var found = new List<ResourceInfo>(pageSize);
+        while (found.Count < pageSize)
+        {
+            IQueryable<ResourceMetadataModel> entries = dbContext.ResourceMetadata
+                .Where(m => m.ContainerName == resourceContainerName && m.Key == match.Key && m.Value == match.Value);
+            if (afterName is not null) entries = entries.Where(m => string.Compare(m.Name, afterName) > 0);
+            IQueryable<ResourceModel> current = entries.Join(dbContext.Resources.Where(r => r.IsLatest), m => m.ResourceId, r => r.Id,
+                (m, r) => new { m, r }).Where(x => x.r.ContainerName == x.m.ContainerName && x.r.Name == x.m.Name).Select(x => x.r);
+            if (prefix is not null) current = WithNamePrefix(current, prefix, afterName);
+            int batch = pageSize - found.Count;
+            List<ResourceInfo> page = await current
+                .OrderBy(r => r.Name)
+                .Take(batch)
+                .Select(AsResourceInfo)
+                .ToListAsync(cancellationToken).ConfigureAwait(false);
+            found.AddRange(page.Where(r => match.IsMatch(r.Metadata)));
+            if (page.Count < batch) break;
+            afterName = page[^1].Name;
+        }
+        return found;
+    }
+
+    /// <summary>How many names <see cref="IndexMetadataAsync"/> indexes in one transaction.</summary>
+    private const int NamesPerIndexBatch = 100;
+
+    public override async Task<int> IndexMetadataAsync(string resourceContainerName, CancellationToken cancellationToken = default)
+    {
+        if (SearchableMetadataKeys.Count == 0 || HasNul(resourceContainerName)) return 0;
+        int indexed = 0;
+        string? afterName = null;
+        while (true)
+        {
+            List<string> names;
+            using (ResourceDbContext dbContext = dbContextFactory.CreateDbContext())
+            {
+                IQueryable<ResourceModel> current = dbContext.Resources.Where(r => r.ContainerName == resourceContainerName && r.IsLatest);
+                if (afterName is not null) current = current.Where(r => string.Compare(r.Name, afterName) > 0);
+                names = await current.OrderBy(r => r.Name).Take(NamesPerIndexBatch).Select(r => r.Name)
+                    .ToListAsync(cancellationToken).ConfigureAwait(false);
+            }
+            if (names.Count == 0) return indexed;
+
+            // Under the names' locks, so a write to one of them can't come between reading its metadata and indexing it.
+            await WriteNamesAsync(names.Select(name => new ResourceLocation(resourceContainerName, name)), async (dbContext, ct) =>
+            {
+                foreach (string name in names) await IndexNameAsync(dbContext, resourceContainerName, name, ct).ConfigureAwait(false);
+                return true;
+            }, cancellationToken).ConfigureAwait(false);
+            indexed += names.Count;
+            afterName = names[^1];
+        }
     }
 
     public override async Task<IReadOnlyList<ResourceInfo>> GetResourceVersionsAsync(ResourceLocation resource,
@@ -1310,7 +1421,9 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
             if (next != null) next.IsLatest = true;
         }
 
-        return await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false) > 0;
+        bool deleted = await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false) > 0;
+        if (version.IsLatest) await IndexNameAsync(dbContext, version.ContainerName, version.Name, cancellationToken).ConfigureAwait(false);
+        return deleted;
     }
 
     public override async Task<IReadOnlyList<ResourceInfo>> GetExpiredAsync(DateTimeOffset now, int maxVersions,
@@ -1457,6 +1570,8 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
         }
 
         await dbContext.SaveChangesAsync(ct).ConfigureAwait(false);
+        foreach ((string containerName, string name) in lostCurrent)
+            await IndexNameAsync(dbContext, containerName, name, ct).ConfigureAwait(false);
 
         // A version gone already counts if an earlier attempt deleted it.
         static (ResourceLocation, string) Key(ResourceModel version) =>
@@ -1515,8 +1630,15 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
     {
         IDictionary<string, string> copy = new Dictionary<string, string>(metadata);
         return WriteNameAsync(resource.ContainerName, resource.ResourceName, async (dbContext, ct) =>
-            await Version(dbContext.Resources, resource.ContainerName, resource.ResourceName, versionId)
-                .ExecuteUpdateAsync(s => s.SetProperty(r => r.Metadata, copy), ct).ConfigureAwait(false) > 0, cancellationToken);
+        {
+            if (await Version(dbContext.Resources, resource.ContainerName, resource.ResourceName, versionId)
+                .ExecuteUpdateAsync(s => s.SetProperty(r => r.Metadata, copy), ct).ConfigureAwait(false) == 0)
+            {
+                return false;
+            }
+            await IndexNameAsync(dbContext, resource.ContainerName, resource.ResourceName, ct).ConfigureAwait(false);
+            return true;
+        }, cancellationToken);
     }
 
     public override Task<bool> SetContentTypeAsync(ResourceLocation resource, string? versionId, string? contentType,

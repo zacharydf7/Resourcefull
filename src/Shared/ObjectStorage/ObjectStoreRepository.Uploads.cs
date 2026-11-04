@@ -315,6 +315,8 @@ internal sealed partial class ObjectStoreRepository
         string? protectionToken = record.RetainUntil is not null || record.LegalHold ? Guid.NewGuid().ToString("N") : null;
         string? protectionKey = protectionToken is null ? null : _keys.Protection(container.Id, protectionToken);
         string[] stored = [contentKey, .. new[] { expiryKey, protectionKey }.OfType<string>()];
+        HashSet<string> searchKeys = SearchKeysOf(container.Id, resource.ResourceName, record.Metadata);
+        List<string> replacedSearchKeys = [];
         WrittenContent? added = null;
         try
         {
@@ -333,6 +335,7 @@ internal sealed partial class ObjectStoreRepository
                 cancellationToken).ConfigureAwait(false);
             if (expiryKey is not null) await PutEntryAsync(expiryKey, resource, cancellationToken).ConfigureAwait(false);
             if (protectionKey is not null) await PutEntryAsync(protectionKey, resource, cancellationToken).ConfigureAwait(false);
+            await PutSearchEntriesAsync(searchKeys, cancellationToken).ConfigureAwait(false);
             bool changed = await ChangeHeadAsync(headKey, head =>
             {
                 // Added by an earlier try of this write, which landed before another writer changed the head, or by
@@ -343,6 +346,7 @@ internal sealed partial class ObjectStoreRepository
                     return null;
                 }
                 ThrowUnlessAddable(resource, head, versionId, condition);
+                replacedSearchKeys = [.. SearchKeysOf(container.Id, resource.ResourceName, head?.Versions[^1]).Except(searchKeys)];
                 added = new WrittenContent(contentLength, contentHash, _clock.GetUtcNow());
                 return new Head([.. head?.Versions ?? [], new StoredVersion(versionId, blob, contentLength, contentHash,
                     record.ContentType, new Dictionary<string, string>(record.Metadata), added.LastModified, record.ExpiresAt, null,
@@ -374,6 +378,7 @@ internal sealed partial class ObjectStoreRepository
             await PurgeQuietlyAsync(container.Id).ConfigureAwait(false);
             throw ContainerMissing(resource.ContainerName);
         }
+        await SettleSearchEntriesAsync(container.Id, resource.ResourceName, searchKeys, replacedSearchKeys).ConfigureAwait(false);
         return added!;
     }
 

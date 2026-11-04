@@ -17,6 +17,7 @@ internal partial class ResourceContainerClient
     {
         ResourceNames.ThrowIfInvalidNewResourceName(resourceName);
         options ??= new ResourceUploadSessionOptions();
+        resourceRepository.ThrowIfUnsearchable(options.Metadata.AsReadOnly(), nameof(options));
         NewVersionCheck check = policies is null ? default : await policies.CheckNewVersionAsync(ContainerName, resourceName,
             restore: false, options.Headers?.ContentType, options.Headers?.ContentLength, _telemetry, cancellationToken).ConfigureAwait(false);
 

@@ -186,11 +186,14 @@ public interface IResourceContainerClient
     /// <param name="options">The prefix and page size; <see langword="null"/> lists everything, 1,000 at a time.</param>
     /// <param name="continuationToken">
     /// The previous page's <see cref="ResourcePage.ContinuationToken"/>, or <see langword="null"/> for the first page.
-    /// It must come from a listing with the same prefix; the page size can change.
+    /// It must come from a listing with the same prefix and metadata match; the page size can change.
     /// </param>
     /// <param name="cancellationToken">Cancels the listing.</param>
     /// <returns>The page, and the token for the next one if there is one.</returns>
-    /// <exception cref="ArgumentException"><paramref name="continuationToken"/> is malformed or comes from a listing of another prefix.</exception>
+    /// <exception cref="ArgumentException">
+    /// <paramref name="continuationToken"/> is malformed or comes from a listing of another prefix or metadata match, or
+    /// <see cref="ResourceListOptions.Metadata"/> has a key that can't be searched or a value too long to search for.
+    /// </exception>
     /// <exception cref="ArgumentOutOfRangeException"><see cref="ResourceListOptions.PageSize"/> is outside 1 to <see cref="ResourceListOptions.MaxPageSize"/>.</exception>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
     /// <exception cref="NotSupportedException">

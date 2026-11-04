@@ -305,7 +305,7 @@ public class AzureBlobIntegrationTests(AzureBlobFixture fixture)
         var services = new ServiceCollection();
 
         // Act
-        void act() => services.AddResourcefull(o => o.UseAzureBlobStorage("files", azure => azure.KeyPrefix = new string('a', 201)));
+        void act() => services.AddResourcefull(o => o.UseAzureBlobStorage("files", azure => azure.KeyPrefix = new string('a', 191)));
 
         // Assert
         Assert.Throws<ArgumentException>(act);

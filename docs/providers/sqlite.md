@@ -27,10 +27,11 @@ particular to SQLite; [Provider features](features.md) compares the providers.
 
 ## Choosing the database
 
-The connection string names the database file, such as `Data Source=files.db`; a relative path is taken from the
-current directory. The file holds Resourcefull's tables, `ResourceContainers`, `Resources` and `ResourceChunks`, plus
-EF Core's migration history, `__EFMigrationsHistory`. It can be a file of its own or your application's, as long as none
-of your tables share those names. Anything Microsoft.Data.Sqlite accepts in a connection string works.
+The connection string names the database file, such as `Data Source=files.db`; a relative path is taken from the current
+directory. The file holds Resourcefull's tables, `ResourceContainers`, `Resources`, `ResourceChunks` and
+`ResourceMetadata`, plus EF Core's migration history, `__EFMigrationsHistory`. It can be a file of its own or your
+application's, as long as none of your tables share those names. Anything Microsoft.Data.Sqlite accepts in a connection
+string works.
 
 Keep the file on a local disk, used from one machine. SQLite relies on the filesystem's locks to keep writers apart,
 which network filesystems don't always honor, and write-ahead logging, which provisioning turns on, shares its index

@@ -77,6 +77,9 @@ internal static class Telemetry
         "resourcefull.client.inspection.duration", unit: "s",
         description: "How long the upload inspector took to answer, from the start of the upload or imported version.");
 
+    public static readonly Counter<long> MetadataIndexed = Meter.CreateCounter<long>("resourcefull.client.metadata.indexed",
+        unit: "{version}", description: "Versions IndexMetadataAsync indexed for metadata search.");
+
     public static readonly Counter<long> DeleteRefusals = Meter.CreateCounter<long>("resourcefull.client.delete.refused",
         unit: "{delete}", description: "Deletes and prunes refused because a version they'd delete is retained or under a legal hold.");
 
@@ -229,6 +232,11 @@ internal sealed class ClientTelemetry(string provider, ResourcefullOptions optio
         tags.Add("error.type", exception.GetType().FullName);
         if (extraTag is not null) tags.Add(extraTag, extraValue);
         counter.Add(1, tags);
+    }
+
+    public void CountIndexed(int versions)
+    {
+        if (versions > 0 && Telemetry.MetadataIndexed.Enabled) Telemetry.MetadataIndexed.Add(versions, StoreTags());
     }
 
     /// <summary>Counts a delete or prune refused because a version it would delete is retained or held.</summary>

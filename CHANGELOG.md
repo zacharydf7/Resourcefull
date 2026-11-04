@@ -165,6 +165,18 @@
   `resourcefull.client.delete.refused`. Providers get `SupportsRetention`, `SetRetentionAsync` and
   `SetLegalHoldAsync`, and with one that doesn't support them, a write that would protect a version throws
   `NotSupportedException`. See [Deleting safely](docs/deleting-safely.md).
+- **Finding resources by metadata.** `UseMetadataSearch("customer")` names the metadata keys a listing can search by,
+  and `ResourceListOptions.Metadata = new ResourceMetadataMatch("customer", "42")` lists the resources whose current
+  version has that value, in name order, by page, with a prefix if you like. Every provider supports it: SQL Server,
+  PostgreSQL and SQLite keep the index in a `ResourceMetadata` table, which the `Resourcefull_AddMetadataSearch`
+  migration adds, and the file system, S3 and Azure Blob keep an index entry for each value, so a search reads only the
+  matches. A searchable key's value is limited to 256 characters. `IndexMetadataAsync` indexes versions stored before a
+  key was named. It has an `index_metadata` span and counts what it indexed in `resourcefull.client.metadata.indexed`; a
+  search's `list_page` span carries the key searched, never its value, and the file system, S3 and Azure Blob count the
+  stale index entries a search dropped in `resourcefull.*.stale_search_entries`. S3's key prefix can be at most 190
+  bytes of UTF-8, and Azure Blob's at most 190 characters, to leave room for the index entries. Providers get
+  `FindResourcePageAsync`, whose default reads every name, and `IndexMetadataAsync`. See [Finding resources by
+  metadata](docs/listing.md#finding-resources-by-metadata).
 - **Copy, move and rename.** `CopyResourceAsync` copies a version to a name in the same or another container, as a
   new version there, and `MoveResourceAsync` moves a resource with every version, keeping their IDs; renaming is a
   move within the container. With SQL Server, no content passes through the application. A copy can be

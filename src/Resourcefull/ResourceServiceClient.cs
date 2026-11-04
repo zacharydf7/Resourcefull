@@ -136,6 +136,16 @@ internal class ResourceServiceClient(ResourceRepository resourceRepository, IOpt
             return await NewContainerClient(new ContainerInfo { Name = resourceContainerName }).PruneAllAsync(activity, cancellationToken).ConfigureAwait(false);
         });
 
+    public Task<int> IndexMetadataAsync(string resourceContainerName, CancellationToken cancellationToken = default)
+        => _telemetry.RunAsync("index_metadata", resourceContainerName, null, async activity =>
+        {
+            ResourceNames.ThrowIfInvalidContainerName(resourceContainerName);
+            int indexed = await resourceRepository.IndexMetadataAsync(resourceContainerName, cancellationToken).ConfigureAwait(false);
+            activity?.SetTag("resourcefull.indexed", indexed);
+            _telemetry.CountIndexed(indexed);
+            return indexed;
+        });
+
     public Task<bool> SetContainerMetadataAsync(string resourceContainerName, IDictionary<string, string> metadata,
         CancellationToken cancellationToken = default)
         => _telemetry.RunAsync("set_container_metadata", resourceContainerName, null, async () =>

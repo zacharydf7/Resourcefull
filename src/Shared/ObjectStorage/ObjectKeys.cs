@@ -1,3 +1,5 @@
+using System.Buffers.Text;
+using System.Security.Cryptography;
 using System.Text;
 
 namespace Resourcefull.ObjectStorage;
@@ -86,6 +88,17 @@ internal sealed class ObjectKeys(string prefix, int segmentBytes = ObjectKeys.Se
     /// <summary>The prefix of the heads of every name in a container that starts with <paramref name="namePrefix"/>.</summary>
     public string HeadsStartingWith(string containerId, string? namePrefix) =>
         Heads(containerId) + (namePrefix is null ? "" : Escape(namePrefix));
+
+    /// <summary>
+    /// The prefix of a container's search entries for one metadata key and value, under a token of the two: a hash, so
+    /// an entry's key is as long as a head's, plus 23 bytes, however long the value is.
+    /// </summary>
+    public string SearchEntries(string containerId, string key, string value) =>
+        $"{Data(containerId)}m/{Base64Url.EncodeToString(SHA256.HashData(Encoding.UTF8.GetBytes($"{key}\0{value}")))[..22]}/";
+
+    /// <summary>The key of a name's search entry for one metadata key and value.</summary>
+    public string SearchEntry(string containerId, string key, string value, string resourceName) =>
+        SearchEntries(containerId, key, value) + Escape(resourceName) + End;
 
     /// <summary>
     /// The prefix of a container's protection entries: one for each version that's had a retention date or a legal

@@ -27,6 +27,13 @@ public abstract partial class ResourcefullContractTests
     protected virtual TimeSpan TimePrecision => TimeSpan.FromTicks(1);
 
     /// <summary>
+    /// Whether the service providers <c>BuildServiceProvider</c> builds share one store, as two instances of an
+    /// application do; <see langword="true"/> by default. A test that stores with one and reads with another is skipped
+    /// when they don't, as with the in-memory provider, where each has a store of its own.
+    /// </summary>
+    protected virtual bool SharesStoreBetweenServiceProviders => true;
+
+    /// <summary>
     /// The order the store lists names in: ordinal by default. PostgreSQL's byte order is Unicode code point order,
     /// which differs from ordinal order only between characters beyond U+FFFF and those from U+E000 to U+FFFF.
     /// </summary>

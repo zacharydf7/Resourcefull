@@ -55,6 +55,42 @@ namespace Resourcefull.SqlServer.Migrations
                     b.ToTable("ResourceContainers");
                 });
 
+            modelBuilder.Entity("Resourcefull.SqlServer.Models.ResourceMetadataModel", b =>
+                {
+                    b.Property<long>("ResourceId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Key")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
+                        .UseCollation("Latin1_General_100_BIN2");
+
+                    b.Property<string>("ContainerName")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
+                        .UseCollation("Latin1_General_100_BIN2");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)")
+                        .UseCollation("Latin1_General_100_BIN2");
+
+                    b.Property<string>("Value")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)")
+                        .UseCollation("Latin1_General_100_BIN2");
+
+                    b.HasKey("ResourceId", "Key");
+
+                    b.HasIndex("ContainerName", "Key", "Value", "Name")
+                        .HasDatabaseName("IX_ResourceMetadata_Search");
+
+                    b.ToTable("ResourceMetadata", (string)null);
+                });
+
             modelBuilder.Entity("Resourcefull.SqlServer.Models.ResourceModel", b =>
                 {
                     b.Property<long>("Id")
@@ -173,6 +209,15 @@ namespace Resourcefull.SqlServer.Migrations
                 {
                     b.HasOne("Resourcefull.SqlServer.Models.ResourceModel", null)
                         .WithMany("Chunks")
+                        .HasForeignKey("ResourceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Resourcefull.SqlServer.Models.ResourceMetadataModel", b =>
+                {
+                    b.HasOne("Resourcefull.SqlServer.Models.ResourceModel", null)
+                        .WithMany()
                         .HasForeignKey("ResourceId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();

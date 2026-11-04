@@ -1107,6 +1107,44 @@ public class S3IntegrationTests(S3Fixture fixture)
     }
 
     [Fact]
+    public async Task FindResourcePageAsync_ShouldFindTheLastWritersValue_WhenAnotherWriterReplacesTheNameDuringItsWrite()
+    {
+        fixture.SkipIfUnavailable();
+
+        // Arrange: a name with customer 42, and a store that lets an upload of customer 7 land just before the head write
+        // of another upload of customer 42. The upload of 7 deletes the entry for 42, which the version current at the
+        // end needs.
+        string prefix = $"search-race-{Guid.NewGuid():N}/";
+        var store = new InterferingStore(new S3ObjectStore(fixture.Client, fixture.BucketName));
+        ObjectStoreRepository repository = await NewRepositoryAsync(prefix, store: store);
+        using ServiceProvider services = new ServiceCollection()
+            .AddResourcefull(o => o.UseProvider(_ => repository, ServiceLifetime.Singleton).UseMetadataSearch("customer"))
+            .BuildServiceProvider();
+        // Resolving a client gives the repository the searchable keys.
+        services.GetRequiredService<IResourceServiceClient>();
+        var name = new ResourceLocation("c", "a.txt");
+        NewResourceVersion Version(string id, string customer) =>
+            new(name, id) { Metadata = new Dictionary<string, string> { ["customer"] = customer } };
+        await repository.AddResourceAsync(Version("v1", "42"), new MemoryStream("1"u8.ToArray()));
+        bool raced = false;
+        store.BeforePut = async (key, body) =>
+        {
+            if (raced || !key.Contains("/h/", StringComparison.Ordinal)) return;
+            raced = true;
+            await repository.AddResourceAsync(Version("v2", "7"), new MemoryStream("2"u8.ToArray()));
+        };
+
+        // Act
+        await repository.AddResourceAsync(Version("v3", "42"), new MemoryStream("3"u8.ToArray()));
+        IReadOnlyList<ResourceInfo> found = await repository.FindResourcePageAsync("c", null, null, 10,
+            new ResourceMetadataMatch("customer", "42"));
+
+        // Assert
+        Assert.True(raced);
+        Assert.Equal(["v3"], found.Select(r => r.VersionId));
+    }
+
+    [Fact]
     public async Task MoveResourceAsync_ShouldBeAbandonedAndRefused_WhenAnotherWriterCreatesTheDestinationBeforeItCommits()
     {
         fixture.SkipIfUnavailable();
@@ -1475,7 +1513,7 @@ public class S3IntegrationTests(S3Fixture fixture)
         var services = new ServiceCollection();
 
         // Act
-        void act() => services.AddResourcefull(options => options.UseS3("bucket", s3 => s3.KeyPrefix = new string('p', 201)));
+        void act() => services.AddResourcefull(options => options.UseS3("bucket", s3 => s3.KeyPrefix = new string('p', 191)));
 
         // Assert
         Assert.Throws<ArgumentException>(act);

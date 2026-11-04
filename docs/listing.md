@@ -42,3 +42,54 @@ return Results.Ok(new { page.Resources, page.ContinuationToken });
   [Reading from a container that doesn't exist](errors.md#reading-from-a-container-that-doesnt-exist).
 - **Cost:** with SQL Server, each page is one query that starts where the last one stopped, so a page costs about the
   same wherever it is in the container.
+
+## Finding resources by metadata
+
+<div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 4.0</span></div>
+
+A listing can also find the resources whose current version has a metadata value, such as every invoice of one customer.
+Name the keys you'll search by when you add Resourcefull, then search with `ResourceListOptions.Metadata`:
+
+```csharp
+builder.Services.AddResourcefull(options => options
+    .UseSqlServer(connectionString)
+    .UseMetadataSearch("customer", "status"));
+
+await foreach (ResourceInfo invoice in invoices.ListResourcesAsync(new ResourceListOptions
+{
+    Metadata = new ResourceMetadataMatch("customer", "42"),
+    Prefix = "2026/"   // optional, as in any listing
+}))
+{
+    Console.WriteLine(invoice.Name);
+}
+```
+
+The provider keeps an index of each named key's value for every current version, so a search reads only what matches
+instead of every name in the container. Everything above about listings holds for a search too: it's in name order, by
+page, with continuation tokens, which work only with the same prefix and the same key and value.
+
+- **The match is exact:** the key and value are compared character by character, case-sensitively (ordinally), so a
+  search for `customer` = `42` doesn't find the value `420` or the key `Customer`. Only the current version counts: a
+  resource whose older version had the value isn't found.
+- **Only named keys can be searched.** A search by another key throws `ArgumentException`, rather than reading the whole
+  container. Indexing every key would make every write slower, and most applications search by only a few.
+- **Named keys have limits** so the index can hold them: a key can be at most 128 characters and can't start or end
+  with whitespace, and its value can be at most 256 characters. `UseMetadataSearch` throws `ArgumentException` for a
+  key that breaks these rules. An upload, copy, restore, import or `SetResourceMetadataAsync` that gives a named key a
+  longer value throws `ArgumentException` and stores nothing. A search for a longer value throws `ArgumentException`
+  too. A longer value stored before you named its key stays as it is, but isn't indexed, so no search finds it. Other
+  keys have no limit.
+- **Adding a key later:** versions stored before you named it aren't in its index yet. Index them once for each
+  container, such as from a maintenance job; writes from then on are indexed as they're stored:
+
+  ```csharp
+  await resources.IndexMetadataAsync("invoices");
+  ```
+
+- **What it costs:** with SQL Server, PostgreSQL and SQLite, once you name a key, every write updates the index in the
+  same transaction, which takes a few more round trips, and a search page is one query. With the file system, S3 and
+  Azure Blob, each named key's value is a small index entry of its own, written with the version, and a delete or
+  metadata change makes one more read of the name first. A search reads each name it finds to make sure the value is
+  still current, so a page of 100 matches makes about 100 reads. With the in-memory provider, or a [provider of your
+  own](providers/writing-a-provider.md#metadata-search) that keeps no index, a search reads every name.

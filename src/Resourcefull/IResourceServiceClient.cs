@@ -259,6 +259,25 @@ public interface IResourceServiceClient
         => throw new NotSupportedException($"{GetType().Name} doesn't prune containers.");
 
     /// <summary>
+    /// Indexes the keys <see cref="ResourcefullOptionsBuilder.UseMetadataSearch"/> names for every current version in
+    /// the container, so a listing by <see cref="ResourceListOptions.Metadata"/> finds versions stored before a key was
+    /// added. New writes are indexed as they're stored, so run it once after adding a key, for each container that
+    /// holds versions from before. With a provider that keeps no index, it does nothing, since searches read every name.
+    /// <para>Coming in 4.0.</para>
+    /// </summary>
+    /// <param name="resourceContainerName">The container to index; a container that doesn't exist has nothing to index.</param>
+    /// <param name="cancellationToken">Stops the indexing; what's indexed by then stays indexed, and running it again finishes.</param>
+    /// <returns>How many versions were indexed.</returns>
+    /// <exception cref="ArgumentException">
+    /// <paramref name="resourceContainerName"/> breaks the name rules (<see cref="ResourceNameException"/>), or is null
+    /// (<see cref="ArgumentNullException"/>).
+    /// </exception>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
+    /// <exception cref="NotSupportedException">This default implementation doesn't index metadata.</exception>
+    public Task<int> IndexMetadataAsync(string resourceContainerName, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException($"{GetType().Name} doesn't index metadata.");
+
+    /// <summary>
     /// Replaces a container's metadata, which otherwise is set only when the container is created. The whole dictionary
     /// is replaced, including the <c>resourcefull.import</c> entry that marks an unfinished import; to change one entry,
     /// read the container's metadata, change it and set it. An import running at the same time replaces the metadata

@@ -55,6 +55,42 @@ namespace Resourcefull.PostgreSql.Migrations
                     b.ToTable("ResourceContainers");
                 });
 
+            modelBuilder.Entity("Resourcefull.PostgreSql.Models.ResourceMetadataModel", b =>
+                {
+                    b.Property<long>("ResourceId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Key")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .UseCollation("C");
+
+                    b.Property<string>("ContainerName")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .UseCollation("C");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .UseCollation("C");
+
+                    b.Property<string>("Value")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .UseCollation("C");
+
+                    b.HasKey("ResourceId", "Key");
+
+                    b.HasIndex("ContainerName", "Key", "Value", "Name")
+                        .HasDatabaseName("IX_ResourceMetadata_Search");
+
+                    b.ToTable("ResourceMetadata", (string)null);
+                });
+
             modelBuilder.Entity("Resourcefull.PostgreSql.Models.ResourceModel", b =>
                 {
                     b.Property<long>("Id")
@@ -168,6 +204,15 @@ namespace Resourcefull.PostgreSql.Migrations
                 {
                     b.HasOne("Resourcefull.PostgreSql.Models.ResourceModel", null)
                         .WithMany("Chunks")
+                        .HasForeignKey("ResourceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Resourcefull.PostgreSql.Models.ResourceMetadataModel", b =>
+                {
+                    b.HasOne("Resourcefull.PostgreSql.Models.ResourceModel", null)
+                        .WithMany()
                         .HasForeignKey("ResourceId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();

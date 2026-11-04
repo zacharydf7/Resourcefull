@@ -44,6 +44,7 @@ internal sealed partial class ObjectStoreRepository
         string destinationKey = _keys.Head(to.Id, destination.ResourceName);
         bool across = from.Id != to.Id;
         bool protects;
+        HashSet<string> searchKeys;
         for (int attempt = 1; ; attempt++)
         {
             (Stored<Head> sourceRead, Head? moving) = await ReadHeadToChangeAsync(sourceKey, cancellationToken).ConfigureAwait(false);
@@ -64,6 +65,7 @@ internal sealed partial class ObjectStoreRepository
                 ProtectionToken = v.ProtectionToken is null ? null : Guid.NewGuid().ToString("N")
             })];
             protects = moved.Any(v => v.ProtectionToken is not null);
+            searchKeys = SearchKeysOf(to.Id, destination.ResourceName, moved[^1]);
             var entry = new MoveEntry(MoveState.Pending, from.Id, source.ResourceName, to.Id, destination.ResourceName,
                 [.. moving.Versions.SelectMany(v => LeftBehind(from.Id, v, across))],
                 [.. moved.SelectMany(v => LeftBehind(to.Id, v, across))]);
@@ -78,6 +80,8 @@ internal sealed partial class ObjectStoreRepository
         }
 
         // As for an upload: a destination container deleted meanwhile took the versions with it.
+        // Put again, in case the stale-entry cleanup of a name that had the destination's name before deleted them meanwhile.
+        await SettleSearchEntriesAsync(to.Id, destination.ResourceName, searchKeys, []).ConfigureAwait(false);
         if (protects) await WaitForContainerDeleteAsync(to, destination.ContainerName).ConfigureAwait(false);
         else if ((await GetContainerAsync(destination.ContainerName, CancellationToken.None).ConfigureAwait(false))?.Id != to.Id)
         {
@@ -122,6 +126,11 @@ internal sealed partial class ObjectStoreRepository
                     await PutEntryAsync(expiryKey, destination, cancellationToken).ConfigureAwait(false);
                 if (pending && ProtectionKeyOf(entry.DestinationContainerId, moved[i]) is { } protectionKey)
                     await PutEntryAsync(protectionKey, destination, cancellationToken).ConfigureAwait(false);
+            }
+            if (pending)
+            {
+                await PutSearchEntriesAsync(SearchKeysOf(entry.DestinationContainerId, entry.DestinationName, moved[^1]), cancellationToken)
+                    .ConfigureAwait(false);
             }
             bool marked = pending
                 && await TryPutAsync(_keys.Head(entry.SourceContainerId, entry.SourceName),

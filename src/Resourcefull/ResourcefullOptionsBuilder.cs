@@ -264,6 +264,37 @@ public class ResourcefullOptionsBuilder
     }
 
     /// <summary>
+    /// Makes listings able to find resources by these metadata keys, through <see cref="ResourceListOptions.Metadata"/>:
+    /// the provider keeps an index of each current version's value for each key, so a search reads only what matches.
+    /// A value of one of these keys can be at most <see cref="ResourceMetadataMatch.MaxValueLength"/> characters, and a
+    /// write that gives a longer one throws <see cref="ArgumentException"/>. Versions stored before a key was added
+    /// aren't found by it until <see cref="IResourceServiceClient.IndexMetadataAsync"/> indexes their container. Calling
+    /// this method again adds more keys.
+    /// <para>Coming in 4.0.</para>
+    /// </summary>
+    /// <param name="keys">The keys, compared ordinally (case-sensitive); each at most <see cref="ResourceMetadataMatch.MaxKeyLength"/> characters.</param>
+    /// <exception cref="ArgumentException">A key is empty, too long, or starts or ends with whitespace.</exception>
+    public ResourcefullOptionsBuilder UseMetadataSearch(params string[] keys)
+    {
+        ArgumentNullException.ThrowIfNull(keys);
+        foreach (string key in keys)
+        {
+            ArgumentException.ThrowIfNullOrEmpty(key, nameof(keys));
+            // Some databases compare as if the shorter string were padded with spaces, so such keys wouldn't stay apart.
+            if (char.IsWhiteSpace(key[0]) || char.IsWhiteSpace(key[^1]))
+                throw new ArgumentException($"The metadata key '{key}' starts or ends with whitespace, so it can't be searched.", nameof(keys));
+            if (key.Length > ResourceMetadataMatch.MaxKeyLength)
+            {
+                throw new ArgumentException(
+                    $"The metadata key {key} is longer than the {ResourceMetadataMatch.MaxKeyLength} characters a searchable key can be.",
+                    nameof(keys));
+            }
+        }
+        Services.Configure<ResourcefullOptions>(OptionsName, options => options._searchableMetadataKeys.UnionWith(keys));
+        return this;
+    }
+
+    /// <summary>
     /// Applies the settings in <paramref name="section"/>, such as a section of appsettings.json, as the matching
     /// methods would: each of its sections that's present turns that feature on, and a value left out keeps its
     /// default. Calls made after this one override it.

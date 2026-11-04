@@ -16,7 +16,7 @@ public sealed class PostgreSqlIntegrationTests(PostgreSqlFixture fixture)
 {
     private static readonly ActivitySource TestSource = new("Resourcefull.Tests.PostgreSql");
 
-    private static readonly string[] Tables = ["ResourceChunks", "ResourceContainers", "Resources", "__EFMigrationsHistory"];
+    private static readonly string[] Tables = ["ResourceChunks", "ResourceContainers", "ResourceMetadata", "Resources", "__EFMigrationsHistory"];
 
     [Fact]
     public async Task MigrateResourcefullDatabaseAsync_ShouldPutTheTablesAndHistoryInTheSchema_WhenGivenASchema()
