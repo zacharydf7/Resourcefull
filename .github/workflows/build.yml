@@ -27,7 +27,11 @@ jobs:
       run: dotnet restore
     - name: Build
       run: dotnet build --no-restore --configuration Release
+    - name: Install tus-js-client, for the resumable upload tests
+      run: npm ci --prefix tests/Resourcefull.Tests.AspNetCore/TusClient
     - name: Test
+      env:
+        RESOURCEFULL_TEST_TUS_CLIENT: "1"
       run: |
         dotnet test tests/Resourcefull.Tests.Unit --no-build --configuration Release
         dotnet test tests/Resourcefull.Tests.AspNetCore --no-build --configuration Release

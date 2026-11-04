@@ -1,0 +1,9 @@
+{
+  "name": "resourcefull-tus-client-tests",
+  "private": true,
+  "description": "Runs tus-js-client against Resourcefull's resumable upload endpoints, for TusClientTests.",
+  "type": "module",
+  "dependencies": {
+    "tus-js-client": "4.3.1"
+  }
+}

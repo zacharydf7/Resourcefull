@@ -11,6 +11,9 @@ and then it becomes the name's current version all at once, as an upload's does.
 Every built-in provider supports sessions: SQL Server, PostgreSQL, [SQLite](providers/sqlite.md),
 the [file system](providers/file-system.md), [S3](providers/s3.md), [Azure Blob](providers/azure-blob.md) and in-memory.
 
+This page is about calling sessions from your own code. For uploads from browsers and apps, map
+[resumable upload endpoints](aspnet-core/resumable-uploads.md), which tus clients such as Uppy use.
+
 ## A session from start to finish
 
 ```csharp

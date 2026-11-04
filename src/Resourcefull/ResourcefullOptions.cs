@@ -29,6 +29,14 @@ public class ResourcefullOptions
 
     internal readonly HashSet<string> _searchableMetadataKeys = new(StringComparer.Ordinal);
 
+    /// <summary>
+    /// Gets how long the expiry sweep keeps an upload session that nothing is appended to before deleting it: 24 hours
+    /// with <see cref="ResourcefullOptionsBuilder.UseExpiry"/>, and <see langword="null"/> without it, since nothing then
+    /// deletes such sessions.
+    /// <para>Coming in 4.0.</para>
+    /// </summary>
+    public TimeSpan? AbandonedUploadsDeletedAfter { get; internal set; }
+
     /// <summary>The store's name, recorded on its telemetry; null for the store without one.</summary>
     internal string? StoreName { get; set; }
 }

@@ -25,6 +25,11 @@ updates:
     ignore:
       - dependency-name: "*"
         update-types: [ "version-update:semver-major" ]
+  # tus-js-client, which the resumable upload tests run in Node.
+  - package-ecosystem: npm
+    directory: /tests/Resourcefull.Tests.AspNetCore/TusClient
+    schedule:
+      interval: weekly
   - package-ecosystem: github-actions
     directory: /
     schedule:

@@ -46,6 +46,8 @@
     href: aspnet-core/serving-downloads.md
   - name: Accepting uploads
     href: aspnet-core/accepting-uploads.md
+  - name: Resumable uploads
+    href: aspnet-core/resumable-uploads.md
   - name: Exceptions as status codes
     href: aspnet-core/status-codes.md
   - name: MVC, Razor Pages and Blazor

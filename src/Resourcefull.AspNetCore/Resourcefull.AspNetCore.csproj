@@ -5,7 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <Title>Resourcefull.AspNetCore</Title>
-    <Description>ASP.NET Core support for Resourcefull: serve downloads with their headers and conditional responses, accept uploads with the request's preconditions, share files with signed links, turn Resourcefull's exceptions into status codes, and see the store on a dashboard.</Description>
+    <Description>ASP.NET Core support for Resourcefull: serve downloads with their headers and conditional responses, accept uploads with the request's preconditions, resume large uploads with tus clients, share files with signed links, turn Resourcefull's exceptions into status codes, and see the store on a dashboard.</Description>
     <PackageTags>$(PackageTags);aspnetcore</PackageTags>
   </PropertyGroup>
 

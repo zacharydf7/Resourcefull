@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using Moq;
 using Resourcefull.InMemory;
 using Resourcefull.Providers;
@@ -240,6 +241,27 @@ public class ExpiryTests
         Assert.Single(services, d => d.ServiceType == typeof(IHostedService));
         Assert.Equal(TimeSpan.FromSeconds(5), Assert.IsType<ExpirySettings>(Assert.Single(services, d => d.ServiceType == typeof(ExpirySettings)).ImplementationInstance).Interval);
         Assert.Throws<ArgumentOutOfRangeException>(() => builder.UseExpiry(TimeSpan.Zero));
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void AbandonedUploadsDeletedAfter_ShouldBeADayOrNull_WhenTheExpirySweepRunsOrNot(bool expiry)
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        services.AddResourcefull(o =>
+        {
+            o.UseInMemory();
+            if (expiry) o.UseExpiry();
+        });
+
+        // Act
+        using ServiceProvider provider = services.BuildServiceProvider();
+        TimeSpan? after = provider.GetRequiredService<IOptions<ResourcefullOptions>>().Value.AbandonedUploadsDeletedAfter;
+
+        // Assert
+        Assert.Equal(expiry ? TimeSpan.FromDays(1) : null, after);
     }
 
     [Fact]

@@ -19,6 +19,8 @@ This section covers:
   and range requests for video players and resumable downloads.
 - [Accepting uploads](accepting-uploads.md): streaming request bodies and form files into storage, with
   preconditions, and raising the request size limits for large files.
+- [Resumable uploads](resumable-uploads.md): endpoints for tus clients, such as Uppy, so browsers and apps resume
+  large uploads after a dropped connection.
 - [Turning exceptions into status codes](status-codes.md): one handler that answers 404, 409, 412 and the rest.
 - [MVC, Razor Pages and Blazor](mvc-razor-blazor.md): the same pieces in controllers, pages and Blazor components.
 - [The dashboard](dashboard.md): a page, for administrators, showing the store's health and each container's usage

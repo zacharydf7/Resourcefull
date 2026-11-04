@@ -17,8 +17,10 @@ public sealed class RequestTelemetryCollection
 [Collection(RequestTelemetryCollection.Name)]
 public sealed class PreconditionTelemetryTests
 {
-    private static async Task<(HttpStatusCode Status, object? Tag)> SendAsync(TestApp app, HttpRequestMessage request,
-        string tag = "resourcefull.precondition")
+    private static Task<(HttpStatusCode Status, object? Tag)> SendAsync(TestApp app, HttpRequestMessage request,
+        string tag = "resourcefull.precondition") => SendAsync(app.Client, request, tag);
+
+    private static async Task<(HttpStatusCode Status, object? Tag)> SendAsync(HttpClient client, HttpRequestMessage request, string tag)
     {
         // ASP.NET Core starts a span per request only while something listens to its source.
         var requests = new ConcurrentQueue<Activity>();
@@ -30,7 +32,7 @@ public sealed class PreconditionTelemetryTests
         };
         ActivitySource.AddActivityListener(listener);
 
-        HttpResponseMessage response = await app.Client.SendAsync(request);
+        HttpResponseMessage response = await client.SendAsync(request);
         // The test server hands back the response before the request finishes and its span stops.
         Assert.True(SpinWait.SpinUntil(() => !requests.IsEmpty, TimeSpan.FromSeconds(5)), "The request's span never stopped.");
         return (response.StatusCode, Assert.Single(requests).GetTagItem(tag));
@@ -92,6 +94,52 @@ public sealed class PreconditionTelemetryTests
         // Act
         (_, object? store) = await SendAsync(app, new HttpRequestMessage(HttpMethod.Get, (archive ? "/archive/shared/" : "/shared/") + "not-a-token"),
             "resourcefull.store");
+
+        // Assert
+        Assert.Equal(expected, store);
+    }
+
+    [Theory]
+    [InlineData("options", HttpStatusCode.NoContent)]
+    [InlineData("create", HttpStatusCode.Created)]
+    [InlineData("resume", HttpStatusCode.OK)]
+    [InlineData("append", HttpStatusCode.NoContent)]
+    [InlineData("complete", HttpStatusCode.NoContent)]
+    [InlineData("cancel", HttpStatusCode.NoContent)]
+    public async Task MapResourcefullUploads_ShouldRecordWhatTheRequestDidOnItsSpan_WhenCalled(string expected, HttpStatusCode expectedStatus)
+    {
+        // Arrange: an upload of 4 bytes, with 2 stored.
+        await using UploadApp app = await UploadApp.StartAsync();
+        string url = (await app.Client.SendAsync(TusRequests.Create(4, TusRequests.Metadata(("filename", "a.bin"))))).Headers.Location!.ToString();
+        await app.Client.SendAsync(TusRequests.Patch(url, 0, "ab"u8.ToArray()));
+        HttpRequestMessage request = expected switch
+        {
+            "options" => new HttpRequestMessage(HttpMethod.Options, "/uploads"),
+            "create" => TusRequests.Create(4, TusRequests.Metadata(("filename", "b.bin"))),
+            "resume" => TusRequests.Tus(HttpMethod.Head, url),
+            "append" => TusRequests.Patch(url, 2, "c"u8.ToArray()),
+            "complete" => TusRequests.Patch(url, 2, "cd"u8.ToArray()),
+            _ => TusRequests.Tus(HttpMethod.Delete, url)
+        };
+
+        // Act
+        (HttpStatusCode status, object? tus) = await SendAsync(app.Client, request, "resourcefull.tus");
+
+        // Assert
+        Assert.Equal(expectedStatus, status);
+        Assert.Equal(expected, tus);
+    }
+
+    [Theory]
+    [InlineData("/archive-uploads", "archive")]
+    [InlineData("/uploads", null)]
+    public async Task MapResourcefullUploads_ShouldRecordANamedStoreOnTheRequestSpan_WhenItsEndpointsAreCalled(string path, string? expected)
+    {
+        // Arrange
+        await using UploadApp app = await UploadApp.StartAsync();
+
+        // Act
+        (_, object? store) = await SendAsync(app.Client, new HttpRequestMessage(HttpMethod.Options, path), "resourcefull.store");
 
         // Assert
         Assert.Equal(expected, store);

@@ -89,4 +89,6 @@ app.MapPost("/files/{container}", UploadFormAsync).WithMetadata(fiveGigabytes).D
 builder.Services.Configure<FormOptions>(options => options.MultipartBodyLengthLimit = 5L * 1024 * 1024 * 1024);
 ```
 
-Behind IIS or a reverse proxy, raise its limit too (`maxAllowedContentLength`, `client_max_body_size`).
+Behind IIS or a reverse proxy, raise its limit too (`maxAllowedContentLength`, `client_max_body_size`). For files
+large enough that a dropped connection is likely, or behind a limit you can't raise, use
+[resumable uploads](resumable-uploads.md) instead: the client sends the file in chunks, and resumes where it stopped.

@@ -48,6 +48,8 @@ Coming in 4.0, and documented on the site already:
 - **A dashboard:** one line maps a page showing the store's health and each container's usage against its limits.
 - **Backups:** export a container, every version, to a zip file, and import it into another store.
 - **Range downloads:** read part of a file, so videos can seek and downloads can resume.
+- **Resumable uploads:** endpoints for tus clients such as Uppy, so browsers and apps carry on with a large upload
+  after a dropped connection.
 - **Health checks and telemetry:** OpenTelemetry spans and metrics for every operation.
 
 ## Quick start

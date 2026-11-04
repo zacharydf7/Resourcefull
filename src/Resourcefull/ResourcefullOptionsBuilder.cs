@@ -229,6 +229,8 @@ public class ResourcefullOptionsBuilder
             throw new ArgumentOutOfRangeException(nameof(interval), interval, "The interval must be positive.");
 
         Replace(new ServiceDescriptor(typeof(ExpirySettings), StoreName, new ExpirySettings(interval ?? TimeSpan.FromMinutes(1))));
+        Services.Configure<ResourcefullOptions>(OptionsName,
+            options => options.AbandonedUploadsDeletedAfter = ResourceServiceClient.AbandonedUploadAge);
         if (!_expiryRegistered)
         {
             // One sweep for each store, so not TryAddEnumerable, which would keep only the first store's.

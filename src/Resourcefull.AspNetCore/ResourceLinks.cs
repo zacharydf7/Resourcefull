@@ -193,7 +193,7 @@ internal sealed class ResourceLinkSigner(IDataProtectionProvider dataProtection,
     }
 
     /// <summary>What <paramref name="token"/> holds, or <see langword="null"/> if this application didn't seal it.</summary>
-    private static T? Open<T>(IDataProtector protector, string token) where T : class
+    internal static T? Open<T>(IDataProtector protector, string token) where T : class
     {
         try
         {

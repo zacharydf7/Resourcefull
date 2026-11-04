@@ -60,6 +60,20 @@
   `resourcefull.azureblob.abandoned_uploads`, joins of a session's segments in `resourcefull.azureblob.session_joins`,
   and, in `resourcefull.azureblob.moves_recovered`, moves the sweep finished or undid after their mover stopped. It's
   tested against Azurite. See [Azure Blob Storage](docs/providers/azure-blob.md).
+- **Resumable uploads from browsers and apps.** `MapResourcefullUploads` maps endpoints that speak tus 1.0 over upload
+  sessions, with the creation, creation-with-upload, termination and expiration extensions, so tus clients such as
+  Uppy and tus-js-client resume large uploads with no upload code of their own. A required `ResolveAsync` decides
+  each upload's container, name, mode, content type and metadata, or refuses it, and `OnCompletedAsync` runs once the
+  file is stored. A client is told an upload finished only once its version is stored: a `Create` upload whose name
+  exists is refused when it starts, a refused completion cancels the upload, and one that fails otherwise answers 503;
+  when the client resumes, completing is tried again, and while it still fails the endpoints answer 423 Locked, which
+  tus clients retry. Upload URLs are sealed with Data Protection and work only for the user who started them, and only
+  with endpoints mapped with the same pattern for the same store (`StoreName` picks a named store). No request stores
+  more than its upload has left, so the endpoints lift ASP.NET Core's request size limit for their own requests;
+  `MaxSize` sets a limit of their own, and `WithResourcefullUploadHeaders` adds what they need to a CORS policy. Each
+  request's span gets `resourcefull.tus`. The core gains `ResourcefullOptions.AbandonedUploadsDeletedAfter`, which the
+  endpoints send as `Upload-Expires`. See
+  [Resumable uploads](docs/aspnet-core/resumable-uploads.md).
 - **Uploading in parts.** An upload session stores a large file over several appends, and what's stored survives a
   dropped connection or a restart: `StartUploadAsync`, then `AppendUploadAsync` from each part's offset,
   `GetUploadAsync` to find where to resume, and `CompleteUploadAsync`, which makes the version current with the
