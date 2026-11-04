@@ -243,6 +243,9 @@ public abstract class ResourceRepository
     /// <exception cref="ResourcePreconditionFailedException">
     /// The name's current version doesn't meet <paramref name="conditions"/>, or the name doesn't exist; nothing was deleted.
     /// </exception>
+    /// <exception cref="ResourceRetainedException">
+    /// A version it would delete is retained or held; see <see cref="SupportsRetention"/>.
+    /// </exception>
     public abstract Task<bool> DeleteResourceAsync(ResourceLocation resource, string? versionId = null,
         ResourceConditions? conditions = null, CancellationToken cancellationToken = default);
 
@@ -291,6 +294,9 @@ public abstract class ResourceRepository
     /// <param name="resourceContainerName">The container's name.</param>
     /// <param name="cancellationToken">Cancels the delete.</param>
     /// <returns><see langword="true"/> if the container existed and was deleted; otherwise <see langword="false"/>.</returns>
+    /// <exception cref="ResourceRetainedException">
+    /// A version in the container is retained or held; see <see cref="SupportsRetention"/>.
+    /// </exception>
     public abstract Task<bool> DeleteContainerAsync(string resourceContainerName,
         CancellationToken cancellationToken = default);
 
@@ -590,6 +596,64 @@ public abstract class ResourceRepository
     public virtual Task<bool> SetContentTypeAsync(ResourceLocation resource, string? versionId, string? contentType,
         CancellationToken cancellationToken = default)
         => throw new NotSupportedException($"{GetType().Name} doesn't change a version's content type.");
+
+    // Retention
+
+    /// <summary>
+    /// Whether the provider keeps versions from being deleted while they're retained or held: <see langword="false"/>
+    /// by default, and the clients then refuse every write that would give a version a
+    /// <see cref="ResourceInfo.RetainUntil"/> or a <see cref="ResourceInfo.LegalHold"/>, so none is stored unprotected.
+    /// <para>Coming in 4.0.</para>
+    /// </summary>
+    /// <remarks>
+    /// A provider that returns <see langword="true"/> must store <see cref="NewResourceVersion.RetainUntil"/> and
+    /// <see cref="NewResourceVersion.LegalHold"/> with each version it adds, return them on every read, override
+    /// <see cref="SetRetentionAsync"/> and <see cref="SetLegalHoldAsync"/>, and refuse to delete a version for which
+    /// <see cref="ResourceInfo.IsDeletableAt"/> is false at the time of the delete, throwing
+    /// <see cref="ResourceRetainedException"/> (see <see cref="ResourceRetainedException.Create"/>). It must decide that
+    /// in the delete itself, as it decides conditions, so a hold set at the same time either lands first and stops the
+    /// delete or finds the version gone. That covers <see cref="DeleteResourceAsync"/>, which deletes nothing when any
+    /// version it would delete is protected, and <see cref="DeleteContainerAsync"/>, which deletes nothing when any
+    /// version in the container is. A delete that goes in batches checks every version before the first, and each
+    /// version again before it goes, so one protected while it's under way stops it there. <see cref="GetExpiredAsync"/> lists only versions that may be deleted, and
+    /// <see cref="DeleteExpiredVersionAsync"/> and <see cref="DeleteExpiredVersionsAsync"/> leave a protected version
+    /// as they leave one that's no longer expired. A move carries a version's retention and hold with it.
+    /// </remarks>
+    public virtual bool SupportsRetention => false;
+
+    /// <summary>
+    /// Moves one version's <see cref="ResourceInfo.RetainUntil"/> to <paramref name="retainUntil"/>, or the current
+    /// version's when <paramref name="versionId"/> is <see langword="null"/>. A date can only move later: it's refused
+    /// if it's before the version's own, decided by the change itself.
+    /// <para>Coming in 4.0.</para>
+    /// </summary>
+    /// <param name="resource">The resource.</param>
+    /// <param name="versionId">The version, or <see langword="null"/> for the current one.</param>
+    /// <param name="retainUntil">Until when the version can't be deleted.</param>
+    /// <param name="cancellationToken">Cancels the change.</param>
+    /// <returns><see langword="true"/> if the version exists; otherwise <see langword="false"/>.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <paramref name="retainUntil"/> is before the version's <see cref="ResourceInfo.RetainUntil"/>; nothing changed.
+    /// </exception>
+    /// <exception cref="NotSupportedException">The provider doesn't support retention, as by default.</exception>
+    public virtual Task<bool> SetRetentionAsync(ResourceLocation resource, string? versionId, DateTimeOffset retainUntil,
+        CancellationToken cancellationToken = default)
+        => throw new NotSupportedException($"{GetType().Name} doesn't support retention.");
+
+    /// <summary>
+    /// Sets or lifts one version's <see cref="ResourceInfo.LegalHold"/>, or the current version's when
+    /// <paramref name="versionId"/> is <see langword="null"/>, changing nothing else about it.
+    /// <para>Coming in 4.0.</para>
+    /// </summary>
+    /// <param name="resource">The resource.</param>
+    /// <param name="versionId">The version, or <see langword="null"/> for the current one.</param>
+    /// <param name="hold">Whether the version is under a legal hold.</param>
+    /// <param name="cancellationToken">Cancels the change.</param>
+    /// <returns><see langword="true"/> if the version exists; otherwise <see langword="false"/>.</returns>
+    /// <exception cref="NotSupportedException">The provider doesn't support retention, as by default.</exception>
+    public virtual Task<bool> SetLegalHoldAsync(ResourceLocation resource, string? versionId, bool hold,
+        CancellationToken cancellationToken = default)
+        => throw new NotSupportedException($"{GetType().Name} doesn't support retention.");
 
     /// <summary>
     /// Gets what a container holds: the total <see cref="ResourceInfo.ContentLength"/> of every version, and how many

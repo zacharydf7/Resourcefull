@@ -45,7 +45,8 @@ public class ResourcefullServiceCollectionExtensionsTests
                 "ContainerPolicies": {
                   "Defaults": {
                     "MaxResourceSize": "100 MB", "MaxContainerSize": "5 GB", "MaxResourceCount": 1000,
-                    "AllowedContentTypes": [ "application/pdf", "image/png" ], "ReadOnly": false, "MaxVersions": 5
+                    "AllowedContentTypes": [ "application/pdf", "image/png" ], "ReadOnly": false, "MaxVersions": 5,
+                    "RetainFor": "7.00:00:00"
                   },
                   "CacheFor": "00:00:10",
                   "KeepLastKnownFor": "00:01:00"
@@ -64,7 +65,8 @@ public class ResourcefullServiceCollectionExtensionsTests
         Assert.Equivalent(new ResourceContainerPolicy
         {
             MaxResourceSize = ResourceSize.Megabytes(100), MaxContainerSize = ResourceSize.Gigabytes(5),
-            MaxResourceCount = 1000, AllowedContentTypes = ["application/pdf", "image/png"], ReadOnly = false, MaxVersions = 5
+            MaxResourceCount = 1000, AllowedContentTypes = ["application/pdf", "image/png"], ReadOnly = false, MaxVersions = 5,
+            RetainFor = TimeSpan.FromDays(7)
         }, policies.Defaults);
     }
 
@@ -126,6 +128,8 @@ public class ResourcefullServiceCollectionExtensionsTests
     [InlineData("""{ "Versioning": { "MaxVersions": 0 } }""", "Resourcefull:Versioning aren't valid")]
     [InlineData("""{ "Expiry": { "Interval": "00:00:00" } }""", "Resourcefull:Expiry aren't valid")]
     [InlineData("""{ "ContainerPolicies": { "Defaults": { "MaxVersions": 0 } } }""",
+        "Resourcefull:ContainerPolicies aren't valid")]
+    [InlineData("""{ "ContainerPolicies": { "Defaults": { "RetainFor": "-1.00:00:00" } } }""",
         "Resourcefull:ContainerPolicies aren't valid")]
     [InlineData("""{ "ContainerPolicies": { "CacheFor": "-00:00:01" } }""",
         "Resourcefull:ContainerPolicies aren't valid")]

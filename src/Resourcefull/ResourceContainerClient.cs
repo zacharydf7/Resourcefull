@@ -34,18 +34,18 @@ internal partial class ResourceContainerClient(ResourceRepository resourceReposi
         uploadOptions ??= new ResourceUploadOptions();
         ResourceConditions? conditions = uploadOptions.Conditions is { IsEmpty: false } set ? set : null;
         bool createOnly = IsCreate(uploadOptions.Mode, conditions, nameof(ResourceUploadOptions.Conditions), "options");
-        if (policies is not null && await policies.CheckNewVersionAsync(ContainerName, resourceName, restore: false,
-            uploadOptions.Headers?.ContentType, uploadOptions.Headers?.ContentLength, _telemetry, cancellationToken).ConfigureAwait(false) is { } limit)
-        {
-            content = new LimitedContentStream(content, limit);
-        }
+        NewVersionCheck check = policies is null ? default : await policies.CheckNewVersionAsync(ContainerName, resourceName, restore: false,
+            uploadOptions.Headers?.ContentType, uploadOptions.Headers?.ContentLength, _telemetry, cancellationToken).ConfigureAwait(false);
+        if (check.Limit is { } limit) content = new LimitedContentStream(content, limit);
 
         var version = new NewResourceVersion(At(resourceName), Guid.CreateVersion7().ToString())
         {
             ContentType = uploadOptions.Headers?.ContentType,
             DeclaredLength = uploadOptions.Headers?.ContentLength,
             Metadata = new Dictionary<string, string>(uploadOptions.Metadata),
-            ExpiresAt = uploadOptions.ExpiresAt
+            ExpiresAt = uploadOptions.ExpiresAt,
+            RetainUntil = RetainUntil(check.RetainFor, uploadOptions.RetainUntil, uploadOptions.LegalHold),
+            LegalHold = uploadOptions.LegalHold
         };
 
         // Disposed in a finally rather than with await using, since ConfigureAwait's wrapper can't dispose null.
@@ -103,11 +103,12 @@ internal partial class ResourceContainerClient(ResourceRepository resourceReposi
         ResourceInfo? resourceInfo = await resourceRepository.GetResourceInfoAsync(At(resourceName), versionId, cancellationToken).ConfigureAwait(false);
         if (resourceInfo == null) return null;
         // As for a copy, the stored length stands in for a declared one: the content doesn't pass through here.
+        NewVersionCheck check = default;
         if (policies is not null)
         {
             resourceInfo = await WithStoredLengthAsync(resourceInfo, cancellationToken).ConfigureAwait(false);
             if (resourceInfo is null) return null;
-            await policies.CheckNewVersionAsync(ContainerName, resourceName, restore: true, null,
+            check = await policies.CheckNewVersionAsync(ContainerName, resourceName, restore: true, null,
                 resourceInfo.ContentLength, _telemetry, cancellationToken).ConfigureAwait(false);
         }
 
@@ -117,7 +118,8 @@ internal partial class ResourceContainerClient(ResourceRepository resourceReposi
         {
             ContentType = resourceInfo.ContentType,
             Metadata = resourceInfo.Metadata,
-            CopiedFrom = new ResourceOrigin(ContainerName, resourceName, versionId)
+            CopiedFrom = new ResourceOrigin(ContainerName, resourceName, versionId),
+            RetainUntil = RetainUntil(check.RetainFor, null, false)
         };
         WrittenContent? written = await resourceRepository.CopyResourceAsync(At(resourceName), versionId, restored, null,
             cancellationToken).ConfigureAwait(false);
@@ -172,6 +174,8 @@ internal partial class ResourceContainerClient(ResourceRepository resourceReposi
             Metadata = version.Metadata,
             CopiedFrom = version.CopiedFrom,
             ExpiresAt = version.ExpiresAt,
+            RetainUntil = version.RetainUntil,
+            LegalHold = version.LegalHold,
             ContentLength = written.ContentLength,
             ContentHash = written.ContentHash,
             LastModified = written.LastModified,
@@ -227,6 +231,9 @@ internal partial class ResourceContainerClient(ResourceRepository resourceReposi
         DateTimeOffset now = (timeProvider ?? TimeProvider.System).GetUtcNow();
         foreach (ResourceInfo version in versions.Skip(keep))
         {
+            // A retained or held version stays past the limit until it's no longer protected; then the next prune removes it.
+            if (!version.IsDeletableAt(now)) continue;
+
             // With expiry on, a version past the limit stays a few minutes more, so a download reading it can finish; the
             // sweep deletes it, telling the cleanup handler then. A provider without expiry deletes it now.
             if (expiry is not null && await TryExpireAsync(containerName, version, now + PruneGracePeriod, cancellationToken).ConfigureAwait(false))
@@ -285,30 +292,48 @@ internal partial class ResourceContainerClient(ResourceRepository resourceReposi
         return pruned;
     }
 
-    /// <summary>Deletes a pruned version, telling the cleanup handler first.</summary>
+    /// <summary>
+    /// Deletes a pruned version, telling the cleanup handler first, unless it's retained or held: then it stays for a
+    /// later prune.
+    /// </summary>
     private async Task DeletePrunedAsync(ResourceInfo version, DateTimeOffset now, CancellationToken cancellationToken)
     {
+        if (!version.IsDeletableAt(now)) return;
         // Told first, so a handler that fails leaves the version for a later prune rather than deleted unreported.
         if (cleanupHandler is not null)
             await _telemetry.NotifyCleanupAsync(cleanupHandler, new ResourceCleanup(version, ResourceCleanupReason.Pruned, now), cancellationToken).ConfigureAwait(false);
-        await resourceRepository.DeleteResourceAsync(new ResourceLocation(version.ContainerName, version.Name), version.VersionId,
-            null, cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await resourceRepository.DeleteResourceAsync(new ResourceLocation(version.ContainerName, version.Name), version.VersionId,
+                null, cancellationToken).ConfigureAwait(false);
+        }
+        catch (ResourceRetainedException refusal)
+        {
+            // A hold or a later date set since the versions were read keeps it.
+            _telemetry.CountRefusal("prune", refusal);
+        }
     }
 
     /// <summary>
-    /// In a container that keeps one version, the replaced versions still waiting out their grace period behind
-    /// <paramref name="currentVersionId"/>. Deleting the current version must take them too, or
-    /// the most recent of them would become current again, bringing back content the upload replaced. Empty in a
-    /// container that keeps more, where an older version becoming current is what deleting the current one does, or
-    /// when expiry is off and none wait.
+    /// In a container that keeps one version, the replaced versions still behind <paramref name="currentVersionId"/>:
+    /// those waiting out their grace period, and those retained or held. Deleting the current version must take them
+    /// too, or the most recent of them would become current again, bringing back content the upload replaced. Empty in
+    /// a container that keeps more, where an older version becoming current is what deleting the current one does.
     /// </summary>
     internal async Task<IReadOnlyList<ResourceInfo>> WaitingBehindAsync(string resourceName, string currentVersionId,
         CancellationToken cancellationToken)
     {
-        if (expiry is null || await MaxVersionsAsync(ContainerName, cancellationToken).ConfigureAwait(false) > 1) return [];
+        if (await MaxVersionsAsync(ContainerName, cancellationToken).ConfigureAwait(false) > 1) return [];
         IReadOnlyList<ResourceInfo> versions = await resourceRepository.GetResourceVersionsAsync(At(resourceName), cancellationToken).ConfigureAwait(false);
         return versions.Count > 0 && versions[0].VersionId == currentVersionId ? [.. versions.Skip(1)] : [];
     }
+
+    /// <summary>
+    /// The first of the versions <see cref="WaitingBehindAsync"/> found that can't be deleted at <paramref name="now"/>,
+    /// which keeps the current version from being deleted: it would become current again.
+    /// </summary>
+    internal static ResourceInfo? Retained(IReadOnlyList<ResourceInfo> waiting, DateTimeOffset now) =>
+        waiting.FirstOrDefault(v => !v.IsDeletableAt(now));
 
     /// <summary>Deletes the versions <see cref="WaitingBehindAsync"/> found, once the current one is deleted.</summary>
     internal Task DeleteWaitingAsync(string resourceName, IReadOnlyList<ResourceInfo> waiting) =>
@@ -326,6 +351,20 @@ internal partial class ResourceContainerClient(ResourceRepository resourceReposi
     private async ValueTask<int> MaxVersionsAsync(string containerName, CancellationToken cancellationToken) =>
         (policies is null ? null : (await policies.GetAsync(containerName, _telemetry, cancellationToken).ConfigureAwait(false)).MaxVersions)
             ?? options.MaxVersions;
+
+    /// <summary>
+    /// The <see cref="NewResourceVersion.RetainUntil"/> of a new version: the one its write asks for, or else
+    /// <paramref name="retainFor"/>, its container's <see cref="ResourceContainerPolicy.RetainFor"/>, from now. A
+    /// provider that can't keep it is refused, so nothing is stored unprotected.
+    /// </summary>
+    /// <exception cref="NotSupportedException">The version would be retained or held, and the provider doesn't support retention.</exception>
+    private DateTimeOffset? RetainUntil(TimeSpan? retainFor, DateTimeOffset? retainUntil, bool legalHold)
+    {
+        if (retainUntil is null && retainFor > TimeSpan.Zero) retainUntil = (timeProvider ?? TimeProvider.System).GetUtcNow() + retainFor;
+        if ((retainUntil is not null || legalHold) && !resourceRepository.SupportsRetention)
+            throw new NotSupportedException($"{resourceRepository.GetType().Name} doesn't support retention.");
+        return retainUntil;
+    }
 
     /// <summary>
     /// Whether a write in <paramref name="mode"/> is create-only. Throws for an undefined mode, or for conditions with
@@ -485,6 +524,9 @@ internal partial class ResourceContainerClient(ResourceRepository resourceReposi
             ResourceNames.ThrowIfInvalidResourceName(resourceName);
             if (policies is not null) await policies.ThrowIfReadOnlyAsync(ContainerName, _telemetry, cancellationToken).ConfigureAwait(false);
             IReadOnlyList<ResourceInfo> waiting = versionId is null ? [] : await WaitingBehindAsync(resourceName, versionId, cancellationToken).ConfigureAwait(false);
+            DateTimeOffset now = (timeProvider ?? TimeProvider.System).GetUtcNow();
+            if (Retained(waiting, now) is { } retained)
+                throw ResourceRetainedException.Create(At(resourceName), retained.VersionId, retained.RetainUntil, retained.LegalHold, now);
             bool deleted = await resourceRepository.DeleteResourceAsync(At(resourceName), versionId,
                 conditions is { IsEmpty: false } ? conditions : null, cancellationToken).ConfigureAwait(false);
             if (deleted) await DeleteWaitingAsync(resourceName, waiting).ConfigureAwait(false);
@@ -512,11 +554,12 @@ internal partial class ResourceContainerClient(ResourceRepository resourceReposi
         ResourceInfo? source = await resourceRepository.GetResourceInfoAsync(At(resourceName), copyOptions.VersionId, cancellationToken).ConfigureAwait(false);
         if (source is null) return null;
         // The stored length stands in for a declared one: the content doesn't pass through here to be measured.
+        NewVersionCheck check = default;
         if (policies is not null)
         {
             source = await WithStoredLengthAsync(source, cancellationToken).ConfigureAwait(false);
             if (source is null) return null;
-            await policies.CheckNewVersionAsync(destinationContainer, destinationName, restore: false, source.ContentType, source.ContentLength,
+            check = await policies.CheckNewVersionAsync(destinationContainer, destinationName, restore: false, source.ContentType, source.ContentLength,
                 _telemetry, cancellationToken).ConfigureAwait(false);
         }
 
@@ -525,7 +568,9 @@ internal partial class ResourceContainerClient(ResourceRepository resourceReposi
             ContentType = source.ContentType,
             Metadata = source.Metadata,
             CopiedFrom = new ResourceOrigin(ContainerName, resourceName, source.VersionId),
-            ExpiresAt = copyOptions.ExpiresAt
+            ExpiresAt = copyOptions.ExpiresAt,
+            RetainUntil = RetainUntil(check.RetainFor, copyOptions.RetainUntil, copyOptions.LegalHold),
+            LegalHold = copyOptions.LegalHold
         };
         WrittenContent? written;
         try
@@ -674,6 +719,24 @@ internal partial class ResourceContainerClient(ResourceRepository resourceReposi
             return await resourceRepository.SetContentTypeAsync(new ResourceLocation(ContainerName, resourceName), versionId,
                 contentType, cancellationToken).ConfigureAwait(false);
         });
+
+    public Task<bool> SetRetentionAsync(string resourceName, string? versionId, DateTimeOffset retainUntil,
+        CancellationToken cancellationToken = default)
+        => _telemetry.RunAsync("set_retention", ContainerName, resourceName, async () =>
+        {
+            ResourceNames.ThrowIfInvalidResourceName(resourceName);
+            if (policies is not null) await policies.ThrowIfReadOnlyAsync(ContainerName, _telemetry, cancellationToken).ConfigureAwait(false);
+            return await resourceRepository.SetRetentionAsync(At(resourceName), versionId, retainUntil, cancellationToken).ConfigureAwait(false);
+        });
+
+    public Task<bool> SetLegalHoldAsync(string resourceName, string? versionId, bool hold,
+        CancellationToken cancellationToken = default)
+        => _telemetry.RunAsync("set_legal_hold", ContainerName, resourceName, async () =>
+        {
+            ResourceNames.ThrowIfInvalidResourceName(resourceName);
+            if (policies is not null) await policies.ThrowIfReadOnlyAsync(ContainerName, _telemetry, cancellationToken).ConfigureAwait(false);
+            return await resourceRepository.SetLegalHoldAsync(At(resourceName), versionId, hold, cancellationToken).ConfigureAwait(false);
+        }, "resourcefull.legal_hold", hold);
 
     public Task<ResourceContainerUsage> GetUsageAsync(CancellationToken cancellationToken = default)
         => _telemetry.RunAsync("get_usage", ContainerName, null, () => resourceRepository.GetContainerUsageAsync(ContainerName, cancellationToken));

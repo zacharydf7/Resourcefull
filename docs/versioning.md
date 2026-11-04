@@ -69,6 +69,10 @@ that are still waiting too, so replaced content doesn't come back; if deleting t
 failed prune and they stay until they expire. In a container that keeps more, deleting the current version makes the
 previous one current, as always, and that can be one waiting to be deleted.
 
+A version that's [retained or under a legal hold](deleting-safely.md) <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> isn't pruned: it stays past the limit,
+and once it's no longer protected, the next prune removes it. So an upload that replaces a retained version always succeeds,
+and the retained version stays on as an older one, even in a container that keeps one version.
+
 To record the versions that pruning deletes, such as for an audit, register a
 [cleanup handler](expiry.md#auditing-whats-deleted) <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>.
 
@@ -115,7 +119,10 @@ replaced. (In 3.1,
 | `DeleteResourceIfExistsAsync(name, versionId)` | that one version; if it was current, the most recently stored remaining version becomes current |
 | `DeleteContainerIfExistsAsync(container)` | the container and everything in it |
 
-Each returns `true` if it deleted anything.
+Each returns `true` if it deleted anything. A delete that would remove a version that's
+[retained or under a legal hold](deleting-safely.md) <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> throws `ResourceRetainedException` and deletes nothing, unless
+the version was protected while a batched delete was already under way; see
+[Deleting safely](deleting-safely.md#what-happens-to-a-protected-version).
 
 With SQL Server, deleting a name with many large versions happens in batches that commit one at a time, oldest first
 and the current version last, so the name keeps its current version until the end. If the delete is canceled or

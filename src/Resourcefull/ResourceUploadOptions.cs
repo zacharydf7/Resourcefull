@@ -37,4 +37,19 @@ public class ResourceUploadOptions
     /// <para>Coming in 4.0.</para>
     /// </summary>
     public DateTimeOffset? ExpiresAt { get; init; }
+
+    /// <summary>
+    /// Until when the uploaded version can't be deleted, by anyone or anything, expiry and pruning included; see
+    /// <see cref="IResourceContainerClient.SetRetentionAsync"/>. <see langword="null"/> takes the container's
+    /// <see cref="ResourceContainerPolicy.RetainFor"/>, if it has one.
+    /// <para>Coming in 4.0.</para>
+    /// </summary>
+    public DateTimeOffset? RetainUntil { get; init; }
+
+    /// <summary>
+    /// Whether the uploaded version is stored under a legal hold, which keeps it from being deleted until the hold is
+    /// lifted; see <see cref="IResourceContainerClient.SetLegalHoldAsync"/>.
+    /// <para>Coming in 4.0.</para>
+    /// </summary>
+    public bool LegalHold { get; init; }
 }

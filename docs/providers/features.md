@@ -17,6 +17,7 @@ provider aims for every feature. This page shows, in one place, where each one s
 | Container metadata | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
 | Changing a version's metadata or content type | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
 | [Expiry](../expiry.md) | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| [Retention and legal holds](../deleting-safely.md) | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
 | [Uploading in parts](../uploading-in-parts.md) | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
 | [Export and import](../backup-and-move.md) | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
 | [Container policies](../container-policies.md) | Yes | Yes | Yes | Yes | Yes | Yes | Yes |

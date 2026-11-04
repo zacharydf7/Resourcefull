@@ -311,7 +311,8 @@ public class ResourcefullOptionsBuilder
             IConfigurationSection? defaults = Present(policies, "Defaults",
                 nameof(ResourceContainerPolicy.MaxResourceSize), nameof(ResourceContainerPolicy.MaxContainerSize),
                 nameof(ResourceContainerPolicy.MaxResourceCount), nameof(ResourceContainerPolicy.AllowedContentTypes),
-                nameof(ResourceContainerPolicy.ReadOnly), nameof(ResourceContainerPolicy.MaxVersions));
+                nameof(ResourceContainerPolicy.ReadOnly), nameof(ResourceContainerPolicy.MaxVersions),
+                nameof(ResourceContainerPolicy.RetainFor));
             int? maxVersions = defaults is null ? null : Read<int>(defaults, nameof(ResourceContainerPolicy.MaxVersions));
             TimeSpan? cacheFor = Read<TimeSpan>(policies, "CacheFor");
             TimeSpan? keepLastKnownFor = Read<TimeSpan>(policies, "KeepLastKnownFor");
@@ -323,7 +324,8 @@ public class ResourcefullOptionsBuilder
                 MaxResourceCount = Read<long>(defaults, nameof(ResourceContainerPolicy.MaxResourceCount)),
                 AllowedContentTypes = ReadList(defaults, nameof(ResourceContainerPolicy.AllowedContentTypes)),
                 ReadOnly = Read<bool>(defaults, nameof(ResourceContainerPolicy.ReadOnly)),
-                MaxVersions = maxVersions
+                MaxVersions = maxVersions,
+                RetainFor = Read<TimeSpan>(defaults, nameof(ResourceContainerPolicy.RetainFor))
             }, cacheFor, keepLastKnownFor));
         }
         return this;

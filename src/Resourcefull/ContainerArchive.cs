@@ -62,7 +62,9 @@ internal static class ContainerArchive
         [property: JsonPropertyName("metadata")] IReadOnlyDictionary<string, string> Metadata,
         [property: JsonPropertyName("copiedFrom")] ManifestOrigin? CopiedFrom,
         [property: JsonPropertyName("expiresAt")] DateTimeOffset? ExpiresAt,
-        [property: JsonPropertyName("content")] string Content);
+        [property: JsonPropertyName("content")] string Content,
+        [property: JsonPropertyName("retainUntil"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] DateTimeOffset? RetainUntil = null,
+        [property: JsonPropertyName("legalHold"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool LegalHold = false);
 
     /// <summary>
     /// A <see cref="ResourceOrigin"/> as the export describes it, so the public type can change without the format.
@@ -160,7 +162,7 @@ internal static class ContainerArchive
                             : null;
                         versions.Add(new ManifestVersion(version.VersionId, version.LastModified, version.ContentType,
                             content.ContentLength, content.ContentHash, version.Metadata, origin, version.ExpiresAt,
-                            entryName));
+                            entryName, version.RetainUntil, version.LegalHold));
                     }
 
                     if (versions.Count == 0) continue;
@@ -193,6 +195,12 @@ internal static class ContainerArchive
         ResourceRepository repository, ContainerPolicies? policies, ClientTelemetry telemetry,
         IResourceUploadInspector? inspector, CancellationToken cancellationToken)
     {
+        // Retention and holds go on once every version is stored, so an import that fails can still delete what it stored.
+        List<(string Name, ManifestVersion Version)> protectedVersions =
+            [.. manifest.Resources.SelectMany(r => r.Versions.Where(v => v.RetainUntil is not null || v.LegalHold).Select(v => (r.Name, v)))];
+        if (protectedVersions.Count > 0 && !repository.SupportsRetention)
+            throw new NotSupportedException($"{repository.GetType().Name} doesn't support retention, which the export's versions have.");
+
         // The container is new, so its usage is what the import has stored so far: counted here, so a policy's limits
         // don't add up the container again before each version.
         long versionCount = 0, contentSize = 0, resourceCount = 0;
@@ -222,7 +230,7 @@ internal static class ContainerArchive
                 await using var contentDisposal = content.ConfigureAwait(false);
                 var usage = new ResourceContainerUsage(contentSize, resourceCount, versionCount);
                 Stream checkedContent = policies is not null && await policies.CheckNewVersionAsync(containerName, resource.Name, restore: false,
-                    version.ContentType, version.ContentLength, telemetry, cancellationToken, usage).ConfigureAwait(false) is { } limit
+                    version.ContentType, version.ContentLength, telemetry, cancellationToken, usage).ConfigureAwait(false) is { Limit: { } limit }
                     ? new LimitedContentStream(content, limit)
                     : content;
                 // Disposed in a finally rather than with await using, since ConfigureAwait's wrapper can't dispose
@@ -258,6 +266,15 @@ internal static class ContainerArchive
 
             // Counted once its versions are stored, so its own later versions don't count it against the limit.
             if (resource.Versions.Count > 0) resourceCount++;
+        }
+
+        foreach ((string name, ManifestVersion version) in protectedVersions)
+        {
+            var location = new ResourceLocation(containerName, name);
+            if (version.RetainUntil is { } retainUntil)
+                await repository.SetRetentionAsync(location, version.VersionId, retainUntil, cancellationToken).ConfigureAwait(false);
+            if (version.LegalHold)
+                await repository.SetLegalHoldAsync(location, version.VersionId, true, cancellationToken).ConfigureAwait(false);
         }
 
         return new ResourceImportResult(manifest.Resources.Count, versionCount, contentSize);

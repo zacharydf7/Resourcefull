@@ -855,6 +855,53 @@ public sealed class TelemetryTests : IDisposable
     }
 
     [Fact]
+    public async Task DeleteResourceIfExistsAsync_ShouldCountAndTagTheRefusal_WhenTheVersionIsHeld()
+    {
+        // Arrange
+        using ServiceProvider provider = NewServices();
+        IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>().CreateContainerAsync("c");
+        await container.UploadAsync("a", BinaryData.FromString("x"), new ResourceUploadOptions { LegalHold = true });
+        using Activity root = TestSource.StartActivity("test")!;
+
+        // Act
+        await Assert.ThrowsAsync<ResourceRetainedException>(() => container.DeleteResourceIfExistsAsync("a"));
+
+        // Assert
+        Dictionary<string, object?> refused = Assert.Single(MeasurementsOf("resourcefull.client.delete.refused"));
+        Assert.Equal(("inmemory", "delete", "legal_hold"),
+            (refused["resourcefull.provider"], refused["resourcefull.operation"], refused["resourcefull.refusal_reason"]));
+        Activity delete = SpansIn(root).Single(s => s.OperationName == "resourcefull delete");
+        Assert.Equal("legal_hold", delete.GetTagItem("resourcefull.refusal_reason"));
+    }
+
+    /// <summary>A store where every delete finds its version protected, as when a hold lands just before it.</summary>
+    private sealed class RefusingDeletes : ResourceInMemoryRepository
+    {
+        public override Task<bool> DeleteResourceAsync(ResourceLocation resource, string? versionId = null,
+            ResourceConditions? conditions = null, CancellationToken cancellationToken = default) =>
+            throw new ResourceRetainedException("Held since the prune read it.", versionId ?? "", null, true);
+    }
+
+    [Fact]
+    public async Task UploadAsync_ShouldCountThePruneRefusal_WhenTheVersionItPrunesIsHeldBeforeItsDelete()
+    {
+        // Arrange: without versioning, an overwrite prunes the version before it.
+        using ServiceProvider provider = new ServiceCollection()
+            .AddResourcefull(o => o.UseProvider(_ => new RefusingDeletes(), Microsoft.Extensions.DependencyInjection.ServiceLifetime.Singleton))
+            .BuildServiceProvider();
+        IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>().CreateContainerAsync("c");
+        await container.UploadAsync("a", BinaryData.FromString("x"));
+
+        // Act
+        await container.UploadAsync("a", BinaryData.FromString("y"), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace });
+
+        // Assert: the upload succeeds, and the refusal is counted rather than failing the prune.
+        Dictionary<string, object?> refused = Assert.Single(MeasurementsOf("resourcefull.client.delete.refused"));
+        Assert.Equal(("prune", "legal_hold"), (refused["resourcefull.operation"], refused["resourcefull.refusal_reason"]));
+        Assert.Empty(MeasurementsOf("resourcefull.client.prune.failures"));
+    }
+
+    [Fact]
     public async Task DeleteExpiredAsync_ShouldCountTheVersionsItDeleted_WhenSomeHaveExpired()
     {
         // Arrange

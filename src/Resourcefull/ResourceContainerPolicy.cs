@@ -64,6 +64,23 @@ public sealed class ResourceContainerPolicy
     public bool? ReadOnly { get; init; }
 
     /// <summary>
+    /// How long each new version can't be deleted for, counted from when its write starts: its
+    /// <see cref="ResourceInfo.RetainUntil"/>, unless the write sets one itself. Uploads, copies and restores get it;
+    /// versions already stored keep theirs. <see cref="TimeSpan.Zero"/> gives none.
+    /// <para>Coming in 4.0.</para>
+    /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">It's set to less than zero.</exception>
+    public TimeSpan? RetainFor
+    {
+        get => _retainFor;
+        init => _retainFor = value < TimeSpan.Zero
+            ? throw new ArgumentOutOfRangeException(nameof(RetainFor), value, "A version can't be retained for a negative time.")
+            : value;
+    }
+
+    private readonly TimeSpan? _retainFor;
+
+    /// <summary>
     /// Whether <see cref="AllowedContentTypes"/> lets an upload declare <paramref name="contentType"/>, matched the same
     /// way the policy checks an upload's type. It's <see langword="true"/> for any type, or none, when <see cref="AllowedContentTypes"/> is
     /// <see langword="null"/>.

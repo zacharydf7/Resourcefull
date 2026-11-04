@@ -41,7 +41,8 @@ Both methods return what they did: how many resources and versions, and how much
 The export is an ordinary zip, so you can open it with any zip tool to see what's inside:
 
 - **`manifest.json`** describes the container and every version: its ID, when it was stored, its type, metadata and
-  content hash, and which file in the zip holds its content.
+  content hash, its [retention date and legal hold](deleting-safely.md) when it has them, and which file in the zip
+  holds its content.
 - **`content/`** holds the files' contents, each once. Versions with the same content, such as a file uploaded twice
   or a copy, share one entry, so copies don't make the export bigger.
 
@@ -109,6 +110,9 @@ app.MapPost("/admin/containers/{name}/import", async (string name, HttpRequest r
   import deletes the container again. Fix the cause and import again. If the delete fails too, as it can when the
   database is unreachable or out of space, you get an `AggregateException` holding both errors, and should delete the
   container yourself before trying again; the same goes if the application stops partway through an import.
+- **Retention dates and legal holds go on last** <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>, once every version is stored, so a failed
+  import can still delete what it stored. Only a failure while it sets them leaves versions that
+  [can't be deleted](deleting-safely.md) yet: lift their holds, and the container can be deleted once their dates pass.
 - **An unfinished import is marked.** While an import fills its container, the container's metadata has
   `resourcefull.import` set to `in-progress`, and the import removes it once every version is stored. A container that
   still has it after the import has stopped didn't finish; delete it and import again. (The mark is set just after the

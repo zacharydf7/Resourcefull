@@ -295,6 +295,31 @@ The service client's `SetContainerMetadataAsync` calls the provider member of th
 [Importing versions](#importing-versions), so with a provider that doesn't override it, the service client's method
 throws `NotSupportedException`.
 
+## Retention and legal holds
+
+<div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 4.0</span></div>
+
+[Retention dates and legal holds](../deleting-safely.md) keep versions from being deleted. `SupportsRetention` is
+`false` by default, and the clients then refuse every write that would protect a version, with
+`NotSupportedException`, so nothing is stored unprotected. To support them, return `true` and:
+
+- **Store and return both.** Keep `NewResourceVersion.RetainUntil` and `LegalHold` with each version that
+  `AddResourceAsync`, `ImportVersionAsync`, `CopyResourceAsync` and the [upload session](#upload-sessions) members
+  store, and return them as `ResourceInfo.RetainUntil` and `LegalHold` on every read. A move keeps both with each
+  version.
+- **Override `SetRetentionAsync` and `SetLegalHoldAsync`.** Each changes one version, or the current one for a `null`
+  version ID, and returns `false` when there's no such version. Refuse a date before the version's own with
+  `ArgumentOutOfRangeException`, deciding that in the change, under whatever serializes writes to the name.
+- **Refuse protected deletes in the delete itself.** `DeleteResourceAsync` throws `ResourceRetainedException` when
+  any version it would delete can't be deleted now (`ResourceInfo.IsDeletableAt` is `false`), and deletes nothing;
+  `ResourceRetainedException.Create` builds it with the clients' message. Decide it as you decide conditions, in the
+  same step as the delete, so a hold set at the same moment either lands first and stops the delete or finds the
+  version gone. `DeleteContainerAsync` does the same for any version in the container. A container deleted in batches
+  must also refuse a version protected after the delete started, before it deletes that version.
+- **Leave protected versions to expiry.** `GetExpiredAsync` lists only versions that may be deleted, and
+  `DeleteExpiredVersionAsync` and `DeleteExpiredVersionsAsync` leave a protected version as they leave one whose
+  expiry was extended.
+
 ## Container usage
 
 `GetContainerUsageAsync`'s default lists every resource's versions, one name at a time, and adds up their
@@ -404,6 +429,7 @@ with `NotSupportedException`, changing nothing, rather than seem to succeed:
 | `SupportsImport` | `ImportVersionAsync` |
 | `SupportsExpiry` | `GetExpiredAsync`, `DeleteExpiredVersionAsync` and `SetExpiryAsync` |
 | `SupportsUploadSessions` | the six [upload session](#upload-sessions) members |
+| `SupportsRetention` | `SupportsRetention`, `SetRetentionAsync` and `SetLegalHoldAsync` ([retention and legal holds](#retention-and-legal-holds)) |
 
 ```csharp
 public class FileSystemContractTests : ResourcefullContractTests

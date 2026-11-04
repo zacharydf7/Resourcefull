@@ -36,4 +36,19 @@ public sealed class ResourceUploadSessionOptions
     /// When the version expires, once the session completes: as for <see cref="ResourceUploadOptions.ExpiresAt"/>.
     /// </summary>
     public DateTimeOffset? ExpiresAt { get; init; }
+
+    /// <summary>
+    /// Until when the version can't be deleted, once the session completes: as for
+    /// <see cref="ResourceUploadOptions.RetainUntil"/>, counting <see cref="ResourceContainerPolicy.RetainFor"/> from
+    /// when the session starts.
+    /// <para>Coming in 4.0.</para>
+    /// </summary>
+    public DateTimeOffset? RetainUntil { get; init; }
+
+    /// <summary>
+    /// Whether the version is stored under a legal hold, once the session completes: as for
+    /// <see cref="ResourceUploadOptions.LegalHold"/>.
+    /// <para>Coming in 4.0.</para>
+    /// </summary>
+    public bool LegalHold { get; init; }
 }

@@ -51,6 +51,7 @@ also carry `error.type`:
 | `resourcefull.client.expired` | {version} | expired versions that [expiry](expiry.md) sweeps deleted |
 | `resourcefull.client.expire.failures` | {version} | expired versions a sweep failed to delete; they stay for the next sweep |
 | `resourcefull.client.policy.last_known_uses` | {use} | times a container's last known [policy](container-policies.md) was used because the policy provider failed, at most once per container each `cacheFor` |
+| `resourcefull.client.delete.refused` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | {delete} | deletes, container deletes and prunes refused because a version they'd delete is [retained or under a legal hold](deleting-safely.md), with `resourcefull.operation` (`delete`, `delete_container` or `prune`) and `resourcefull.refusal_reason`: `retain_until` or `legal_hold`. A prune is counted only when a hold or date was set after it read the versions; it skips versions it already knows are protected |
 | `resourcefull.client.cleanup_handler.failures` | {failure} | calls to your [cleanup handler](expiry.md#auditing-whats-deleted) that threw, with `resourcefull.cleanup_reason`: `expired` or `pruned`. A handler failure also counts as a failed prune or expired version, since the version stays |
 | `resourcefull.sqlserver.abandoned_uploads` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | {upload} | staged versions of uploads that stopped partway, which the [expiry](expiry.md) sweep deleted a day after they last stored anything; upload sessions nothing was added to are counted here too |
 | `resourcefull.sqlserver.retries` | {retry} | SQL Server calls retried after a transient failure, such as a deadlock or a dropped connection, with `db.response.status_code`: the SQL Server error number, such as `1205` for a deadlock |
@@ -119,6 +120,8 @@ metrics. It also has:
 | `move` | `MoveResourceAsync`, `RenameResourceAsync` | `resourcefull.destination_container` |
 | `set_expiry` | `SetExpiryAsync` | |
 | `set_metadata` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | `SetResourceMetadataAsync` | |
+| `set_retention` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | `SetRetentionAsync` | |
+| `set_legal_hold` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | `SetLegalHoldAsync` | `resourcefull.legal_hold`: whether it set or lifted the hold |
 | `set_content_type` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | `SetContentTypeAsync` | |
 | `set_container_metadata` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | `SetContainerMetadataAsync` | |
 | `export` | `ExportContainerAsync` | `resourcefull.resources`, `resourcefull.versions`: what it wrote; `resourcefull.pages`: the pages of 1,000 names it read |
@@ -129,20 +132,20 @@ metrics. It also has:
 | `list_versions` | `GetResourceVersionsAsync` | |
 | `list_top` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | `GetTopVersionsAsync` | `resourcefull.order`: `largest_first` or `expiring_first` |
 | `list_expired` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | `GetExpiredVersionsAsync` | |
-| `delete` | `DeleteResourceIfExistsAsync` | `resourcefull.conditional` |
+| `delete` | `DeleteResourceIfExistsAsync` | `resourcefull.conditional`; when a [retained or held](deleting-safely.md) version refuses it, `resourcefull.refusal_reason` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> |
 | `create_container` | `CreateContainerAsync`, `CreateContainerIfNotExistsAsync` | |
 | `get_container` | `GetContainerInfoAsync` | |
 | `container_exists` | `ContainerExistsAsync` | |
 | `list_containers` | `GetContainerPageAsync` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>, and each page `ListContainersAsync` fetches | `resourcefull.page_size` |
-| `delete_container` | `DeleteContainerIfExistsAsync` | |
+| `delete_container` | `DeleteContainerIfExistsAsync` | when a [retained or held](deleting-safely.md) version refuses it, `resourcefull.refusal_reason` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> |
 | `migrate` | `MigrateResourcefullDatabaseAsync` (SQL Server) | span only; `resourcefull.schema` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>: the [schema](providers/sql-server.md#choosing-a-schema) given to `UseSqlServer`, when there is one |
 | `backfill` | `ContentHashBackfill.RunAsync` (SQL Server) | span only; `resourcefull.hashed`, `resourcefull.mismatches` |
 | `health_check` | `AddResourcefullCheck`; `AddResourcefullSqlServerCheck` (span only) | for SQL Server, `resourcefull.pending_migrations` |
 
 `GetContainerClient` doesn't contact storage, so it records nothing. With
 [container policies](container-policies.md), every operation that checks one (`upload`, `restore`, `copy`, `move`,
-`delete`, `delete_container`, `prune_container`, `set_metadata`, `set_content_type`,
-`set_container_metadata` and `get_container_policy`) records a `resourcefull get_policy` child span when it asks the policy provider, and
+`delete`, `delete_container`, `prune_container`, `set_metadata`, `set_content_type`, `set_retention`,
+`set_legal_hold`, `set_container_metadata` and `get_container_policy`) records a `resourcefull get_policy` child span when it asks the policy provider, and
 `resourcefull.policy_rule` when the policy refuses it. When the provider fails and the container's last known policy is
 used instead, the `get_policy` span records the failure and `resourcefull.policy_last_known`.
 

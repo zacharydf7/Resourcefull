@@ -155,20 +155,36 @@ internal class ResourcePostgreSqlRepository(IDbContextFactory<ResourceDbContext>
     }
 
     protected override async Task<bool> LockVersionInContainerAsync(ResourceDbContext attempt, long resourceId,
-        string resourceContainerName, CancellationToken cancellationToken) =>
+        string resourceContainerName, DateTimeOffset now, CancellationToken cancellationToken) =>
         (await attempt.Database.SqlQuery<int>(attempt.QualifyTables($"""
             SELECT 1 AS "Value" FROM "Resources"
             WHERE "Id" = {resourceId} AND "ContainerName" = {resourceContainerName}
+              AND ("StagedAt" IS NOT NULL OR (NOT "LegalHold" AND ("RetainUntil" IS NULL OR "RetainUntil" <= {now.ToUniversalTime()})))
             FOR UPDATE
             """)).ToListAsync(cancellationToken).ConfigureAwait(false)).Count > 0;
 
+    /// <summary>
+    /// Locks the container's row: a write adding a version locks it to check the foreign key, and holds that lock until
+    /// it commits, so this waits for one under way and keeps any more from starting.
+    /// </summary>
+    protected override async Task<bool> LockEmptyContainerAsync(ResourceDbContext attempt, string resourceContainerName,
+        CancellationToken cancellationToken)
+    {
+        await attempt.Database.SqlQuery<int>(attempt.QualifyTables($"""
+            SELECT 1 AS "Value" FROM "ResourceContainers" WHERE "Name" = {resourceContainerName} FOR UPDATE
+            """)).ToListAsync(cancellationToken).ConfigureAwait(false);
+        return !await attempt.Resources.IgnoreQueryFilters().AnyAsync(r => r.ContainerName == resourceContainerName, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
     /// <summary>One statement for the whole batch; the cascade deletes the versions' chunks.</summary>
     protected override Task DeleteVersionsInContainerAsync(ResourceDbContext attempt, string resourceContainerName, List<long> ids,
-        CancellationToken cancellationToken)
+        DateTimeOffset now, CancellationToken cancellationToken)
     {
         long[] batch = [.. ids];
         return attempt.Database.ExecuteSqlAsync(attempt.QualifyTables($"""
             DELETE FROM "Resources" WHERE "Id" = ANY({batch}) AND "ContainerName" = {resourceContainerName}
+              AND ("StagedAt" IS NOT NULL OR (NOT "LegalHold" AND ("RetainUntil" IS NULL OR "RetainUntil" <= {now.ToUniversalTime()})))
             """), cancellationToken);
     }
 

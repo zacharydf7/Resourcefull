@@ -93,6 +93,30 @@ public abstract partial class ResourcefullContractTests
     }
 
     [Fact]
+    public async Task RetentionAndLegalHolds_ShouldThrowNotSupportedExceptionAndStoreNothing_WhenTheProviderDoesNotSupportThem()
+    {
+        Assert.SkipWhen(SupportsRetention, "The provider supports retention.");
+
+        // Arrange
+        using ServiceProvider provider = BuildServiceProvider();
+        IResourceContainerClient container = await NewContainerAsync(provider);
+        await container.UploadAsync("a", BinaryData.FromString("a"));
+        using ServiceProvider retainingAll = BuildServiceProvider(o =>
+            o.UseContainerPolicies(new ResourceContainerPolicy { RetainFor = TimeSpan.FromDays(1) }));
+
+        // Act & Assert: a version the provider would leave unprotected isn't stored.
+        await Assert.ThrowsAsync<NotSupportedException>(() => container.SetRetentionAsync("a", null, DateTimeOffset.UtcNow.AddDays(1)));
+        await Assert.ThrowsAsync<NotSupportedException>(() => container.SetLegalHoldAsync("a", null, true));
+        await Assert.ThrowsAsync<NotSupportedException>(() =>
+            container.UploadAsync("b", BinaryData.FromString("b"), new ResourceUploadOptions { LegalHold = true }));
+        await Assert.ThrowsAsync<NotSupportedException>(() =>
+            container.CopyResourceAsync("a", container.Name, "c", new ResourceCopyOptions { RetainUntil = DateTimeOffset.UtcNow.AddDays(1) }));
+        await Assert.ThrowsAsync<NotSupportedException>(() =>
+            ServiceOf(retainingAll).GetContainerClient(container.Name).UploadAsync("d", BinaryData.FromString("d")));
+        Assert.Equal(["a"], (await container.ListResourcesAsync().ToListAsync()).Select(r => r.Name));
+    }
+
+    [Fact]
     public async Task SetExpiryAndDeleteExpiredAsync_ShouldThrowNotSupportedException_WhenTheProviderDoesNotSupportExpiry()
     {
         Assert.SkipWhen(SupportsExpiry, "The provider supports expiry.");

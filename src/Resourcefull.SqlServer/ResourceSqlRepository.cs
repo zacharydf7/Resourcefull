@@ -161,11 +161,23 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
     }
 
     protected override async Task<bool> LockVersionInContainerAsync(ResourceDbContext attempt, long resourceId,
-        string resourceContainerName, CancellationToken cancellationToken) =>
+        string resourceContainerName, DateTimeOffset now, CancellationToken cancellationToken) =>
         (await attempt.Database.SqlQuery<int>(attempt.QualifyTables($"""
             SELECT 1 AS [Value] FROM [Resources] WITH (UPDLOCK, ROWLOCK)
             WHERE [Id] = {resourceId} AND [ContainerName] = {resourceContainerName}
+              AND ([StagedAt] IS NOT NULL OR ([LegalHold] = 0 AND ([RetainUntil] IS NULL OR [RetainUntil] <= {now})))
             """)).ToListAsync(cancellationToken).ConfigureAwait(false)).Count > 0;
+
+    /// <summary>
+    /// A key-range lock on the container's rows, held to the end of the transaction, keeps any from being added; it waits
+    /// for one being written, rather than reading past it as read committed snapshot would.
+    /// </summary>
+    protected override async Task<bool> LockEmptyContainerAsync(ResourceDbContext attempt, string resourceContainerName,
+        CancellationToken cancellationToken) =>
+        (await attempt.Database.SqlQuery<int>(attempt.QualifyTables($"""
+            SELECT TOP (1) 1 AS [Value] FROM [Resources] WITH (UPDLOCK, HOLDLOCK)
+            WHERE [ContainerName] = {resourceContainerName}
+            """)).ToListAsync(cancellationToken).ConfigureAwait(false)).Count == 0;
 
     /// <summary>
     /// A statement per version, in one round trip, rather than loading and tracking each to delete it: SQL Server removes
@@ -174,19 +186,22 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
     /// container are locked and listed first, by ID, and only those are deleted.
     /// </summary>
     protected override Task DeleteVersionsInContainerAsync(ResourceDbContext attempt, string resourceContainerName, List<long> ids,
-        CancellationToken cancellationToken)
+        DateTimeOffset now, CancellationToken cancellationToken)
     {
         var idParameters = string.Join(", ", ids.Select((_, i) => $"@id{i}"));
         var sql = new StringBuilder("DECLARE @here TABLE ([Id] bigint PRIMARY KEY); " +
             "INSERT INTO @here SELECT [Id] FROM [Resources] WITH (UPDLOCK, ROWLOCK, INDEX([PK_Resources])) " +
-            $"WHERE [Id] IN ({idParameters}) AND [ContainerName] = @container;");
-        var parameters = new object[ids.Count + 1];
+            $"WHERE [Id] IN ({idParameters}) AND [ContainerName] = @container " +
+            "AND ([StagedAt] IS NOT NULL OR ([LegalHold] = 0 AND ([RetainUntil] IS NULL OR [RetainUntil] <= @now)));");
+        const int fixedParameters = 2;
+        var parameters = new object[ids.Count + fixedParameters];
         parameters[0] = new SqlParameter("@container", resourceContainerName);
+        parameters[1] = new SqlParameter("@now", now);
         for (int i = 0; i < ids.Count; i++)
         {
             sql.Append($"IF EXISTS (SELECT 1 FROM @here WHERE [Id] = @id{i}) ")
                 .Append($"DELETE FROM [Resources] WHERE [Id] = @id{i};");
-            parameters[i + 1] = new SqlParameter($"@id{i}", ids[i]);
+            parameters[i + fixedParameters] = new SqlParameter($"@id{i}", ids[i]);
         }
         return attempt.Database.ExecuteSqlRawAsync(ResourceDbContext.QualifyTables(sql.ToString(), attempt.Schema), parameters,
             cancellationToken);

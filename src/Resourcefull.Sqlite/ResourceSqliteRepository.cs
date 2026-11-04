@@ -190,15 +190,23 @@ internal class ResourceSqliteRepository(IDbContextFactory<ResourceDbContext> dbC
     }
 
     protected override Task<bool> LockVersionInContainerAsync(ResourceDbContext attempt, long resourceId,
-        string resourceContainerName, CancellationToken cancellationToken) =>
+        string resourceContainerName, DateTimeOffset now, CancellationToken cancellationToken) =>
         attempt.Resources.IgnoreQueryFilters()
-            .AnyAsync(r => r.Id == resourceId && r.ContainerName == resourceContainerName, cancellationToken);
+            .AnyAsync(r => r.Id == resourceId && r.ContainerName == resourceContainerName
+                && (r.StagedAt != null || (!r.LegalHold && (r.RetainUntil == null || r.RetainUntil <= now))), cancellationToken);
+
+    /// <summary>Nothing to lock: the transaction holds the database's write lock from its start.</summary>
+    protected override async Task<bool> LockEmptyContainerAsync(ResourceDbContext attempt, string resourceContainerName,
+        CancellationToken cancellationToken) =>
+        !await attempt.Resources.IgnoreQueryFilters().AnyAsync(r => r.ContainerName == resourceContainerName, cancellationToken)
+            .ConfigureAwait(false);
 
     /// <summary>One statement for the whole batch; the cascade deletes the versions' chunks.</summary>
     protected override Task DeleteVersionsInContainerAsync(ResourceDbContext attempt, string resourceContainerName, List<long> ids,
-        CancellationToken cancellationToken) =>
+        DateTimeOffset now, CancellationToken cancellationToken) =>
         attempt.Resources.IgnoreQueryFilters()
-            .Where(r => ids.Contains(r.Id) && r.ContainerName == resourceContainerName)
+            .Where(r => ids.Contains(r.Id) && r.ContainerName == resourceContainerName
+                && (r.StagedAt != null || (!r.LegalHold && (r.RetainUntil == null || r.RetainUntil <= now))))
             .ExecuteDeleteAsync(cancellationToken);
 
     /// <summary>Nothing to do: the transaction holds the database's write lock from its start.</summary>

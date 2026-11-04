@@ -153,6 +153,18 @@
   Server, one transaction for the page (more when its versions hold over 256 chunks, about 10 MB, so no transaction
   logs a page of large files): 16 expired 1 MiB files take 14 round trips, where one version at a time took 98. Its
   default deletes them one at a time. See [Expiring resources](docs/expiry.md).
+- **Retention dates and legal holds.** `ResourceUploadOptions.RetainUntil` keeps a version from being deleted until a
+  date, and `LegalHold` until the hold is lifted; `SetRetentionAsync` moves a version's date later (never earlier), and
+  `SetLegalHoldAsync` sets or lifts its hold. `ResourceContainerPolicy.RetainFor` gives every new version in a
+  container a date. While either applies, a delete of the version, its name or its container throws
+  `ResourceRetainedException` (409 with the ASP.NET Core exception handler) and deletes nothing (unless the version was
+  protected while a batched delete was under way), expiry leaves it, and
+  pruning keeps it past `MaxVersions`. Moves keep both, and exports and imports carry them. Every provider supports
+  them, deciding in the delete itself, so a hold set at the same time can't lose the race; the
+  `Resourcefull_AddRetention` migration adds two columns and two small indexes. Refused deletes are counted in
+  `resourcefull.client.delete.refused`. Providers get `SupportsRetention`, `SetRetentionAsync` and
+  `SetLegalHoldAsync`, and with one that doesn't support them, a write that would protect a version throws
+  `NotSupportedException`. See [Deleting safely](docs/deleting-safely.md).
 - **Copy, move and rename.** `CopyResourceAsync` copies a version to a name in the same or another container, as a
   new version there, and `MoveResourceAsync` moves a resource with every version, keeping their IDs; renaming is a
   move within the container. With SQL Server, no content passes through the application. A copy can be

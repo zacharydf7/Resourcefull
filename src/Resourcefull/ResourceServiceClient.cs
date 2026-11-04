@@ -260,16 +260,19 @@ internal class ResourceServiceClient(ResourceRepository resourceRepository, IOpt
                         if (policies is not null && await policies.IsReadOnlyAsync(version.ContainerName, _telemetry, cancellationToken).ConfigureAwait(false))
                             continue;
 
+                        IReadOnlyList<ResourceInfo> waiting = version.IsLatest
+                            ? await NewContainerClient(new ContainerInfo { Name = version.ContainerName })
+                                .WaitingBehindAsync(version.Name, version.VersionId, cancellationToken).ConfigureAwait(false)
+                            : [];
+                        // Left while a version it replaced is protected: deleting it would make that version current again.
+                        if (ResourceContainerClient.Retained(waiting, now) is not null) continue;
+
                         // Told first, so a handler that fails leaves the version for the next sweep rather than deleted unreported.
                         if (cleanupHandler is not null)
                         {
                             await _telemetry.NotifyCleanupAsync(cleanupHandler, new ResourceCleanup(version, ResourceCleanupReason.Expired, now),
                                 cancellationToken).ConfigureAwait(false);
                         }
-                        IReadOnlyList<ResourceInfo> waiting = version.IsLatest
-                            ? await NewContainerClient(new ContainerInfo { Name = version.ContainerName })
-                                .WaitingBehindAsync(version.Name, version.VersionId, cancellationToken).ConfigureAwait(false)
-                            : [];
                         ready.Add((version, waiting));
                     }
                     catch (Exception exception) when (exception is not OperationCanceledException || !cancellationToken.IsCancellationRequested)

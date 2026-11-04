@@ -107,6 +107,9 @@ namespace Resourcefull.SqlServer.Migrations
                     b.Property<DateTimeOffset>("LastModified")
                         .HasColumnType("datetimeoffset");
 
+                    b.Property<bool>("LegalHold")
+                        .HasColumnType("bit");
+
                     b.Property<string>("Metadata")
                         .IsRequired()
                         .HasColumnType("varchar(MAX)");
@@ -116,6 +119,9 @@ namespace Resourcefull.SqlServer.Migrations
                         .HasMaxLength(256)
                         .HasColumnType("nvarchar(256)")
                         .UseCollation("Latin1_General_100_BIN2");
+
+                    b.Property<DateTimeOffset?>("RetainUntil")
+                        .HasColumnType("datetimeoffset");
 
                     b.Property<DateTimeOffset?>("StagedAt")
                         .HasColumnType("datetimeoffset");
@@ -131,6 +137,10 @@ namespace Resourcefull.SqlServer.Migrations
 
                     SqlServerKeyBuilderExtensions.IsClustered(b.HasKey("Id"), false);
 
+                    b.HasIndex("ContainerName")
+                        .HasDatabaseName("IX_Resources_LegalHold")
+                        .HasFilter("[LegalHold] = 1");
+
                     b.HasIndex("StagedAt")
                         .HasDatabaseName("IX_Resources_StagedAt")
                         .HasFilter("[StagedAt] IS NOT NULL");
@@ -141,6 +151,10 @@ namespace Resourcefull.SqlServer.Migrations
                         .IsUnique()
                         .HasDatabaseName("IX_Resources_Latest")
                         .HasFilter("[IsLatest] = 1");
+
+                    b.HasIndex("ContainerName", "RetainUntil")
+                        .HasDatabaseName("IX_Resources_RetainUntil")
+                        .HasFilter("[RetainUntil] IS NOT NULL");
 
                     b.HasIndex("ExpiresAt", "VersionId")
                         .HasDatabaseName("IX_Resources_ExpiresAt")

@@ -106,6 +106,9 @@ namespace Resourcefull.PostgreSql.Migrations
                     b.Property<DateTimeOffset>("LastModified")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<bool>("LegalHold")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("Metadata")
                         .IsRequired()
                         .HasColumnType("text");
@@ -115,6 +118,9 @@ namespace Resourcefull.PostgreSql.Migrations
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)")
                         .UseCollation("C");
+
+                    b.Property<DateTimeOffset?>("RetainUntil")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<DateTimeOffset?>("StagedAt")
                         .HasColumnType("timestamp with time zone");
@@ -128,6 +134,10 @@ namespace Resourcefull.PostgreSql.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("ContainerName")
+                        .HasDatabaseName("IX_Resources_LegalHold")
+                        .HasFilter("\"LegalHold\" = true");
+
                     b.HasIndex("StagedAt")
                         .HasDatabaseName("IX_Resources_StagedAt")
                         .HasFilter("\"StagedAt\" IS NOT NULL");
@@ -138,6 +148,10 @@ namespace Resourcefull.PostgreSql.Migrations
                         .IsUnique()
                         .HasDatabaseName("IX_Resources_Latest")
                         .HasFilter("\"IsLatest\"");
+
+                    b.HasIndex("ContainerName", "RetainUntil")
+                        .HasDatabaseName("IX_Resources_RetainUntil")
+                        .HasFilter("\"RetainUntil\" IS NOT NULL");
 
                     b.HasIndex("ExpiresAt", "VersionId")
                         .HasDatabaseName("IX_Resources_ExpiresAt")

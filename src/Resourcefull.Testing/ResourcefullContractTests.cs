@@ -87,6 +87,16 @@ public abstract partial class ResourcefullContractTests
     /// </remarks>
     protected virtual bool SupportsUploadSessions => true;
 
+    /// <summary>
+    /// Whether the provider keeps retained and held versions from being deleted, with <c>SupportsRetention</c>,
+    /// <c>SetRetentionAsync</c> and <c>SetLegalHoldAsync</c>.
+    /// </summary>
+    /// <remarks>
+    /// Override it to return <see langword="false"/> when the provider doesn't override those members: the feature's
+    /// tests are then skipped, and a test checks that the clients refuse it.
+    /// </remarks>
+    protected virtual bool SupportsRetention => true;
+
     /// <summary>Skips the calling test unless the provider supports <paramref name="feature"/>.</summary>
     private static void Requires(bool supported, string feature) =>
         Assert.SkipUnless(supported, $"The provider doesn't support {feature}.");

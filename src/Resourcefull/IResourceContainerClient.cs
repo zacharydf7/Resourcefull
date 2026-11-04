@@ -237,6 +237,12 @@ public interface IResourceContainerClient
     /// The name's current version doesn't meet <paramref name="conditions"/>, or the name doesn't exist; nothing was deleted.
     /// </exception>
     /// <exception cref="ResourcePolicyViolationException">The container is read-only; nothing was deleted.</exception>
+    /// <exception cref="ResourceRetainedException">
+    /// A version it would delete is retained or under a legal hold. In a container that keeps one version, it's also
+    /// thrown when a version the current one replaced is protected, since deleting the current version would make that
+    /// one current again. Nothing was deleted, unless the version was protected while a batched delete of a name with
+    /// many large versions was under way.
+    /// </exception>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
     public Task<bool> DeleteResourceIfExistsAsync(string resourceName, string? versionId = null,
         ResourceConditions? conditions = null, CancellationToken cancellationToken = default);
@@ -407,6 +413,59 @@ public interface IResourceContainerClient
     public Task<bool> SetContentTypeAsync(string resourceName, string? versionId, string? contentType,
         CancellationToken cancellationToken = default)
         => throw new NotSupportedException($"{GetType().Name} doesn't change a version's content type.");
+
+    /// <summary>
+    /// Keeps a version from being deleted until <paramref name="retainUntil"/>, by anyone or anything: a delete of it,
+    /// of its name or of its container is refused with <see cref="ResourceRetainedException"/>, expiry leaves it until
+    /// the date has passed, and pruning keeps it past the container's
+    /// <see cref="ResourceContainerPolicy.MaxVersions"/> until then. Use it for records that must be kept for a
+    /// period, such as invoices. The date can only move later, never earlier, and can't be cleared, so a retained
+    /// version is safe from a mistaken or malicious change too. Who may set it is up to the application.
+    /// <para>Coming in 4.0.</para>
+    /// </summary>
+    /// <remarks>
+    /// The version's content and hash never change; its metadata and content type still can. A move takes the date
+    /// with the version.
+    /// </remarks>
+    /// <param name="resourceName">The resource.</param>
+    /// <param name="versionId">The version; <see langword="null"/> for the current one.</param>
+    /// <param name="retainUntil">Until when the version can't be deleted.</param>
+    /// <param name="cancellationToken">Cancels the change.</param>
+    /// <returns><see langword="true"/> if the version exists; otherwise <see langword="false"/>.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <paramref name="retainUntil"/> is before the version's <see cref="ResourceInfo.RetainUntil"/>; nothing changed.
+    /// </exception>
+    /// <exception cref="ResourcePolicyViolationException">The container is read-only.</exception>
+    /// <exception cref="ArgumentException"><paramref name="resourceName"/> breaks the name rules.</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
+    /// <exception cref="NotSupportedException">
+    /// The provider doesn't support retention, or this is the default implementation.
+    /// </exception>
+    public Task<bool> SetRetentionAsync(string resourceName, string? versionId, DateTimeOffset retainUntil,
+        CancellationToken cancellationToken = default)
+        => throw new NotSupportedException($"{GetType().Name} doesn't support retention.");
+
+    /// <summary>
+    /// Sets or lifts a legal hold on a version. While it's held, it can't be deleted, by anyone or anything, whatever
+    /// its <see cref="ResourceInfo.RetainUntil"/>: a delete of it, of its name or of its container is refused with
+    /// <see cref="ResourceRetainedException"/>, and expiry and pruning leave it. Use it to keep what a lawsuit or an
+    /// investigation needs. Who may set or lift it is up to the application.
+    /// <para>Coming in 4.0.</para>
+    /// </summary>
+    /// <param name="resourceName">The resource.</param>
+    /// <param name="versionId">The version; <see langword="null"/> for the current one.</param>
+    /// <param name="hold">Whether the version is held.</param>
+    /// <param name="cancellationToken">Cancels the change.</param>
+    /// <returns><see langword="true"/> if the version exists; otherwise <see langword="false"/>.</returns>
+    /// <exception cref="ResourcePolicyViolationException">The container is read-only.</exception>
+    /// <exception cref="ArgumentException"><paramref name="resourceName"/> breaks the name rules.</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
+    /// <exception cref="NotSupportedException">
+    /// The provider doesn't support retention, or this is the default implementation.
+    /// </exception>
+    public Task<bool> SetLegalHoldAsync(string resourceName, string? versionId, bool hold,
+        CancellationToken cancellationToken = default)
+        => throw new NotSupportedException($"{GetType().Name} doesn't support retention.");
 
     /// <summary>
     /// Gets what the container holds: the size of every version, and how many resources and versions there are. Use it

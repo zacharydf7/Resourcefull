@@ -154,7 +154,9 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : R
                 ContentHash = written.ContentHash,
                 Metadata = new Dictionary<string, string>(version.Metadata),
                 CopiedFrom = version.CopiedFrom,
-                ExpiresAt = version.ExpiresAt
+                ExpiresAt = version.ExpiresAt,
+                RetainUntil = version.RetainUntil,
+                LegalHold = version.LegalHold
             }
         });
     }
@@ -166,7 +168,7 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : R
             .. _containers.Values
                 .SelectMany(container => container.Resources.Values)
                 .SelectMany(versions => versions
-                    .Where(v => v.ResourceInfo.ExpiresAt <= now)
+                    .Where(v => v.ResourceInfo.ExpiresAt <= now && v.ResourceInfo.IsDeletableAt(now))
                     .Select(v => ToResourceInfo(v, isLatest: v == versions.MaxBy(r => r.Sequence))))
                 .Where(v => after is not { } last || v.ExpiresAt > last.ExpiresAt
                     || (v.ExpiresAt == last.ExpiresAt && string.CompareOrdinal(v.VersionId, last.VersionId) > 0))
@@ -182,7 +184,8 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : R
             if (_containers.GetValueOrDefault(resource.ContainerName) is not { } container
                 || !container.Resources.TryGetValue(resource.ResourceName, out List<InMemoryResource>? versions)
                 || Resolve(versions, versionId) is not { } version
-                || !(version.ResourceInfo.ExpiresAt <= now))
+                || !(version.ResourceInfo.ExpiresAt <= now)
+                || !version.ResourceInfo.IsDeletableAt(now))
             {
                 return false;
             }
@@ -195,6 +198,18 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : R
     public override Task<bool> SetExpiryAsync(ResourceLocation resource, string? versionId, DateTimeOffset? expiresAt,
         CancellationToken cancellationToken = default) =>
         ChangeAsync(resource, versionId, info => info with { ExpiresAt = expiresAt }, cancellationToken);
+
+    public override bool SupportsRetention => true;
+
+    public override Task<bool> SetRetentionAsync(ResourceLocation resource, string? versionId, DateTimeOffset retainUntil,
+        CancellationToken cancellationToken = default) =>
+        ChangeAsync(resource, versionId, info => info.RetainUntil > retainUntil
+            ? throw RetentionShortened(resource, info, retainUntil)
+            : info with { RetainUntil = retainUntil }, cancellationToken);
+
+    public override Task<bool> SetLegalHoldAsync(ResourceLocation resource, string? versionId, bool hold,
+        CancellationToken cancellationToken = default) =>
+        ChangeAsync(resource, versionId, info => info with { LegalHold = hold }, cancellationToken);
 
     public override Task<bool> SetResourceMetadataAsync(ResourceLocation resource, string? versionId,
         IReadOnlyDictionary<string, string> metadata, CancellationToken cancellationToken = default) =>
@@ -273,6 +288,7 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : R
             if (_containers.GetValueOrDefault(resourceContainerName) is not { } container
                 || !container.Resources.TryGetValue(resourceName, out List<InMemoryResource>? versions))
                 return false;
+            ThrowIfAnyRetained(versionId is null ? versions : versions.Where(r => r.ResourceInfo.VersionId == versionId));
 
             // Without a version, every version of the name goes.
             if (versionId == null)
@@ -436,7 +452,12 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : R
 
     public override Task<bool> DeleteContainerAsync(string resourceContainerName,
         CancellationToken cancellationToken = default) =>
-        UnderLockAsync(() => _containers.Remove(resourceContainerName), cancellationToken);
+        UnderLockAsync(() =>
+        {
+            if (!_containers.TryGetValue(resourceContainerName, out InMemoryResourceContainer? container)) return false;
+            ThrowIfAnyRetained(container.Resources.Values.SelectMany(versions => versions));
+            return _containers.Remove(resourceContainerName);
+        }, cancellationToken);
 
     public override Task<ResourceContainerUsage> GetContainerUsageAsync(string resourceContainerName,
         CancellationToken cancellationToken = default) =>
@@ -457,6 +478,22 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : R
             _gate.Release();
         }
     }
+
+    /// <summary>Throws for the first of <paramref name="versions"/> that can't be deleted now; called under the lock.</summary>
+    private void ThrowIfAnyRetained(IEnumerable<InMemoryResource> versions)
+    {
+        DateTimeOffset now = _clock.GetUtcNow();
+        if (versions.Select(v => v.ResourceInfo).FirstOrDefault(v => !v.IsDeletableAt(now)) is { } retained)
+        {
+            throw ResourceRetainedException.Create(new ResourceLocation(retained.ContainerName, retained.Name), retained.VersionId,
+                retained.RetainUntil, retained.LegalHold, now);
+        }
+    }
+
+    private static ArgumentOutOfRangeException RetentionShortened(ResourceLocation resource, ResourceInfo version,
+        DateTimeOffset retainUntil) =>
+        new("retainUntil", retainUntil, $"The version {version.VersionId} of the resource {resource.ResourceName} in the " +
+            $"container {resource.ContainerName} is retained until {version.RetainUntil:O}, and that can't move earlier.");
 
     /// <summary>A name with no current version meets no condition; empty conditions are no conditions.</summary>
     private static ResourceContainerNotFoundException ContainerMissing(string resourceContainerName) =>

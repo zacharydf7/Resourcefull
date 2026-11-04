@@ -87,6 +87,15 @@ internal sealed class ObjectKeys(string prefix, int segmentBytes = ObjectKeys.Se
     public string HeadsStartingWith(string containerId, string? namePrefix) =>
         Heads(containerId) + (namePrefix is null ? "" : Escape(namePrefix));
 
+    /// <summary>
+    /// The prefix of a container's protection entries: one for each version that's had a retention date or a legal
+    /// hold.
+    /// </summary>
+    public string Protections(string containerId) => Data(containerId) + "r/";
+
+    /// <summary>The key of a version's protection entry, by the token the version records for it.</summary>
+    public string Protection(string containerId, string token) => Protections(containerId) + token;
+
     /// <summary>The prefix of every version's content in a container.</summary>
     public string Contents(string containerId) => Data(containerId) + "b/";
 

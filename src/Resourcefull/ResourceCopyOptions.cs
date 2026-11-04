@@ -28,6 +28,21 @@ public sealed class ResourceCopyOptions
     /// copied, so <see langword="null"/> never expires.
     /// </summary>
     public DateTimeOffset? ExpiresAt { get; init; }
+
+    /// <summary>
+    /// Until when the copy can't be deleted, as <see cref="ResourceUploadOptions.RetainUntil"/> for an upload; the
+    /// source's isn't copied, so <see langword="null"/> takes the destination's
+    /// <see cref="ResourceContainerPolicy.RetainFor"/>, if it has one.
+    /// <para>Coming in 4.0.</para>
+    /// </summary>
+    public DateTimeOffset? RetainUntil { get; init; }
+
+    /// <summary>
+    /// Whether the copy is stored under a legal hold, as <see cref="ResourceUploadOptions.LegalHold"/> for an upload; the
+    /// source's isn't copied.
+    /// <para>Coming in 4.0.</para>
+    /// </summary>
+    public bool LegalHold { get; init; }
 }
 
 /// <summary>

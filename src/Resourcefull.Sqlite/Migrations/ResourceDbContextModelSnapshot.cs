@@ -98,6 +98,9 @@ namespace Resourcefull.Sqlite.Migrations
                     b.Property<long>("LastModified")
                         .HasColumnType("INTEGER");
 
+                    b.Property<bool>("LegalHold")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("Metadata")
                         .IsRequired()
                         .HasColumnType("text");
@@ -107,6 +110,9 @@ namespace Resourcefull.Sqlite.Migrations
                         .HasMaxLength(256)
                         .HasColumnType("TEXT")
                         .UseCollation("BINARY");
+
+                    b.Property<long?>("RetainUntil")
+                        .HasColumnType("INTEGER");
 
                     b.Property<long?>("StagedAt")
                         .HasColumnType("INTEGER");
@@ -120,6 +126,10 @@ namespace Resourcefull.Sqlite.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("ContainerName")
+                        .HasDatabaseName("IX_Resources_LegalHold")
+                        .HasFilter("\"LegalHold\" = 1");
+
                     b.HasIndex("StagedAt")
                         .HasDatabaseName("IX_Resources_StagedAt")
                         .HasFilter("\"StagedAt\" IS NOT NULL");
@@ -128,6 +138,10 @@ namespace Resourcefull.Sqlite.Migrations
                         .IsUnique()
                         .HasDatabaseName("IX_Resources_Latest")
                         .HasFilter("\"IsLatest\"");
+
+                    b.HasIndex("ContainerName", "RetainUntil")
+                        .HasDatabaseName("IX_Resources_RetainUntil")
+                        .HasFilter("\"RetainUntil\" IS NOT NULL");
 
                     b.HasIndex("ExpiresAt", "VersionId")
                         .HasDatabaseName("IX_Resources_ExpiresAt")

@@ -53,8 +53,11 @@ internal sealed class ContainerPolicies(ContainerPolicySettings settings, Resour
     /// <see cref="ResourceContainerPolicy.AllowedContentTypes"/>. A caller that keeps track of the container's usage, as an
     /// import does, passes it as <paramref name="knownUsage"/>; otherwise it's read from storage when a limit needs it.
     /// </summary>
-    /// <returns>The size the content must stay within as it's read, or <see langword="null"/> for no limit.</returns>
-    public async Task<ContentLimit?> CheckNewVersionAsync(string containerName, string resourceName, bool restore, string? contentType,
+    /// <returns>
+    /// The size the content must stay within as it's read, or <see langword="null"/> for no limit, and the
+    /// container's <see cref="ResourceContainerPolicy.RetainFor"/>.
+    /// </returns>
+    public async Task<NewVersionCheck> CheckNewVersionAsync(string containerName, string resourceName, bool restore, string? contentType,
         long? declaredLength, ClientTelemetry telemetry, CancellationToken cancellationToken, ResourceContainerUsage? knownUsage = null)
     {
         ResourceContainerPolicy policy = await GetAsync(containerName, telemetry, cancellationToken).ConfigureAwait(false);
@@ -88,7 +91,7 @@ internal sealed class ContainerPolicies(ContainerPolicySettings settings, Resour
         }
 
         if (declaredLength > limit?.Bytes) throw limit.Exception();
-        return limit;
+        return new NewVersionCheck(limit, policy.RetainFor);
     }
 
     /// <summary>
@@ -232,7 +235,8 @@ internal sealed class ContainerPolicies(ContainerPolicySettings settings, Resour
         MaxResourceCount = own.MaxResourceCount ?? defaults.MaxResourceCount,
         AllowedContentTypes = own.AllowedContentTypes ?? defaults.AllowedContentTypes,
         ReadOnly = own.ReadOnly ?? defaults.ReadOnly,
-        MaxVersions = own.MaxVersions ?? defaults.MaxVersions
+        MaxVersions = own.MaxVersions ?? defaults.MaxVersions,
+        RetainFor = own.RetainFor ?? defaults.RetainFor
     };
 
     /// <summary>The cache key of a container's policy as the provider last gave it.</summary>
@@ -255,6 +259,9 @@ internal sealed class ContainerPolicies(ContainerPolicySettings settings, Resour
 
     private static string MediaType(string value) => value.Split(';', 2)[0].Trim();
 }
+
+/// <summary>What <see cref="ContainerPolicies.CheckNewVersionAsync"/> found the new version must keep to.</summary>
+internal readonly record struct NewVersionCheck(ContentLimit? Limit, TimeSpan? RetainFor);
 
 /// <summary>How many bytes a new version may have, and the rule that refuses one with more.</summary>
 internal sealed record ContentLimit(long Bytes, ResourcePolicyRule Rule, long RuleLimit, string ContainerName,

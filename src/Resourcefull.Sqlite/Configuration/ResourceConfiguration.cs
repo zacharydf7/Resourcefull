@@ -64,6 +64,14 @@ internal class ResourceConfiguration : IEntityTypeConfiguration<ResourceModel>
             .HasFilter("\"ExpiresAt\" IS NOT NULL")
             .HasDatabaseName("IX_Resources_ExpiresAt");
 
+        // Only the versions that are retained or held, so a container delete finds whether it may go with a seek.
+        builder.HasIndex(r => new { r.ContainerName, r.RetainUntil })
+            .HasFilter("\"RetainUntil\" IS NOT NULL")
+            .HasDatabaseName("IX_Resources_RetainUntil");
+        builder.HasIndex(r => r.ContainerName)
+            .HasFilter("\"LegalHold\" = 1")
+            .HasDatabaseName("IX_Resources_LegalHold");
+
         // A version an upload is still storing is left out of every query, so nothing sees it until it's complete; only
         // the upload and the deletes, of a container or of abandoned uploads, ask for it with IgnoreQueryFilters. Reads
         // of a name's current version skip the filter too, since a current version is never staged.

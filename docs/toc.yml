@@ -66,6 +66,8 @@
     href: container-policies.md
   - name: Expiring resources
     href: expiry.md
+  - name: Deleting safely
+    href: deleting-safely.md
   - name: Backing up and moving containers
     href: backup-and-move.md
   - name: Several stores

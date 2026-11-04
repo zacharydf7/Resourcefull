@@ -77,6 +77,9 @@ internal static class Telemetry
         "resourcefull.client.inspection.duration", unit: "s",
         description: "How long the upload inspector took to answer, from the start of the upload or imported version.");
 
+    public static readonly Counter<long> DeleteRefusals = Meter.CreateCounter<long>("resourcefull.client.delete.refused",
+        unit: "{delete}", description: "Deletes and prunes refused because a version they'd delete is retained or under a legal hold.");
+
     public static readonly Counter<long> CleanupHandlerFailures = Meter.CreateCounter<long>(
         "resourcefull.client.cleanup_handler.failures", unit: "{failure}",
         description: "Calls to the cleanup handler that threw; the version they reported stays.");
@@ -139,6 +142,7 @@ internal sealed class ClientTelemetry(string provider, ResourcefullOptions optio
         {
             errorType = exception.GetType().FullName;
             (exception as ResourcefullException)?.LocateIfUnknown(containerName, resourceName);
+            if (exception is ResourceRetainedException refusal) CountRefusal(operation, refusal);
             RecordFailure(activity, exception);
             throw;
         }
@@ -187,6 +191,10 @@ internal sealed class ClientTelemetry(string provider, ResourcefullOptions optio
                 _ => violation.Rule.ToString()
             });
         }
+        else if (exception is ResourceRetainedException refusal)
+        {
+            activity.SetTag("resourcefull.refusal_reason", RefusalReason(refusal));
+        }
         activity.SetStatus(ActivityStatusCode.Error, options.Telemetry.RecordResourceNames ? exception.Message : null);
         RecordException(activity, exception);
     }
@@ -222,6 +230,19 @@ internal sealed class ClientTelemetry(string provider, ResourcefullOptions optio
         if (extraTag is not null) tags.Add(extraTag, extraValue);
         counter.Add(1, tags);
     }
+
+    /// <summary>Counts a delete or prune refused because a version it would delete is retained or held.</summary>
+    public void CountRefusal(string operation, ResourceRetainedException refusal)
+    {
+        if (!Telemetry.DeleteRefusals.Enabled) return;
+        TagList tags = StoreTags();
+        tags.Add("resourcefull.operation", operation);
+        tags.Add("resourcefull.refusal_reason", RefusalReason(refusal));
+        Telemetry.DeleteRefusals.Add(1, tags);
+    }
+
+    /// <summary>The <c>resourcefull.refusal_reason</c> tag's value: what keeps the version.</summary>
+    private static string RefusalReason(ResourceRetainedException refusal) => refusal.LegalHold ? "legal_hold" : "retain_until";
 
     public void CountExpired()
     {

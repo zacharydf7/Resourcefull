@@ -17,6 +17,12 @@ internal class ResourceModel
     public string? CopiedFromVersionId { get; set; }
     public DateTimeOffset? ExpiresAt { get; set; }
 
+    /// <summary>Until when the version can't be deleted; null for no date.</summary>
+    public DateTimeOffset? RetainUntil { get; set; }
+
+    /// <summary>Whether the version is under a legal hold, which keeps it from being deleted until it's lifted.</summary>
+    public bool LegalHold { get; set; }
+
     /// <summary>The length an upload session said its version would have, checked as it completes; otherwise null.</summary>
     public long? DeclaredLength { get; set; }
 

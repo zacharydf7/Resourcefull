@@ -38,6 +38,8 @@ await container.UploadAsync("exports/report.zip", stream, new ResourceUploadOpti
   [upload session](uploading-in-parts.md) nothing was appended to, with any provider, and, with SQL Server, PostgreSQL
   and SQLite, the [staged content](providers/sql-server-operations.md#uploads-connections-and-the-log) of an upload
   whose process died partway.
+- **Retained and held versions wait** <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>. A version that's [retained or under a legal hold](deleting-safely.md)
+  is left until both its expiry and its retention date have passed, and its hold is lifted.
 - **Without `UseExpiry`,** expiries are stored, and `IResourceServiceClient.DeleteExpiredAsync()` deletes what has
   expired, and what stopped uploads left behind, whenever you call it, such as from a scheduled job.
 

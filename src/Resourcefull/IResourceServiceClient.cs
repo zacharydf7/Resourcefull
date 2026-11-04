@@ -124,6 +124,10 @@ public interface IResourceServiceClient
     /// <returns><see langword="true"/> if a container was deleted; otherwise <see langword="false"/>.</returns>
     /// <exception cref="ArgumentException"><paramref name="resourceContainerName"/> is null, empty, longer than 128 characters, or starts or ends with whitespace (<see cref="ArgumentNullException"/> when null).</exception>
     /// <exception cref="ResourcePolicyViolationException">The container is read-only; nothing was deleted.</exception>
+    /// <exception cref="ResourceRetainedException">
+    /// A version in the container is retained or under a legal hold. Nothing was deleted, unless the version was
+    /// protected while a batched delete was under way (SQL Server, PostgreSQL and SQLite delete containers in batches).
+    /// </exception>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
     public Task<bool> DeleteContainerIfExistsAsync(string resourceContainerName,
         CancellationToken cancellationToken = default);

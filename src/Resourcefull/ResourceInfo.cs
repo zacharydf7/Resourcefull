@@ -78,4 +78,26 @@ public sealed record ResourceInfo
     /// <para>Coming in 4.0.</para>
     /// </summary>
     public DateTimeOffset? ExpiresAt { get; init; }
+
+    /// <summary>
+    /// Until when the version can't be deleted, by anyone or anything, expiry and pruning included;
+    /// <see langword="null"/> for a version without one. See <see cref="IResourceContainerClient.SetRetentionAsync"/>.
+    /// <para>Coming in 4.0.</para>
+    /// </summary>
+    public DateTimeOffset? RetainUntil { get; init; }
+
+    /// <summary>
+    /// Whether the version is under a legal hold, which keeps it from being deleted until the hold is lifted, whatever
+    /// its <see cref="RetainUntil"/>. See <see cref="IResourceContainerClient.SetLegalHoldAsync"/>.
+    /// <para>Coming in 4.0.</para>
+    /// </summary>
+    public bool LegalHold { get; init; }
+
+    /// <summary>
+    /// Whether the version may be deleted at <paramref name="now"/>: it's under no legal hold, and its
+    /// <see cref="RetainUntil"/> is unset or has passed.
+    /// <para>Coming in 4.0.</para>
+    /// </summary>
+    /// <param name="now">The time to judge by.</param>
+    public bool IsDeletableAt(DateTimeOffset now) => !LegalHold && !(RetainUntil > now);
 }

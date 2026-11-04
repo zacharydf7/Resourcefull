@@ -415,6 +415,8 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
                 ContentType = staged.ContentType,
                 Metadata = new Dictionary<string, string>(staged.Metadata),
                 ExpiresAt = staged.ExpiresAt,
+                RetainUntil = staged.RetainUntil,
+                LegalHold = staged.LegalHold,
                 DeclaredLength = staged.DeclaredLength
             }, staged.ContentLength!.Value);
     }
@@ -636,7 +638,9 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
         CopiedFromContainerName = version.CopiedFrom?.ContainerName,
         CopiedFromName = version.CopiedFrom?.ResourceName,
         CopiedFromVersionId = version.CopiedFrom?.VersionId,
-        ExpiresAt = version.ExpiresAt
+        ExpiresAt = version.ExpiresAt,
+        RetainUntil = version.RetainUntil,
+        LegalHold = version.LegalHold
     };
 
     /// <summary>
@@ -1033,7 +1037,9 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
         Metadata = (IReadOnlyDictionary<string, string>)r.Metadata,
         CopiedFrom = r.CopiedFromVersionId == null ? null
             : new ResourceOrigin(r.CopiedFromContainerName!, r.CopiedFromName!, r.CopiedFromVersionId),
-        ExpiresAt = r.ExpiresAt
+        ExpiresAt = r.ExpiresAt,
+        RetainUntil = r.RetainUntil,
+        LegalHold = r.LegalHold
     };
 
     /// <summary>A stored version already read, as the clients see it.</summary>
@@ -1173,9 +1179,10 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
                 return true;
 
             await ThrowIfNotMetAsync(dbContext, conditions, resourceContainerName, resourceName, ct).ConfigureAwait(false);
-            deletedInAnEarlierAttempt = await ResolveWithChunksAsync(dbContext.Resources, resourceContainerName, resourceName, versionId, ct).ConfigureAwait(false) is { } found
-                && await DeleteVersionAsync(dbContext, found.Version, found.Chunks, ct).ConfigureAwait(false);
-            return deletedInAnEarlierAttempt;
+            if (await ResolveWithChunksAsync(dbContext.Resources, resourceContainerName, resourceName, versionId, ct).ConfigureAwait(false) is not { } found)
+                return deletedInAnEarlierAttempt = false;
+            ThrowIfRetained(found.Version, Now());
+            return deletedInAnEarlierAttempt = await DeleteVersionAsync(dbContext, found.Version, found.Chunks, ct).ConfigureAwait(false);
         }, cancellationToken);
     }
 
@@ -1203,10 +1210,18 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
                 if (firstBatch)
                 {
                     await ThrowIfNotMetAsync(dbContext, conditions, resourceContainerName, resourceName, ct).ConfigureAwait(false);
-                    versions = [.. (await Versions(dbContext.Resources, resourceContainerName, resourceName)
+                    var listed = await Versions(dbContext.Resources, resourceContainerName, resourceName)
                         .OrderBy(r => r.IsLatest).ThenBy(r => r.Id)
-                        .Select(r => new { r.Id, Chunks = r.Chunks!.Count })
-                        .ToListAsync(ct).ConfigureAwait(false)).Select(v => (v.Id, v.Chunks))];
+                        .Select(r => new { r.Id, r.VersionId, r.RetainUntil, r.LegalHold, Chunks = r.Chunks!.Count })
+                        .ToListAsync(ct).ConfigureAwait(false);
+                    // Every version is checked before any goes, so a delete that's refused deletes nothing.
+                    DateTimeOffset now = Now();
+                    if (listed.FirstOrDefault(v => v.LegalHold || v.RetainUntil > now) is { } retained)
+                    {
+                        throw ResourceRetainedException.Create(new ResourceLocation(resourceContainerName, resourceName),
+                            retained.VersionId!, retained.RetainUntil, retained.LegalHold, now);
+                    }
+                    versions = [.. listed.Select(v => (v.Id, v.Chunks))];
                 }
 
                 List<(long Id, int Chunks)> batch = [];
@@ -1233,6 +1248,10 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
                     found = await dbContext.Resources
                         .Where(r => ids.Contains(r.Id) && r.ContainerName == resourceContainerName && r.Name == resourceName)
                         .ToListAsync(ct).ConfigureAwait(false);
+                    // This batch took the name's lock again after the first one released it, so a hold or a later date
+                    // may have been set in between.
+                    DateTimeOffset now = Now();
+                    foreach (ResourceModel version in found) ThrowIfRetained(version, now);
                 }
                 await DeleteLargeVersionsChunksAsync(dbContext, found.Select(r => (r.Id, batch.First(v => v.Id == r.Id).Chunks)), ct).ConfigureAwait(false);
                 dbContext.Resources.RemoveRange(found);
@@ -1300,7 +1319,8 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
         using ResourceDbContext dbContext = dbContextFactory.CreateDbContext();
 
         // A seek on the index of versions that expire, so a sweep with nothing to delete reads only that.
-        IQueryable<ResourceModel> expired = dbContext.Resources.Where(r => r.ExpiresAt != null && r.ExpiresAt <= now);
+        IQueryable<ResourceModel> expired = dbContext.Resources.Where(r => r.ExpiresAt != null && r.ExpiresAt <= now
+            && !r.LegalHold && (r.RetainUntil == null || r.RetainUntil <= now));
         if (after is { } last)
         {
             (DateTimeOffset afterExpiry, string afterVersion) = last;
@@ -1328,7 +1348,7 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
             // A retry after a commit whose acknowledgement was lost finds the version gone.
             if (await ResolveWithChunksAsync(dbContext.Resources, resource.ContainerName, resource.ResourceName, versionId, ct).ConfigureAwait(false) is not { } found)
                 return deletedInAnEarlierAttempt;
-            if (!(found.Version.ExpiresAt <= now)) return false;
+            if (!(found.Version.ExpiresAt <= now) || !IsDeletable(found.Version, now)) return false;
             return deletedInAnEarlierAttempt = await DeleteVersionAsync(dbContext, found.Version, found.Chunks, ct).ConfigureAwait(false);
         }, cancellationToken);
     }
@@ -1409,7 +1429,7 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
             .Where(f => wanted.Contains(
                 (new ResourceLocation(f.Version.ContainerName, f.Version.Name), f.Version.VersionId!)))
             .ToList();
-        var expired = found.Where(f => f.Version.ExpiresAt <= now).ToList();
+        var expired = found.Where(f => f.Version.ExpiresAt <= now && IsDeletable(f.Version, now)).ToList();
         var deleting = expired.Take(CountWithinDeleteBudget(expired.Select(e => e.Chunks))).ToList();
 
         await DeleteLargeVersionsChunksAsync(dbContext, deleting.Select(d => (d.Version.Id, d.Chunks)), ct).ConfigureAwait(false);
@@ -1452,6 +1472,43 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
         WriteNameAsync(resource.ContainerName, resource.ResourceName, async (dbContext, ct) =>
             await Version(dbContext.Resources, resource.ContainerName, resource.ResourceName, versionId)
                 .ExecuteUpdateAsync(s => s.SetProperty(r => r.ExpiresAt, expiresAt), ct).ConfigureAwait(false) > 0, cancellationToken);
+
+    public override bool SupportsRetention => true;
+
+    // Under the name's lock, as every delete is, so a change and a delete of the version can't interleave.
+    public override Task<bool> SetRetentionAsync(ResourceLocation resource, string? versionId, DateTimeOffset retainUntil,
+        CancellationToken cancellationToken = default) =>
+        WriteNameAsync(resource.ContainerName, resource.ResourceName, async (dbContext, ct) =>
+        {
+            IQueryable<ResourceModel> version = Version(dbContext.Resources, resource.ContainerName, resource.ResourceName, versionId);
+            if (await version.Select(r => new { r.VersionId, r.RetainUntil }).FirstOrDefaultAsync(ct).ConfigureAwait(false) is not { } stored)
+                return false;
+            if (stored.RetainUntil > retainUntil)
+            {
+                throw new ArgumentOutOfRangeException(nameof(retainUntil), retainUntil, $"The version {stored.VersionId} of the resource " +
+                    $"{resource.ResourceName} in the container {resource.ContainerName} is retained until {stored.RetainUntil:O}, and that can't move earlier.");
+            }
+            return await version.ExecuteUpdateAsync(s => s.SetProperty(r => r.RetainUntil, retainUntil), ct).ConfigureAwait(false) > 0;
+        }, cancellationToken);
+
+    public override Task<bool> SetLegalHoldAsync(ResourceLocation resource, string? versionId, bool hold,
+        CancellationToken cancellationToken = default) =>
+        WriteNameAsync(resource.ContainerName, resource.ResourceName, async (dbContext, ct) =>
+            await Version(dbContext.Resources, resource.ContainerName, resource.ResourceName, versionId)
+                .ExecuteUpdateAsync(s => s.SetProperty(r => r.LegalHold, hold), ct).ConfigureAwait(false) > 0, cancellationToken);
+
+    /// <summary>Whether a stored version may be deleted at <paramref name="now"/>: it's neither held nor retained.</summary>
+    private static bool IsDeletable(ResourceModel version, DateTimeOffset now) => !version.LegalHold && !(version.RetainUntil > now);
+
+    /// <summary>Throws <see cref="ResourceRetainedException"/> if a stored version can't be deleted at <paramref name="now"/>.</summary>
+    private static void ThrowIfRetained(ResourceModel version, DateTimeOffset now)
+    {
+        if (!IsDeletable(version, now))
+        {
+            throw ResourceRetainedException.Create(new ResourceLocation(version.ContainerName, version.Name), version.VersionId!,
+                version.RetainUntil, version.LegalHold, now);
+        }
+    }
 
     public override Task<bool> SetResourceMetadataAsync(ResourceLocation resource, string? versionId,
         IReadOnlyDictionary<string, string> metadata, CancellationToken cancellationToken = default)
@@ -1577,12 +1634,23 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
 
         if (!await dbContext.ResourceContainers.AnyAsync(x => x.Name == resourceContainerName, cancellationToken).ConfigureAwait(false)) return false;
 
+        // Every version is checked before any goes, so a delete that's refused deletes nothing. A version held or
+        // retained after this is left by the batch that reaches it, and the next batch refuses.
+        DateTimeOffset now = Now();
+        await ThrowIfAnyRetainedAsync(dbContext.Resources.Where(r => r.ContainerName == resourceContainerName), now, cancellationToken).ConfigureAwait(false);
+
         // Each batch commits in a transaction of its own, so no single transaction holds the whole container's content.
         // A batch takes whole resources, each with its chunks, so a reader never sees part of one, until it reaches the
         // chunk budget. Each pass removes only what earlier passes left, so a delete that is canceled or fails partway
-        // is finished by calling it again.
-        while (await WriteNamesAsync([], DeleteBatchAsync, cancellationToken).ConfigureAwait(false) > 0)
+        // is finished by calling it again. A version stored after the last batch takes another round of them, which
+        // checks it as it checks the rest.
+        bool deleted = false;
+        while (true)
         {
+            while (await WriteNamesAsync([], DeleteBatchAsync, cancellationToken).ConfigureAwait(false) > 0)
+            {
+            }
+            if (await WriteNamesAsync([], RemoveIfEmptyAsync, cancellationToken).ConfigureAwait(false) is { } removed) return removed;
         }
 
         async Task<int> DeleteBatchAsync(ResourceDbContext attempt, CancellationToken ct)
@@ -1592,10 +1660,16 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
             var candidates = await attempt.Resources.IgnoreQueryFilters()
                 .Where(r => r.ContainerName == resourceContainerName)
                 .OrderBy(r => r.Name).ThenBy(r => r.VersionId)
-                .Select(r => new { r.Id, r.Name, r.IsLatest, Chunks = r.Chunks!.Count })
+                .Select(r => new { r.Id, r.Name, r.VersionId, r.IsLatest, r.StagedAt, r.RetainUntil, r.LegalHold, Chunks = r.Chunks!.Count })
                 .Take(MaxResourcesPerDeleteBatch)
                 .ToListAsync(ct).ConfigureAwait(false);
             if (candidates.Count == 0) return 0;
+            // A staged version's retention applies only once its upload completes.
+            if (candidates.FirstOrDefault(c => c.StagedAt is null && (c.LegalHold || c.RetainUntil > now)) is { } retained)
+            {
+                throw ResourceRetainedException.Create(new ResourceLocation(resourceContainerName, retained.Name), retained.VersionId!,
+                    retained.RetainUntil, retained.LegalHold, now);
+            }
 
             // A name's current version goes after all its others: deleting it first would leave the name with stored
             // versions but none current. Candidates come grouped by name, so a current version waits while more of its
@@ -1620,7 +1694,7 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
             foreach (var candidate in candidates.Where(c => batch.Contains(c.Id)))
             {
                 if (candidate.Chunks > ChunksDeletedPerStatement && attempt.Database.IsRelational()
-                    && !await LockVersionInContainerAsync(attempt, candidate.Id, resourceContainerName, ct).ConfigureAwait(false))
+                    && !await LockVersionInContainerAsync(attempt, candidate.Id, resourceContainerName, now, ct).ConfigureAwait(false))
                     continue;
                 deleting.Add((candidate.Id, candidate.Chunks));
             }
@@ -1628,29 +1702,50 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
             await DeleteLargeVersionsChunksAsync(attempt, deleting, ct).ConfigureAwait(false);
             if (attempt.Database.IsRelational())
             {
-                await DeleteVersionsInContainerAsync(attempt, resourceContainerName, batch, ct).ConfigureAwait(false);
+                await DeleteVersionsInContainerAsync(attempt, resourceContainerName, batch, now, ct).ConfigureAwait(false);
             }
             else
             {
                 // The in-memory provider the unit tests use runs no SQL.
                 attempt.Resources.RemoveRange(
-                    await attempt.Resources.IgnoreQueryFilters().Where(r => batch.Contains(r.Id)).ToListAsync(ct).ConfigureAwait(false));
+                    await attempt.Resources.IgnoreQueryFilters().Where(r => batch.Contains(r.Id)
+                        && (r.StagedAt != null || (!r.LegalHold && (r.RetainUntil == null || r.RetainUntil <= now)))).ToListAsync(ct).ConfigureAwait(false));
                 await attempt.SaveChangesAsync(ct).ConfigureAwait(false);
             }
             return batch.Count;
         }
 
-        bool deleted = false;
-        return await WriteNamesAsync([], async (attempt, ct) =>
+        // Removes the container's row, unless a version was stored since the last batch: the row's cascade would delete
+        // it unchecked, so this returns null for another round of batches.
+        async Task<bool?> RemoveIfEmptyAsync(ResourceDbContext attempt, CancellationToken ct)
         {
             ResourceContainerModel? container = await attempt.ResourceContainers.FirstOrDefaultAsync(x => x.Name == resourceContainerName, ct).ConfigureAwait(false);
             // A retry after a commit whose acknowledgement was lost finds the container gone.
             if (container is null) return deleted;
+            if (attempt.Database.IsRelational()
+                ? !await LockEmptyContainerAsync(attempt, resourceContainerName, ct).ConfigureAwait(false)
+                : await attempt.Resources.IgnoreQueryFilters().AnyAsync(r => r.ContainerName == resourceContainerName, ct).ConfigureAwait(false))
+            {
+                return null;
+            }
 
             attempt.ResourceContainers.Remove(container);
             await attempt.SaveChangesAsync(ct).ConfigureAwait(false);
             return deleted = true;
-        }, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Throws <see cref="ResourceRetainedException"/> if any of <paramref name="versions"/> is held or retained at
+    /// <paramref name="now"/>. Staged versions aren't among them: the staged filter leaves them out, since an upload's
+    /// retention applies only once it's complete.
+    /// </summary>
+    private static async Task ThrowIfAnyRetainedAsync(IQueryable<ResourceModel> versions, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        // Each condition alone, so each seeks on the filtered index of the versions it applies to, in one query.
+        ResourceModel? retained = await versions.Where(r => r.LegalHold).Concat(versions.Where(r => r.RetainUntil > now))
+            .FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
+        if (retained is not null) ThrowIfRetained(retained, now);
     }
 
     /// <summary>
@@ -1775,17 +1870,28 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
     protected abstract Task<ResourceContainerUsage> MeasureContainerAsync(ResourceDbContext dbContext, string resourceContainerName,
         CancellationToken cancellationToken);
 
-    /// <summary>Locks a version's row, provided it's still in the container.</summary>
+    /// <summary>
+    /// Locks a version's row, provided it's still in the container and, unless it's staged, neither held nor retained at
+    /// <paramref name="now"/>.
+    /// </summary>
     /// <returns>Whether it is.</returns>
     protected abstract Task<bool> LockVersionInContainerAsync(ResourceDbContext attempt, long resourceId, string resourceContainerName,
+        DateTimeOffset now, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Locks the container until the transaction ends, so nothing can be stored in it, and says whether it holds no
+    /// versions, staged ones included, counting one whose write was still under way.
+    /// </summary>
+    protected abstract Task<bool> LockEmptyContainerAsync(ResourceDbContext attempt, string resourceContainerName,
         CancellationToken cancellationToken);
 
     /// <summary>
-    /// Deletes the versions still in the container, with their chunks; one moved to another container since it was
-    /// listed is left there.
+    /// Deletes the versions still in the container, with their chunks, deciding in the delete itself: one moved to
+    /// another container since it was listed is left there, and one that's become held or retained at
+    /// <paramref name="now"/> since then is left where it is, unless it's staged.
     /// </summary>
     protected abstract Task DeleteVersionsInContainerAsync(ResourceDbContext attempt, string resourceContainerName, List<long> ids,
-        CancellationToken cancellationToken);
+        DateTimeOffset now, CancellationToken cancellationToken);
 
     /// <summary>
     /// Locks each name for the rest of the transaction, in the order given, in one round trip. One lock per name, rather

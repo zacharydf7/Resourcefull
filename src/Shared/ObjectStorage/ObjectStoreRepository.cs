@@ -93,12 +93,15 @@ internal sealed partial class ObjectStoreRepository(IObjectStore store, string k
         string contentKey = _keys.Content(container.Id, blob);
         string? expiryToken = version.ExpiresAt is null ? null : Guid.NewGuid().ToString("N");
         string? expiryKey = version.ExpiresAt is { } expiresAt ? _keys.Expiry(expiresAt, version.VersionId, expiryToken!, container.Id, blob) : null;
+        string? protectionToken = version.RetainUntil is not null || version.LegalHold ? Guid.NewGuid().ToString("N") : null;
+        string? protectionKey = protectionToken is null ? null : _keys.Protection(container.Id, protectionToken);
         using var hashing = new HashingStream(content);
         WrittenContent? written = null;
         try
         {
             await UploadContentAsync(location, contentKey, hashing, cancellationToken).ConfigureAwait(false);
-            if (expiryKey is not null) await PutExpiryAsync(expiryKey, location, cancellationToken).ConfigureAwait(false);
+            if (expiryKey is not null) await PutEntryAsync(expiryKey, location, cancellationToken).ConfigureAwait(false);
+            if (protectionKey is not null) await PutEntryAsync(protectionKey, location, cancellationToken).ConfigureAwait(false);
             await ChangeHeadAsync(headKey, head =>
             {
                 // An earlier try already added this version: it landed, but another writer changed the head before it
@@ -109,18 +112,20 @@ internal sealed partial class ObjectStoreRepository(IObjectStore store, string k
                 written = hashing.Complete(version.DeclaredLength, lastModified ?? _clock.GetUtcNow());
                 return new Head([.. head?.Versions ?? [], new StoredVersion(version.VersionId, blob, written.ContentLength,
                     written.ContentHash, version.ContentType, new Dictionary<string, string>(version.Metadata),
-                    written.LastModified, version.ExpiresAt, version.CopiedFrom, expiryToken)]);
+                    written.LastModified, version.ExpiresAt, version.CopiedFrom, expiryToken, version.RetainUntil, version.LegalHold,
+                    protectionToken)]);
             }, cancellationToken).ConfigureAwait(false);
         }
         catch
         {
-            await DeleteUnnamedContentAsync(headKey, blob, expiryKey is null ? [contentKey] : [contentKey, expiryKey]).ConfigureAwait(false);
+            await DeleteUnnamedContentAsync(headKey, blob, [contentKey, .. new[] { expiryKey, protectionKey }.OfType<string>()]).ConfigureAwait(false);
             throw;
         }
 
         // A container deleted while the version was stored: the head went in under the container's old ID, which
         // nothing reads anymore, so whatever is left there is deleted.
-        if ((await GetContainerAsync(location.ContainerName, CancellationToken.None).ConfigureAwait(false))?.Id != container.Id)
+        if (protectionKey is not null) await WaitForContainerDeleteAsync(container, location.ContainerName).ConfigureAwait(false);
+        else if ((await GetContainerAsync(location.ContainerName, CancellationToken.None).ConfigureAwait(false))?.Id != container.Id)
         {
             await PurgeQuietlyAsync(container.Id).ConfigureAwait(false);
             throw ContainerMissing(location.ContainerName);
@@ -364,6 +369,9 @@ internal sealed partial class ObjectStoreRepository(IObjectStore store, string k
             conditions?.ThrowIfNotMet(resource, current?.VersionId, current?.ContentHash);
             if (head is null) return null;
             removed.AddRange(versionId is null ? head.Versions : head.Versions.Where(v => v.VersionId == versionId));
+            DateTimeOffset now = _clock.GetUtcNow();
+            if (removed.FirstOrDefault(v => !IsDeletable(v, now)) is { } retained)
+                throw ResourceRetainedException.Create(resource, retained.VersionId, retained.RetainUntil, retained.LegalHold, now);
             return removed.Count == 0 ? null : new Head([.. head.Versions.Except(removed)]);
         }, cancellationToken).ConfigureAwait(false);
         if (!changed) return false;
@@ -372,11 +380,15 @@ internal sealed partial class ObjectStoreRepository(IObjectStore store, string k
         return true;
     }
 
-    /// <summary>A version's content key, and its expiry entry's key if it has an expiry.</summary>
+    /// <summary>
+    /// A version's content key, its expiry entry's key if it has an expiry, and its protection entry's key if it's been
+    /// protected.
+    /// </summary>
     private IEnumerable<string> KeysOf(string containerId, StoredVersion version)
     {
         yield return _keys.Content(containerId, version.Blob);
         if (ExpiryKeyOf(containerId, version) is { } expiryKey) yield return expiryKey;
+        if (ProtectionKeyOf(containerId, version) is { } protectionKey) yield return protectionKey;
     }
 
     /// <summary>A version's expiry entry's key, or <see langword="null"/> when it has no expiry.</summary>
@@ -448,11 +460,11 @@ internal sealed partial class ObjectStoreRepository(IObjectStore store, string k
             if (ObjectKeys.ParseExpiry(entry.Key[_keys.Expiries.Length..]).ExpiresAt > now) break;
             batch.Add(entry);
             if (batch.Count < Math.Min(maxVersions - expired.Count, ParallelReads)) continue;
-            expired.AddRange(await ReadExpiredAsync(batch, cancellationToken).ConfigureAwait(false));
+            expired.AddRange((await ReadExpiredAsync(batch, cancellationToken).ConfigureAwait(false)).Where(v => v.IsDeletableAt(now)));
             batch.Clear();
             if (expired.Count >= maxVersions) return expired;
         }
-        expired.AddRange(await ReadExpiredAsync(batch, cancellationToken).ConfigureAwait(false));
+        expired.AddRange((await ReadExpiredAsync(batch, cancellationToken).ConfigureAwait(false)).Where(v => v.IsDeletableAt(now)));
         return expired;
     }
 
@@ -502,7 +514,7 @@ internal sealed partial class ObjectStoreRepository(IObjectStore store, string k
         bool changed = await ChangeHeadAsync(_keys.Head(container.Id, resource.ResourceName), head =>
         {
             removed = head?.Versions.FirstOrDefault(v => v.VersionId == versionId);
-            if (removed is not { ExpiresAt: { } expiresAt } || expiresAt > now) return null;
+            if (removed is not { ExpiresAt: { } expiresAt } || expiresAt > now || !IsDeletable(removed, now)) return null;
             return new Head([.. head!.Versions.Where(v => v.VersionId != versionId)]);
         }, cancellationToken).ConfigureAwait(false);
         if (!changed) return false;
@@ -527,7 +539,7 @@ internal sealed partial class ObjectStoreRepository(IObjectStore store, string k
         string? token = expiresAt is null ? null : Guid.NewGuid().ToString("N");
         if (expiresAt is { } time)
         {
-            await PutExpiryAsync(_keys.Expiry(time, target.VersionId, token!, container.Id, target.Blob), resource, cancellationToken)
+            await PutEntryAsync(_keys.Expiry(time, target.VersionId, token!, container.Id, target.Blob), resource, cancellationToken)
                 .ConfigureAwait(false);
         }
 
@@ -546,10 +558,10 @@ internal sealed partial class ObjectStoreRepository(IObjectStore store, string k
     }
 
     /// <summary>
-    /// Writes an expiry entry holding the version's container and resource names, since its key has only the container's
-    /// ID and the version's blob.
+    /// Writes an expiry or protection entry holding the version's container and resource names, since its key has
+    /// neither.
     /// </summary>
-    private Task PutExpiryAsync(string key, ResourceLocation resource, CancellationToken cancellationToken) =>
+    private Task PutEntryAsync(string key, ResourceLocation resource, CancellationToken cancellationToken) =>
         store.UploadAsync(key, new MemoryStream(JsonSerializer.SerializeToUtf8Bytes(new ExpiryEntry(resource.ContainerName,
             resource.ResourceName))), cancellationToken);
 
@@ -605,8 +617,9 @@ internal sealed partial class ObjectStoreRepository(IObjectStore store, string k
             : null;
 
     /// <summary>
-    /// Marks the container's record deleted, which hides everything in it at once, then deletes what it held. If that
-    /// stops partway, deleting the container again finishes it.
+    /// Marks the container's record closing, refuses if a version in it is retained or held, and otherwise marks it
+    /// deleted, which hides everything in it at once, then deletes what it held. If that stops partway, deleting the
+    /// container again finishes it.
     /// </summary>
     public override async Task<bool> DeleteContainerAsync(string resourceContainerName, CancellationToken cancellationToken = default)
     {
@@ -629,7 +642,40 @@ internal sealed partial class ObjectStoreRepository(IObjectStore store, string k
                 return false;
             }
             deleting = record.Id;
-            if (await TryPutAsync(key, id => Serialize(record with { Deleted = true, WriteId = id }), existing.ETag).ConfigureAwait(false))
+            // Closed first, so a write that protects a version from here on waits for this delete to decide, and the
+            // entries read next include every version protected before that.
+            if (record.ClosingSince is null)
+            {
+                if (!await TryPutAsync(key, id => Serialize(record with { ClosingSince = RealTime.GetUtcNow(), WriteId = id }), existing.ETag)
+                    .ConfigureAwait(false))
+                {
+                    await WaitToRetryAsync(key, attempt, cancellationToken).ConfigureAwait(false);
+                    continue;
+                }
+                existing = await GetAsync<ContainerRecord>(key, cancellationToken).ConfigureAwait(false);
+                if (existing.Value?.Id != record.Id || existing.Value.ClosingSince is null) continue;
+                record = existing.Value;
+            }
+
+            (ResourceLocation Location, StoredVersion Version)? retained;
+            try
+            {
+                retained = await FindProtectedAsync(record.Id, cancellationToken).ConfigureAwait(false);
+            }
+            catch
+            {
+                await ReopenQuietlyAsync(key, record.Id).ConfigureAwait(false);
+                throw;
+            }
+            if (retained is ({ } location, { } version))
+            {
+                await ReopenQuietlyAsync(key, record.Id).ConfigureAwait(false);
+                throw ResourceRetainedException.Create(location, version.VersionId, version.RetainUntil, version.LegalHold, _clock.GetUtcNow());
+            }
+
+            // Refused if a write reopened the container meanwhile, so the entries are read again.
+            if (await TryPutAsync(key, id => Serialize(record with { Deleted = true, ClosingSince = null, WriteId = id }), existing.ETag)
+                .ConfigureAwait(false))
             {
                 await PurgeAsync(record.Id, cancellationToken).ConfigureAwait(false);
                 return true;
@@ -830,7 +876,9 @@ internal sealed partial class ObjectStoreRepository(IObjectStore store, string k
         ContentHash = version.ContentHash,
         Metadata = new Dictionary<string, string>(version.Metadata),
         CopiedFrom = version.CopiedFrom,
-        ExpiresAt = version.ExpiresAt
+        ExpiresAt = version.ExpiresAt,
+        RetainUntil = version.RetainUntil,
+        LegalHold = version.LegalHold
     };
 
     private static ContainerInfo ToInfo(string name, ContainerRecord record) => new()
@@ -854,15 +902,19 @@ internal sealed partial class ObjectStoreRepository(IObjectStore store, string k
     private sealed record PiecesRecord([property: JsonPropertyName("k")] List<string> Keys);
 
     /// <summary>
-    /// A container's record: its ID, which the keys of what it holds start with, its metadata, and whether it's deleted.
+    /// A container's record: its ID, which the keys of what it holds start with, its metadata, whether it's deleted, and
+    /// since when a delete has had it closing, while it finds whether any version in it is protected.
     /// </summary>
     private sealed record ContainerRecord(
         [property: JsonPropertyName("id")] string Id,
         [property: JsonPropertyName("m")] Dictionary<string, string> Metadata,
         [property: JsonPropertyName("deleted")] bool Deleted = false,
-        [property: JsonPropertyName("w")] string? WriteId = null);
+        [property: JsonPropertyName("w")] string? WriteId = null,
+        [property: JsonPropertyName("cl"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] DateTimeOffset? ClosingSince = null);
 
-    /// <summary>What an expiry entry names: the container and resource of the version its key identifies.</summary>
+    /// <summary>
+    /// What an expiry or protection entry names: the container and resource of the version its key identifies.
+    /// </summary>
     private sealed record ExpiryEntry(
         [property: JsonPropertyName("c")] string ContainerName,
         [property: JsonPropertyName("n")] string ResourceName);
@@ -887,5 +939,8 @@ internal sealed partial class ObjectStoreRepository(IObjectStore store, string k
         [property: JsonPropertyName("at")] DateTimeOffset LastModified,
         [property: JsonPropertyName("x")] DateTimeOffset? ExpiresAt,
         [property: JsonPropertyName("o")] ResourceOrigin? CopiedFrom,
-        [property: JsonPropertyName("xt")] string? ExpiryToken = null);
+        [property: JsonPropertyName("xt")] string? ExpiryToken = null,
+        [property: JsonPropertyName("ru"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] DateTimeOffset? RetainUntil = null,
+        [property: JsonPropertyName("lh"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool LegalHold = false,
+        [property: JsonPropertyName("pt"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? ProtectionToken = null);
 }

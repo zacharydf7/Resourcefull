@@ -40,7 +40,10 @@ internal sealed partial class ObjectStoreRepository
         ContainerRecord container = await GetContainerAsync(location.ContainerName, cancellationToken).ConfigureAwait(false)
             ?? throw ContainerMissing(location.ContainerName);
         var record = new UploadRecord(location.ContainerName, location.ResourceName, version.ContentType, version.DeclaredLength,
-            new Dictionary<string, string>(version.Metadata), version.ExpiresAt, [], _clock.GetUtcNow());
+            new Dictionary<string, string>(version.Metadata), version.ExpiresAt, [], _clock.GetUtcNow())
+        {
+            RetainUntil = version.RetainUntil, LegalHold = version.LegalHold
+        };
         if (!await TryPutAsync(_keys.UploadRecord(container.Id, version.VersionId), id => Serialize(record with { WriteId = id }), null)
             .ConfigureAwait(false))
         {
@@ -59,7 +62,9 @@ internal sealed partial class ObjectStoreRepository
                 ContentType = record.ContentType,
                 DeclaredLength = record.DeclaredLength,
                 Metadata = new Dictionary<string, string>(record.Metadata),
-                ExpiresAt = record.ExpiresAt
+                ExpiresAt = record.ExpiresAt,
+                RetainUntil = record.RetainUntil,
+                LegalHold = record.LegalHold
             }, record.Length)
             : null;
 
@@ -307,7 +312,9 @@ internal sealed partial class ObjectStoreRepository
         string contentKey = _keys.Content(container.Id, blob);
         string? expiryToken = record.ExpiresAt is null ? null : Guid.NewGuid().ToString("N");
         string? expiryKey = record.ExpiresAt is { } expiresAt ? _keys.Expiry(expiresAt, versionId, expiryToken!, container.Id, blob) : null;
-        string[] stored = expiryKey is null ? [contentKey] : [contentKey, expiryKey];
+        string? protectionToken = record.RetainUntil is not null || record.LegalHold ? Guid.NewGuid().ToString("N") : null;
+        string? protectionKey = protectionToken is null ? null : _keys.Protection(container.Id, protectionToken);
+        string[] stored = [contentKey, .. new[] { expiryKey, protectionKey }.OfType<string>()];
         WrittenContent? added = null;
         try
         {
@@ -324,7 +331,8 @@ internal sealed partial class ObjectStoreRepository
             await store.JoinAsync(contentKey,
                 [.. record.Segments.SelectMany(s => PartsOf(_keys.UploadSegment(container.Id, versionId, s.Token), s.Length))],
                 cancellationToken).ConfigureAwait(false);
-            if (expiryKey is not null) await PutExpiryAsync(expiryKey, resource, cancellationToken).ConfigureAwait(false);
+            if (expiryKey is not null) await PutEntryAsync(expiryKey, resource, cancellationToken).ConfigureAwait(false);
+            if (protectionKey is not null) await PutEntryAsync(protectionKey, resource, cancellationToken).ConfigureAwait(false);
             bool changed = await ChangeHeadAsync(headKey, head =>
             {
                 // Added by an earlier try of this write, which landed before another writer changed the head, or by
@@ -338,7 +346,7 @@ internal sealed partial class ObjectStoreRepository
                 added = new WrittenContent(contentLength, contentHash, _clock.GetUtcNow());
                 return new Head([.. head?.Versions ?? [], new StoredVersion(versionId, blob, contentLength, contentHash,
                     record.ContentType, new Dictionary<string, string>(record.Metadata), added.LastModified, record.ExpiresAt, null,
-                    expiryToken)]);
+                    expiryToken, record.RetainUntil, record.LegalHold, protectionToken)]);
             }, cancellationToken).ConfigureAwait(false);
             // The content this completion joined is named by nothing, unless the head's version is its own, added by an
             // earlier try.
@@ -360,7 +368,8 @@ internal sealed partial class ObjectStoreRepository
 
         await DeleteUploadQuietlyAsync(container.Id, versionId).ConfigureAwait(false);
         // As for an upload: a container deleted meanwhile took the version with it.
-        if ((await GetContainerAsync(resource.ContainerName, CancellationToken.None).ConfigureAwait(false))?.Id != container.Id)
+        if (protectionKey is not null) await WaitForContainerDeleteAsync(container, resource.ContainerName).ConfigureAwait(false);
+        else if ((await GetContainerAsync(resource.ContainerName, CancellationToken.None).ConfigureAwait(false))?.Id != container.Id)
         {
             await PurgeQuietlyAsync(container.Id).ConfigureAwait(false);
             throw ContainerMissing(resource.ContainerName);
@@ -588,6 +597,14 @@ internal sealed partial class ObjectStoreRepository
         [property: JsonPropertyName("s")] string? Seal = null,
         [property: JsonPropertyName("w")] string? WriteId = null)
     {
+        /// <summary>Until when the version will be retained once the session completes.</summary>
+        [JsonPropertyName("ru"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public DateTimeOffset? RetainUntil { get; init; }
+
+        /// <summary>Whether the version will be under a legal hold once the session completes.</summary>
+        [JsonPropertyName("lh"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+        public bool LegalHold { get; init; }
+
         /// <summary>How many bytes the session has stored.</summary>
         [JsonIgnore]
         public long Length => Segments.Sum(s => s.Length);

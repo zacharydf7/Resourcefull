@@ -17,18 +17,17 @@ internal partial class ResourceContainerClient
     {
         ResourceNames.ThrowIfInvalidNewResourceName(resourceName);
         options ??= new ResourceUploadSessionOptions();
-        if (policies is not null)
-        {
-            await policies.CheckNewVersionAsync(ContainerName, resourceName, restore: false, options.Headers?.ContentType,
-                options.Headers?.ContentLength, _telemetry, cancellationToken).ConfigureAwait(false);
-        }
+        NewVersionCheck check = policies is null ? default : await policies.CheckNewVersionAsync(ContainerName, resourceName,
+            restore: false, options.Headers?.ContentType, options.Headers?.ContentLength, _telemetry, cancellationToken).ConfigureAwait(false);
 
         var version = new NewResourceVersion(At(resourceName), Guid.CreateVersion7().ToString())
         {
             ContentType = options.Headers?.ContentType,
             DeclaredLength = options.Headers?.ContentLength,
             Metadata = new Dictionary<string, string>(options.Metadata),
-            ExpiresAt = options.ExpiresAt
+            ExpiresAt = options.ExpiresAt,
+            RetainUntil = RetainUntil(check.RetainFor, options.RetainUntil, options.LegalHold),
+            LegalHold = options.LegalHold
         };
         await resourceRepository.StartStagedVersionAsync(version, cancellationToken).ConfigureAwait(false);
         return new ResourceUpload(ContainerName, resourceName, version.VersionId, 0, version.DeclaredLength);

@@ -43,6 +43,7 @@ internal sealed partial class ObjectStoreRepository
         string sourceKey = _keys.Head(from.Id, source.ResourceName);
         string destinationKey = _keys.Head(to.Id, destination.ResourceName);
         bool across = from.Id != to.Id;
+        bool protects;
         for (int attempt = 1; ; attempt++)
         {
             (Stored<Head> sourceRead, Head? moving) = await ReadHeadToChangeAsync(sourceKey, cancellationToken).ConfigureAwait(false);
@@ -55,12 +56,14 @@ internal sealed partial class ObjectStoreRepository
 
             // Across containers, each version's content is copied under the destination's ID, so the destination's
             // usage counts it and deleting the source container doesn't take it. Every version gets a new expiry entry
-            // for its new name.
+            // and protection entry for its new name.
             List<StoredVersion> moved = [.. moving.Versions.Select(v => v with
             {
                 Blob = across ? Guid.NewGuid().ToString("N") : v.Blob,
-                ExpiryToken = v.ExpiresAt is null ? null : Guid.NewGuid().ToString("N")
+                ExpiryToken = v.ExpiresAt is null ? null : Guid.NewGuid().ToString("N"),
+                ProtectionToken = v.ProtectionToken is null ? null : Guid.NewGuid().ToString("N")
             })];
+            protects = moved.Any(v => v.ProtectionToken is not null);
             var entry = new MoveEntry(MoveState.Pending, from.Id, source.ResourceName, to.Id, destination.ResourceName,
                 [.. moving.Versions.SelectMany(v => LeftBehind(from.Id, v, across))],
                 [.. moved.SelectMany(v => LeftBehind(to.Id, v, across))]);
@@ -75,7 +78,8 @@ internal sealed partial class ObjectStoreRepository
         }
 
         // As for an upload: a destination container deleted meanwhile took the versions with it.
-        if ((await GetContainerAsync(destination.ContainerName, CancellationToken.None).ConfigureAwait(false))?.Id != to.Id)
+        if (protects) await WaitForContainerDeleteAsync(to, destination.ContainerName).ConfigureAwait(false);
+        else if ((await GetContainerAsync(destination.ContainerName, CancellationToken.None).ConfigureAwait(false))?.Id != to.Id)
         {
             await PurgeQuietlyAsync(to.Id).ConfigureAwait(false);
             throw ContainerMissing(destination.ContainerName);
@@ -85,10 +89,10 @@ internal sealed partial class ObjectStoreRepository
 
     /// <summary>
     /// What a version leaves on the side of a move it doesn't end up on: across containers, its content and its expiry
-    /// entry; within one, just its expiry entry, since the content stays where it is.
+    /// and protection entries; within one, just its entries, since the content stays where it is.
     /// </summary>
     private IEnumerable<string> LeftBehind(string containerId, StoredVersion version, bool across) =>
-        across ? KeysOf(containerId, version) : ExpiryKeyOf(containerId, version) is { } key ? [key] : [];
+        across ? KeysOf(containerId, version) : new[] { ExpiryKeyOf(containerId, version), ProtectionKeyOf(containerId, version) }.OfType<string>();
 
     /// <summary>Makes one try at a move, and finishes it, whichever way it was decided.</summary>
     /// <returns>Whether the move happened; <see langword="false"/> when another writer changed a head first.</returns>
@@ -115,7 +119,9 @@ internal sealed partial class ObjectStoreRepository
                         .ConfigureAwait(false);
                 }
                 if (pending && ExpiryKeyOf(entry.DestinationContainerId, moved[i]) is { } expiryKey)
-                    await PutExpiryAsync(expiryKey, destination, cancellationToken).ConfigureAwait(false);
+                    await PutEntryAsync(expiryKey, destination, cancellationToken).ConfigureAwait(false);
+                if (pending && ProtectionKeyOf(entry.DestinationContainerId, moved[i]) is { } protectionKey)
+                    await PutEntryAsync(protectionKey, destination, cancellationToken).ConfigureAwait(false);
             }
             bool marked = pending
                 && await TryPutAsync(_keys.Head(entry.SourceContainerId, entry.SourceName),

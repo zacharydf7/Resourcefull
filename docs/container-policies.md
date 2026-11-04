@@ -48,6 +48,9 @@ reports those.
 - **`MaxVersions`** isn't a rule a write can break: it's how many versions of each name this container keeps, in
   place of the store-wide [`UseVersioning`](versioning.md) setting. Lowering it deletes each
   name's extra versions at the name's next upload, or at once with `PruneContainerAsync`.
+- **`RetainFor`** <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> isn't one either: it's how long each new version in the container can't be deleted, counted
+  from when its write starts, unless the write gives its own `RetainUntil`. Versions already stored keep their dates.
+  See [Deleting safely](deleting-safely.md).
 - **Writes at the same time can go slightly over.** The size and count limits read what the container holds once per
   write, so uploads running at the same moment can together pass `MaxContainerSize` or `MaxResourceCount` by up to
   one upload each. Set `MaxResourceSize` alongside `MaxContainerSize` to bound that: without it, each of those uploads

@@ -33,6 +33,18 @@ public sealed record NewResourceVersion(ResourceLocation Location, string Versio
     public ResourceOrigin? CopiedFrom { get; init; }
 
     /// <summary>
+    /// Until when the version can't be deleted, as <see cref="ResourceInfo.RetainUntil"/>; <see langword="null"/> for
+    /// none. The clients set it only for a provider whose <see cref="ResourceRepository.SupportsRetention"/> is true.
+    /// </summary>
+    public DateTimeOffset? RetainUntil { get; init; }
+
+    /// <summary>
+    /// Whether the version is stored under a legal hold, as <see cref="ResourceInfo.LegalHold"/>. The clients set it
+    /// only for a provider whose <see cref="ResourceRepository.SupportsRetention"/> is true.
+    /// </summary>
+    public bool LegalHold { get; init; }
+
+    /// <summary>
     /// For an import only, when the version first became current in the store it came from, kept as its
     /// <see cref="ResourceInfo.LastModified"/>; <see langword="null"/> otherwise, as the write stamps its own time.
     /// </summary>
