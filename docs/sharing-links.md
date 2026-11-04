@@ -49,7 +49,8 @@ builder.Services.AddResourcefullLinks();
 one instance of your application, or restart it, read [Keeping links working](sharing-links-in-production.md#keeping-links-working-data-protection-keys)
 before going live.
 
-Signed links work with the store `AddResourcefull` adds, not yet with a [named store](several-stores.md).
+For a store added with `AddKeyedResourcefull`, pass its name: `AddResourcefullLinks("archive")`. See
+[Several stores](several-stores.md#signed-links).
 
 ### 2. Add an endpoint that creates links
 
@@ -131,8 +132,9 @@ Every response, the errors included, tells browsers not to pass the link on to o
 
 ## Telemetry
 
-Each request that opens a link gets `resourcefull.link` on its span: `valid`, `expired` or `invalid`. A valid link's
-download records the usual `download` operation. See [Telemetry](telemetry.md).
+Each request that opens a link gets `resourcefull.link` on its span: `valid`, `expired` or `invalid`. A link for a
+named store also gets `resourcefull.store`. A valid link's download records the usual `download` operation. See
+[Telemetry](telemetry.md).
 
 ## Troubleshooting
 
@@ -150,4 +152,9 @@ to files you overwrite with `FollowCurrent = true`.
 programs cut long URLs, or break them across lines.
 
 **`Results.SharedResource` throws "needs signed links added with AddResourcefullLinks".** Add
-`builder.Services.AddResourcefullLinks()`.
+`builder.Services.AddResourcefullLinks()`. For a [named store](several-stores.md#signed-links), the message names the
+store: add `builder.Services.AddResourcefullLinks("archive")` with that store's name.
+
+**A link answers 404 at one endpoint but works at another.** Each store's links work only at an endpoint that passes
+that store's client to `Results.SharedResource` or `Results.SharedUpload`. See
+[Several stores](several-stores.md#signed-links).

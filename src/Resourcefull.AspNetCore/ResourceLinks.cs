@@ -83,7 +83,8 @@ public sealed record ResourceLinkCheck(ResourceLinkStatus Status, SignedResource
 /// Creates and checks the tokens of signed links: strings that let whoever holds them download one resource, or upload
 /// what an upload link allows, until they expire, without signing in. Register it with <see cref="ResourceLinkServiceCollectionExtensions.AddResourcefullLinks"/>.
 /// Tokens are signed and encrypted with ASP.NET Core Data Protection, so they can't be changed, read or made up, and
-/// they work on every instance that shares the application's Data Protection keys.
+/// they work on every instance that shares the application's Data Protection keys. Each store has a signer of its own,
+/// and a token made by one store's signer doesn't work with another store.
 /// <para>Coming in 4.0.</para>
 /// </summary>
 public interface IResourceLinkSigner
@@ -131,9 +132,10 @@ public interface IResourceLinkSigner
 internal sealed class ResourceLinkSigner(IDataProtectionProvider dataProtection, IResourceServiceClient resources,
     TimeProvider? timeProvider = null) : IResourceLinkSigner
 {
-    // Changing a purpose would invalidate every link ever made with it, as removing the keys does.
-    private readonly IDataProtector _protector = dataProtection.CreateProtector("Resourcefull.ResourceLink.v1");
-    private readonly IDataProtector _uploadProtector = dataProtection.CreateProtector("Resourcefull.ResourceUploadLink.v1");
+    // Changing a purpose would invalidate every link ever made with it, as removing the keys does. A named store's
+    // purposes add its name, so its tokens don't open with another store's signer.
+    private readonly IDataProtector _protector = Protector(dataProtection, "Resourcefull.ResourceLink.v1", resources.StoreName);
+    private readonly IDataProtector _uploadProtector = Protector(dataProtection, "Resourcefull.ResourceUploadLink.v1", resources.StoreName);
     private readonly TimeProvider _clock = timeProvider ?? TimeProvider.System;
 
     public async Task<string?> CreateTokenAsync(ResourceLink link, CancellationToken cancellationToken = default)
@@ -204,6 +206,9 @@ internal sealed class ResourceLinkSigner(IDataProtectionProvider dataProtection,
         }
     }
 
+    private static IDataProtector Protector(IDataProtectionProvider dataProtection, string purpose, string? storeName) =>
+        storeName is null ? dataProtection.CreateProtector(purpose) : dataProtection.CreateProtector(purpose, storeName);
+
     private ResourceLinkStatus StatusAt(DateTimeOffset expiresAt) =>
         expiresAt <= _clock.GetUtcNow() ? ResourceLinkStatus.Expired : ResourceLinkStatus.Valid;
 
@@ -226,16 +231,20 @@ internal sealed class ResourceLinkSigner(IDataProtectionProvider dataProtection,
         [property: JsonPropertyName("e")] long ExpiresAt);
 }
 
-/// <summary>Tags the request's span with whether its link works.</summary>
+/// <summary>Tags the request's span with whether its link works, and which named store it's for.</summary>
 internal static class ResourceLinkTelemetry
 {
-    public static void Record(HttpContext httpContext, ResourceLinkStatus status) =>
-        httpContext.Features.Get<IHttpActivityFeature>()?.Activity.SetTag("resourcefull.link", status switch
+    public static void Record(HttpContext httpContext, ResourceLinkStatus status, string? storeName)
+    {
+        if (httpContext.Features.Get<IHttpActivityFeature>()?.Activity is not { } activity) return;
+        activity.SetTag("resourcefull.link", status switch
         {
             ResourceLinkStatus.Valid => "valid",
             ResourceLinkStatus.Expired => "expired",
             _ => "invalid"
         });
+        if (storeName is not null) activity.SetTag("resourcefull.store", storeName);
+    }
 }
 
 /// <summary>
@@ -245,17 +254,50 @@ internal static class ResourceLinkTelemetry
 public static class ResourceLinkServiceCollectionExtensions
 {
     /// <summary>
-    /// Adds <see cref="IResourceLinkSigner"/>, and ASP.NET Core Data Protection if it isn't added yet. Configure Data
-    /// Protection to keep its keys where every instance of the application can read them, or links made on one
-    /// instance won't work on another, nor after a restart.
+    /// Adds <see cref="IResourceLinkSigner"/> for a store, and ASP.NET Core Data Protection if it isn't added yet.
+    /// Configure Data Protection to keep its keys where every instance of the application can read them, or links made
+    /// on one instance won't work on another, nor after a restart.
     /// </summary>
     /// <param name="services">The application's services.</param>
+    /// <param name="storeName">
+    /// The store whose links to sign, added with <see cref="ResourcefullServiceCollectionExtensions.AddKeyedResourcefull"/>;
+    /// <see langword="null"/>, the default, for the store <see cref="ResourcefullServiceCollectionExtensions.AddResourcefull"/>
+    /// adds. A named store's signer is a keyed service, resolved with <c>[FromKeyedServices(storeName)]</c>, such as
+    /// <c>[FromKeyedServices("archive")]</c>. Call this once for each store whose links you serve.
+    /// </param>
     /// <returns><paramref name="services"/>, for chaining.</returns>
-    public static IServiceCollection AddResourcefullLinks(this IServiceCollection services)
+    /// <exception cref="ArgumentException"><paramref name="storeName"/> is empty or white space.</exception>
+    public static IServiceCollection AddResourcefullLinks(this IServiceCollection services, string? storeName = null)
     {
         ArgumentNullException.ThrowIfNull(services);
+        if (storeName is not null) ArgumentException.ThrowIfNullOrWhiteSpace(storeName);
         services.AddDataProtection();
-        services.TryAddScoped<IResourceLinkSigner, ResourceLinkSigner>();
+        if (storeName is null)
+        {
+            services.TryAddScoped<IResourceLinkSigner, ResourceLinkSigner>();
+            return services;
+        }
+
+        services.TryAddKeyedScoped<IResourceLinkSigner>(storeName, (provider, _) => new ResourceLinkSigner(
+            provider.GetRequiredService<IDataProtectionProvider>(),
+            provider.GetKeyedService<IResourceServiceClient>(storeName) ?? throw new InvalidOperationException(
+                $"{nameof(AddResourcefullLinks)} needs a store named '{storeName}' added with {nameof(ResourcefullServiceCollectionExtensions.AddKeyedResourcefull)}."),
+            provider.GetService<TimeProvider>()));
         return services;
+    }
+
+    /// <summary>
+    /// Gets the signer for the store <paramref name="resources"/> works with from the request's services.
+    /// <paramref name="caller"/> names the API in the error when that signer isn't added.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">That store's signed links aren't added.</exception>
+    internal static IResourceLinkSigner SignerFor(HttpContext httpContext, IResourceServiceClient resources, string caller)
+    {
+        string? storeName = resources.StoreName;
+        IServiceProvider services = httpContext.RequestServices;
+        return (storeName is null ? services.GetService<IResourceLinkSigner>() : services.GetKeyedService<IResourceLinkSigner>(storeName))
+            ?? throw new InvalidOperationException(storeName is null
+                ? $"{caller} needs signed links added with {nameof(AddResourcefullLinks)}."
+                : $"{caller} needs signed links for the store '{storeName}' added with {nameof(AddResourcefullLinks)}(\"{storeName}\").");
     }
 }

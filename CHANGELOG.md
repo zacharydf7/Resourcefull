@@ -92,7 +92,11 @@
   and expiry sweep. `MigrateResourcefullDatabaseAsync`, `GenerateResourcefullScript`, the SQL Server hash backfill and
   both health checks take a store's name. Spans and metrics from a named store carry `resourcefull.store`. Providers
   read the store's name from `ResourcefullOptionsBuilder.StoreName`, and a new `UseProvider` overload takes a factory.
-  Signed links work with the store `AddResourcefull` adds. See [Several stores](docs/several-stores.md).
+  `IResourceServiceClient.StoreName` says which store a client works with; a class that implements the interface
+  implements it too. Signed links work with every store: `AddResourcefullLinks("archive")` adds a keyed signer for a
+  named store, and `Results.SharedResource` and `Results.SharedUpload` check a token with the signer of the store whose
+  client they're given. A link made for one store doesn't open at another's endpoint. See
+  [Several stores](docs/several-stores.md).
 - **Listing containers a page at a time.** `ListContainersAsync` enumerates every container, or those whose names start
   with a prefix, fetching a page at a time, so it holds only one page in memory, even in a store with a container for
   each user. `GetContainerPageAsync` returns one page and a continuation token, for an API that pages for its own

@@ -115,7 +115,9 @@ These need changes:
 - **Mocks and test doubles.** A Moq setup or verification can't leave out optional arguments, so it passes the token
   too: `Setup(c => c.ExistsAsync("a", null, It.IsAny<CancellationToken>()))`. A class that implements either
   interface implements one method per operation, and handles the range and the conditions itself: the overloads
-  that took them no longer have default implementations.
+  that took them no longer have default implementations. A class that implements `IResourceServiceClient` also
+  implements `StoreName`: the name of the store it works with, or `null` for the store `AddResourcefull` adds. A class
+  that wraps a client returns the wrapped client's.
 
 ### `ResourceInfo` can't be changed
 

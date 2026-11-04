@@ -15,12 +15,15 @@ namespace Resourcefull.Tests.AspNetCore;
 /// an application would: download, download inline under another name, download looked up by the result (which
 /// answers ranges), download through a signed link, upload, upload through a signed link, one that throws a given
 /// exception, a Razor page that downloads, and the dashboard, open to anyone, with Resourcefull's health check: read-only
-/// at <c>/resourcefull</c>, and with changes and links at <c>/editable</c>. Each app has Data Protection keys of its own,
-/// held in memory, so one app's links don't work in another, and records what it logs.
+/// at <c>/resourcefull</c>, and with changes and links at <c>/editable</c>. A second store, named
+/// <see cref="ArchiveStore"/>, has link endpoints of its own under <c>/archive</c>. Each app has Data Protection keys of
+/// its own, held in memory, so one app's links don't work in another, and records what it logs.
 /// </summary>
 internal sealed class TestApp : IAsyncDisposable
 {
     public const string Container = "files";
+
+    public const string ArchiveStore = "archive";
 
     private readonly WebApplication _app;
 
@@ -44,6 +47,14 @@ internal sealed class TestApp : IAsyncDisposable
     /// <summary>Creates signed links in this app.</summary>
     public IResourceLinkSigner Links => _app.Services.CreateScope().ServiceProvider.GetRequiredService<IResourceLinkSigner>();
 
+    /// <summary>The <see cref="Container"/> container in the store named <see cref="ArchiveStore"/>.</summary>
+    public IResourceContainerClient ArchiveFiles => _app.Services.CreateScope().ServiceProvider
+        .GetRequiredKeyedService<IResourceServiceClient>(ArchiveStore).GetContainerClient(Container);
+
+    /// <summary>Creates signed links for the store named <see cref="ArchiveStore"/>.</summary>
+    public IResourceLinkSigner ArchiveLinks =>
+        _app.Services.CreateScope().ServiceProvider.GetRequiredKeyedService<IResourceLinkSigner>(ArchiveStore);
+
     public static async Task<TestApp> StartAsync(Exception? toThrow = null, bool versioning = true, TimeProvider? clock = null,
         ResourceContainerPolicy? policy = null)
     {
@@ -60,6 +71,8 @@ internal sealed class TestApp : IAsyncDisposable
             if (versioning) options.UseVersioning();
             if (policy is not null) options.UseContainerPolicies(policy);
         });
+        builder.Services.AddKeyedResourcefull(ArchiveStore, options => options.UseInMemory());
+        builder.Services.AddResourcefullLinks(ArchiveStore);
         builder.Services.AddResourcefullExceptionHandler();
         builder.Services.AddHealthChecks().AddResourcefullCheck();
         builder.Services.AddRazorPages().AddApplicationPart(typeof(TestApp).Assembly);
@@ -86,6 +99,10 @@ internal sealed class TestApp : IAsyncDisposable
             resources.GetContainerClient(Container).UploadFromRequestAsync(name, request, null, cancellationToken));
         app.MapPut("/upload/{token}/{**name}", (string token, string? name, IResourceServiceClient resources) =>
             Results.SharedUpload(resources, token, name));
+        app.MapGet("/archive/shared/{token}", (string token, [FromKeyedServices(ArchiveStore)] IResourceServiceClient archive) =>
+            Results.SharedResource(archive, token));
+        app.MapPut("/archive/upload/{token}/{**name}", (string token, string? name, [FromKeyedServices(ArchiveStore)] IResourceServiceClient archive) =>
+            Results.SharedUpload(archive, token, name));
         app.MapGet("/throw", () => { throw toThrow!; });
         app.MapRazorPages();
         app.MapResourcefullDashboard().AllowAnonymous();
@@ -96,6 +113,7 @@ internal sealed class TestApp : IAsyncDisposable
 
         await app.StartAsync();
         await app.Services.CreateScope().ServiceProvider.GetRequiredService<IResourceServiceClient>().CreateContainerAsync(Container);
+        await app.Services.CreateScope().ServiceProvider.GetRequiredKeyedService<IResourceServiceClient>(ArchiveStore).CreateContainerAsync(Container);
         return new TestApp(app, logs);
     }
 

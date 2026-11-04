@@ -14,6 +14,15 @@ namespace Resourcefull;
 public interface IResourceServiceClient
 {
     /// <summary>
+    /// The name of the store this client works with, given to
+    /// <see cref="ResourcefullServiceCollectionExtensions.AddKeyedResourcefull"/>, or <see langword="null"/> for the store
+    /// <see cref="ResourcefullServiceCollectionExtensions.AddResourcefull"/> adds. A class that wraps a client returns
+    /// the wrapped client's name, because signed links are checked with the signer of the store this names.
+    /// <para>Coming in 4.0.</para>
+    /// </summary>
+    public string? StoreName { get; }
+
+    /// <summary>
     /// Returns a client for a container without contacting the store. The container need not exist
     /// yet; operations report absence at the time they run. Since nothing is read, the client's
     /// <see cref="IResourceContainerClient.Info"/> carries the name and the URI provider's URI but no

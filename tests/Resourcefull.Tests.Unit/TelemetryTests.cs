@@ -109,7 +109,7 @@ public sealed class TelemetryTests : IDisposable
 
     private static IEnumerable<(object, MethodInfo)> Operations(IResourceServiceClient service, IResourceContainerClient container)
     {
-        foreach (MethodInfo method in typeof(IResourceServiceClient).GetMethods().Where(m => m.Name != nameof(IResourceServiceClient.GetContainerClient)))
+        foreach (MethodInfo method in typeof(IResourceServiceClient).GetMethods().Where(m => !m.IsSpecialName && m.Name != nameof(IResourceServiceClient.GetContainerClient)))
             yield return (service, method);
         foreach (MethodInfo method in typeof(IResourceContainerClient).GetMethods().Where(m => !m.IsSpecialName && m.Name != nameof(IDisposable.Dispose)))
             yield return (container, method);

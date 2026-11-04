@@ -89,5 +89,38 @@ store doesn't change what the first one records.
 
 ## Signed links
 
-[Signed links](sharing-links.md) work with the store `AddResourcefull` adds, not yet with a named store.
+[Download links](sharing-links.md) and [upload links](upload-links.md) work with every store. Add a link signer for
+each store whose links you serve:
+
+```csharp
+builder.Services.AddResourcefullLinks();          // the store AddResourcefull adds
+builder.Services.AddResourcefullLinks("archive"); // the store named "archive"
+```
+
+A named store's signer is a keyed service. Create its links with it, and give the endpoint that serves them that
+store's client:
+
+```csharp
+app.MapPost("/archive/share/{container}/{**name}", async (string container, string name,
+    [FromKeyedServices("archive")] IResourceLinkSigner links, CancellationToken cancellationToken) =>
+{
+    string? token = await links.CreateTokenAsync(new ResourceLink(container, name), cancellationToken);
+    return token is null
+        ? Results.NotFound()
+        : Results.Ok(new { url = $"https://example.com/archive/shared/{token}" });
+}).RequireAuthorization();
+
+app.MapMethods("/archive/shared/{token}", ["GET", "HEAD"], (string token,
+    [FromKeyedServices("archive")] IResourceServiceClient archive) => Results.SharedResource(archive, token));
+```
+
+`Results.SharedResource` and `Results.SharedUpload` check the token with the signer of the store whose client they're
+given. A token opens only with the signer of the store that made it, so a link made for one store gets 404 at another
+store's endpoint, even when both stores have a file at the same container and name. Map one endpoint for each store's
+links.
+
+A named store's tokens are sealed with its name, so renaming the store makes the links it made stop working, as
+removing the Data Protection keys does. Adding a named store doesn't change the links of the store `AddResourcefull`
+adds.
+
 `Results.Resource` and the [exception handler](aspnet-core/status-codes.md) work with every store.

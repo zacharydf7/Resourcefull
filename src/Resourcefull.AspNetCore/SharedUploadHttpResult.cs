@@ -1,6 +1,5 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace Resourcefull.AspNetCore;
 
@@ -52,11 +51,9 @@ public sealed class SharedUploadHttpResult : IResult, IActionResult
         HttpRequest request = httpContext.Request;
         HttpResponse response = httpContext.Response;
 
-        IResourceLinkSigner signer = httpContext.RequestServices.GetService<IResourceLinkSigner>()
-            ?? throw new InvalidOperationException(
-                $"Results.SharedUpload needs signed links added with {nameof(ResourceLinkServiceCollectionExtensions.AddResourcefullLinks)}.");
+        IResourceLinkSigner signer = ResourceLinkServiceCollectionExtensions.SignerFor(httpContext, Resources, "Results.SharedUpload");
         ResourceUploadLinkCheck check = signer.CheckUpload(Token);
-        ResourceLinkTelemetry.Record(httpContext, check.Status);
+        ResourceLinkTelemetry.Record(httpContext, check.Status, Resources.StoreName);
 
         if (check is { Status: ResourceLinkStatus.Expired })
         {

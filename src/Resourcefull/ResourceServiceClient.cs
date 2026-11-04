@@ -15,6 +15,8 @@ internal partial class ResourceServiceClient(ResourceRepository resourceReposito
     IResourceUploadInspector? uploadInspector = null) : IResourceServiceClient
 {
     private readonly ResourcefullOptions _options = options.Value;
+
+    public string? StoreName => _options.StoreName;
     private readonly ClientTelemetry _telemetry = new(Telemetry.ProviderName(resourceRepository), options.Value);
 
     public IResourceContainerClient GetContainerClient(string resourceContainerName)

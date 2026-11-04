@@ -22,6 +22,9 @@ builder.Services.AddResourcefull(options => options.UseSqlServer(connectionStrin
 builder.Services.AddResourcefullLinks();
 ```
 
+For a store added with `AddKeyedResourcefull`, pass its name, as for download links: see
+[Several stores](several-stores.md#signed-links).
+
 ### 1. Add an endpoint that creates links
 
 This is your application's endpoint, so you decide who may ask for a link. Here, a signed-in claims handler gets a

@@ -81,6 +81,23 @@ public sealed class PreconditionTelemetryTests
     }
 
     [Theory]
+    [InlineData(true, "archive")]
+    [InlineData(false, null)]
+    public async Task SharedResource_ShouldRecordANamedStoreOnTheRequestSpan_WhenItsLinkIsOpened(bool archive, string? expected)
+    {
+        // Arrange
+        await using TestApp app = await TestApp.StartAsync();
+
+
+        // Act
+        (_, object? store) = await SendAsync(app, new HttpRequestMessage(HttpMethod.Get, (archive ? "/archive/shared/" : "/shared/") + "not-a-token"),
+            "resourcefull.store");
+
+        // Assert
+        Assert.Equal(expected, store);
+    }
+
+    [Theory]
     [InlineData("/resourcefull/", "page")]
     [InlineData("/resourcefull/api/health", "health")]
     [InlineData("/resourcefull/api/containers", "containers")]

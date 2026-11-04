@@ -202,6 +202,7 @@ filter that type out of storage error rates. ASP.NET
 Core records each request's status code, 304, 412 and 413 included, in its own metrics and spans. When a request has
 preconditions, the package adds `resourcefull.precondition` to the request's span: `met`, `not_modified` or `failed`.
 A request that opens a [signed link](sharing-links.md), or uploads through an [upload link](upload-links.md), gets
-`resourcefull.link`: `valid`, `expired` or `invalid`. A request to the [dashboard](aspnet-core/dashboard.md) gets
-`resourcefull.dashboard`, naming what it asked for, such as `containers`, `largest` or, for a change, `upload`; the
+`resourcefull.link`: `valid`, `expired` or `invalid`. A link for a [named store](several-stores.md) also gets
+`resourcefull.store`. A request to the [dashboard](aspnet-core/dashboard.md) gets `resourcefull.dashboard`, naming
+what it asked for, such as `containers`, `largest` or, for a change, `upload`; the
 [dashboard's telemetry](aspnet-core/dashboard.md#telemetry) lists them all.

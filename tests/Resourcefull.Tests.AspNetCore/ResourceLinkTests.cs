@@ -210,4 +210,80 @@ public class ResourceLinkTests
         // Assert
         Assert.Contains("AddResourcefullLinks", (await Assert.ThrowsAsync<InvalidOperationException>(act)).Message);
     }
+
+    [Fact]
+    public async Task SharedResource_ShouldSendTheNamedStoresFile_WhenTheLinkIsFromThatStore()
+    {
+        // Arrange: the same container and name in both stores, with different content.
+        await using TestApp app = await StartWithReportAsync();
+        await app.ArchiveFiles.UploadAsync("2026/report.txt", BinaryData.FromString("archived"));
+        string token = (await app.ArchiveLinks.CreateTokenAsync(new ResourceLink(TestApp.Container, "2026/report.txt")))!;
+
+        // Act
+        HttpResponseMessage response = await app.Client.GetAsync($"/archive/shared/{token}");
+
+        // Assert
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("archived", await response.Content.ReadAsStringAsync());
+    }
+
+    [Theory]
+    [InlineData(false, "/archive/shared/")]
+    [InlineData(true, "/shared/")]
+    public async Task SharedResource_ShouldAnswerNotFound_WhenTheLinkIsFromAnotherStore(bool fromArchive, string endpoint)
+    {
+        // Arrange: the file is in both stores, so only the token's store can refuse it.
+        await using TestApp app = await StartWithReportAsync();
+        await app.ArchiveFiles.UploadAsync("2026/report.txt", BinaryData.FromString("archived"));
+        IResourceLinkSigner signer = fromArchive ? app.ArchiveLinks : app.Links;
+        string token = (await signer.CreateTokenAsync(new ResourceLink(TestApp.Container, "2026/report.txt")))!;
+
+        // Act
+        HttpResponseMessage response = await app.Client.GetAsync(endpoint + token);
+
+        // Assert
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.Equal(ResourceLinkStatus.Invalid, (fromArchive ? app.Links : app.ArchiveLinks).Check(token).Status);
+    }
+
+    [Fact]
+    public async Task SharedResource_ShouldSayWhichStoresLinksToAdd_WhenANamedStoresLinksArentRegistered()
+    {
+        // Arrange: a client for a named store, and a request whose services have no link signer.
+        var archive = new Moq.Mock<IResourceServiceClient>();
+        archive.Setup(client => client.StoreName).Returns("archive");
+        var context = new DefaultHttpContext { RequestServices = new ServiceCollection().BuildServiceProvider() };
+
+        // Act
+        Task act() => Results.SharedResource(archive.Object, "token").ExecuteAsync(context);
+
+        // Assert
+        Assert.Contains("AddResourcefullLinks(\"archive\")", (await Assert.ThrowsAsync<InvalidOperationException>(act)).Message);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData(" ")]
+    public void AddResourcefullLinks_ShouldThrow_WhenGivenAnEmptyStoreName(string storeName)
+    {
+        // Act
+        void act() => new ServiceCollection().AddResourcefullLinks(storeName);
+
+        // Assert
+        Assert.ThrowsAny<ArgumentException>(act);
+    }
+
+    [Fact]
+    public void AddResourcefullLinks_ShouldSayWhichStoreIsMissing_WhenTheNamedStoreIsntAdded()
+    {
+        // Arrange
+        using ServiceProvider provider = new ServiceCollection().AddResourcefullLinks("archive").BuildServiceProvider();
+        using IServiceScope scope = provider.CreateScope();
+
+        // Act
+        void act() => scope.ServiceProvider.GetRequiredKeyedService<IResourceLinkSigner>("archive");
+
+        // Assert
+        Assert.Contains("a store named 'archive'", Assert.Throws<InvalidOperationException>(act).Message);
+    }
 }

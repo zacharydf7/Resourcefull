@@ -67,6 +67,21 @@ public class KeyedStoreTests
     }
 
     [Fact]
+    public async Task AddKeyedResourcefull_ShouldNameEachClientsStore_WhenTwoStoresAreAdded()
+    {
+        // Arrange
+        await using ServiceProvider provider = TwoStores();
+
+        // Act
+        IResourceServiceClient hot = provider.GetRequiredService<IResourceServiceClient>();
+        IResourceServiceClient archive = provider.GetRequiredKeyedService<IResourceServiceClient>("archive");
+
+        // Assert
+        Assert.Null(hot.StoreName);
+        Assert.Equal("archive", archive.StoreName);
+    }
+
+    [Fact]
     public async Task AddKeyedResourcefull_ShouldGiveOnlyItsOwnStoreItsServices_WhenAStoreConfiguresOne()
     {
         // Arrange

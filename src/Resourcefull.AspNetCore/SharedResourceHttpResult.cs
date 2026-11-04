@@ -1,6 +1,5 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace Resourcefull.AspNetCore;
 
@@ -37,11 +36,9 @@ public sealed class SharedResourceHttpResult : IResult, IActionResult
         response.Headers["Referrer-Policy"] = "no-referrer";
         response.Headers.CacheControl = "private";
 
-        IResourceLinkSigner signer = httpContext.RequestServices.GetService<IResourceLinkSigner>()
-            ?? throw new InvalidOperationException(
-                $"Results.SharedResource needs signed links added with {nameof(ResourceLinkServiceCollectionExtensions.AddResourcefullLinks)}.");
+        IResourceLinkSigner signer = ResourceLinkServiceCollectionExtensions.SignerFor(httpContext, Resources, "Results.SharedResource");
         ResourceLinkCheck check = signer.Check(Token);
-        ResourceLinkTelemetry.Record(httpContext, check.Status);
+        ResourceLinkTelemetry.Record(httpContext, check.Status, Resources.StoreName);
 
         switch (check)
         {

@@ -278,6 +278,41 @@ public class UploadLinkTests
         Assert.Contains("AddResourcefullLinks", (await Assert.ThrowsAsync<InvalidOperationException>(act)).Message);
     }
 
+    [Fact]
+    public async Task SharedUpload_ShouldStoreInTheNamedStore_WhenTheLinkIsFromThatStore()
+    {
+        // Arrange
+        await using TestApp app = await TestApp.StartAsync();
+        string token = app.ArchiveLinks.CreateUploadToken(new ResourceUploadLink(TestApp.Container) { ResourceName = "claims/1042.txt" });
+
+        // Act
+        HttpResponseMessage response = await app.Client.PutAsync($"/archive/upload/{token}", Text("hello"));
+
+        // Assert
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        Assert.Equal("hello", (await app.ArchiveFiles.DownloadContentAsync("claims/1042.txt"))?.Content.ToString());
+        Assert.Null(await app.Files.GetResourceInfoAsync("claims/1042.txt"));
+    }
+
+    [Theory]
+    [InlineData(false, "/archive/upload/")]
+    [InlineData(true, "/upload/")]
+    public async Task SharedUpload_ShouldAnswerNotFoundAndStoreNothing_WhenTheLinkIsFromAnotherStore(bool fromArchive, string endpoint)
+    {
+        // Arrange
+        await using TestApp app = await TestApp.StartAsync();
+        var link = new ResourceUploadLink(TestApp.Container) { ResourceName = "claims/1042.txt" };
+        string token = (fromArchive ? app.ArchiveLinks : app.Links).CreateUploadToken(link);
+
+        // Act
+        HttpResponseMessage response = await app.Client.PutAsync(endpoint + token, Text("hello"));
+
+        // Assert
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.Null(await app.Files.GetResourceInfoAsync("claims/1042.txt"));
+        Assert.Null(await app.ArchiveFiles.GetResourceInfoAsync("claims/1042.txt"));
+    }
+
     /// <summary>A stream whose length can't be known in advance.</summary>
     private sealed class NonSeekableStream(byte[] content) : MemoryStream(content)
     {
