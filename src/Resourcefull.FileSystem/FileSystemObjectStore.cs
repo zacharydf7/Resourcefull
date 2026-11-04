@@ -30,10 +30,10 @@ internal sealed class FileSystemObjectStore(string root) : IObjectStore
     /// <summary>How many lock files conditional writes share, chosen by a hash of the key.</summary>
     internal const int LockCount = 256;
 
-    /// <summary>How long a writer waits between tries for a lock, or to move a file that's being read.</summary>
+    /// <summary>How long a writer waits between tries for a lock, or to move or delete a file another process has open.</summary>
     private static readonly TimeSpan RetryWait = TimeSpan.FromMilliseconds(10);
 
-    /// <summary>How long a writer keeps trying for a lock, or to move a file, before it fails.</summary>
+    /// <summary>How long a writer keeps trying for a lock, or to move or delete a file, before it fails.</summary>
     private static readonly TimeSpan MaxWait = TimeSpan.FromSeconds(30);
 
     /// <summary>
@@ -48,7 +48,7 @@ internal sealed class FileSystemObjectStore(string root) : IObjectStore
     /// </summary>
     internal Action<string>? BeforeMove { get; init; }
 
-    /// <summary>Windows' answers when another process has a file open in a way that keeps it from being replaced.</summary>
+    /// <summary>Windows' answers when another process has a file open in a way that keeps it from being replaced or deleted.</summary>
     private const int SharingViolation = unchecked((int)0x80070020), LockViolation = unchecked((int)0x80070021);
 
     /// <summary>How old a file under <c>.tmp</c> must be before it's taken for one a stopped write left behind.</summary>
@@ -237,7 +237,7 @@ internal sealed class FileSystemObjectStore(string root) : IObjectStore
             if (!Fits(path)) continue;
             try
             {
-                using (await LockAsync(key).ConfigureAwait(false)) File.Delete(path);
+                using (await LockAsync(key).ConfigureAwait(false)) await DeleteFileAsync(path, cancellationToken).ConfigureAwait(false);
             }
             catch (DirectoryNotFoundException)
             {
@@ -330,6 +330,27 @@ internal sealed class FileSystemObjectStore(string root) : IObjectStore
                 // Left for the sweep of .tmp, so the write's own failure is what's reported.
             }
             throw;
+        }
+    }
+
+    /// <summary>
+    /// Deletes a file, waiting while Windows refuses because another process has it open, until the file is released or
+    /// <see cref="MaxWait"/> runs out. A virus scanner, for one, may still have a file open that was just written.
+    /// </summary>
+    private static async Task DeleteFileAsync(string path, CancellationToken cancellationToken)
+    {
+        long started = Stopwatch.GetTimestamp();
+        while (true)
+        {
+            try
+            {
+                File.Delete(path);
+                return;
+            }
+            catch (Exception exception) when (IsBusy(exception) && Stopwatch.GetElapsedTime(started) < MaxWait)
+            {
+                await Task.Delay(RetryWait, cancellationToken).ConfigureAwait(false);
+            }
         }
     }
 

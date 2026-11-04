@@ -101,6 +101,30 @@ public class FileSystemIntegrationTests(FileSystemFixture fixture)
     }
 
     [Fact]
+    public async Task DeleteAsync_ShouldDeleteTheFile_WhenAnotherHandleReleasesItDuringTheDelete()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Only Windows refuses to delete a file another handle has open.");
+
+        // Arrange: a stored object, held open with no sharing, as a virus scanner may hold a file just written.
+        string root = fixture.NewRoot();
+        var store = new FileSystemObjectStore(root);
+        await store.UploadAsync("k", new MemoryStream("a"u8.ToArray()), CancellationToken.None);
+        string path = Path.Combine(root, "k");
+        var held = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.None);
+
+        // Act
+        Task deleting = store.DeleteAsync(["k"], CancellationToken.None);
+        await Task.Delay(200);
+        bool waited = !deleting.IsCompleted;
+        await held.DisposeAsync();
+        await deleting;
+
+        // Assert: it waited for the handle, then deleted the file.
+        Assert.True(waited);
+        Assert.False(File.Exists(path));
+    }
+
+    [Fact]
     public async Task AddResourceAsync_ShouldThrowResourceNameExceptionAndFindNothing_WhenTheNamesPathIsLongerThanTheSystemAllows()
     {
         // Arrange: macOS's limit on a path, and a name whose file's path would pass it.
