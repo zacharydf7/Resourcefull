@@ -48,11 +48,12 @@ app.MapPost("/claims/{claimId:int}/upload-link", (int claimId, IResourceLinkSign
 ### 2. Add the endpoint that receives uploads
 
 This endpoint must **not** require sign-in, because the people uploading can't sign in. The `{**name}` part of the
-route is the file's name, for a link with a prefix; a link to one name leaves it off.
+route is the file's name, for a link with a prefix; a link to one name leaves it off. It takes `PUT`, for a file sent
+as the request's body, and `POST`, for a file sent from an HTML form:
 
 ```csharp
-app.MapPut("/upload/{token}/{**name}", (string token, string? name, IResourceServiceClient resources) =>
-    Results.SharedUpload(resources, token, name));
+app.MapMethods("/upload/{token}/{**name}", ["PUT", "POST"],
+    (string token, string? name, IResourceServiceClient resources) => Results.SharedUpload(resources, token, name));
 ```
 
 ### 3. Upload from the browser
@@ -65,15 +66,52 @@ const file = document.querySelector("input[type=file]").files[0];
 const response = await fetch(`${uploadUrl}/${encodeURIComponent(file.name)}`, { method: "PUT", body: file });
 ```
 
-A plain HTML `<form>` can't send a `PUT`, and the endpoint doesn't unpack the multipart body a form posts: it stores
-the request body as the file. Use `fetch`, or any HTTP client that sends the file as the body.
-
 `encodeURIComponent` keeps a name like `scan 1.pdf` intact in the URL. It also encodes `/`, so to upload into a folder
 under the prefix, encode each part of the name and keep the slashes between them: with the prefix `1042/`, sending
 `scans/form.pdf` stores `1042/scans/form.pdf`.
 
 Serve the page that holds the link with `Referrer-Policy: no-referrer`, so the link isn't passed on to other websites
 the page loads from or links to.
+
+### Or from a plain HTML form
+
+A form needs no JavaScript at all. Post it to the link's URL, with no file name after the token: each file is stored
+under the name it has on the person's computer, after the link's prefix, with the type the browser gives it.
+
+```html
+<form method="post" enctype="multipart/form-data" action="https://example.com/upload/{token}">
+  <input type="file" name="files" multiple>
+  <button>Send</button>
+</form>
+```
+
+- **A link with a prefix** stores every file in the form. With the prefix `1042/`, a form with `photo.jpg` and
+  `form.pdf` stores `1042/photo.jpg` and `1042/form.pdf`.
+- **A link to one name** takes a form with one file, and stores it under the link's name, whatever the file is
+  called. Leave `multiple` off its file input.
+- **The form's other fields are ignored**, and so is a file input left empty.
+- **Files are stored in the order the form sends them, and the first one refused stops the upload.** The files stored
+  before it stay, and the response says which they are, so the person can send the rest again.
+
+Each file is checked against the link as a `PUT` is: its type against `AllowedContentTypes`, and its size against
+`MaxSize`. A form doesn't say how large each file is, so a file is read until it reaches `MaxSize`, and refused if it
+goes past it.
+
+The response is JSON. When every file is stored, it's **201 Created**, listing each file by the name the form sent and
+its `ETag`:
+
+```json
+{ "stored": [{ "name": "photo.jpg", "etag": "\"sha256:…\"" }, { "name": "form.pdf", "etag": "\"sha256:…\"" }] }
+```
+
+When a file is refused, the response has the status code from [the table below](#what-people-see-when-they-upload),
+with [problem details](https://www.rfc-editor.org/rfc/rfc9457) that name the refused file in `file` and list the files
+stored before it in `stored`. Without JavaScript, the browser shows the person this JSON as it is. To show a page of
+your own instead, send the form with `fetch` and build the page from the response:
+
+```javascript
+const response = await fetch(form.action, { method: "POST", body: new FormData(form) });
+```
 
 ## What a link can do
 
@@ -107,10 +145,10 @@ file. The upload is then held to that length: a body cut short stores nothing.
 
 | The request | They get |
 |---|---|
-| is stored | **201 Created**, or **200 OK** when a `Replace` link replaced a file, with the file's `ETag`. The response has no body, so the person uploading learns nothing about your store beyond what they sent. |
+| is stored | **201 Created**, or **200 OK** when a `Replace` link replaced a file, with the file's `ETag`. The response has no body, so the person uploading learns nothing about your store beyond what they sent. A form gets **201 Created** with a JSON body listing the files it stored, by the names it sent them under. |
 | uses a link that has expired | **410 Gone** |
 | uses a link that was changed, made up, or sealed with keys this application no longer has, or a download link's token | **404 Not Found** |
-| names a file the link doesn't cover: a name for a link to one name, or no name for a link with a prefix | **404 Not Found** |
+| names a file the link doesn't cover: a name for a link to one name, no name for a link with a prefix, or any name for a form | **404 Not Found** |
 | uses a link whose container doesn't exist, or no longer does | **404 Not Found** |
 | has no `Content-Length`, for a link with `MaxSize` | **411 Length Required** |
 | is larger than `MaxSize` | **413 Content Too Large** |
@@ -119,6 +157,8 @@ file. The upload is then held to that length: a body cut short stores nothing.
 | breaks a container policy | **413**, **415**, **409** or **403**, the codes the [exception handler](aspnet-core/status-codes.md) gives |
 | names a file the [name rules](names.md) refuse, such as one ending in a space, or has a body shorter or longer than its `Content-Length` | **400 Bad Request** |
 | is refused by your [upload inspector](upload-inspection.md) | **422 Unprocessable Content**, with the inspector's reason |
+| is a form with no file, with more than one for a link to one name, or that can't be read, such as one cut short | **400 Bad Request** |
+| is a form larger than your server accepts: ASP.NET Core's limit on a request's size, 30,000,000 bytes unless you change it | **413 Content Too Large** |
 
 When the store refuses an upload (the row for a missing container, and the rows from 409 Conflict down), the
 response has a message of its own rather than the exception's, which would name the container and could say how

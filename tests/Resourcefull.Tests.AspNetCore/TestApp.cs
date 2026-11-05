@@ -13,11 +13,12 @@ namespace Resourcefull.Tests.AspNetCore;
 /// <summary>
 /// A minimal API over the in-memory provider, served by the test server, with endpoints built from the package the way
 /// an application would: download, download inline under another name, download looked up by the result (which
-/// answers ranges), download through a signed link, upload, upload through a signed link, one that throws a given
-/// exception, a Razor page that downloads, and the dashboard, open to anyone, with Resourcefull's health check: read-only
-/// at <c>/resourcefull</c>, and with changes and links at <c>/editable</c>. A second store, named
+/// answers ranges), download through a signed link, upload, upload through a signed link (a body put, or a form posted),
+/// one that throws a given exception, a Razor page that downloads, and the dashboard, open to anyone, with Resourcefull's
+/// health check: read-only at <c>/resourcefull</c>, and with changes and links at <c>/editable</c>. A second store, named
 /// <see cref="ArchiveStore"/>, has link endpoints of its own under <c>/archive</c>. Each app has Data Protection keys of
-/// its own, held in memory, so one app's links don't work in another, and records what it logs.
+/// its own, held in memory, so one app's links don't work in another, and records what it logs. A request with an
+/// <c>X-Test-Body-Limit</c> header fails past that many bytes, as one past the server's size limit does.
 /// </summary>
 internal sealed class TestApp : IAsyncDisposable
 {
@@ -79,6 +80,12 @@ internal sealed class TestApp : IAsyncDisposable
 
         WebApplication app = builder.Build();
         app.UseExceptionHandler();
+        app.Use((context, next) =>
+        {
+            if (context.Request.Headers["X-Test-Body-Limit"] is [{ } limit])
+                context.Request.Body = new LimitedBody(context.Request.Body, long.Parse(limit));
+            return next(context);
+        });
         app.MapMethods("/files/{**name}", ["GET", "HEAD"], async (string name, IResourceServiceClient resources, CancellationToken cancellationToken) =>
         {
             ResourceDownloadResult? download = await resources.GetContainerClient(Container).DownloadStreamingAsync(name, cancellationToken: cancellationToken);
@@ -97,7 +104,7 @@ internal sealed class TestApp : IAsyncDisposable
             Results.SharedResource(resources, token));
         app.MapPut("/files/{**name}", (string name, HttpRequest request, IResourceServiceClient resources, CancellationToken cancellationToken) =>
             resources.GetContainerClient(Container).UploadFromRequestAsync(name, request, null, cancellationToken));
-        app.MapPut("/upload/{token}/{**name}", (string token, string? name, IResourceServiceClient resources) =>
+        app.MapMethods("/upload/{token}/{**name}", ["PUT", "POST"], (string token, string? name, IResourceServiceClient resources) =>
             Results.SharedUpload(resources, token, name));
         app.MapGet("/archive/shared/{token}", (string token, [FromKeyedServices(ArchiveStore)] IResourceServiceClient archive) =>
             Results.SharedResource(archive, token));
@@ -115,6 +122,47 @@ internal sealed class TestApp : IAsyncDisposable
         await app.Services.CreateScope().ServiceProvider.GetRequiredService<IResourceServiceClient>().CreateContainerAsync(Container);
         await app.Services.CreateScope().ServiceProvider.GetRequiredKeyedService<IResourceServiceClient>(ArchiveStore).CreateContainerAsync(Container);
         return new TestApp(app, logs);
+    }
+
+    /// <summary>A request body that throws past <paramref name="limit"/> bytes, as Kestrel's does past its size limit.</summary>
+    private sealed class LimitedBody(Stream inner, long limit) : Stream
+    {
+        private long _read;
+
+        public override bool CanRead => true;
+
+        public override bool CanSeek => false;
+
+        public override bool CanWrite => false;
+
+        public override long Length => throw new NotSupportedException();
+
+        public override long Position
+        {
+            get => throw new NotSupportedException();
+            set => throw new NotSupportedException();
+        }
+
+        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+        public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            int read = await inner.ReadAsync(buffer, cancellationToken);
+            _read += read;
+            if (_read > limit) throw new BadHttpRequestException("Request body too large.", StatusCodes.Status413PayloadTooLarge);
+            return read;
+        }
+
+        public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) =>
+            ReadAsync(buffer.AsMemory(offset, count), cancellationToken).AsTask();
+
+        public override void Flush() => throw new NotSupportedException();
+
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+
+        public override void SetLength(long value) => throw new NotSupportedException();
+
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
     }
 
     public async ValueTask DisposeAsync()

@@ -25,8 +25,9 @@ public sealed record ResourceUploadLink(string ContainerName)
 
     /// <summary>
     /// The most bytes one upload may hold, or <see langword="null"/> for no limit of the link's own. With a limit, a
-    /// request to <c>Results.SharedUpload</c> must send <c>Content-Length</c>, and is refused before its body is read
-    /// if that's over the limit; a resumable upload is refused when it starts if the length it declares is over it.
+    /// body sent to <c>Results.SharedUpload</c> must have a <c>Content-Length</c>, and is refused before it's read if
+    /// that's over the limit; each file a form posts is refused once it goes past the limit; and a resumable upload is
+    /// refused when it starts if the length it declares is over it.
     /// </summary>
     public long? MaxSize { get; init; }
 

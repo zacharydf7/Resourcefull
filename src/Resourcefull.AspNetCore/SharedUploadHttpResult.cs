@@ -1,5 +1,8 @@
+using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.WebUtilities;
+using Microsoft.Net.Http.Headers;
 
 namespace Resourcefull.AspNetCore;
 
@@ -14,6 +17,16 @@ namespace Resourcefull.AspNetCore;
 /// Gone. Before the body is read, the link's own limits are checked: a request gets 411 Length Required when the link
 /// limits the size and the request has no <c>Content-Length</c>, 413 Content Too Large when it's over that limit, and
 /// 415 Unsupported Media Type when its type isn't allowed.
+/// </para>
+/// <para>
+/// A <c>POST</c> of a <c>multipart/form-data</c> form, as an HTML <c>&lt;form&gt;</c> sends one, stores the files in the
+/// form instead, in order: a link to one name takes one file and stores it under that name, and a link with a prefix
+/// stores each file under the prefix followed by its file name, so the URL names no file. Each file is checked against
+/// the link's content types and refused once it passes the link's size limit, and the first file refused stops the
+/// upload; the files stored before it stay. The answer lists the files stored, by their names in the form,
+/// as JSON: 201 Created with <c>{ "stored": [{ "name", "etag" }] }</c>, or the refusal's problem details with the
+/// refused file's name in <c>file</c> and the files stored before it in <c>stored</c>. A form with no file, or one
+/// that can't be read, gets 400.
 /// </para>
 /// <para>
 /// The container's policies, the name rules and the upload inspector apply as to any upload. What they refuse, a
@@ -60,7 +73,13 @@ public sealed class SharedUploadHttpResult : IResult, IActionResult
             response.StatusCode = StatusCodes.Status410Gone;
             return;
         }
-        if (check is not { Status: ResourceLinkStatus.Valid, Link: { } link } || link.NameFor(ResourceName) is not { } name)
+        // A form's files are named in the form, so a request that names one too is for a name the link doesn't cover.
+        if (check is { Status: ResourceLinkStatus.Valid, Link: { } formLink } && ResourceName is null && IsForm(request))
+        {
+            await StoreFormAsync(httpContext, formLink).ConfigureAwait(false);
+            return;
+        }
+        if (check is not { Status: ResourceLinkStatus.Valid, Link: { } link } || IsForm(request) || link.NameFor(ResourceName) is not { } name)
         {
             response.StatusCode = StatusCodes.Status404NotFound;
             return;
@@ -97,6 +116,134 @@ public sealed class SharedUploadHttpResult : IResult, IActionResult
         response.GetTypedHeaders().ETag = Preconditions.EntityTagOf(stored);
         response.StatusCode = existed ? StatusCodes.Status200OK : StatusCodes.Status201Created;
     }
+
+    private static bool IsForm(HttpRequest request) =>
+        HttpMethods.IsPost(request.Method)
+        && MediaTypeHeaderValue.TryParse(request.ContentType, out MediaTypeHeaderValue? type)
+        && type?.MediaType.Equals("multipart/form-data", StringComparison.OrdinalIgnoreCase) == true;
+
+    /// <summary>Stores the files in a <c>multipart/form-data</c> form, stopping at the first one refused.</summary>
+    private async Task StoreFormAsync(HttpContext httpContext, SignedResourceUploadLink link)
+    {
+        HttpRequest request = httpContext.Request;
+        CancellationToken cancellationToken = httpContext.RequestAborted;
+        var stored = new List<StoredFile>();
+        string? boundary = HeaderUtilities.RemoveQuotes(MediaTypeHeaderValue.Parse(request.ContentType).Boundary).Value;
+        // RFC 2046 limits a boundary to 70 characters.
+        if (boundary is not { Length: > 0 and <= 70 })
+        {
+            await RefuseFileAsync(httpContext, StatusCodes.Status400BadRequest,
+                "The form's Content-Type must have a boundary of 1 to 70 characters.", null, stored).ConfigureAwait(false);
+            return;
+        }
+
+        var reader = new MultipartReader(boundary, request.Body);
+        IResourceContainerClient container = Resources.GetContainerClient(link.ContainerName);
+        while (true)
+        {
+            MultipartSection? section;
+            try
+            {
+                section = await reader.ReadNextSectionAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception exception) when (exception is IOException or InvalidDataException && !cancellationToken.IsCancellationRequested)
+            {
+                // The file whose headers couldn't be read has no name to give.
+                await RefuseUnreadableAsync(httpContext, exception, null, stored).ConfigureAwait(false);
+                return;
+            }
+            if (section is null) break;
+
+            // Skips fields other than files, and file inputs left empty, which browsers send without a file name.
+            if (section.GetContentDispositionHeader() is not { } disposition || !disposition.IsFileDisposition()) continue;
+            string? fileName = HeaderUtilities.RemoveQuotes(disposition.FileNameStar.HasValue ? disposition.FileNameStar : disposition.FileName).Value;
+            if (string.IsNullOrEmpty(fileName)) continue;
+
+            if (link.ResourceName is not null && stored.Count > 0)
+            {
+                await RefuseFileAsync(httpContext, StatusCodes.Status400BadRequest, "The upload link takes only one file.", fileName, stored)
+                    .ConfigureAwait(false);
+                return;
+            }
+            if (TypeRefusalTitle(link, section.ContentType) is { } typeRefusal)
+            {
+                await RefuseFileAsync(httpContext, StatusCodes.Status415UnsupportedMediaType, typeRefusal, fileName, stored).ConfigureAwait(false);
+                return;
+            }
+
+            // A form doesn't say how long each file is, so a file is cut off at the link's limit, and refused.
+            var content = new ResourceUploadEndpoints.BoundedStream(section.Body, link.MaxSize ?? long.MaxValue);
+            try
+            {
+                ResourceInfo version = await container.UploadAsync(link.ResourceName ?? link.NamePrefix + fileName, content,
+                    new ResourceUploadOptions { Mode = link.Mode, Headers = new ResourceHeaders(section.ContentType, null) },
+                    cancellationToken).ConfigureAwait(false);
+                stored.Add(new StoredFile(fileName, Preconditions.EntityTagOf(version)?.ToString()));
+            }
+            catch (Exception) when (content.Exceeded)
+            {
+                await RefuseFileAsync(httpContext, StatusCodes.Status413PayloadTooLarge,
+                    $"The upload link accepts at most {link.MaxSize} bytes, and {fileName} has more.", fileName, stored).ConfigureAwait(false);
+                return;
+            }
+            catch (Exception) when (content.ReadFailure is { } failure)
+            {
+                await RefuseUnreadableAsync(httpContext, failure, fileName, stored).ConfigureAwait(false);
+                return;
+            }
+            catch (Exception exception) when (RefusalTitle(exception) is { } title)
+            {
+                await RefuseFileAsync(httpContext, ResourcefullExceptionHandler.StatusCodeOf(exception)!.Value, title, fileName, stored)
+                    .ConfigureAwait(false);
+                return;
+            }
+        }
+
+        if (stored.Count == 0)
+        {
+            await RefuseFileAsync(httpContext, StatusCodes.Status400BadRequest, "The form has no file.", null, stored).ConfigureAwait(false);
+            return;
+        }
+        await TypedResults.Json(new StoredFiles(stored), statusCode: StatusCodes.Status201Created).ExecuteAsync(httpContext).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Answers a form whose reading failed with <paramref name="failure"/>: 413 Content Too Large when it's larger than
+    /// the server accepts, and 400 Bad Request when it's cut short or malformed.
+    /// </summary>
+    private static Task RefuseUnreadableAsync(HttpContext httpContext, Exception failure, string? fileName, List<StoredFile> stored) =>
+        failure is BadHttpRequestException { StatusCode: StatusCodes.Status413PayloadTooLarge }
+            ? RefuseFileAsync(httpContext, StatusCodes.Status413PayloadTooLarge, "The form is larger than this server accepts.", fileName, stored)
+            : RefuseFileAsync(httpContext, StatusCodes.Status400BadRequest,
+                "The form couldn't be read: it was cut short, or isn't valid multipart/form-data.", fileName, stored);
+
+    /// <summary>
+    /// Answers a form with problem details naming the file refused, if any, and the files stored before it, once the
+    /// rest of the form is read and discarded: a server that answers before it has read what a browser is still
+    /// sending may drop the connection, and the browser then shows an error rather than the answer.
+    /// </summary>
+    private static async Task RefuseFileAsync(HttpContext httpContext, int status, string title, string? fileName, List<StoredFile> stored)
+    {
+        try
+        {
+            await httpContext.Request.Body.CopyToAsync(Stream.Null, httpContext.RequestAborted).ConfigureAwait(false);
+        }
+        catch (Exception) when (!httpContext.RequestAborted.IsCancellationRequested)
+        {
+            // What's left can't be read, such as a body past the server's size limit: answer anyway.
+        }
+        await TypedResults.Problem(statusCode: status, title: title, extensions: new Dictionary<string, object?>
+        {
+            ["file"] = fileName,
+            ["stored"] = stored
+        }).ExecuteAsync(httpContext).ConfigureAwait(false);
+    }
+
+    /// <summary>The files a form stored.</summary>
+    private sealed record StoredFiles([property: JsonPropertyName("stored")] List<StoredFile> Stored);
+
+    /// <summary>A file a form stored: its name in the form, and its version's <c>ETag</c>.</summary>
+    private sealed record StoredFile([property: JsonPropertyName("name")] string Name, [property: JsonPropertyName("etag")] string? ETag);
 
     /// <summary>
     /// What to tell the holder about an upload the store refused, in place of the exception's message, which names the
@@ -139,13 +286,16 @@ public sealed class SharedUploadHttpResult : IResult, IActionResult
                     title: $"The upload link accepts at most {maxSize} bytes, and the upload has {length}.");
             }
         }
-        if (!new ResourceContainerPolicy { AllowedContentTypes = link.AllowedContentTypes }.AllowsContentType(contentType))
-        {
-            return TypedResults.Problem(statusCode: StatusCodes.Status415UnsupportedMediaType,
-                title: $"The upload link accepts only {string.Join(", ", link.AllowedContentTypes!)}.");
-        }
-        return null;
+        return TypeRefusalTitle(link, contentType) is { } title
+            ? TypedResults.Problem(statusCode: StatusCodes.Status415UnsupportedMediaType, title: title)
+            : null;
     }
+
+    /// <summary>Why the link's content types don't allow <paramref name="contentType"/>, or <see langword="null"/> if they do.</summary>
+    private static string? TypeRefusalTitle(SignedResourceUploadLink link, string? contentType) =>
+        new ResourceContainerPolicy { AllowedContentTypes = link.AllowedContentTypes }.AllowsContentType(contentType)
+            ? null
+            : $"The upload link accepts only {string.Join(", ", link.AllowedContentTypes!)}.";
 
     /// <summary>
     /// Runs the result as an MVC action result, so a Razor Pages handler, which can't return an <see cref="IResult"/>,

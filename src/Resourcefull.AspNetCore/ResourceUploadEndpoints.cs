@@ -751,14 +751,20 @@ internal sealed partial class ResourceUploadEndpoints(ResourceUploadEndpointOpti
 
     /// <summary>
     /// Reads no more than <paramref name="length"/> bytes of <paramref name="inner"/>, and throws if it holds more,
-    /// setting <see cref="Exceeded"/>, so a request can't store more than its upload has left.
+    /// setting <see cref="Exceeded"/>, so a request can't store more than its upload has left, or than a link allows.
     /// </summary>
-    private sealed class BoundedStream(Stream inner, long length) : Stream
+    internal sealed class BoundedStream(Stream inner, long length) : Stream
     {
         private long _left = length;
 
-        /// <summary>Whether the request held more than its upload has left.</summary>
+        /// <summary>Whether the content held more than <c>length</c> bytes.</summary>
         public bool Exceeded { get; private set; }
+
+        /// <summary>
+        /// The exception reading <c>inner</c> threw, as it does for content cut short or malformed, or
+        /// <see langword="null"/> if reading hasn't failed.
+        /// </summary>
+        public Exception? ReadFailure { get; private set; }
 
         public override bool CanRead => true;
 
@@ -779,7 +785,16 @@ internal sealed partial class ResourceUploadEndpoints(ResourceUploadEndpointOpti
         public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
         {
             // With nothing left, reading one more byte tells a request that ends there from one that goes on.
-            int read = await inner.ReadAsync(buffer[..(int)Math.Min(buffer.Length, Math.Max(_left, 1))], cancellationToken).ConfigureAwait(false);
+            int read;
+            try
+            {
+                read = await inner.ReadAsync(buffer[..(int)Math.Min(buffer.Length, Math.Max(_left, 1))], cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
+            {
+                ReadFailure = exception;
+                throw;
+            }
             if (read > _left)
             {
                 Exceeded = true;

@@ -158,7 +158,10 @@
   types, and whether an upload may replace a file (by default it can't). `Results.SharedUpload` serves them, checking
   the link's limits before the body is read, and `CheckUpload` reads a token. Upload and download tokens are sealed
   apart, so neither works as the other. `ResourceContainerPolicy.AllowsContentType` says whether a policy allows a
-  type. See [Receiving files through links](docs/upload-links.md).
+  type. A `POST` of a `multipart/form-data` form, as a plain HTML `<form>` sends one, stores the files in the form: a
+  link with a prefix stores each under the prefix and its file name, and a link to one name takes one file. Each file
+  is checked against the link's types and refused once it passes the link's size limit. The first file refused stops
+  the upload, and the JSON response lists the files stored. See [Receiving files through links](docs/upload-links.md).
 - **A dashboard.** `app.MapResourcefullDashboard("/resourcefull").RequireAuthorization("admins")` maps a
   page showing the health check's result, how many expired versions are waiting for the sweep, each container's usage
   against its policy, its largest versions, the versions that expire soonest, its files, and each file's versions,
