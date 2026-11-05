@@ -163,11 +163,11 @@ internal partial class ResourceServiceClient(ResourceRepository resourceReposito
 
             // Whether a version is gone, by whatever deleted it: a batch that failed partway may have.
             async Task<bool> GoneAsync(ResourceInfo version) =>
-                await resourceRepository.GetResourceInfoAsync(new ResourceLocation(version.ContainerName, version.Name),
+                await resourceRepository.GetResourceInfoAsync(new ResourceAddress(version.ContainerName, version.Name),
                     version.VersionId, CancellationToken.None).ConfigureAwait(false) is null;
 
-            static (ResourceLocation, string) Key(ResourceInfo version) =>
-                (new ResourceLocation(version.ContainerName, version.Name), version.VersionId);
+            static (ResourceAddress, string) Key(ResourceInfo version) =>
+                (new ResourceAddress(version.ContainerName, version.Name), version.VersionId);
 
             // Deletes a batch of versions together, or, if that fails, each on its own, so one version that fails
             // doesn't hold up the rest. Returns the versions deleted.
@@ -175,7 +175,7 @@ internal partial class ResourceServiceClient(ResourceRepository resourceReposito
             {
                 try
                 {
-                    HashSet<(ResourceLocation, string)> deletedTogether =
+                    HashSet<(ResourceAddress, string)> deletedTogether =
                         [.. await resourceRepository.DeleteExpiredVersionsAsync([.. versions.Select(Key)], now,
                             cancellationToken).ConfigureAwait(false)];
                     batches++;
@@ -191,7 +191,7 @@ internal partial class ResourceServiceClient(ResourceRepository resourceReposito
                     {
                         try
                         {
-                            var location = new ResourceLocation(version.ContainerName, version.Name);
+                            var location = new ResourceAddress(version.ContainerName, version.Name);
                             // One the failed batch deleted before it failed counts as deleted, so what waited
                             // behind it is cleaned up.
                             if (await resourceRepository.DeleteExpiredVersionAsync(location, version.VersionId, now,
@@ -333,7 +333,7 @@ internal partial class ResourceServiceClient(ResourceRepository resourceReposito
                             await _telemetry.NotifyCleanupAsync(cleanupHandler, new ResourceCleanup(version, ResourceCleanupReason.Purged, now),
                                 cancellationToken).ConfigureAwait(false);
                         }
-                        int count = await resourceRepository.PurgeDeletedAsync(new ResourceLocation(version.ContainerName, version.Name),
+                        int count = await resourceRepository.PurgeDeletedAsync(new ResourceAddress(version.ContainerName, version.Name),
                             version.VersionId, now, cancellationToken).ConfigureAwait(false);
                         purged += count;
                         _telemetry.CountPurged(count);
@@ -415,7 +415,7 @@ internal partial class ResourceServiceClient(ResourceRepository resourceReposito
                 cancellationToken).ConfigureAwait(false);
             await using var zipDisposal = zip.ConfigureAwait(false);
             ContainerArchive.Manifest manifest = await ContainerArchive.ReadManifestAsync(zip, cancellationToken).ConfigureAwait(false);
-            ContainerArchive.ThrowIfUnimportable(manifest, resourceRepository);
+            ContainerArchive.ThrowIfUnimportable(manifest, resourceRepository, _options);
             // Without the mark of an import the exported container may have been in the middle of.
             return await ImportNewContainerAsync(resourceContainerName, WithoutImportMark(manifest.Metadata),
                 ContainerArchive.VersionsOf(zip, manifest).ToAsyncEnumerable(), "the export", activity, cancellationToken).ConfigureAwait(false);

@@ -130,7 +130,7 @@ public class FileSystemIntegrationTests(FileSystemFixture fixture)
         // Arrange: macOS's limit on a path, and a name whose file's path would pass it.
         string root = fixture.NewRoot();
         var repository = new ObjectStoreRepository(new FileSystemObjectStore(root) { MaxPathBytes = 1023 }, "", null, null);
-        var location = new ResourceLocation("c", new string('\u00e9', 256));
+        var location = new ResourceAddress("c", new string('\u00e9', 256));
         await repository.AddContainerAsync("c", new Dictionary<string, string>());
 
         // Act
@@ -142,7 +142,7 @@ public class FileSystemIntegrationTests(FileSystemFixture fixture)
         Assert.Contains("1023", refused.Message);
         Assert.DoesNotContain(root, refused.Message);
         Assert.Null(await repository.GetResourceInfoAsync(location));
-        Assert.Empty(await repository.GetAllResourceInfoAsync("c"));
+        Assert.Empty(await repository.GetResourcePageAsync("c", null, null, 1000));
     }
 
     [Fact]
@@ -199,7 +199,7 @@ public class FileSystemIntegrationTests(FileSystemFixture fixture)
             }
         };
         var repository = new ObjectStoreRepository(store, "", null, null);
-        var location = new ResourceLocation("c", "a.txt");
+        var location = new ResourceAddress("c", "a.txt");
         await repository.AddContainerAsync("c", new Dictionary<string, string>());
 
         // Act
@@ -229,7 +229,7 @@ public class FileSystemIntegrationTests(FileSystemFixture fixture)
 
         // Act
         await Assert.ThrowsAnyAsync<FileNotFoundException>(() => repository.AddResourceAsync(
-            new NewResourceVersion(new ResourceLocation("c", "a.txt"), "v1"), new MemoryStream("a"u8.ToArray())));
+            new NewResourceVersion(new ResourceAddress("c", "a.txt"), "v1"), new MemoryStream("a"u8.ToArray())));
 
         // Assert: refused without waiting out the half minute the move keeps trying for a directory.
         Assert.InRange(started.Elapsed, TimeSpan.Zero, TimeSpan.FromSeconds(10));
@@ -303,7 +303,7 @@ public class FileSystemIntegrationTests(FileSystemFixture fixture)
         // Arrange: a container holding a long name's version, whose head goes in nested directories.
         string root = fixture.NewRoot();
         var repository = new ObjectStoreRepository(new FileSystemObjectStore(root), "", null, null);
-        var location = new ResourceLocation("c", new string('a', 256));
+        var location = new ResourceAddress("c", new string('a', 256));
         await repository.AddContainerAsync("c", new Dictionary<string, string>());
         await repository.AddResourceAsync(new NewResourceVersion(location, "v1"), new MemoryStream("a"u8.ToArray()));
 

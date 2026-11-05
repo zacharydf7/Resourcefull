@@ -35,6 +35,21 @@ namespace Resourcefull.Providers;
 /// </remarks>
 public abstract class ResourceRepository
 {
+    /// <summary>Creates a provider that keeps no index for metadata search.</summary>
+    protected ResourceRepository() : this(null)
+    {
+    }
+
+    /// <summary>
+    /// Creates a provider that indexes <paramref name="searchableMetadataKeys"/>, the keys in its store's
+    /// <see cref="ResourcefullOptions.SearchableMetadataKeys"/>. Read them from the store's options in the factory
+    /// that makes the provider, the one given to <c>UseProvider</c>.
+    /// <para>Coming in 4.0.</para>
+    /// </summary>
+    /// <param name="searchableMetadataKeys">The keys listings can search for; <see langword="null"/> for none.</param>
+    protected ResourceRepository(IReadOnlySet<string>? searchableMetadataKeys) =>
+        SearchableMetadataKeys = searchableMetadataKeys ?? new HashSet<string>();
+
     // Resources
 
     /// <summary>
@@ -82,21 +97,11 @@ public abstract class ResourceRepository
         ResourceWriteCondition? condition = null, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Lists the current version of every resource in a container, each with <see cref="ResourceInfo.IsLatest"/> set.
-    /// </summary>
-    /// <param name="resourceContainerName">The container to list.</param>
-    /// <param name="cancellationToken">Cancels the listing.</param>
-    /// <returns>The resources; empty when the container is empty or does not exist.</returns>
-    public abstract Task<IReadOnlyList<ResourceInfo>> GetAllResourceInfoAsync(string resourceContainerName,
-        CancellationToken cancellationToken = default);
-
-    /// <summary>
     /// Lists up to <paramref name="pageSize"/> current versions in a container, ordered by name in ordinal order
     /// (<see cref="StringComparer.Ordinal"/>), each with <see cref="ResourceInfo.IsLatest"/> set. A provider may use
     /// its storage's binary order instead, as long as its ordering and its <paramref name="afterName"/> comparison agree:
     /// SQL Server's binary collations, for one, sort a name after itself followed by characters below U+0020, since
-    /// they pad the shorter name with spaces. A provider should answer this without reading the whole container. The
-    /// default implementation filters and sorts <see cref="GetAllResourceInfoAsync"/> in memory.
+    /// they pad the shorter name with spaces. A provider should answer this without reading the whole container.
     /// </summary>
     /// <param name="resourceContainerName">The container to list.</param>
     /// <param name="prefix">Only names that start with this, ordinally; <see langword="null"/> for every name.</param>
@@ -104,23 +109,18 @@ public abstract class ResourceRepository
     /// <param name="pageSize">The most versions to return.</param>
     /// <param name="cancellationToken">Cancels the listing.</param>
     /// <returns>The versions; empty when there are no more, or the container does not exist.</returns>
-    public virtual async Task<IReadOnlyList<ResourceInfo>> GetResourcePageAsync(string resourceContainerName, string? prefix,
-        string? afterName, int pageSize, CancellationToken cancellationToken = default) =>
-        [.. (await GetAllResourceInfoAsync(resourceContainerName, cancellationToken).ConfigureAwait(false))
-            .Where(r => (prefix is null || r.Name.StartsWith(prefix, StringComparison.Ordinal))
-                && (afterName is null || string.CompareOrdinal(r.Name, afterName) > 0))
-            .OrderBy(r => r.Name, StringComparer.Ordinal)
-            .Take(pageSize)];
+    public abstract Task<IReadOnlyList<ResourceInfo>> GetResourcePageAsync(string resourceContainerName, string? prefix,
+        string? afterName, int pageSize, CancellationToken cancellationToken = default);
 
     // Metadata search
 
     /// <summary>
-    /// The metadata keys a listing can search for, from <see cref="ResourcefullOptionsBuilder.UseMetadataSearch"/>,
-    /// which the clients set before they call the provider; empty when there are none. A provider that keeps an index for
+    /// The metadata keys a listing can search for, from <see cref="ResourcefullOptionsBuilder.UseMetadataSearch"/>, as
+    /// given to the constructor; empty when there are none. A provider that keeps an index for
     /// <see cref="FindResourcePageAsync"/> indexes these keys of each current version, and only these.
     /// <para>Coming in 4.0.</para>
     /// </summary>
-    protected internal IReadOnlySet<string> SearchableMetadataKeys { get; internal set; } = new HashSet<string>();
+    public virtual IReadOnlySet<string> SearchableMetadataKeys { get; }
 
     /// <summary>
     /// Lists a page of a container's current versions whose metadata has <paramref name="match"/>'s entry, as
@@ -163,22 +163,6 @@ public abstract class ResourceRepository
     public virtual Task<int> IndexMetadataAsync(string resourceContainerName, CancellationToken cancellationToken = default) =>
         Task.FromResult(0);
 
-    /// <summary>
-    /// Throws when <paramref name="metadata"/> gives one of <see cref="SearchableMetadataKeys"/> a value longer than an
-    /// index can hold.
-    /// </summary>
-    internal void ThrowIfUnsearchable(IReadOnlyDictionary<string, string> metadata, string paramName)
-    {
-        if (SearchableMetadataKeys.Count == 0) return;
-        foreach (string key in SearchableMetadataKeys)
-        {
-            if (metadata.TryGetValue(key, out string? value) && value.Length > ResourceMetadataMatch.MaxValueLength)
-            {
-                throw new ArgumentException($"The metadata value of {key} is {value.Length} characters long; a searchable " +
-                    $"key's value can be at most {ResourceMetadataMatch.MaxValueLength}.", paramName);
-            }
-        }
-    }
 
     /// <summary>
     /// Lists every stored version of a resource: the current version first, then the rest from the most recently
@@ -187,7 +171,7 @@ public abstract class ResourceRepository
     /// <param name="resource">The resource.</param>
     /// <param name="cancellationToken">Cancels the listing.</param>
     /// <returns>The versions; empty when the resource or container does not exist.</returns>
-    public abstract Task<IReadOnlyList<ResourceInfo>> GetResourceVersionsAsync(ResourceLocation resource,
+    public abstract Task<IReadOnlyList<ResourceInfo>> GetResourceVersionsAsync(ResourceAddress resource,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -222,7 +206,7 @@ public abstract class ResourceRepository
             {
                 // A name deleted since it was listed has no versions left, and the next name takes its place.
                 IReadOnlyList<ResourceInfo> ofName = await GetResourceVersionsAsync(
-                    new ResourceLocation(resourceContainerName, current.Name), cancellationToken).ConfigureAwait(false);
+                    new ResourceAddress(resourceContainerName, current.Name), cancellationToken).ConfigureAwait(false);
                 if (ofName.Count > 0) names++;
                 versions.AddRange(ofName);
                 afterName = current.Name;
@@ -240,7 +224,7 @@ public abstract class ResourceRepository
     /// <param name="versionId">The version, or <see langword="null"/> for the current version.</param>
     /// <param name="cancellationToken">Cancels the lookup.</param>
     /// <returns>The version, or <see langword="null"/> when it does not exist.</returns>
-    public abstract Task<ResourceInfo?> GetResourceInfoAsync(ResourceLocation resource, string? versionId = null,
+    public abstract Task<ResourceInfo?> GetResourceInfoAsync(ResourceAddress resource, string? versionId = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -253,7 +237,7 @@ public abstract class ResourceRepository
     /// <param name="versionId">The version to open, or <see langword="null"/> for the current version.</param>
     /// <param name="cancellationToken">Cancels opening the content.</param>
     /// <returns>The content, or <see langword="null"/> when the version does not exist.</returns>
-    public abstract Task<Stream?> GetResourceStreamAsync(ResourceLocation resource, string? versionId = null,
+    public abstract Task<Stream?> GetResourceStreamAsync(ResourceAddress resource, string? versionId = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -271,7 +255,7 @@ public abstract class ResourceRepository
     /// <param name="length">How many bytes the client will read, not negative; to the end when <see langword="null"/>.</param>
     /// <param name="cancellationToken">Cancels opening the content.</param>
     /// <returns>The content, or <see langword="null"/> when the version does not exist.</returns>
-    public virtual async Task<Stream?> GetResourceStreamAsync(ResourceLocation resource, string? versionId, long offset,
+    public virtual async Task<Stream?> GetResourceStreamAsync(ResourceAddress resource, string? versionId, long offset,
         long? length, CancellationToken cancellationToken = default)
     {
         Stream? content = await GetResourceStreamAsync(resource, versionId, cancellationToken).ConfigureAwait(false);
@@ -318,7 +302,7 @@ public abstract class ResourceRepository
     /// <exception cref="ResourceRetainedException">
     /// A version it would delete is retained or held; see <see cref="SupportsRetention"/>.
     /// </exception>
-    public abstract Task<bool> DeleteResourceAsync(ResourceLocation resource, string? versionId = null,
+    public abstract Task<bool> DeleteResourceAsync(ResourceAddress resource, string? versionId = null,
         ResourceConditions? conditions = null, CancellationToken cancellationToken = default);
 
     // Resource Containers
@@ -399,7 +383,7 @@ public abstract class ResourceRepository
     /// <param name="condition">How to treat the destination name's current version, as for an upload.</param>
     /// <param name="cancellationToken">Cancels the copy; a canceled copy stores nothing.</param>
     /// <returns>What was stored, or <see langword="null"/> when the source version doesn't exist.</returns>
-    public virtual async Task<WrittenContent?> CopyResourceAsync(ResourceLocation source, string? sourceVersionId,
+    public virtual async Task<WrittenContent?> CopyResourceAsync(ResourceAddress source, string? sourceVersionId,
         NewResourceVersion destination, ResourceWriteCondition? condition = null, CancellationToken cancellationToken = default)
     {
         Stream? content = await GetResourceStreamAsync(source, sourceVersionId, cancellationToken).ConfigureAwait(false);
@@ -424,7 +408,7 @@ public abstract class ResourceRepository
     /// <exception cref="ResourceContainerNotFoundException">The destination container doesn't exist.</exception>
     /// <exception cref="ResourcePreconditionFailedException">The source's current version doesn't meet <paramref name="sourceConditions"/>.</exception>
     /// <exception cref="NotSupportedException">The provider doesn't move resources.</exception>
-    public virtual Task<bool> MoveResourceAsync(ResourceLocation source, ResourceLocation destination,
+    public virtual Task<bool> MoveResourceAsync(ResourceAddress source, ResourceAddress destination,
         ResourceConditions? sourceConditions, CancellationToken cancellationToken = default)
         => throw new NotSupportedException($"{GetType().Name} doesn't move resources.");
 
@@ -480,7 +464,7 @@ public abstract class ResourceRepository
     /// <param name="cancellationToken">Cancels the delete.</param>
     /// <returns><see langword="true"/> if it was deleted; <see langword="false"/> if it's gone or no longer expired.</returns>
     /// <exception cref="NotSupportedException">The provider doesn't support expiry, as by default.</exception>
-    public virtual Task<bool> DeleteExpiredVersionAsync(ResourceLocation resource, string versionId, DateTimeOffset now,
+    public virtual Task<bool> DeleteExpiredVersionAsync(ResourceAddress resource, string versionId, DateTimeOffset now,
         CancellationToken cancellationToken = default)
         => throw new NotSupportedException($"{GetType().Name} doesn't support expiry.");
 
@@ -525,7 +509,7 @@ public abstract class ResourceRepository
     /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns>The staged version, or <see langword="null"/> if there's none: it was completed, deleted or swept.</returns>
     /// <exception cref="NotSupportedException">The provider doesn't support upload sessions, as by default.</exception>
-    public virtual Task<StagedVersion?> GetStagedVersionAsync(ResourceLocation resource, string versionId,
+    public virtual Task<StagedVersion?> GetStagedVersionAsync(ResourceAddress resource, string versionId,
         CancellationToken cancellationToken = default)
         => throw new NotSupportedException($"{GetType().Name} doesn't support upload sessions.");
 
@@ -547,7 +531,7 @@ public abstract class ResourceRepository
     /// The session already holds as much as the provider can store; what it stored stays.
     /// </exception>
     /// <exception cref="NotSupportedException">The provider doesn't support upload sessions, as by default.</exception>
-    public virtual Task<long?> AppendStagedContentAsync(ResourceLocation resource, string versionId, long offset, Stream content,
+    public virtual Task<long?> AppendStagedContentAsync(ResourceAddress resource, string versionId, long offset, Stream content,
         CancellationToken cancellationToken = default)
         => throw new NotSupportedException($"{GetType().Name} doesn't support upload sessions.");
 
@@ -561,7 +545,7 @@ public abstract class ResourceRepository
     /// <param name="cancellationToken">Cancels opening the stream.</param>
     /// <returns>The content, or <see langword="null"/> if there's no such staged version.</returns>
     /// <exception cref="NotSupportedException">The provider doesn't support upload sessions, as by default.</exception>
-    public virtual Task<Stream?> GetStagedStreamAsync(ResourceLocation resource, string versionId,
+    public virtual Task<Stream?> GetStagedStreamAsync(ResourceAddress resource, string versionId,
         CancellationToken cancellationToken = default)
         => throw new NotSupportedException($"{GetType().Name} doesn't support upload sessions.");
 
@@ -587,7 +571,7 @@ public abstract class ResourceRepository
     /// The stored content isn't <paramref name="contentLength"/> long: something was appended after it was measured.
     /// </exception>
     /// <exception cref="NotSupportedException">The provider doesn't support upload sessions, as by default.</exception>
-    public virtual Task<WrittenContent?> CompleteStagedVersionAsync(ResourceLocation resource, string versionId, long contentLength,
+    public virtual Task<WrittenContent?> CompleteStagedVersionAsync(ResourceAddress resource, string versionId, long contentLength,
         string contentHash, ResourceWriteCondition? condition = null, CancellationToken cancellationToken = default)
         => throw new NotSupportedException($"{GetType().Name} doesn't support upload sessions.");
 
@@ -600,7 +584,7 @@ public abstract class ResourceRepository
     /// <param name="cancellationToken">Cancels the delete.</param>
     /// <returns><see langword="true"/> if it was deleted; <see langword="false"/> if there's no such staged version.</returns>
     /// <exception cref="NotSupportedException">The provider doesn't support upload sessions, as by default.</exception>
-    public virtual Task<bool> DeleteStagedVersionAsync(ResourceLocation resource, string versionId,
+    public virtual Task<bool> DeleteStagedVersionAsync(ResourceAddress resource, string versionId,
         CancellationToken cancellationToken = default)
         => throw new NotSupportedException($"{GetType().Name} doesn't support upload sessions.");
 
@@ -616,12 +600,12 @@ public abstract class ResourceRepository
     /// <param name="cancellationToken">Cancels the deletes; the versions already deleted stay deleted.</param>
     /// <returns>The versions it deleted.</returns>
     /// <exception cref="NotSupportedException">The provider doesn't support expiry.</exception>
-    public virtual async Task<IReadOnlyCollection<(ResourceLocation Resource, string VersionId)>> DeleteExpiredVersionsAsync(
-        IReadOnlyList<(ResourceLocation Resource, string VersionId)> versions, DateTimeOffset now,
+    public virtual async Task<IReadOnlyCollection<(ResourceAddress Resource, string VersionId)>> DeleteExpiredVersionsAsync(
+        IReadOnlyList<(ResourceAddress Resource, string VersionId)> versions, DateTimeOffset now,
         CancellationToken cancellationToken = default)
     {
-        var deleted = new List<(ResourceLocation, string)>();
-        foreach ((ResourceLocation resource, string versionId) in versions)
+        var deleted = new List<(ResourceAddress, string)>();
+        foreach ((ResourceAddress resource, string versionId) in versions)
         {
             if (await DeleteExpiredVersionAsync(resource, versionId, now, cancellationToken).ConfigureAwait(false))
                 deleted.Add((resource, versionId));
@@ -641,7 +625,7 @@ public abstract class ResourceRepository
     /// <param name="cancellationToken">Cancels the change.</param>
     /// <returns><see langword="true"/> if the version exists; otherwise <see langword="false"/>.</returns>
     /// <exception cref="NotSupportedException">The provider doesn't support expiry, as by default.</exception>
-    public virtual Task<bool> SetExpiryAsync(ResourceLocation resource, string? versionId, DateTimeOffset? expiresAt,
+    public virtual Task<bool> SetExpiryAsync(ResourceAddress resource, string? versionId, DateTimeOffset? expiresAt,
         CancellationToken cancellationToken = default)
         => throw new NotSupportedException($"{GetType().Name} doesn't support expiry.");
 
@@ -655,7 +639,7 @@ public abstract class ResourceRepository
     /// <param name="cancellationToken">Cancels the change.</param>
     /// <returns><see langword="true"/> if the version exists; otherwise <see langword="false"/>.</returns>
     /// <exception cref="NotSupportedException">The provider doesn't change a version's metadata, as by default.</exception>
-    public virtual Task<bool> SetResourceMetadataAsync(ResourceLocation resource, string? versionId,
+    public virtual Task<bool> SetResourceMetadataAsync(ResourceAddress resource, string? versionId,
         IReadOnlyDictionary<string, string> metadata, CancellationToken cancellationToken = default)
         => throw new NotSupportedException($"{GetType().Name} doesn't change a version's metadata.");
 
@@ -669,7 +653,7 @@ public abstract class ResourceRepository
     /// <param name="cancellationToken">Cancels the change.</param>
     /// <returns><see langword="true"/> if the version exists; otherwise <see langword="false"/>.</returns>
     /// <exception cref="NotSupportedException">The provider doesn't change a version's content type, as by default.</exception>
-    public virtual Task<bool> SetContentTypeAsync(ResourceLocation resource, string? versionId, string? contentType,
+    public virtual Task<bool> SetContentTypeAsync(ResourceAddress resource, string? versionId, string? contentType,
         CancellationToken cancellationToken = default)
         => throw new NotSupportedException($"{GetType().Name} doesn't change a version's content type.");
 
@@ -686,9 +670,10 @@ public abstract class ResourceRepository
     /// <see cref="NewResourceVersion.LegalHold"/> with each version it adds, return them on every read, override
     /// <see cref="SetRetentionAsync"/> and <see cref="SetLegalHoldAsync"/>, and refuse to delete a version for which
     /// <see cref="ResourceInfo.IsDeletableAt"/> is false at the time of the delete, throwing
-    /// <see cref="ResourceRetainedException"/> (see <see cref="ResourceRetainedException.Create"/>). It must decide that
-    /// in the delete itself, as it decides conditions, so a hold set at the same time either lands first and stops the
-    /// delete or finds the version gone. That covers <see cref="DeleteResourceAsync"/>, which deletes nothing when any
+    /// <see cref="ResourceRetainedException"/> (<c>ResourceRetainedException.Create</c>, in
+    /// <see cref="ResourcefullProviderExtensions"/>, makes one). It must decide that in the delete itself, as it decides
+    /// conditions, so a hold set at the same time either lands first and stops the delete or finds the version gone.
+    /// That covers <see cref="DeleteResourceAsync"/>, which deletes nothing when any
     /// version it would delete is protected, and <see cref="DeleteContainerAsync"/>, which deletes nothing when any
     /// version in the container is. A delete that goes in batches checks every version before the first, and each
     /// version again before it goes, so one protected while it's under way stops it there. <see cref="GetExpiredAsync"/> lists only versions that may be deleted, and
@@ -712,7 +697,7 @@ public abstract class ResourceRepository
     /// <paramref name="retainUntil"/> is before the version's <see cref="ResourceInfo.RetainUntil"/>; nothing changed.
     /// </exception>
     /// <exception cref="NotSupportedException">The provider doesn't support retention, as by default.</exception>
-    public virtual Task<bool> SetRetentionAsync(ResourceLocation resource, string? versionId, DateTimeOffset retainUntil,
+    public virtual Task<bool> SetRetentionAsync(ResourceAddress resource, string? versionId, DateTimeOffset retainUntil,
         CancellationToken cancellationToken = default)
         => throw new NotSupportedException($"{GetType().Name} doesn't support retention.");
 
@@ -727,7 +712,7 @@ public abstract class ResourceRepository
     /// <param name="cancellationToken">Cancels the change.</param>
     /// <returns><see langword="true"/> if the version exists; otherwise <see langword="false"/>.</returns>
     /// <exception cref="NotSupportedException">The provider doesn't support retention, as by default.</exception>
-    public virtual Task<bool> SetLegalHoldAsync(ResourceLocation resource, string? versionId, bool hold,
+    public virtual Task<bool> SetLegalHoldAsync(ResourceAddress resource, string? versionId, bool hold,
         CancellationToken cancellationToken = default)
         => throw new NotSupportedException($"{GetType().Name} doesn't support retention.");
 
@@ -767,7 +752,7 @@ public abstract class ResourceRepository
     /// </exception>
     /// <exception cref="ResourceRetainedException">A version it would delete is retained or held.</exception>
     /// <exception cref="NotSupportedException">The provider has no bin, as by default.</exception>
-    public virtual Task<bool> SoftDeleteResourceAsync(ResourceLocation resource, string? versionId, ResourceConditions? conditions,
+    public virtual Task<bool> SoftDeleteResourceAsync(ResourceAddress resource, string? versionId, ResourceConditions? conditions,
         DateTimeOffset purgeAt, CancellationToken cancellationToken = default)
         => throw new NotSupportedException($"{GetType().Name} doesn't keep deleted versions.");
 
@@ -799,7 +784,7 @@ public abstract class ResourceRepository
     /// <param name="resource">The resource.</param>
     /// <param name="cancellationToken">Cancels the listing.</param>
     /// <exception cref="NotSupportedException">The provider has no bin, as by default.</exception>
-    public virtual Task<IReadOnlyList<ResourceInfo>> GetDeletedVersionsAsync(ResourceLocation resource,
+    public virtual Task<IReadOnlyList<ResourceInfo>> GetDeletedVersionsAsync(ResourceAddress resource,
         CancellationToken cancellationToken = default)
         => throw new NotSupportedException($"{GetType().Name} doesn't keep deleted versions.");
 
@@ -814,7 +799,7 @@ public abstract class ResourceRepository
     /// <param name="cancellationToken">Cancels the undelete.</param>
     /// <returns>How many versions came back; 0 if the bin has none of them.</returns>
     /// <exception cref="NotSupportedException">The provider has no bin, as by default.</exception>
-    public virtual Task<int> UndeleteAsync(ResourceLocation resource, string? versionId, CancellationToken cancellationToken = default)
+    public virtual Task<int> UndeleteAsync(ResourceAddress resource, string? versionId, CancellationToken cancellationToken = default)
         => throw new NotSupportedException($"{GetType().Name} doesn't keep deleted versions.");
 
     /// <summary>
@@ -829,7 +814,7 @@ public abstract class ResourceRepository
     /// <param name="cancellationToken">Cancels the purge.</param>
     /// <returns>How many versions were purged.</returns>
     /// <exception cref="NotSupportedException">The provider has no bin, as by default.</exception>
-    public virtual Task<int> PurgeDeletedAsync(ResourceLocation resource, string? versionId, DateTimeOffset? dueBy,
+    public virtual Task<int> PurgeDeletedAsync(ResourceAddress resource, string? versionId, DateTimeOffset? dueBy,
         CancellationToken cancellationToken = default)
         => throw new NotSupportedException($"{GetType().Name} doesn't keep deleted versions.");
 
@@ -855,8 +840,8 @@ public abstract class ResourceRepository
     /// <summary>
     /// Gets what a container holds: the total <see cref="ResourceInfo.ContentLength"/> of every version, and how many
     /// resources and versions there are. Container policies read it before each write they limit, so a provider should
-    /// answer it without reading content. The default implementation lists every resource's versions, one name at a
-    /// time; override it if the store can add them up itself.
+    /// answer it without reading content. The default implementation pages through the container's names and lists each
+    /// one's versions; override it if the store can add them up itself.
     /// </summary>
     /// <param name="resourceContainerName">The container.</param>
     /// <param name="cancellationToken">Cancels the lookup.</param>
@@ -864,19 +849,28 @@ public abstract class ResourceRepository
     public virtual async Task<ResourceContainerUsage> GetContainerUsageAsync(string resourceContainerName,
         CancellationToken cancellationToken = default)
     {
-        IReadOnlyList<ResourceInfo> resources = await GetAllResourceInfoAsync(resourceContainerName, cancellationToken).ConfigureAwait(false);
         long storedBytes = 0, versionCount = 0;
-        foreach (ResourceInfo resource in resources)
+        int resourceCount = 0;
+        string? afterName = null;
+        while (true)
         {
-            foreach (ResourceInfo version in await GetResourceVersionsAsync(
-                new ResourceLocation(resourceContainerName, resource.Name), cancellationToken).ConfigureAwait(false))
+            IReadOnlyList<ResourceInfo> page = await GetResourcePageAsync(resourceContainerName, null, afterName,
+                ResourceListOptions.DefaultPageSize, cancellationToken).ConfigureAwait(false);
+            foreach (ResourceInfo resource in page)
             {
-                storedBytes += version.ContentLength ?? 0;
-                versionCount++;
+                foreach (ResourceInfo version in await GetResourceVersionsAsync(
+                    new ResourceAddress(resourceContainerName, resource.Name), cancellationToken).ConfigureAwait(false))
+                {
+                    storedBytes += version.ContentLength ?? 0;
+                    versionCount++;
+                }
             }
+            resourceCount += page.Count;
+            if (page.Count < ResourceListOptions.DefaultPageSize) break;
+            afterName = page[^1].Name;
         }
 
-        return new ResourceContainerUsage(storedBytes, resources.Count, versionCount);
+        return new ResourceContainerUsage(storedBytes, resourceCount, versionCount);
     }
 
     /// <summary>

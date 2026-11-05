@@ -93,7 +93,7 @@ internal sealed class InspectedContentStream : Stream
     private const int PipeSize = 1024 * 1024;
 
     private readonly Stream _content;
-    private readonly ResourceLocation _location;
+    private readonly ResourceAddress _location;
     private readonly Pipe _pipe = new(new PipeOptions(pauseWriterThreshold: PipeSize, resumeWriterThreshold: PipeSize / 2,
         useSynchronizationContext: false));
     private readonly CancellationTokenSource _stop;
@@ -105,9 +105,9 @@ internal sealed class InspectedContentStream : Stream
         ClientTelemetry telemetry, string operation, CancellationToken cancellationToken)
     {
         _content = content;
-        _location = version.Location;
+        _location = version.Resource;
         _stop = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        var upload = new ResourceUploadInspection(version.Location.ContainerName, version.Location.ResourceName, version.VersionId,
+        var upload = new ResourceUploadInspection(version.Resource.ContainerName, version.Resource.ResourceName, version.VersionId,
             version.ContentType, contentLength, version.Metadata.ToDictionary().AsReadOnly(), _pipe.Reader.AsStream());
         // On the thread pool, so an inspector that reads synchronously can't block the upload that feeds it.
         _inspection = Task.Run(() => InspectAsync(inspector, upload, telemetry, operation, _stop.Token));

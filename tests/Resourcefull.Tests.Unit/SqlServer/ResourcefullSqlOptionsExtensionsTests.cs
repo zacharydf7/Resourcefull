@@ -27,8 +27,9 @@ public class ResourcefullSqlOptionsExtensionsTests
     [Fact]
     public async Task UseSqlServer_ShouldProvideTheSqlRepositoryAndBackfill_WhenProviderIsConfigured()
     {
-        // Arrange
+        // Arrange: the options AddResourcefull registers, which the provider reads its search keys from.
         var services = new ServiceCollection();
+        services.AddOptions();
         var resourcefullOptionsBuilder = new ResourcefullOptionsBuilder(services);
 
         // Act

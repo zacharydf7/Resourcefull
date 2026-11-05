@@ -18,6 +18,9 @@ internal partial class ResourceContainerClient(ResourceRepository resourceReposi
 
     private string ContainerName => Name;
 
+    // The store's options, for methods whose own options parameter hides the primary constructor's.
+    private ResourcefullOptions StoreOptions => options;
+
     public Task<ResourceInfo> UploadAsync(string resourceName, Stream content, ResourceUploadOptions? options = null,
         CancellationToken cancellationToken = default)
         => _telemetry.RunAsync("upload", ContainerName, resourceName, activity =>
@@ -32,7 +35,7 @@ internal partial class ResourceContainerClient(ResourceRepository resourceReposi
         ResourceNames.ThrowIfInvalidNewResourceName(resourceName);
 
         uploadOptions ??= new ResourceUploadOptions();
-        resourceRepository.ThrowIfUnsearchable(uploadOptions.Metadata.AsReadOnly(), "options");
+        options.ThrowIfUnsearchable(uploadOptions.Metadata.AsReadOnly(), "options");
         ResourceConditions? conditions = uploadOptions.Conditions is { IsEmpty: false } set ? set : null;
         bool createOnly = IsCreate(uploadOptions.Mode, conditions, nameof(ResourceUploadOptions.Conditions), "options");
         NewVersionCheck check = policies is null ? default : await policies.CheckNewVersionAsync(ContainerName, resourceName, restore: false,
@@ -103,7 +106,7 @@ internal partial class ResourceContainerClient(ResourceRepository resourceReposi
 
         ResourceInfo? resourceInfo = await resourceRepository.GetResourceInfoAsync(At(resourceName), versionId, cancellationToken).ConfigureAwait(false);
         if (resourceInfo == null) return null;
-        resourceRepository.ThrowIfUnsearchable(resourceInfo.Metadata, nameof(versionId));
+        options.ThrowIfUnsearchable(resourceInfo.Metadata, nameof(versionId));
         // As for a copy, the stored length stands in for a declared one: the content doesn't pass through here.
         NewVersionCheck check = default;
         if (policies is not null)
@@ -155,7 +158,7 @@ internal partial class ResourceContainerClient(ResourceRepository resourceReposi
         }
         catch
         {
-            await resourceRepository.DeleteResourceAsync(version.Location, version.VersionId, null, CancellationToken.None).ConfigureAwait(false);
+            await resourceRepository.DeleteResourceAsync(version.Resource, version.VersionId, null, CancellationToken.None).ConfigureAwait(false);
             throw;
         }
     }
@@ -165,7 +168,7 @@ internal partial class ResourceContainerClient(ResourceRepository resourceReposi
     /// </summary>
     private async Task<ResourceInfo> CompleteNewVersionAsync(NewResourceVersion version, WrittenContent written)
     {
-        (string containerName, string resourceName) = version.Location;
+        (string containerName, string resourceName) = version.Resource;
         // Report what was stored rather than what was asked for.
         ResourceInfo stored = WithUri(new ResourceInfo
         {
@@ -229,7 +232,7 @@ internal partial class ResourceContainerClient(ResourceRepository resourceReposi
     private async Task<int> PruneAsync(string containerName, string resourceName, int keep, CancellationToken cancellationToken)
     {
         IReadOnlyList<ResourceInfo> versions = await resourceRepository.GetResourceVersionsAsync(
-            new ResourceLocation(containerName, resourceName), cancellationToken).ConfigureAwait(false);
+            new ResourceAddress(containerName, resourceName), cancellationToken).ConfigureAwait(false);
         DateTimeOffset now = (timeProvider ?? TimeProvider.System).GetUtcNow();
         DateTimeOffset? purgeAt = versions.Count > keep ? await PurgeAtAsync(containerName, now, cancellationToken).ConfigureAwait(false) : null;
         foreach (ResourceInfo version in versions.Skip(keep))
@@ -309,7 +312,7 @@ internal partial class ResourceContainerClient(ResourceRepository resourceReposi
             await _telemetry.NotifyCleanupAsync(cleanupHandler, new ResourceCleanup(version, ResourceCleanupReason.Pruned, now), cancellationToken).ConfigureAwait(false);
         try
         {
-            await DeleteAsync(new ResourceLocation(version.ContainerName, version.Name), version.VersionId, null,
+            await DeleteAsync(new ResourceAddress(version.ContainerName, version.Name), version.VersionId, null,
                 await PurgeAtAsync(version.ContainerName, now, cancellationToken).ConfigureAwait(false), cancellationToken).ConfigureAwait(false);
         }
         catch (ResourceRetainedException refusal)
@@ -374,7 +377,7 @@ internal partial class ResourceContainerClient(ResourceRepository resourceReposi
     }
 
     /// <summary>Deletes into the bin, until <paramref name="purgeAt"/>, or for good when that's <see langword="null"/>.</summary>
-    private Task<bool> DeleteAsync(ResourceLocation resource, string? versionId, ResourceConditions? conditions, DateTimeOffset? purgeAt,
+    private Task<bool> DeleteAsync(ResourceAddress resource, string? versionId, ResourceConditions? conditions, DateTimeOffset? purgeAt,
         CancellationToken cancellationToken) =>
         purgeAt is { } at
             ? resourceRepository.SoftDeleteResourceAsync(resource, versionId, conditions, at, cancellationToken)
@@ -431,7 +434,7 @@ internal partial class ResourceContainerClient(ResourceRepository resourceReposi
         if (version.ExpiresAt <= expiresAt) return true;
         try
         {
-            await resourceRepository.SetExpiryAsync(new ResourceLocation(containerName, version.Name), version.VersionId, expiresAt,
+            await resourceRepository.SetExpiryAsync(new ResourceAddress(containerName, version.Name), version.VersionId, expiresAt,
                 cancellationToken).ConfigureAwait(false);
             return true;
         }
@@ -528,7 +531,7 @@ internal partial class ResourceContainerClient(ResourceRepository resourceReposi
         {
             ArgumentNullException.ThrowIfNull(match.Key, nameof(options));
             ArgumentNullException.ThrowIfNull(match.Value, nameof(options));
-            if (!resourceRepository.SearchableMetadataKeys.Contains(match.Key))
+            if (!StoreOptions.SearchableMetadataKeys.Contains(match.Key))
             {
                 throw new ArgumentException($"The metadata key {match.Key} can't be searched: name it with " +
                     $"{nameof(ResourcefullOptionsBuilder.UseMetadataSearch)} to search by it.", nameof(options));
@@ -571,7 +574,7 @@ internal partial class ResourceContainerClient(ResourceRepository resourceReposi
 
     private IReadOnlyList<ResourceInfo> WithUris(IReadOnlyList<ResourceInfo> resources) => [.. resources.Select(WithUri)];
 
-    private ResourceLocation At(string resourceName) => new(ContainerName, resourceName);
+    private ResourceAddress At(string resourceName) => new(ContainerName, resourceName);
 
     public Task<bool> DeleteResourceIfExistsAsync(string resourceName, string? versionId = null, ResourceConditions? conditions = null,
         CancellationToken cancellationToken = default)
@@ -609,7 +612,7 @@ internal partial class ResourceContainerClient(ResourceRepository resourceReposi
 
         ResourceInfo? source = await resourceRepository.GetResourceInfoAsync(At(resourceName), copyOptions.VersionId, cancellationToken).ConfigureAwait(false);
         if (source is null) return null;
-        resourceRepository.ThrowIfUnsearchable(source.Metadata, nameof(resourceName));
+        options.ThrowIfUnsearchable(source.Metadata, nameof(resourceName));
         // The stored length stands in for a declared one: the content doesn't pass through here to be measured.
         NewVersionCheck check = default;
         if (policies is not null)
@@ -620,7 +623,7 @@ internal partial class ResourceContainerClient(ResourceRepository resourceReposi
                 _telemetry, cancellationToken).ConfigureAwait(false);
         }
 
-        var copy = new NewResourceVersion(new ResourceLocation(destinationContainer, destinationName), Guid.CreateVersion7().ToString())
+        var copy = new NewResourceVersion(new ResourceAddress(destinationContainer, destinationName), Guid.CreateVersion7().ToString())
         {
             ContentType = source.ContentType,
             Metadata = source.Metadata,
@@ -711,8 +714,8 @@ internal partial class ResourceContainerClient(ResourceRepository resourceReposi
             bool done;
             try
             {
-                done = await resourceRepository.MoveResourceAsync(new ResourceLocation(ContainerName, resourceName),
-                    new ResourceLocation(destinationContainer, destinationName), sourceConditions, cancellationToken).ConfigureAwait(false);
+                done = await resourceRepository.MoveResourceAsync(new ResourceAddress(ContainerName, resourceName),
+                    new ResourceAddress(destinationContainer, destinationName), sourceConditions, cancellationToken).ConfigureAwait(false);
             }
             catch (ResourcefullException exception)
                 when (exception is ResourceConflictException or ResourceContainerNotFoundException)
@@ -727,7 +730,7 @@ internal partial class ResourceContainerClient(ResourceRepository resourceReposi
                 return null;
             }
 
-            ResourceInfo? moved = await resourceRepository.GetResourceInfoAsync(new ResourceLocation(destinationContainer, destinationName),
+            ResourceInfo? moved = await resourceRepository.GetResourceInfoAsync(new ResourceAddress(destinationContainer, destinationName),
                 null, cancellationToken).ConfigureAwait(false);
             return moved is null ? null : WithUri(moved);
         }
@@ -753,7 +756,7 @@ internal partial class ResourceContainerClient(ResourceRepository resourceReposi
         {
             ResourceNames.ThrowIfInvalidResourceName(resourceName);
             if (policies is not null) await policies.ThrowIfReadOnlyAsync(ContainerName, _telemetry, cancellationToken).ConfigureAwait(false);
-            return await resourceRepository.SetExpiryAsync(new ResourceLocation(ContainerName, resourceName), versionId, expiresAt, cancellationToken).ConfigureAwait(false);
+            return await resourceRepository.SetExpiryAsync(new ResourceAddress(ContainerName, resourceName), versionId, expiresAt, cancellationToken).ConfigureAwait(false);
         });
 
     public Task<bool> SetResourceMetadataAsync(string resourceName, string? versionId, IDictionary<string, string> metadata,
@@ -763,7 +766,7 @@ internal partial class ResourceContainerClient(ResourceRepository resourceReposi
             ResourceNames.ThrowIfInvalidResourceName(resourceName);
             ArgumentNullException.ThrowIfNull(metadata);
             var copy = new Dictionary<string, string>(metadata);
-            resourceRepository.ThrowIfUnsearchable(copy, nameof(metadata));
+            options.ThrowIfUnsearchable(copy, nameof(metadata));
             if (policies is not null) await policies.ThrowIfReadOnlyAsync(ContainerName, _telemetry, cancellationToken).ConfigureAwait(false);
             return await resourceRepository.SetResourceMetadataAsync(At(resourceName), versionId, copy, cancellationToken).ConfigureAwait(false);
         });
@@ -774,7 +777,7 @@ internal partial class ResourceContainerClient(ResourceRepository resourceReposi
         {
             ResourceNames.ThrowIfInvalidResourceName(resourceName);
             if (policies is not null) await policies.CheckContentTypeAsync(ContainerName, contentType, _telemetry, cancellationToken).ConfigureAwait(false);
-            return await resourceRepository.SetContentTypeAsync(new ResourceLocation(ContainerName, resourceName), versionId,
+            return await resourceRepository.SetContentTypeAsync(new ResourceAddress(ContainerName, resourceName), versionId,
                 contentType, cancellationToken).ConfigureAwait(false);
         });
 

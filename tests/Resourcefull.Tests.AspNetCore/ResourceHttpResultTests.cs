@@ -64,7 +64,7 @@ public class ResourceHttpResultTests
         // Arrange: stored through the provider, as an earlier release could have; uploads refuse most of these names now.
         await using TestApp app = await TestApp.StartAsync();
         await app.Services.GetRequiredService<ResourceRepository>().AddResourceAsync(
-            new NewResourceVersion(new ResourceLocation(TestApp.Container, name), Guid.NewGuid().ToString()), new MemoryStream("x"u8.ToArray()));
+            new NewResourceVersion(new ResourceAddress(TestApp.Container, name), Guid.NewGuid().ToString()), new MemoryStream("x"u8.ToArray()));
 
         // Act
         HttpResponseMessage response = await app.Client.GetAsync("/files/" + Uri.EscapeDataString(name));

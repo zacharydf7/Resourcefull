@@ -19,7 +19,8 @@ namespace Resourcefull.SqlServer;
 /// The SQL Server provider's repository: the shared EF Core one, with SQL Server's own statements, locks and errors.
 /// </summary>
 internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbContextFactory, TimeProvider? timeProvider = null,
-    string? storeName = null) : EntityFrameworkRepository(dbContextFactory, timeProvider, storeName)
+    string? storeName = null, IReadOnlySet<string>? searchableMetadataKeys = null)
+    : EntityFrameworkRepository(dbContextFactory, timeProvider, storeName, searchableMetadataKeys)
 {
     private const int SqlForeignKeyViolation = 547;
     private const int SqlUniqueIndexViolation = 2601;
@@ -78,7 +79,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
             SELECT [ContentLength] AS [Value] FROM [Resources] WHERE [Id] = {resourceId} AND [StagedAt] IS NOT NULL
             """)).ToListAsync(cancellationToken).ConfigureAwait(false)).FirstOrDefault();
 
-    protected override async Task<SessionRow?> LockSessionAsync(ResourceDbContext attempt, ResourceLocation resource, string versionId,
+    protected override async Task<SessionRow?> LockSessionAsync(ResourceDbContext attempt, ResourceAddress resource, string versionId,
         CancellationToken cancellationToken) =>
         (await attempt.Database.SqlQuery<SessionRow>(attempt.QualifyTables($"""
             SELECT [Id], [ContentLength], [StagedAt] FROM [Resources] WITH (UPDLOCK, ROWLOCK)
@@ -212,7 +213,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
     }
 
     /// <summary>Takes an exclusive application lock on each name, rather than key-range locks on its rows.</summary>
-    protected override async Task LockNamesAsync(ResourceDbContext dbContext, IReadOnlyList<ResourceLocation> names,
+    protected override async Task LockNamesAsync(ResourceDbContext dbContext, IReadOnlyList<ResourceAddress> names,
         CancellationToken cancellationToken)
     {
         if (names.Count == 0) return;
@@ -237,7 +238,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
     /// schema, which can be the one another store was given, so a single lock across every store is what keeps writers
     /// of a name taking turns.
     /// </summary>
-    internal static string NameLockResource(ResourceLocation name) =>
+    internal static string NameLockResource(ResourceAddress name) =>
         "Resourcefull:" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes($"{name.ContainerName}\n{name.ResourceName}")));
 
     /// <summary>What <see cref="MeasureContainerAsync"/> reads, named as its query's columns.</summary>

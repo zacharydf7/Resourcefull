@@ -10,7 +10,7 @@ public class UploadSessionTests
     {
         // Arrange: the session had 3 bytes when its checks ran, and 5 by the time its content was read.
         var repository = new Mock<ResourceRepository>();
-        var location = new ResourceLocation("c", "a");
+        var location = new ResourceAddress("c", "a");
         repository.Setup(r => r.GetStagedVersionAsync(location, "u1", It.IsAny<CancellationToken>()))
             .ReturnsAsync(new StagedVersion(new NewResourceVersion(location, "u1") { DeclaredLength = 3 }, 3));
         repository.Setup(r => r.GetStagedStreamAsync(location, "u1", It.IsAny<CancellationToken>()))
@@ -22,7 +22,7 @@ public class UploadSessionTests
 
         // Assert
         Assert.Equal(5, exception.CurrentOffset);
-        repository.Verify(r => r.CompleteStagedVersionAsync(It.IsAny<ResourceLocation>(), It.IsAny<string>(), It.IsAny<long>(),
+        repository.Verify(r => r.CompleteStagedVersionAsync(It.IsAny<ResourceAddress>(), It.IsAny<string>(), It.IsAny<long>(),
             It.IsAny<string>(), It.IsAny<ResourceWriteCondition?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 }

@@ -365,7 +365,7 @@ public class StoreCopyTests : IDisposable
         repository.Setup(r => r.GetContainerInfoAsync("c", It.IsAny<CancellationToken>())).ReturnsAsync(container);
         repository.Setup(r => r.GetVersionPageAsync("c", null, It.IsAny<int>(), It.IsAny<CancellationToken>())).ReturnsAsync([version]);
         repository.Setup(r => r.GetVersionPageAsync("c", "a", It.IsAny<int>(), It.IsAny<CancellationToken>())).ReturnsAsync([]);
-        repository.Setup(r => r.GetResourceInfoAsync(new Providers.ResourceLocation("c", "a"), null, It.IsAny<CancellationToken>()))
+        repository.Setup(r => r.GetResourceInfoAsync(new Providers.ResourceAddress("c", "a"), null, It.IsAny<CancellationToken>()))
             .ReturnsAsync(version);
         var source = new ResourceServiceClient(repository.Object, Microsoft.Extensions.Options.Options.Create(new ResourcefullOptions()));
         await Target.ImportContainerAsync("c", new[] { new ImportedVersion(version with { ContentLength = null },

@@ -81,8 +81,8 @@ public class UploadInspectionTests
                 await content.ReadExactlyAsync(declared, cancellationToken);
                 return await store.AddResourceAsync(version, new MemoryStream(declared), condition, cancellationToken);
             });
-        repository.Setup(r => r.DeleteResourceAsync(new ResourceLocation("c", "r"), It.IsAny<string?>(), It.IsAny<ResourceConditions?>(), It.IsAny<CancellationToken>()))
-            .Returns((ResourceLocation resource, string? versionId, ResourceConditions? conditions, CancellationToken cancellationToken) =>
+        repository.Setup(r => r.DeleteResourceAsync(new ResourceAddress("c", "r"), It.IsAny<string?>(), It.IsAny<ResourceConditions?>(), It.IsAny<CancellationToken>()))
+            .Returns((ResourceAddress resource, string? versionId, ResourceConditions? conditions, CancellationToken cancellationToken) =>
                 store.DeleteResourceAsync(resource, versionId, conditions, cancellationToken));
         var inspector = new DelegatingUploadInspector(async (upload, cancellationToken) =>
         {
@@ -98,7 +98,7 @@ public class UploadInspectionTests
 
         // Assert
         await Assert.ThrowsAsync<ResourceContentRefusedException>(act);
-        Assert.Null(await store.GetResourceInfoAsync(new ResourceLocation("c", "r")));
+        Assert.Null(await store.GetResourceInfoAsync(new ResourceAddress("c", "r")));
     }
 
     [Theory]

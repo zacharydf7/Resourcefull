@@ -20,14 +20,14 @@ internal sealed partial class ObjectStoreRepository
 
     public override bool SupportsRetention => true;
 
-    public override Task<bool> SetRetentionAsync(ResourceLocation resource, string? versionId, DateTimeOffset retainUntil,
+    public override Task<bool> SetRetentionAsync(ResourceAddress resource, string? versionId, DateTimeOffset retainUntil,
         CancellationToken cancellationToken = default) =>
         ProtectAsync(resource, versionId, version => version.RetainUntil > retainUntil
             ? throw new ArgumentOutOfRangeException(nameof(retainUntil), retainUntil, $"The version {version.VersionId} of the resource " +
                 $"{resource.ResourceName} in the container {resource.ContainerName} is retained until {version.RetainUntil:O}, and that can't move earlier.")
             : version with { RetainUntil = retainUntil }, cancellationToken);
 
-    public override Task<bool> SetLegalHoldAsync(ResourceLocation resource, string? versionId, bool hold,
+    public override Task<bool> SetLegalHoldAsync(ResourceAddress resource, string? versionId, bool hold,
         CancellationToken cancellationToken = default) =>
         hold
             ? ProtectAsync(resource, versionId, version => version with { LegalHold = true }, cancellationToken)
@@ -37,7 +37,7 @@ internal sealed partial class ObjectStoreRepository
     /// Writes a protection entry for the version, unless it has one, then changes it with <paramref name="protect"/> in
     /// a head write, and waits for a container delete that's deciding.
     /// </summary>
-    private async Task<bool> ProtectAsync(ResourceLocation resource, string? versionId, Func<StoredVersion, StoredVersion> protect,
+    private async Task<bool> ProtectAsync(ResourceAddress resource, string? versionId, Func<StoredVersion, StoredVersion> protect,
         CancellationToken cancellationToken)
     {
         if (await GetContainerAsync(resource.ContainerName, cancellationToken).ConfigureAwait(false) is not { } container) return false;
@@ -97,14 +97,14 @@ internal sealed partial class ObjectStoreRepository
     /// A version in the container that can't be deleted now, found from its protection entries; <see langword="null"/>
     /// when there's none.
     /// </summary>
-    private async Task<(ResourceLocation Location, StoredVersion Version)?> FindProtectedAsync(string containerId,
+    private async Task<(ResourceAddress Location, StoredVersion Version)?> FindProtectedAsync(string containerId,
         CancellationToken cancellationToken)
     {
         DateTimeOffset now = _clock.GetUtcNow();
         string prefix = _keys.Protections(containerId);
         await foreach (string[] keys in ListKeysAsync(prefix, null, _ => true, () => int.MaxValue, cancellationToken).ConfigureAwait(false))
         {
-            var found = new (ResourceLocation, StoredVersion)?[keys.Length];
+            var found = new (ResourceAddress, StoredVersion)?[keys.Length];
             await Parallel.ForEachAsync(Enumerable.Range(0, keys.Length),
                 new ParallelOptions { MaxDegreeOfParallelism = ParallelReads, CancellationToken = cancellationToken },
                 async (i, ct) =>
@@ -113,7 +113,7 @@ internal sealed partial class ObjectStoreRepository
                     string token = keys[i][prefix.Length..];
                     Head? head = await ReadHeadAsync(_keys.Head(containerId, named.ResourceName), ct).ConfigureAwait(false);
                     if (head?.Versions.FirstOrDefault(v => v.ProtectionToken == token) is { } version && !IsDeletable(version, now))
-                        found[i] = (new ResourceLocation(named.ContainerName, named.ResourceName), version);
+                        found[i] = (new ResourceAddress(named.ContainerName, named.ResourceName), version);
                 }).ConfigureAwait(false);
             if (found.FirstOrDefault(f => f is not null) is { } first) return first;
         }

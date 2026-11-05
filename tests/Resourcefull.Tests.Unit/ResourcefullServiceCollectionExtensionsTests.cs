@@ -201,13 +201,13 @@ public class ResourcefullServiceCollectionExtensionsTests
         var repository = new Mock<ResourceRepository>();
         repository.Setup(r => r.AddResourceAsync( It.IsAny<NewResourceVersion>(), It.IsAny<Stream>(), It.IsAny<ResourceWriteCondition?>(),
             It.IsAny<CancellationToken>())).ReturnsAsync(new WrittenContent(0, "sha256:empty", DateTimeOffset.UnixEpoch));
-        repository.Setup(r => r.GetResourceVersionsAsync(new ResourceLocation("reports", "name"), It.IsAny<CancellationToken>()))
+        repository.Setup(r => r.GetResourceVersionsAsync(new ResourceAddress("reports", "name"), It.IsAny<CancellationToken>()))
             .ReturnsAsync(
             [
                 new() { ContainerName = "reports", Name = "name", VersionId = "new" },
                 new() { ContainerName = "reports", Name = "name", VersionId = "old" }
             ]);
-        repository.Setup(r => r.DeleteResourceAsync(new ResourceLocation("reports", "name"), "old", It.IsAny<ResourceConditions?>(), It.IsAny<CancellationToken>())).ThrowsAsync(failure);
+        repository.Setup(r => r.DeleteResourceAsync(new ResourceAddress("reports", "name"), "old", It.IsAny<ResourceConditions?>(), It.IsAny<CancellationToken>())).ThrowsAsync(failure);
 
         var logger = new Mock<ILogger>();
         logger.Setup(l => l.IsEnabled(It.IsAny<LogLevel>())).Returns(true);

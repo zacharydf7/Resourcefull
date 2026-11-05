@@ -41,23 +41,23 @@ public class MinimalProviderContractTests : ResourcefullContractTests
             ResourceWriteCondition? condition = null, CancellationToken cancellationToken = default) =>
             inner.AddResourceAsync(version, content, condition, cancellationToken);
 
-        public override Task<IReadOnlyList<ResourceInfo>> GetAllResourceInfoAsync(string resourceContainerName,
-            CancellationToken cancellationToken = default) =>
-            inner.GetAllResourceInfoAsync(resourceContainerName, cancellationToken);
+        public override Task<IReadOnlyList<ResourceInfo>> GetResourcePageAsync(string resourceContainerName, string? prefix,
+            string? afterName, int pageSize, CancellationToken cancellationToken = default) =>
+            inner.GetResourcePageAsync(resourceContainerName, prefix, afterName, pageSize, cancellationToken);
 
-        public override Task<IReadOnlyList<ResourceInfo>> GetResourceVersionsAsync(ResourceLocation resource,
+        public override Task<IReadOnlyList<ResourceInfo>> GetResourceVersionsAsync(ResourceAddress resource,
             CancellationToken cancellationToken = default) =>
             inner.GetResourceVersionsAsync(resource, cancellationToken);
 
-        public override Task<ResourceInfo?> GetResourceInfoAsync(ResourceLocation resource, string? versionId = null,
+        public override Task<ResourceInfo?> GetResourceInfoAsync(ResourceAddress resource, string? versionId = null,
             CancellationToken cancellationToken = default) =>
             inner.GetResourceInfoAsync(resource, versionId, cancellationToken);
 
-        public override Task<Stream?> GetResourceStreamAsync(ResourceLocation resource, string? versionId = null,
+        public override Task<Stream?> GetResourceStreamAsync(ResourceAddress resource, string? versionId = null,
             CancellationToken cancellationToken = default) =>
             inner.GetResourceStreamAsync(resource, versionId, cancellationToken);
 
-        public override Task<bool> DeleteResourceAsync(ResourceLocation resource, string? versionId = null,
+        public override Task<bool> DeleteResourceAsync(ResourceAddress resource, string? versionId = null,
             ResourceConditions? conditions = null, CancellationToken cancellationToken = default) =>
             inner.DeleteResourceAsync(resource, versionId, conditions, cancellationToken);
 

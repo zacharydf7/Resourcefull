@@ -1,5 +1,3 @@
-using Resourcefull.Providers;
-
 namespace Resourcefull;
 
 /// <summary>
@@ -288,31 +286,6 @@ public sealed class ResourceRetainedException : ResourcefullException
     /// <summary>Whether the version is under a legal hold.</summary>
     public bool LegalHold { get; }
 
-    /// <summary>
-    /// The exception for a version that can't be deleted at <paramref name="now"/>, with the message the clients and
-    /// the built-in providers use, for a provider to throw when its delete finds one.
-    /// </summary>
-    /// <param name="location">The version's container and name.</param>
-    /// <param name="versionId">The version.</param>
-    /// <param name="retainUntil">The version's <see cref="ResourceInfo.RetainUntil"/>.</param>
-    /// <param name="legalHold">The version's <see cref="ResourceInfo.LegalHold"/>.</param>
-    /// <param name="now">The time the delete judged it by.</param>
-    public static ResourceRetainedException Create(ResourceLocation location, string versionId, DateTimeOffset? retainUntil,
-        bool legalHold, DateTimeOffset now)
-    {
-        DateTimeOffset? until = retainUntil > now ? retainUntil : null;
-        string why = (until, legalHold) switch
-        {
-            ({ } date, true) => $"it's retained until {date:O} and under a legal hold",
-            ({ } date, false) => $"it's retained until {date:O}",
-            _ => "it's under a legal hold"
-        };
-        return new ResourceRetainedException($"The version {versionId} of the resource {location.ResourceName} in the " +
-            $"container {location.ContainerName} can't be deleted: {why}.", versionId, until, legalHold)
-        {
-            ContainerName = location.ContainerName, ResourceName = location.ResourceName
-        };
-    }
 }
 
 /// <summary>

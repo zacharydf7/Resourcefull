@@ -25,7 +25,7 @@ internal sealed partial class ObjectStoreRepository
     /// conditions and retention, and deletes their expiry entries, since expiry leaves the bin alone. When another writer
     /// changes the head so the delete takes a version whose entries weren't written, it starts again.
     /// </summary>
-    public override async Task<bool> SoftDeleteResourceAsync(ResourceLocation resource, string? versionId, ResourceConditions? conditions,
+    public override async Task<bool> SoftDeleteResourceAsync(ResourceAddress resource, string? versionId, ResourceConditions? conditions,
         DateTimeOffset purgeAt, CancellationToken cancellationToken = default)
     {
         ContainerRecord? container = await GetContainerAsync(resource.ContainerName, cancellationToken).ConfigureAwait(false);
@@ -185,7 +185,7 @@ internal sealed partial class ObjectStoreRepository
         ObjectStoreTelemetry.CountStaleBinEntry(storeName);
     }
 
-    public override async Task<IReadOnlyList<ResourceInfo>> GetDeletedVersionsAsync(ResourceLocation resource,
+    public override async Task<IReadOnlyList<ResourceInfo>> GetDeletedVersionsAsync(ResourceAddress resource,
         CancellationToken cancellationToken = default)
     {
         if (await GetContainerAsync(resource.ContainerName, cancellationToken).ConfigureAwait(false) is not { } container) return [];
@@ -201,7 +201,7 @@ internal sealed partial class ObjectStoreRepository
     /// write, and deletes their bin and purge entries. When another writer changes the head so a version comes back whose
     /// expiry entry wasn't written, it starts again.
     /// </summary>
-    public override async Task<int> UndeleteAsync(ResourceLocation resource, string? versionId, CancellationToken cancellationToken = default)
+    public override async Task<int> UndeleteAsync(ResourceAddress resource, string? versionId, CancellationToken cancellationToken = default)
     {
         if (await GetContainerAsync(resource.ContainerName, cancellationToken).ConfigureAwait(false) is not { } container) return 0;
         string headKey = _keys.Head(container.Id, resource.ResourceName);
@@ -290,7 +290,7 @@ internal sealed partial class ObjectStoreRepository
     /// Takes the versions out of the bin in one head write, then deletes their content and every entry they have.
     /// Content whose delete fails is no longer named by any head, and stays until the sweep deletes it.
     /// </summary>
-    public override async Task<int> PurgeDeletedAsync(ResourceLocation resource, string? versionId, DateTimeOffset? dueBy,
+    public override async Task<int> PurgeDeletedAsync(ResourceAddress resource, string? versionId, DateTimeOffset? dueBy,
         CancellationToken cancellationToken = default)
     {
         if (await GetContainerAsync(resource.ContainerName, cancellationToken).ConfigureAwait(false) is not { } container) return 0;

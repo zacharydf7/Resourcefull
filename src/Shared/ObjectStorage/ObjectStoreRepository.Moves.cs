@@ -29,7 +29,7 @@ internal sealed partial class ObjectStoreRepository
     /// the source head and writes the destination's, each only if unchanged since it was read, then commits the entry.
     /// When another writer changed either head first, the try is undone and the move tried again.
     /// </summary>
-    public override async Task<bool> MoveResourceAsync(ResourceLocation source, ResourceLocation destination,
+    public override async Task<bool> MoveResourceAsync(ResourceAddress source, ResourceAddress destination,
         ResourceConditions? sourceConditions, CancellationToken cancellationToken = default)
     {
         ContainerRecord to = await GetContainerAsync(destination.ContainerName, cancellationToken).ConfigureAwait(false)
@@ -105,7 +105,7 @@ internal sealed partial class ObjectStoreRepository
     /// </summary>
     /// <returns>Whether the move happened; <see langword="false"/> when another writer changed a head first.</returns>
     private async Task<bool> TryMoveAsync(MoveEntry entry, Head moving, List<StoredVersion> moved, List<StoredVersion>? destinationBin,
-        string? sourceETag, string? destinationETag, ResourceLocation destination, CancellationToken cancellationToken)
+        string? sourceETag, string? destinationETag, ResourceAddress destination, CancellationToken cancellationToken)
     {
         string entryKey = _keys.Move(Guid.NewGuid().ToString("N"));
         var mark = new HeadMove(entryKey[_keys.Moves.Length..], false);

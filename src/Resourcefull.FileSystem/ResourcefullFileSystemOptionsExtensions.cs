@@ -33,7 +33,7 @@ public static class ResourcefullFileSystemOptionsExtensions
         // One store for every scope, so this process's writers queue on its in-process gates before they contend with other
         // processes for the lock files.
         builder.UseProvider(services => new ObjectStoreRepository(new FileSystemObjectStore(root), "", services.GetService<TimeProvider>(),
-            storeName), ServiceLifetime.Singleton);
+            storeName, services.SearchableMetadataKeys(storeName)), ServiceLifetime.Singleton);
         return builder;
     }
 }

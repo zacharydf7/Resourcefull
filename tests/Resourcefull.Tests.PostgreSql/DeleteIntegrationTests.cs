@@ -103,7 +103,7 @@ public sealed class DeleteIntegrationTests(PostgreSqlFixture fixture)
             "version" => await container.DeleteResourceIfExistsAsync("big", current.VersionId),
             "name" => await container.DeleteResourceIfExistsAsync("big"),
             "expire" => (await provider.GetRequiredService<ResourceRepository>().DeleteExpiredVersionsAsync(
-                [(new ResourceLocation(container.Name, "big"), current.VersionId)], DateTimeOffset.UtcNow)).Count == 1,
+                [(new ResourceAddress(container.Name, "big"), current.VersionId)], DateTimeOffset.UtcNow)).Count == 1,
             _ => await service.DeleteContainerIfExistsAsync(container.Name)
         };
 

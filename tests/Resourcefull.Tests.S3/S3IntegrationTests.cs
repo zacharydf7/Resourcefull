@@ -10,7 +10,6 @@ using Resourcefull.ObjectStorage;
 using Resourcefull.Tests.ObjectStorage;
 using Resourcefull.Providers;
 using Resourcefull.S3;
-using ResourceLocation = Resourcefull.Providers.ResourceLocation;
 
 namespace Resourcefull.Tests.S3;
 
@@ -121,7 +120,7 @@ public class S3IntegrationTests(S3Fixture fixture)
         ObjectStoreRepository repository = await NewRepositoryAsync(prefix, store: store);
         byte[] payload = new byte[mebibytes * 1024 * 1024];
         new Random(159).NextBytes(payload);
-        var location = new ResourceLocation("c", "big.bin");
+        var location = new ResourceAddress("c", "big.bin");
 
         // Act
         WrittenContent written = await repository.AddResourceAsync(new NewResourceVersion(location, "v1"), new MemoryStream(payload));
@@ -150,7 +149,7 @@ public class S3IntegrationTests(S3Fixture fixture)
 
         // Act
         Exception? failed = await Record.ExceptionAsync(() => repository.AddResourceAsync(
-            new NewResourceVersion(new ResourceLocation("c", "big.bin"), "v1"), new MemoryStream(new byte[40 * 1024 * 1024])));
+            new NewResourceVersion(new ResourceAddress("c", "big.bin"), "v1"), new MemoryStream(new byte[40 * 1024 * 1024])));
 
         // Assert: neither the pieces nor their record is left.
         Assert.IsType<IOException>(failed);
@@ -173,7 +172,7 @@ public class S3IntegrationTests(S3Fixture fixture)
 
         // Act
         Exception? refused = await Record.ExceptionAsync(() => repository.AddResourceAsync(
-            new NewResourceVersion(new ResourceLocation("c", "big.bin"), "v1"), new MemoryStream(new byte[40 * 1024 * 1024])));
+            new NewResourceVersion(new ResourceAddress("c", "big.bin"), "v1"), new MemoryStream(new byte[40 * 1024 * 1024])));
 
         // Assert
         Assert.IsType<ResourceUploadLimitException>(refused);
@@ -198,7 +197,7 @@ public class S3IntegrationTests(S3Fixture fixture)
             }
         };
         ObjectStoreRepository repository = await NewRepositoryAsync(prefix, clock, store: store);
-        await repository.AddResourceAsync(new NewResourceVersion(new ResourceLocation("c", "a.txt"), "v1"),
+        await repository.AddResourceAsync(new NewResourceVersion(new ResourceAddress("c", "a.txt"), "v1"),
             new MemoryStream("kept"u8.ToArray()));
         string named = (await fixture.Client.ListObjectsV2Async(new ListObjectsV2Request
         {
@@ -239,7 +238,7 @@ public class S3IntegrationTests(S3Fixture fixture)
         };
         ObjectStoreRepository repository = await NewRepositoryAsync(prefix, store: store);
         store.BeforeJoin = () => repository.DeleteAbandonedUploadsAsync(DateTimeOffset.UtcNow.AddDays(-1));
-        var location = new ResourceLocation("c", "big.bin");
+        var location = new ResourceAddress("c", "big.bin");
         byte[] payload = new byte[40 * 1024 * 1024];
         new Random(160).NextBytes(payload);
 
@@ -388,7 +387,7 @@ public class S3IntegrationTests(S3Fixture fixture)
         int afterChange = await CountKeysAsync(prefix + "x/");
         await container.DeleteResourceIfExistsAsync("b.txt");
         int afterDelete = await CountKeysAsync(prefix + "x/");
-        bool expired = await repository.DeleteExpiredVersionAsync(new Resourcefull.Providers.ResourceLocation("c", "a.txt"), a.VersionId,
+        bool expired = await repository.DeleteExpiredVersionAsync(new Resourcefull.Providers.ResourceAddress("c", "a.txt"), a.VersionId,
             DateTimeOffset.UtcNow);
 
         // Assert: changing the expiry replaced the entry rather than adding one, and each delete took its version's entry
@@ -428,7 +427,7 @@ public class S3IntegrationTests(S3Fixture fixture)
         // first's short segment, in three segments, and the third with the second's short last one.
         string prefix = $"session-{Guid.NewGuid():N}/";
         ObjectStoreRepository repository = await NewRepositoryAsync(prefix, segmentSize: 9 * 1024 * 1024);
-        var location = new ResourceLocation("c", "big.bin");
+        var location = new ResourceAddress("c", "big.bin");
         byte[] payload = new byte[21 * 1024 * 1024 + 3];
         new Random(151).NextBytes(payload);
         await repository.StartStagedVersionAsync(new NewResourceVersion(location, "v1"));
@@ -468,7 +467,7 @@ public class S3IntegrationTests(S3Fixture fixture)
         // whose content holds back its first read until the test lets it go.
         string prefix = $"race-{Guid.NewGuid():N}/";
         ObjectStoreRepository repository = await NewRepositoryAsync(prefix);
-        var location = new ResourceLocation("c", "a.txt");
+        var location = new ResourceAddress("c", "a.txt");
         await repository.StartStagedVersionAsync(new NewResourceVersion(location, "v1"));
         if (stored.Length > 0) await repository.AppendStagedContentAsync(location, "v1", 0, new MemoryStream(Encoding.UTF8.GetBytes(stored)));
         var held = new HeldStream(new MemoryStream("first"u8.ToArray()));
@@ -497,7 +496,7 @@ public class S3IntegrationTests(S3Fixture fixture)
         string prefix = $"complete-race-{Guid.NewGuid():N}/";
         var store = new InterferingStore(new S3ObjectStore(fixture.Client, fixture.BucketName)) { HoldFirstJoin = true };
         ObjectStoreRepository repository = await NewRepositoryAsync(prefix, store: store);
-        var location = new ResourceLocation("c", "a.txt");
+        var location = new ResourceAddress("c", "a.txt");
         await repository.StartStagedVersionAsync(new NewResourceVersion(location, "v1"));
         await repository.AppendStagedContentAsync(location, "v1", 0, new MemoryStream("a"u8.ToArray()));
 
@@ -525,7 +524,7 @@ public class S3IntegrationTests(S3Fixture fixture)
         // Arrange: a session with content, whose record is sealed, as a completion that stopped after sealing leaves it.
         string prefix = $"sealed-{Guid.NewGuid():N}/";
         ObjectStoreRepository repository = await NewRepositoryAsync(prefix);
-        var location = new ResourceLocation("c", "a.txt");
+        var location = new ResourceAddress("c", "a.txt");
         await repository.StartStagedVersionAsync(new NewResourceVersion(location, "v1"));
         await repository.AppendStagedContentAsync(location, "v1", 0, new MemoryStream("a"u8.ToArray()));
         string recordKey = (await fixture.Client.ListObjectsV2Async(new ListObjectsV2Request
@@ -561,7 +560,7 @@ public class S3IntegrationTests(S3Fixture fixture)
         // Arrange: a name with a current version, and a session for it.
         string prefix = $"unseal-{Guid.NewGuid():N}/";
         ObjectStoreRepository repository = await NewRepositoryAsync(prefix);
-        var location = new ResourceLocation("c", "a.txt");
+        var location = new ResourceAddress("c", "a.txt");
         await repository.AddResourceAsync(new NewResourceVersion(location, "v0"), new MemoryStream("old"u8.ToArray()));
         await repository.StartStagedVersionAsync(new NewResourceVersion(location, "v1"));
         await repository.AppendStagedContentAsync(location, "v1", 0, new MemoryStream("a"u8.ToArray()));
@@ -588,9 +587,9 @@ public class S3IntegrationTests(S3Fixture fixture)
         var clock = new MovableClock();
         ObjectStoreRepository repository = await NewRepositoryAsync(prefix, clock);
         await repository.AddContainerAsync("d", new Dictionary<string, string>());
-        var gone = new ResourceLocation("c", "a.txt");
-        var live = new ResourceLocation("d", "a.txt");
-        foreach (ResourceLocation location in new[] { gone, live })
+        var gone = new ResourceAddress("c", "a.txt");
+        var live = new ResourceAddress("d", "a.txt");
+        foreach (ResourceAddress location in new[] { gone, live })
         {
             await repository.StartStagedVersionAsync(new NewResourceVersion(location, "v1"));
             await repository.AppendStagedContentAsync(location, "v1", 0, new MemoryStream("a"u8.ToArray()));
@@ -624,7 +623,7 @@ public class S3IntegrationTests(S3Fixture fixture)
         string prefix = $"session-limit-{Guid.NewGuid():N}/";
         var store = new InterferingStore(new S3ObjectStore(fixture.Client, fixture.BucketName)) { MaxObject = 3 * ObjectParts.PartSize };
         ObjectStoreRepository repository = await NewRepositoryAsync(prefix, segmentSize: 9 * 1024 * 1024, store: store);
-        var location = new ResourceLocation("c", "big.bin");
+        var location = new ResourceAddress("c", "big.bin");
         await repository.StartStagedVersionAsync(new NewResourceVersion(location, "v1"));
 
         // Act
@@ -671,8 +670,8 @@ public class S3IntegrationTests(S3Fixture fixture)
         await repository.AddContainerAsync("d", new Dictionary<string, string>());
         byte[] payload = new byte[17 * 1024 * 1024];
         new Random(154).NextBytes(payload);
-        var from = new ResourceLocation("c", "big.bin");
-        var to = new ResourceLocation("d", "big.bin");
+        var from = new ResourceAddress("c", "big.bin");
+        var to = new ResourceAddress("d", "big.bin");
         await repository.AddResourceAsync(new NewResourceVersion(from, "v1"), new MemoryStream(payload));
 
         // Act
@@ -696,8 +695,8 @@ public class S3IntegrationTests(S3Fixture fixture)
         var store = new InterferingStore(new S3ObjectStore(fixture.Client, fixture.BucketName));
         ObjectStoreRepository repository = await NewRepositoryAsync(prefix, clock, store: store);
         await repository.AddContainerAsync("d", new Dictionary<string, string>());
-        var from = new ResourceLocation("c", "a.txt");
-        var to = new ResourceLocation("d", "b.txt");
+        var from = new ResourceAddress("c", "a.txt");
+        var to = new ResourceAddress("d", "b.txt");
         await repository.AddResourceAsync(new NewResourceVersion(from, "v1"), new MemoryStream("first"u8.ToArray()));
         await repository.AddResourceAsync(new NewResourceVersion(from, "v2"), new MemoryStream("second"u8.ToArray()));
         bool committing = false;
@@ -751,8 +750,8 @@ public class S3IntegrationTests(S3Fixture fixture)
         var store = new InterferingStore(new S3ObjectStore(fixture.Client, fixture.BucketName));
         ObjectStoreRepository repository = await NewRepositoryAsync(prefix, clock, store: store);
         await repository.AddContainerAsync("d", new Dictionary<string, string>());
-        var from = new ResourceLocation("c", "a.txt");
-        var to = new ResourceLocation("d", "b.txt");
+        var from = new ResourceAddress("c", "a.txt");
+        var to = new ResourceAddress("d", "b.txt");
         await repository.AddResourceAsync(new NewResourceVersion(from, "v1"), new MemoryStream("first"u8.ToArray()));
         bool stopped = false;
         store.FailWrites = _ => stopped;
@@ -794,8 +793,8 @@ public class S3IntegrationTests(S3Fixture fixture)
         var store = new InterferingStore(new S3ObjectStore(fixture.Client, fixture.BucketName));
         ObjectStoreRepository repository = await NewRepositoryAsync(prefix, clock, store: store);
         await repository.AddContainerAsync("d", new Dictionary<string, string>());
-        var from = new ResourceLocation("c", "a.txt");
-        var to = new ResourceLocation("d", "a.txt");
+        var from = new ResourceAddress("c", "a.txt");
+        var to = new ResourceAddress("d", "a.txt");
         await repository.AddResourceAsync(new NewResourceVersion(from, "v1"), new MemoryStream("moved"u8.ToArray()));
         bool swept = false;
         store.BeforeJoin = async () =>
@@ -830,8 +829,8 @@ public class S3IntegrationTests(S3Fixture fixture)
         var clock = new MovableClock();
         var store = new InterferingStore(new S3ObjectStore(fixture.Client, fixture.BucketName));
         ObjectStoreRepository repository = await NewRepositoryAsync(prefix, clock, store: store);
-        var from = new ResourceLocation("c", "a.txt");
-        var to = new ResourceLocation("c", "b.txt");
+        var from = new ResourceAddress("c", "a.txt");
+        var to = new ResourceAddress("c", "b.txt");
         await repository.AddResourceAsync(new NewResourceVersion(from, "v1"), new MemoryStream("first"u8.ToArray()));
         bool stalled = false;
         store.BeforePut = async (key, body) =>
@@ -867,8 +866,8 @@ public class S3IntegrationTests(S3Fixture fixture)
         var clock = new MovableClock();
         var store = new InterferingStore(new S3ObjectStore(fixture.Client, fixture.BucketName));
         ObjectStoreRepository repository = await NewRepositoryAsync(prefix, clock, store: store);
-        var from = new ResourceLocation("c", "a.txt");
-        var to = new ResourceLocation("c", "b.txt");
+        var from = new ResourceAddress("c", "a.txt");
+        var to = new ResourceAddress("c", "b.txt");
         await repository.AddResourceAsync(new NewResourceVersion(from, "v1"), new MemoryStream("first"u8.ToArray()));
         bool stalled = false;
         store.BeforePut = async (key, body) =>
@@ -909,8 +908,8 @@ public class S3IntegrationTests(S3Fixture fixture)
         var store = new InterferingStore(new S3ObjectStore(fixture.Client, fixture.BucketName));
         ObjectStoreRepository repository = await NewRepositoryAsync(prefix, time, store: store);
         await repository.AddContainerAsync("d", new Dictionary<string, string>());
-        var from = new ResourceLocation("c", "a.txt");
-        var to = new ResourceLocation("d", "a.txt");
+        var from = new ResourceAddress("c", "a.txt");
+        var to = new ResourceAddress("d", "a.txt");
         await repository.AddResourceAsync(new NewResourceVersion(from, "v1"), new MemoryStream("moved"u8.ToArray()));
         var refreshed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         bool copying = false;
@@ -944,8 +943,8 @@ public class S3IntegrationTests(S3Fixture fixture)
         string prefix = $"move-source-race-{Guid.NewGuid():N}/";
         var store = new InterferingStore(new S3ObjectStore(fixture.Client, fixture.BucketName));
         ObjectStoreRepository repository = await NewRepositoryAsync(prefix, store: store);
-        var from = new ResourceLocation("c", "a.txt");
-        var to = new ResourceLocation("c", "b.txt");
+        var from = new ResourceAddress("c", "a.txt");
+        var to = new ResourceAddress("c", "b.txt");
         await repository.AddResourceAsync(new NewResourceVersion(from, "v1"), new MemoryStream("first"u8.ToArray()));
         bool raced = false;
         store.BeforePut = async (key, body) =>
@@ -982,7 +981,7 @@ public class S3IntegrationTests(S3Fixture fixture)
             .BuildServiceProvider();
         // Resolving a client gives the repository the searchable keys.
         services.GetRequiredService<IResourceServiceClient>();
-        var name = new ResourceLocation("c", "a.txt");
+        var name = new ResourceAddress("c", "a.txt");
         NewResourceVersion Version(string id, string customer) =>
             new(name, id) { Metadata = new Dictionary<string, string> { ["customer"] = customer } };
         await repository.AddResourceAsync(Version("v1", "42"), new MemoryStream("1"u8.ToArray()));
@@ -1013,8 +1012,8 @@ public class S3IntegrationTests(S3Fixture fixture)
         string prefix = $"move-race-{Guid.NewGuid():N}/";
         var store = new InterferingStore(new S3ObjectStore(fixture.Client, fixture.BucketName));
         ObjectStoreRepository repository = await NewRepositoryAsync(prefix, store: store);
-        var from = new ResourceLocation("c", "a.txt");
-        var to = new ResourceLocation("c", "b.txt");
+        var from = new ResourceAddress("c", "a.txt");
+        var to = new ResourceAddress("c", "b.txt");
         await repository.AddResourceAsync(new NewResourceVersion(from, "v1"), new MemoryStream("moved"u8.ToArray()));
         bool raced = false;
         store.BeforePut = async (key, body) =>
@@ -1047,7 +1046,7 @@ public class S3IntegrationTests(S3Fixture fixture)
         string prefix = $"unnamed-{Guid.NewGuid():N}/";
         var clock = new MovableClock();
         ObjectStoreRepository repository = await NewRepositoryAsync(prefix, clock);
-        var location = new ResourceLocation("c", "a.txt");
+        var location = new ResourceAddress("c", "a.txt");
         await repository.AddResourceAsync(new NewResourceVersion(location, "v1"), new MemoryStream("kept"u8.ToArray()));
         string named = (await fixture.Client.ListObjectsV2Async(new ListObjectsV2Request
         {
@@ -1102,9 +1101,9 @@ public class S3IntegrationTests(S3Fixture fixture)
         string prefix = $"bin-index-{Guid.NewGuid():N}/";
         var clock = new MovableClock();
         ObjectStoreRepository repository = await NewRepositoryAsync(prefix, clock);
-        await repository.AddResourceAsync(new NewResourceVersion(new ResourceLocation("c", "a.txt"), "v1"), new MemoryStream("a"u8.ToArray()));
-        await repository.SoftDeleteResourceAsync(new ResourceLocation("c", "a.txt"), null, null, DateTimeOffset.UtcNow.AddDays(30));
-        await repository.AddResourceAsync(new NewResourceVersion(new ResourceLocation("c", "b.txt"), "v1"), new MemoryStream("b"u8.ToArray()));
+        await repository.AddResourceAsync(new NewResourceVersion(new ResourceAddress("c", "a.txt"), "v1"), new MemoryStream("a"u8.ToArray()));
+        await repository.SoftDeleteResourceAsync(new ResourceAddress("c", "a.txt"), null, null, DateTimeOffset.UtcNow.AddDays(30));
+        await repository.AddResourceAsync(new NewResourceVersion(new ResourceAddress("c", "b.txt"), "v1"), new MemoryStream("b"u8.ToArray()));
         List<string> keys = [.. (await fixture.Client.ListObjectsV2Async(new ListObjectsV2Request
         {
             BucketName = fixture.BucketName, Prefix = prefix + "d/"
@@ -1137,7 +1136,7 @@ public class S3IntegrationTests(S3Fixture fixture)
         string prefix = $"unnamed-young-{Guid.NewGuid():N}/";
         var clock = new MovableClock();
         ObjectStoreRepository repository = await NewRepositoryAsync(prefix, clock);
-        await repository.AddResourceAsync(new NewResourceVersion(new ResourceLocation("c", "a.txt"), "v1"),
+        await repository.AddResourceAsync(new NewResourceVersion(new ResourceAddress("c", "a.txt"), "v1"),
             new MemoryStream("kept"u8.ToArray()));
         string named = (await fixture.Client.ListObjectsV2Async(new ListObjectsV2Request
         {
@@ -1169,7 +1168,7 @@ public class S3IntegrationTests(S3Fixture fixture)
         ObjectStoreRepository repository = await NewRepositoryAsync(prefix, store: store);
         foreach ((string name, string versionId) in new[] { ("a.txt", "v1"), ("b.txt", "v2") })
         {
-            var location = new ResourceLocation("c", name);
+            var location = new ResourceAddress("c", name);
             await repository.StartStagedVersionAsync(new NewResourceVersion(location, versionId));
             await repository.AppendStagedContentAsync(location, versionId, 0, new MemoryStream("a"u8.ToArray()));
         }

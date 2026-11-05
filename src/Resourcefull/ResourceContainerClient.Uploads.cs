@@ -17,7 +17,7 @@ internal partial class ResourceContainerClient
     {
         ResourceNames.ThrowIfInvalidNewResourceName(resourceName);
         options ??= new ResourceUploadSessionOptions();
-        resourceRepository.ThrowIfUnsearchable(options.Metadata.AsReadOnly(), nameof(options));
+        StoreOptions.ThrowIfUnsearchable(options.Metadata.AsReadOnly(), nameof(options));
         NewVersionCheck check = policies is null ? default : await policies.CheckNewVersionAsync(ContainerName, resourceName,
             restore: false, options.Headers?.ContentType, options.Headers?.ContentLength, _telemetry, cancellationToken).ConfigureAwait(false);
 
@@ -102,7 +102,7 @@ internal partial class ResourceContainerClient
     }
 
     private ResourceUpload Describe(StagedVersion staged) =>
-        new(ContainerName, staged.Version.Location.ResourceName, staged.Version.VersionId, staged.StoredLength,
+        new(ContainerName, staged.Version.Resource.ResourceName, staged.Version.VersionId, staged.StoredLength,
             staged.Version.DeclaredLength);
 
     public Task<ResourceInfo?> CompleteUploadAsync(string resourceName, string uploadId,
@@ -120,7 +120,7 @@ internal partial class ResourceContainerClient
         ThrowIfInvalidUpload(resourceName, uploadId);
         conditions = conditions is { IsEmpty: false } ? conditions : null;
         bool createOnly = IsCreate(mode, conditions, "conditions", nameof(mode));
-        ResourceLocation location = At(resourceName);
+        ResourceAddress location = At(resourceName);
 
         if (await resourceRepository.GetStagedVersionAsync(location, uploadId, cancellationToken).ConfigureAwait(false) is not { } staged)
             return null;

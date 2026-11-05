@@ -68,7 +68,7 @@ internal sealed class ContainerPolicies(ContainerPolicySettings settings, Resour
             ? knownUsage ?? await repository.GetContainerUsageAsync(containerName, cancellationToken).ConfigureAwait(false)
             : null;
         if (!restore && policy.MaxResourceCount is { } maxCount && usage!.ResourceCount >= maxCount
-            && await repository.GetResourceInfoAsync(new ResourceLocation(containerName, resourceName), null, cancellationToken).ConfigureAwait(false) is null)
+            && await repository.GetResourceInfoAsync(new ResourceAddress(containerName, resourceName), null, cancellationToken).ConfigureAwait(false) is null)
         {
             throw CountExceeded(containerName, usage, maxCount);
         }
@@ -169,7 +169,7 @@ internal sealed class ContainerPolicies(ContainerPolicySettings settings, Resour
             ? await repository.GetContainerUsageAsync(containerName, cancellationToken).ConfigureAwait(false)
             : null;
         if (policy.MaxResourceCount is { } maxCount && usage!.ResourceCount >= maxCount
-            && await repository.GetResourceInfoAsync(new ResourceLocation(containerName, resourceName), null, cancellationToken).ConfigureAwait(false) is null)
+            && await repository.GetResourceInfoAsync(new ResourceAddress(containerName, resourceName), null, cancellationToken).ConfigureAwait(false) is null)
         {
             throw CountExceeded(containerName, usage, maxCount);
         }

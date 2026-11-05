@@ -90,10 +90,11 @@
   (`ResourceContentLengthMismatchException` otherwise), and the `Resourcefull_AddDeclaredLength` migration adds the
   nullable column that keeps it. Each call records a span, and appends count bytes in `resourcefull.client.appended`.
   See [Uploading in parts](docs/uploading-in-parts.md).
-- **A conditions check for providers.** `ResourceConditions.ThrowIfNotMet(resource, currentVersionId,
-  currentContentHash)` makes the check every provider must make when a write has conditions: given the current version
-  the write read, it throws `ResourcePreconditionFailedException` if they aren't met. A provider can call it instead of
-  writing its own check, and the built-in providers now do. `ResourceConditions.IsEmpty` is public too. See
+- **A conditions check for providers.** `conditions.ThrowIfNotMet(resource, currentVersionId, currentContentHash)`,
+  an extension method in `Resourcefull.Providers`, makes the check every provider must make when a write has
+  conditions: given the current version the write read, it throws `ResourcePreconditionFailedException` if they aren't
+  met. A provider can call it instead of writing its own check, and the built-in providers now do.
+  `ResourceConditions.IsEmpty` is public too. See
   [Writing a provider](docs/providers/writing-a-provider.md#the-contract).
 - **The contract tests as a package.** `Resourcefull.Testing` holds the tests every provider must pass, as an
   abstract xUnit v3 class (`xunit.v3` 4.0.2 or later): derive from `ResourcefullContractTests`, register your
@@ -348,12 +349,17 @@
   and `ResourceContainers`; `Uri` comes from your URI provider on every read, as it has since 3.0. 3.x applications
   still read and write the columns, so they fail against an upgraded database: stop them before migrating, and roll
   back by restoring a backup. See [Upgrading to 4.0](docs/upgrading-to-4.md#upgrading-the-database).
-- **Providers derive from the `ResourceRepository` base class,** which replaces the `IResourceRepository` interface.
-  Its members take a `ResourceLocation` rather than a container name and a resource name, return `IReadOnlyList<T>`
-  rather than `List<T>`, and take metadata as `IReadOnlyDictionary<string, string>`. A write is given a
-  `NewResourceVersion` rather than a `ResourceInfo`; it holds only what the write's caller can know. `AddResourceAsync`
-  and `DeleteResourceAsync` each have one overload, taking an optional condition, so every provider decides
-  conditional writes itself. Providers no longer store `Uri`. See [Upgrading to 4.0](docs/upgrading-to-4.md#custom-providers).
+- **Providers derive from the `ResourceRepository` base class,** which replaces the `IResourceRepository` interface. Its
+  members take a `ResourceAddress` rather than a container name and a resource name, return `IReadOnlyList<T>` rather
+  than `List<T>`, and take metadata as `IReadOnlyDictionary<string, string>`. A write is given a `NewResourceVersion`
+  rather than a `ResourceInfo`; it holds only what the write's caller can know. `AddResourceAsync` and
+  `DeleteResourceAsync` each have one overload, taking an optional condition, so every provider decides conditional
+  writes itself. Providers no longer store `Uri`. `GetResourcePageAsync` is required, and `GetAllResourceInfoAsync`,
+  which read a whole container, is gone. A provider that indexes metadata for search gets the keys through the base
+  class's constructor, and a provider that wraps another passes `FindResourcePageAsync` and `IndexMetadataAsync` on, so
+  the wrapped provider's index answers searches. The helpers for providers, `ThrowIfNotMet` and
+  `ResourceRetainedException.Create`, are extension members in `Resourcefull.Providers`. See [Upgrading to
+  4.0](docs/upgrading-to-4.md#custom-providers).
 - **`ResourceInfo` can't be changed:** it's a sealed record with `init`-only properties, and its `Metadata` is an
   `IReadOnlyDictionary<string, string>`. Change a stored version with `SetResourceMetadataAsync` or
   `SetContentTypeAsync`, or make a changed copy with `with`. See [Upgrading to 4.0](docs/upgrading-to-4.md).

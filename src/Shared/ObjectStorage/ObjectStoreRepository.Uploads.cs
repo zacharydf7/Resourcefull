@@ -36,7 +36,7 @@ internal sealed partial class ObjectStoreRepository
 
     public override async Task StartStagedVersionAsync(NewResourceVersion version, CancellationToken cancellationToken = default)
     {
-        ResourceLocation location = version.Location;
+        ResourceAddress location = version.Resource;
         ContainerRecord container = await GetContainerAsync(location.ContainerName, cancellationToken).ConfigureAwait(false)
             ?? throw ContainerMissing(location.ContainerName);
         var record = new UploadRecord(location.ContainerName, location.ResourceName, version.ContentType, version.DeclaredLength,
@@ -54,7 +54,7 @@ internal sealed partial class ObjectStoreRepository
         }
     }
 
-    public override async Task<StagedVersion?> GetStagedVersionAsync(ResourceLocation resource, string versionId,
+    public override async Task<StagedVersion?> GetStagedVersionAsync(ResourceAddress resource, string versionId,
         CancellationToken cancellationToken = default) =>
         (await GetUploadAsync(resource, versionId, cancellationToken).ConfigureAwait(false)).Record is { } record
             ? new StagedVersion(new NewResourceVersion(resource, versionId)
@@ -74,7 +74,7 @@ internal sealed partial class ObjectStoreRepository
     /// segments take as many parts as the store joins, those since the last such join are joined into one in the store,
     /// so the session holds as much as one upload can.
     /// </summary>
-    public override async Task<long?> AppendStagedContentAsync(ResourceLocation resource, string versionId, long offset, Stream content,
+    public override async Task<long?> AppendStagedContentAsync(ResourceAddress resource, string versionId, long offset, Stream content,
         CancellationToken cancellationToken = default)
     {
         (string? containerId, UploadRecord? record) = await GetUploadAsync(resource, versionId, cancellationToken).ConfigureAwait(false);
@@ -173,7 +173,7 @@ internal sealed partial class ObjectStoreRepository
     /// <paramref name="length"/>. It isn't canceled, since the segment is already stored.
     /// </summary>
     /// <returns>The changed record, or <see langword="null"/> when the session is gone.</returns>
-    private async Task<UploadRecord?> AddSegmentAsync(ResourceLocation resource, string containerId, string versionId, long length,
+    private async Task<UploadRecord?> AddSegmentAsync(ResourceAddress resource, string containerId, string versionId, long length,
         IReadOnlyList<Segment> replacing, Segment segment)
     {
         string key = _keys.UploadRecord(containerId, versionId);
@@ -195,7 +195,7 @@ internal sealed partial class ObjectStoreRepository
         }
     }
 
-    private static void ThrowUnlessAppendable(ResourceLocation resource, string versionId, UploadRecord record, long offset)
+    private static void ThrowUnlessAppendable(ResourceAddress resource, string versionId, UploadRecord record, long offset)
     {
         if (record.Seal is null && record.Length == offset) return;
         string upload = $"The upload {versionId} of the resource {resource.ResourceName} in the container {resource.ContainerName}";
@@ -216,7 +216,7 @@ internal sealed partial class ObjectStoreRepository
     /// </summary>
     /// <returns>The changed record, or <see langword="null"/> when the session is gone.</returns>
     /// <exception cref="ResourceUploadLimitException">The joined segments would still take as many parts as the store joins.</exception>
-    private async Task<UploadRecord?> JoinSegmentsAsync(ResourceLocation resource, string containerId, string versionId, long length,
+    private async Task<UploadRecord?> JoinSegmentsAsync(ResourceAddress resource, string containerId, string versionId, long length,
         UploadRecord record, CancellationToken cancellationToken)
     {
         Segment[] joining = [.. record.Segments.AsEnumerable().Reverse().TakeWhile(s => PartCount([s]) == 1).Reverse()];
@@ -258,14 +258,14 @@ internal sealed partial class ObjectStoreRepository
     /// <summary>How many parts joining <paramref name="segments"/> takes.</summary>
     private int PartCount(IEnumerable<Segment> segments) => segments.Sum(s => PartsOf("", s.Length).Count());
 
-    private static ResourceUploadLimitException SessionFull(ResourceLocation resource, string versionId, long length) =>
+    private static ResourceUploadLimitException SessionFull(ResourceAddress resource, string versionId, long length) =>
         new($"The upload {versionId} of the resource {resource.ResourceName} in the container {resource.ContainerName} holds " +
             $"{length} bytes, as much as the provider can store in one object.")
         {
             ContainerName = resource.ContainerName, ResourceName = resource.ResourceName
         };
 
-    public override async Task<Stream?> GetStagedStreamAsync(ResourceLocation resource, string versionId,
+    public override async Task<Stream?> GetStagedStreamAsync(ResourceAddress resource, string versionId,
         CancellationToken cancellationToken = default)
     {
         (string? containerId, UploadRecord? record) = await GetUploadAsync(resource, versionId, cancellationToken).ConfigureAwait(false);
@@ -279,7 +279,7 @@ internal sealed partial class ObjectStoreRepository
         });
     }
 
-    private async Task<ResourceUploadOffsetException> ChangedWhileReadAsync(ResourceLocation resource, string versionId)
+    private async Task<ResourceUploadOffsetException> ChangedWhileReadAsync(ResourceAddress resource, string versionId)
     {
         long stored = (await GetUploadAsync(resource, versionId, CancellationToken.None).ConfigureAwait(false)).Record?.Length ?? 0;
         return new ResourceUploadOffsetException($"The upload {versionId} of the resource {resource.ResourceName} in the container " +
@@ -295,7 +295,7 @@ internal sealed partial class ObjectStoreRepository
     /// it was. Another completion of the same session may run meanwhile, as when a client retries one that timed out:
     /// whichever adds the version first wins, and the other returns what the winner added.
     /// </summary>
-    public override async Task<WrittenContent?> CompleteStagedVersionAsync(ResourceLocation resource, string versionId, long contentLength,
+    public override async Task<WrittenContent?> CompleteStagedVersionAsync(ResourceAddress resource, string versionId, long contentLength,
         string contentHash, ResourceWriteCondition? condition = null, CancellationToken cancellationToken = default)
     {
         condition ??= new ResourceWriteCondition();
@@ -413,7 +413,7 @@ internal sealed partial class ObjectStoreRepository
     /// The sealed record and the seal this call wrote, which is <see langword="null"/> when another completion had already
     /// sealed it; or <see langword="null"/> when there's no such session.
     /// </returns>
-    private async Task<(UploadRecord Record, string? Seal)?> SealAsync(ResourceLocation resource, string versionId, string key, long length,
+    private async Task<(UploadRecord Record, string? Seal)?> SealAsync(ResourceAddress resource, string versionId, string key, long length,
         CancellationToken cancellationToken)
     {
         for (int attempt = 1; ; attempt++)
@@ -460,7 +460,7 @@ internal sealed partial class ObjectStoreRepository
     }
 
     /// <summary>Deletes the session's record, so the session is gone, then its segments.</summary>
-    public override async Task<bool> DeleteStagedVersionAsync(ResourceLocation resource, string versionId,
+    public override async Task<bool> DeleteStagedVersionAsync(ResourceAddress resource, string versionId,
         CancellationToken cancellationToken = default)
     {
         (string? containerId, UploadRecord? record) = await GetUploadAsync(resource, versionId, cancellationToken).ConfigureAwait(false);
@@ -578,7 +578,7 @@ internal sealed partial class ObjectStoreRepository
     /// A session's container ID and record, or a <see langword="null"/> record when the container has no session with
     /// that ID for the name.
     /// </summary>
-    private async Task<(string? ContainerId, UploadRecord? Record)> GetUploadAsync(ResourceLocation resource, string versionId,
+    private async Task<(string? ContainerId, UploadRecord? Record)> GetUploadAsync(ResourceAddress resource, string versionId,
         CancellationToken cancellationToken)
     {
         if (await GetContainerAsync(resource.ContainerName, cancellationToken).ConfigureAwait(false) is not { } container)

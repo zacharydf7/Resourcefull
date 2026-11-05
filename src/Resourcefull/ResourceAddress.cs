@@ -6,4 +6,4 @@ namespace Resourcefull.Providers;
 /// </summary>
 /// <param name="ContainerName">The container's name.</param>
 /// <param name="ResourceName">The resource's name.</param>
-public readonly record struct ResourceLocation(string ContainerName, string ResourceName);
+public readonly record struct ResourceAddress(string ContainerName, string ResourceName);

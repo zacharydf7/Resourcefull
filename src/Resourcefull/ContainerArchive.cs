@@ -135,7 +135,7 @@ internal static class ContainerArchive
                         if (!written.TryGetValue(entryName, out WrittenContent? content))
                         {
                             Stream? source = await repository.GetResourceStreamAsync(
-                                new ResourceLocation(container.Name, name.Key), version.VersionId, cancellationToken).ConfigureAwait(false);
+                                new ResourceAddress(container.Name, name.Key), version.VersionId, cancellationToken).ConfigureAwait(false);
                             // Deleted while the container was exported.
                             if (source is null) continue;
                             await using var sourceDisposal = source.ConfigureAwait(false);
@@ -195,12 +195,12 @@ internal static class ContainerArchive
     /// Throws before anything is stored if the export holds what the provider can't keep: a retained or held version
     /// without retention, or a value it can't index for search.
     /// </summary>
-    public static void ThrowIfUnimportable(Manifest manifest, ResourceRepository repository)
+    public static void ThrowIfUnimportable(Manifest manifest, ResourceRepository repository, ResourcefullOptions options)
     {
         if (!repository.SupportsRetention && manifest.Resources.SelectMany(r => r.Versions).Any(v => v.RetainUntil is not null || v.LegalHold))
             throw new NotSupportedException($"{repository.GetType().Name} doesn't support retention, which the export's versions have.");
         foreach (ManifestVersion version in manifest.Resources.SelectMany(r => r.Versions))
-            repository.ThrowIfUnsearchable(version.Metadata, "source");
+            options.ThrowIfUnsearchable(version.Metadata, "source");
     }
 
     /// <summary>Every version an export describes, in its order, each opening its content from the zip.</summary>
@@ -242,8 +242,8 @@ internal static class ContainerArchive
     /// messages name what the versions come from as <paramref name="source"/>, such as "the export".
     /// </summary>
     public static async Task<ResourceImportResult> ImportAsync(IAsyncEnumerable<ImportedVersion> versions, string containerName,
-        bool newContainer, string source, ResourceRepository repository, ContainerPolicies? policies, ClientTelemetry telemetry,
-        IResourceUploadInspector? inspector, CancellationToken cancellationToken)
+        bool newContainer, string source, ResourceRepository repository, ResourcefullOptions options, ContainerPolicies? policies,
+        ClientTelemetry telemetry, IResourceUploadInspector? inspector, CancellationToken cancellationToken)
     {
         // In a new container, retention and holds go on once every version is stored, so an import that fails can still
         // delete what it stored. In one that exists, the versions stored before a failure stay, so each version gets them
@@ -259,13 +259,13 @@ internal static class ContainerArchive
             bool protects = version.RetainUntil is not null || version.LegalHold;
             if (protects && !repository.SupportsRetention)
                 throw new NotSupportedException($"{repository.GetType().Name} doesn't support retention, which {source}'s versions have.");
-            repository.ThrowIfUnsearchable(version.Metadata, "source");
+            options.ThrowIfUnsearchable(version.Metadata, "source");
 
             Stream? opened = await imported.OpenContentAsync(cancellationToken).ConfigureAwait(false);
             // Gone from the source since it was listed.
             if (opened is null) continue;
             await using var openedDisposal = opened.ConfigureAwait(false);
-            var info = new NewResourceVersion(new ResourceLocation(containerName, version.Name), version.VersionId)
+            var info = new NewResourceVersion(new ResourceAddress(containerName, version.Name), version.VersionId)
             {
                 LastModified = version.LastModified,
                 ContentType = version.ContentType,
@@ -305,7 +305,7 @@ internal static class ContainerArchive
                     // A refused version, or one whose content doesn't match its hash, fails the import. A new container
                     // is then deleted with everything in it; in one that exists, only this version is deleted, as a
                     // refused upload's is.
-                    await repository.DeleteResourceAsync(info.Location, info.VersionId, null, CancellationToken.None).ConfigureAwait(false);
+                    await repository.DeleteResourceAsync(info.Resource, info.VersionId, null, CancellationToken.None).ConfigureAwait(false);
                     throw;
                 }
             }
@@ -320,17 +320,17 @@ internal static class ContainerArchive
             contentSize += stored.ContentLength;
             if (!protects) continue;
             if (newContainer) protectedVersions.Add((version.Name, version));
-            else await ProtectAsync(repository, info.Location, version, cancellationToken).ConfigureAwait(false);
+            else await ProtectAsync(repository, info.Resource, version, cancellationToken).ConfigureAwait(false);
         }
 
         foreach ((string name, ResourceInfo version) in protectedVersions)
-            await ProtectAsync(repository, new ResourceLocation(containerName, name), version, cancellationToken).ConfigureAwait(false);
+            await ProtectAsync(repository, new ResourceAddress(containerName, name), version, cancellationToken).ConfigureAwait(false);
 
         return new ResourceImportResult(names.Count, versionCount, contentSize);
     }
 
     /// <summary>Gives an imported version the retention date and hold it had.</summary>
-    private static async Task ProtectAsync(ResourceRepository repository, ResourceLocation location, ResourceInfo version,
+    private static async Task ProtectAsync(ResourceRepository repository, ResourceAddress location, ResourceInfo version,
         CancellationToken cancellationToken)
     {
         if (version.RetainUntil is { } retainUntil)

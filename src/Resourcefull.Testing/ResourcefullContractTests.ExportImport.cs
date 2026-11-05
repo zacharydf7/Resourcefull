@@ -257,7 +257,7 @@ public abstract partial class ResourcefullContractTests
         using ServiceProvider provider = BuildServiceProvider();
         IResourceContainerClient container = await NewContainerAsync(provider);
         ResourceRepository repository = provider.GetRequiredService<ResourceRepository>();
-        var version = new NewResourceVersion(new ResourceLocation(container.Name, "a"), "imported")
+        var version = new NewResourceVersion(new ResourceAddress(container.Name, "a"), "imported")
         {
             LastModified = Past
         };

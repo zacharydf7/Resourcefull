@@ -14,9 +14,9 @@ public class ResourceRangeTests
     private static Mock<ResourceRepository> ProviderWithoutRanges()
     {
         var repository = new Mock<ResourceRepository> { CallBase = true };
-        repository.Setup(r => r.GetResourceInfoAsync(new ResourceLocation(Container, "r"), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+        repository.Setup(r => r.GetResourceInfoAsync(new ResourceAddress(Container, "r"), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ResourceInfo { ContainerName = Container, Name = "r", VersionId = "v1" });
-        repository.Setup(r => r.GetResourceStreamAsync(new ResourceLocation(Container, "r"), "v1", It.IsAny<CancellationToken>()))
+        repository.Setup(r => r.GetResourceStreamAsync(new ResourceAddress(Container, "r"), "v1", It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => new MemoryStream(Payload, writable: false));
         return repository;
     }
@@ -31,7 +31,7 @@ public class ResourceRangeTests
         ResourceRepository repository = ProviderWithoutRanges().Object;
 
         // Act
-        await using Stream stream = (await repository.GetResourceStreamAsync(new ResourceLocation(Container, "r"), "v1", offset, 10))!;
+        await using Stream stream = (await repository.GetResourceStreamAsync(new ResourceAddress(Container, "r"), "v1", offset, 10))!;
 
         // Assert
         Assert.Equal(offset, stream.Position);
@@ -46,7 +46,7 @@ public class ResourceRangeTests
         ResourceRepository repository = ProviderWithoutRanges().Object;
 
         // Act
-        Stream? stream = await repository.GetResourceStreamAsync(new ResourceLocation(Container, "r"), "missing", 0, 10);
+        Stream? stream = await repository.GetResourceStreamAsync(new ResourceAddress(Container, "r"), "missing", 0, 10);
 
         // Assert
         Assert.Null(stream);

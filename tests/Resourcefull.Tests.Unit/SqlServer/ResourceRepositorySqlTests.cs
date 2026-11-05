@@ -100,14 +100,14 @@ public class ResourceSqlRepositoryTests
     }
 
     private static NewResourceVersion Version(string container, string name, DateTime when) =>
-        new(new ResourceLocation(container, name), when.ToString("yyyy-MM-ddTHH:mm:ss.fffffffZ"));
+        new(new ResourceAddress(container, name), when.ToString("yyyy-MM-ddTHH:mm:ss.fffffffZ"));
 
     [Fact]
     public async Task AddResourceAsync_ShouldAddToRepository_WhenContainerExists()
     {
         // Arrange
         var resourceContainerName = "containerName";
-        var resourceInfo = new NewResourceVersion(new ResourceLocation(resourceContainerName, "newResourceName"), Guid.NewGuid().ToString());
+        var resourceInfo = new NewResourceVersion(new ResourceAddress(resourceContainerName, "newResourceName"), Guid.NewGuid().ToString());
         var resourceContainerInfo = new ResourceContainerModel { Name = resourceContainerName };
         (ResourceDbContext resourceDbContext, var dbContextFactory) = NewDatabase();
         await resourceDbContext.ResourceContainers.AddAsync(resourceContainerInfo);
@@ -126,7 +126,7 @@ public class ResourceSqlRepositoryTests
     {
         // Arrange
         var resourceContainerName = "containerName";
-        var resourceInfo = new NewResourceVersion(new ResourceLocation(resourceContainerName, "newResourceName"), Guid.NewGuid().ToString());
+        var resourceInfo = new NewResourceVersion(new ResourceAddress(resourceContainerName, "newResourceName"), Guid.NewGuid().ToString());
         (ResourceDbContext resourceDbContext, var dbContextFactory) = NewDatabase();
         await resourceDbContext.ResourceContainers.AddAsync(new ResourceContainerModel { Name = resourceContainerName });
         await resourceDbContext.SaveChangesAsync();
@@ -152,7 +152,7 @@ public class ResourceSqlRepositoryTests
 
         // Act
         var resourceRepository = new ResourceSqlRepository(dbContextFactory);
-        await resourceRepository.DeleteResourceAsync(new ResourceLocation(resourceContainerName, resourceName));
+        await resourceRepository.DeleteResourceAsync(new ResourceAddress(resourceContainerName, resourceName));
 
         // Assert
         Assert.Empty(resourceDbContext.Resources);
@@ -170,7 +170,7 @@ public class ResourceSqlRepositoryTests
 
         // Act
         var resourceRepository = new ResourceSqlRepository(dbContextFactory);
-        await resourceRepository.DeleteResourceAsync(new ResourceLocation(resourceContainerName, "nonExistentResource"));
+        await resourceRepository.DeleteResourceAsync(new ResourceAddress(resourceContainerName, "nonExistentResource"));
 
         // Assert
         Assert.NotEmpty(resourceDbContext.Resources);
@@ -189,7 +189,7 @@ public class ResourceSqlRepositoryTests
 
         // Act
         var resourceRepository = new ResourceSqlRepository(dbContextFactory);
-        await resourceRepository.DeleteResourceAsync(new ResourceLocation("nonExistentContainer", resourceName));
+        await resourceRepository.DeleteResourceAsync(new ResourceAddress("nonExistentContainer", resourceName));
 
         // Assert
         Assert.NotEmpty(resourceDbContext.Resources);
@@ -211,10 +211,10 @@ public class ResourceSqlRepositoryTests
         await resourceRepository.AddResourceAsync(newer, new MemoryStream());
 
         // Act - delete the current (latest) version
-        await resourceRepository.DeleteResourceAsync(new ResourceLocation(container, name), newer.VersionId);
+        await resourceRepository.DeleteResourceAsync(new ResourceAddress(container, name), newer.VersionId);
 
         // Assert - the older version is now resolvable as latest
-        var latest = await resourceRepository.GetResourceInfoAsync(new ResourceLocation(container, name));
+        var latest = await resourceRepository.GetResourceInfoAsync(new ResourceAddress(container, name));
         Assert.NotNull(latest);
         Assert.Equal(older.VersionId, latest!.VersionId);
     }
@@ -235,17 +235,17 @@ public class ResourceSqlRepositoryTests
         await resourceRepository.AddResourceAsync(newer, new MemoryStream());
 
         // Act - delete the specific (older, non-latest) version
-        await resourceRepository.DeleteResourceAsync(new ResourceLocation(container, name), older.VersionId);
+        await resourceRepository.DeleteResourceAsync(new ResourceAddress(container, name), older.VersionId);
 
         // Assert - only the newer version remains and is still latest
-        var versions = await resourceRepository.GetResourceVersionsAsync(new ResourceLocation(container, name));
+        var versions = await resourceRepository.GetResourceVersionsAsync(new ResourceAddress(container, name));
         Assert.Single(versions);
         Assert.Equal(newer.VersionId, versions.Single().VersionId);
-        Assert.Equal(newer.VersionId, (await resourceRepository.GetResourceInfoAsync(new ResourceLocation(container, name)))!.VersionId);
+        Assert.Equal(newer.VersionId, (await resourceRepository.GetResourceInfoAsync(new ResourceAddress(container, name)))!.VersionId);
     }
 
     [Fact]
-    public async Task GetAllResourceInfoAsync_ShouldReturnAllResources_WhenContainerHoldsResources()
+    public async Task GetResourcePageAsync_ShouldReturnAllResources_WhenContainerHoldsResources()
     {
         // Arrange
         var resourceContainerName = "containerName";
@@ -256,14 +256,14 @@ public class ResourceSqlRepositoryTests
 
         // Act
         var resourceRepository = new ResourceSqlRepository(dbContextFactory);
-        IEnumerable<ResourceInfo> outputResources = await resourceRepository.GetAllResourceInfoAsync(resourceContainerName);
+        IEnumerable<ResourceInfo> outputResources = await resourceRepository.GetResourcePageAsync(resourceContainerName, null, null, 1000);
 
         // Assert
         Assert.NotEmpty(outputResources);
     }
 
     [Fact]
-    public async Task GetAllResourceInfoAsync_ShouldReturnEmpty_WhenContainerDoesNotExist()
+    public async Task GetResourcePageAsync_ShouldReturnEmpty_WhenContainerDoesNotExist()
     {
         // Arrange
         var resourceContainerName = "containerName";
@@ -274,7 +274,7 @@ public class ResourceSqlRepositoryTests
 
         // Act
         var resourceRepository = new ResourceSqlRepository(dbContextFactory);
-        IEnumerable<ResourceInfo> outputResources = await resourceRepository.GetAllResourceInfoAsync("nonExistentContainer");
+        IEnumerable<ResourceInfo> outputResources = await resourceRepository.GetResourcePageAsync("nonExistentContainer", null, null, 1000);
 
         // Assert
         Assert.Empty(outputResources);
@@ -293,7 +293,7 @@ public class ResourceSqlRepositoryTests
 
         // Act
         var resourceRepository = new ResourceSqlRepository(dbContextFactory);
-        ResourceInfo? outputResource = await resourceRepository.GetResourceInfoAsync(new ResourceLocation(resourceContainerName, existingResourceName));
+        ResourceInfo? outputResource = await resourceRepository.GetResourceInfoAsync(new ResourceAddress(resourceContainerName, existingResourceName));
 
         // Assert
         Assert.Equal(existingResource.ContainerName, outputResource?.ContainerName);
@@ -312,7 +312,7 @@ public class ResourceSqlRepositoryTests
 
         // Act
         var resourceRepository = new ResourceSqlRepository(dbContextFactory);
-        ResourceInfo? outputResource = await resourceRepository.GetResourceInfoAsync(new ResourceLocation(resourceContainerName, "nonExistentResource"));
+        ResourceInfo? outputResource = await resourceRepository.GetResourceInfoAsync(new ResourceAddress(resourceContainerName, "nonExistentResource"));
 
         // Assert
         Assert.Null(outputResource);
@@ -330,7 +330,7 @@ public class ResourceSqlRepositoryTests
 
         // Act
         var resourceRepository = new ResourceSqlRepository(dbContextFactory);
-        ResourceInfo? outputResource = await resourceRepository.GetResourceInfoAsync(new ResourceLocation("nonExistentContainer", existingResourceName));
+        ResourceInfo? outputResource = await resourceRepository.GetResourceInfoAsync(new ResourceAddress("nonExistentContainer", existingResourceName));
 
         // Assert
         Assert.Null(outputResource);
@@ -352,7 +352,7 @@ public class ResourceSqlRepositoryTests
         await resourceRepository.AddResourceAsync(newer, new MemoryStream());
 
         // Act
-        ResourceInfo? result = await resourceRepository.GetResourceInfoAsync(new ResourceLocation(container, name), older.VersionId);
+        ResourceInfo? result = await resourceRepository.GetResourceInfoAsync(new ResourceAddress(container, name), older.VersionId);
 
         // Assert
         Assert.Equal(older.VersionId, result!.VersionId);
@@ -372,7 +372,7 @@ public class ResourceSqlRepositoryTests
 
         // Act
         var resourceRepository = new ResourceSqlRepository(dbContextFactory);
-        Stream? outputStream = await resourceRepository.GetResourceStreamAsync(new ResourceLocation(existingContainerName, "nonExistentResource"));
+        Stream? outputStream = await resourceRepository.GetResourceStreamAsync(new ResourceAddress(existingContainerName, "nonExistentResource"));
 
         // Assert
         Assert.Null(outputStream);
@@ -393,7 +393,7 @@ public class ResourceSqlRepositoryTests
 
         // Act
         var resourceRepository = new ResourceSqlRepository(dbContextFactory);
-        Stream? outputStream = await resourceRepository.GetResourceStreamAsync(new ResourceLocation("nonExistentContainer", existingResourceName));
+        Stream? outputStream = await resourceRepository.GetResourceStreamAsync(new ResourceAddress("nonExistentContainer", existingResourceName));
 
         // Assert
         Assert.Null(outputStream);
@@ -566,7 +566,7 @@ public class ResourceSqlRepositoryTests
     }
 
     [Fact]
-    public async Task GetAllResourceInfoAsync_ShouldOnlyReturnMostRecentVersion_WhenThereAreMultipleVersions()
+    public async Task GetResourcePageAsync_ShouldOnlyReturnMostRecentVersion_WhenThereAreMultipleVersions()
     {
         // Arrange
         var date1 = DateTime.UtcNow;
@@ -583,7 +583,7 @@ public class ResourceSqlRepositoryTests
         await resourceRepository.AddResourceAsync(resourceInfo2, new MemoryStream());
 
         // Act
-        var resources = await resourceRepository.GetAllResourceInfoAsync(resourceContainerName);
+        var resources = await resourceRepository.GetResourcePageAsync(resourceContainerName, null, null, 1000);
 
         // Assert
         Assert.Single(resources);
@@ -611,7 +611,7 @@ public class ResourceSqlRepositoryTests
         await resourceRepository.AddResourceAsync(resourceInfo2, new MemoryStream());
 
         // Act
-        var resource = await resourceRepository.GetResourceInfoAsync(new ResourceLocation(resourceContainerName, "newResourceName"));
+        var resource = await resourceRepository.GetResourceInfoAsync(new ResourceAddress(resourceContainerName, "newResourceName"));
 
         // Assert
         Assert.Equal(date2, resource!.LastModified);
@@ -636,7 +636,7 @@ public class ResourceSqlRepositoryTests
         await resourceRepository.AddResourceAsync(resourceInfo2, new MemoryStream());
 
         // Act
-        var resources = await resourceRepository.GetResourceVersionsAsync(new ResourceLocation(resourceContainerName, "newResourceName"));
+        var resources = await resourceRepository.GetResourceVersionsAsync(new ResourceAddress(resourceContainerName, "newResourceName"));
 
         // Assert
         Assert.Equal(2, resources.Count());
@@ -658,10 +658,10 @@ public class ResourceSqlRepositoryTests
         await resourceRepository.DeleteContainerAsync(containerName);
 
         // Assert
-        Assert.Null(await resourceRepository.GetResourceInfoAsync(new ResourceLocation(containerName, resourceName)));
-        Assert.Null(await resourceRepository.GetResourceStreamAsync(new ResourceLocation(containerName, resourceName)));
-        Assert.Empty(await resourceRepository.GetAllResourceInfoAsync(containerName));
-        Assert.Empty(await resourceRepository.GetResourceVersionsAsync(new ResourceLocation(containerName, resourceName)));
+        Assert.Null(await resourceRepository.GetResourceInfoAsync(new ResourceAddress(containerName, resourceName)));
+        Assert.Null(await resourceRepository.GetResourceStreamAsync(new ResourceAddress(containerName, resourceName)));
+        Assert.Empty(await resourceRepository.GetResourcePageAsync(containerName, null, null, 1000));
+        Assert.Empty(await resourceRepository.GetResourceVersionsAsync(new ResourceAddress(containerName, resourceName)));
     }
 
     [Fact]
@@ -682,7 +682,7 @@ public class ResourceSqlRepositoryTests
         metadata["extra"] = "added";
 
         // Assert
-        ResourceInfo? stored = await resourceRepository.GetResourceInfoAsync(new ResourceLocation(containerName, resourceName));
+        ResourceInfo? stored = await resourceRepository.GetResourceInfoAsync(new ResourceAddress(containerName, resourceName));
         Assert.Equal("original", stored!.Metadata["key"]);
         Assert.False(stored.Metadata.ContainsKey("extra"));
     }
@@ -723,12 +723,12 @@ public class ResourceSqlRepositoryTests
 
         // Assert
         await Assert.ThrowsAnyAsync<OperationCanceledException>(act);
-        Assert.Null(await resourceRepository.GetResourceInfoAsync(new ResourceLocation(containerName, "resourceName")));
-        Assert.Empty(await resourceRepository.GetAllResourceInfoAsync(containerName));
+        Assert.Null(await resourceRepository.GetResourceInfoAsync(new ResourceAddress(containerName, "resourceName")));
+        Assert.Empty(await resourceRepository.GetResourcePageAsync(containerName, null, null, 1000));
     }
 
     [Fact]
-    public async Task GetAllResourceInfoAsync_ShouldThrowOperationCanceled_WhenTokenIsAlreadyCanceled()
+    public async Task GetResourcePageAsync_ShouldThrowOperationCanceled_WhenTokenIsAlreadyCanceled()
     {
         // Arrange & Act
         (_, var dbContextFactory) = NewDatabase();
@@ -737,7 +737,7 @@ public class ResourceSqlRepositoryTests
         cts.Cancel();
 
         // Assert
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => resourceRepository.GetAllResourceInfoAsync("containerName", cts.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => resourceRepository.GetResourcePageAsync("containerName", null, null, 1000, cts.Token));
     }
 
     [Fact]
@@ -753,7 +753,7 @@ public class ResourceSqlRepositoryTests
         cts.Cancel();
 
         // Assert
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => resourceRepository.GetResourceStreamAsync(new ResourceLocation(containerName, "resourceName"), null, cts.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => resourceRepository.GetResourceStreamAsync(new ResourceAddress(containerName, "resourceName"), null, cts.Token));
     }
 
     [Fact]
@@ -765,7 +765,7 @@ public class ResourceSqlRepositoryTests
         await resourceRepository.AddContainerAsync("c", new Dictionary<string, string>());
         foreach (string name in new[] { "a", "b" })
         {
-            await resourceRepository.AddResourceAsync(new NewResourceVersion(new ResourceLocation("c", name), "v1"), new MemoryStream(new byte[70_000]));
+            await resourceRepository.AddResourceAsync(new NewResourceVersion(new ResourceAddress("c", name), "v1"), new MemoryStream(new byte[70_000]));
         }
 
         // Act
@@ -789,20 +789,20 @@ public class ResourceSqlRepositoryTests
         byte[] payload = RandomNumberGenerator.GetBytes(70_000);
         foreach (string version in new[] { "first", "second", "third" })
         {
-            await resourceRepository.AddResourceAsync(new NewResourceVersion(new ResourceLocation("c", "n"), version), new MemoryStream(payload));
+            await resourceRepository.AddResourceAsync(new NewResourceVersion(new ResourceAddress("c", "n"), version), new MemoryStream(payload));
         }
 
         // Act
-        Exception? cancellation = await Record.ExceptionAsync(() => canceledAfterOneBatch.DeleteResourceAsync(new ResourceLocation("c", "n"), null, null, cts.Token));
-        IReadOnlyList<ResourceInfo> remaining = await resourceRepository.GetResourceVersionsAsync(new ResourceLocation("c", "n"));
-        bool finished = await resourceRepository.DeleteResourceAsync(new ResourceLocation("c", "n"));
+        Exception? cancellation = await Record.ExceptionAsync(() => canceledAfterOneBatch.DeleteResourceAsync(new ResourceAddress("c", "n"), null, null, cts.Token));
+        IReadOnlyList<ResourceInfo> remaining = await resourceRepository.GetResourceVersionsAsync(new ResourceAddress("c", "n"));
+        bool finished = await resourceRepository.DeleteResourceAsync(new ResourceAddress("c", "n"));
 
         // Assert
         Assert.IsAssignableFrom<OperationCanceledException>(cancellation);
         Assert.Equal(["third", "second"], remaining.Select(v => v.VersionId));
         Assert.True(remaining[0].IsLatest);
         Assert.True(finished);
-        Assert.Empty(await resourceRepository.GetResourceVersionsAsync(new ResourceLocation("c", "n")));
+        Assert.Empty(await resourceRepository.GetResourceVersionsAsync(new ResourceAddress("c", "n")));
     }
 
     [Fact]
@@ -822,16 +822,16 @@ public class ResourceSqlRepositoryTests
         await resourceRepository.AddContainerAsync("c", new Dictionary<string, string>());
         foreach (string version in new[] { "first", "second", "third" })
         {
-            await resourceRepository.AddResourceAsync(new NewResourceVersion(new ResourceLocation("c", "n"), version), new MemoryStream(new byte[70_000]));
+            await resourceRepository.AddResourceAsync(new NewResourceVersion(new ResourceAddress("c", "n"), version), new MemoryStream(new byte[70_000]));
         }
 
         // Act
-        bool deleted = await deleting.DeleteResourceAsync(new ResourceLocation("c", "n"));
+        bool deleted = await deleting.DeleteResourceAsync(new ResourceAddress("c", "n"));
 
         // Assert
         Assert.True(deleted);
-        Assert.Empty(await resourceRepository.GetResourceVersionsAsync(new ResourceLocation("c", "n")));
-        Assert.Equal(["third", "second"], (await resourceRepository.GetResourceVersionsAsync(new ResourceLocation("c", "moved"))).Select(v => v.VersionId));
+        Assert.Empty(await resourceRepository.GetResourceVersionsAsync(new ResourceAddress("c", "n")));
+        Assert.Equal(["third", "second"], (await resourceRepository.GetResourceVersionsAsync(new ResourceAddress("c", "moved"))).Select(v => v.VersionId));
     }
 
     private sealed class AfterFirstSaveInterceptor(Action action) : SaveChangesInterceptor
@@ -883,12 +883,12 @@ public class ResourceSqlRepositoryTests
         var clock = new ManualTimeProvider();
         var resourceRepository = new ResourceSqlRepository(dbContextFactory, clock);
         clock.Now = DateTime.UtcNow.AddHours(1);
-        await resourceRepository.AddResourceAsync(new NewResourceVersion(new ResourceLocation("c", "n"), "ahead"), new MemoryStream());
+        await resourceRepository.AddResourceAsync(new NewResourceVersion(new ResourceAddress("c", "n"), "ahead"), new MemoryStream());
         clock.Now = DateTime.UtcNow;
-        await resourceRepository.AddResourceAsync(new NewResourceVersion(new ResourceLocation("c", "n"), "behind"), new MemoryStream());
+        await resourceRepository.AddResourceAsync(new NewResourceVersion(new ResourceAddress("c", "n"), "behind"), new MemoryStream());
 
         // Act
-        IReadOnlyList<ResourceInfo> versions = await resourceRepository.GetResourceVersionsAsync(new ResourceLocation("c", "n"));
+        IReadOnlyList<ResourceInfo> versions = await resourceRepository.GetResourceVersionsAsync(new ResourceAddress("c", "n"));
 
         // Assert
         Assert.Equal(["behind", "ahead"], versions.Select(v => v.VersionId));
@@ -905,17 +905,17 @@ public class ResourceSqlRepositoryTests
         var clock = new ManualTimeProvider();
         var resourceRepository = new ResourceSqlRepository(dbContextFactory, clock);
         clock.Now = DateTime.UtcNow.AddHours(1);
-        await resourceRepository.AddResourceAsync(new NewResourceVersion(new ResourceLocation("c", "n"), "first"), new MemoryStream());
+        await resourceRepository.AddResourceAsync(new NewResourceVersion(new ResourceAddress("c", "n"), "first"), new MemoryStream());
         clock.Now = DateTime.UtcNow;
-        await resourceRepository.AddResourceAsync(new NewResourceVersion(new ResourceLocation("c", "n"), "second"), new MemoryStream());
+        await resourceRepository.AddResourceAsync(new NewResourceVersion(new ResourceAddress("c", "n"), "second"), new MemoryStream());
         clock.Now = DateTime.UtcNow;
-        await resourceRepository.AddResourceAsync(new NewResourceVersion(new ResourceLocation("c", "n"), "third"), new MemoryStream());
+        await resourceRepository.AddResourceAsync(new NewResourceVersion(new ResourceAddress("c", "n"), "third"), new MemoryStream());
 
         // Act
-        await resourceRepository.DeleteResourceAsync(new ResourceLocation("c", "n"), "third");
+        await resourceRepository.DeleteResourceAsync(new ResourceAddress("c", "n"), "third");
 
         // Assert
-        Assert.Equal("second", (await resourceRepository.GetResourceInfoAsync(new ResourceLocation("c", "n")))!.VersionId);
+        Assert.Equal("second", (await resourceRepository.GetResourceInfoAsync(new ResourceAddress("c", "n")))!.VersionId);
     }
 
     [Fact]
@@ -926,14 +926,14 @@ public class ResourceSqlRepositoryTests
         await resourceDbContext.ResourceContainers.AddAsync(new ResourceContainerModel { Name = "c" });
         await resourceDbContext.SaveChangesAsync();
         var resourceRepository = new ResourceSqlRepository(dbContextFactory);
-        await resourceRepository.AddResourceAsync(new NewResourceVersion(new ResourceLocation("c", "n"), "first"), new MemoryStream());
+        await resourceRepository.AddResourceAsync(new NewResourceVersion(new ResourceAddress("c", "n"), "first"), new MemoryStream());
 
         // Act
-        Task act() => resourceRepository.AddResourceAsync(new NewResourceVersion(new ResourceLocation("c", "n"), "second"), new MemoryStream(), new ResourceWriteCondition { CreateOnly = true });
+        Task act() => resourceRepository.AddResourceAsync(new NewResourceVersion(new ResourceAddress("c", "n"), "second"), new MemoryStream(), new ResourceWriteCondition { CreateOnly = true });
 
         // Assert
         await Assert.ThrowsAsync<ResourceConflictException>(act);
-        Assert.Equal("first", Assert.Single(await resourceRepository.GetResourceVersionsAsync(new ResourceLocation("c", "n"))).VersionId);
+        Assert.Equal("first", Assert.Single(await resourceRepository.GetResourceVersionsAsync(new ResourceAddress("c", "n"))).VersionId);
     }
 
     [Fact]
@@ -944,7 +944,7 @@ public class ResourceSqlRepositoryTests
         await resourceDbContext.ResourceContainers.AddAsync(new ResourceContainerModel { Name = "c" });
         await resourceDbContext.SaveChangesAsync();
         var resourceRepository = new ResourceSqlRepository(dbContextFactory);
-        var version = new NewResourceVersion(new ResourceLocation("c", "n"), "v1");
+        var version = new NewResourceVersion(new ResourceAddress("c", "n"), "v1");
         await resourceRepository.AddResourceAsync(version, new MemoryStream([1]));
 
         // Act
@@ -952,7 +952,7 @@ public class ResourceSqlRepositoryTests
 
         // Assert
         await Assert.ThrowsAsync<ResourceConflictException>(act);
-        ResourceInfo stored = Assert.Single(await resourceRepository.GetResourceVersionsAsync(new ResourceLocation("c", "n")));
+        ResourceInfo stored = Assert.Single(await resourceRepository.GetResourceVersionsAsync(new ResourceAddress("c", "n")));
         Assert.True(stored.IsLatest);
     }
 
@@ -967,12 +967,12 @@ public class ResourceSqlRepositoryTests
         var resourceRepository = new ResourceSqlRepository(dbContextFactory);
 
         // Act
-        WrittenContent written = await resourceRepository.AddResourceAsync(new NewResourceVersion(new ResourceLocation("c", "n"), "v1"), new MemoryStream(payload));
+        WrittenContent written = await resourceRepository.AddResourceAsync(new NewResourceVersion(new ResourceAddress("c", "n"), "v1"), new MemoryStream(payload));
 
         // Assert
         Assert.Equal(payload.Length, written.ContentLength);
         Assert.Equal("sha256:" + Convert.ToHexStringLower(SHA256.HashData(payload)), written.ContentHash);
-        Assert.Equal(payload.Length, (await resourceRepository.GetResourceInfoAsync(new ResourceLocation("c", "n")))!.ContentLength);
+        Assert.Equal(payload.Length, (await resourceRepository.GetResourceInfoAsync(new ResourceAddress("c", "n")))!.ContentLength);
     }
 
     [Fact]
@@ -985,11 +985,11 @@ public class ResourceSqlRepositoryTests
         var resourceRepository = new ResourceSqlRepository(dbContextFactory);
 
         // Act
-        Task act() => resourceRepository.AddResourceAsync(new NewResourceVersion(new ResourceLocation("c", "n"), "v1") { DeclaredLength = 4 }, new MemoryStream([1, 2, 3]));
+        Task act() => resourceRepository.AddResourceAsync(new NewResourceVersion(new ResourceAddress("c", "n"), "v1") { DeclaredLength = 4 }, new MemoryStream([1, 2, 3]));
 
         // Assert
         await Assert.ThrowsAsync<ResourceContentLengthMismatchException>(act);
-        Assert.Null(await resourceRepository.GetResourceInfoAsync(new ResourceLocation("c", "n")));
+        Assert.Null(await resourceRepository.GetResourceInfoAsync(new ResourceAddress("c", "n")));
     }
 
     [Fact]
@@ -1000,17 +1000,17 @@ public class ResourceSqlRepositoryTests
         await resourceDbContext.ResourceContainers.AddAsync(new ResourceContainerModel { Name = "c" });
         await resourceDbContext.SaveChangesAsync();
         var resourceRepository = new ResourceSqlRepository(dbContextFactory);
-        await resourceRepository.AddResourceAsync(new NewResourceVersion(new ResourceLocation("c", "n"), "first"), new MemoryStream());
-        await resourceRepository.AddResourceAsync(new NewResourceVersion(new ResourceLocation("c", "n"), "second"), new MemoryStream());
-        await resourceRepository.AddResourceAsync(new NewResourceVersion(new ResourceLocation("c", "other"), "kept"), new MemoryStream());
+        await resourceRepository.AddResourceAsync(new NewResourceVersion(new ResourceAddress("c", "n"), "first"), new MemoryStream());
+        await resourceRepository.AddResourceAsync(new NewResourceVersion(new ResourceAddress("c", "n"), "second"), new MemoryStream());
+        await resourceRepository.AddResourceAsync(new NewResourceVersion(new ResourceAddress("c", "other"), "kept"), new MemoryStream());
 
         // Act
-        bool deleted = await resourceRepository.DeleteResourceAsync(new ResourceLocation("c", "n"));
+        bool deleted = await resourceRepository.DeleteResourceAsync(new ResourceAddress("c", "n"));
 
         // Assert
         Assert.True(deleted);
-        Assert.Empty(await resourceRepository.GetResourceVersionsAsync(new ResourceLocation("c", "n")));
-        Assert.Null(await resourceRepository.GetResourceInfoAsync(new ResourceLocation("c", "n")));
-        Assert.Equal("other", Assert.Single(await resourceRepository.GetAllResourceInfoAsync("c")).Name);
+        Assert.Empty(await resourceRepository.GetResourceVersionsAsync(new ResourceAddress("c", "n")));
+        Assert.Null(await resourceRepository.GetResourceInfoAsync(new ResourceAddress("c", "n")));
+        Assert.Equal("other", Assert.Single(await resourceRepository.GetResourcePageAsync("c", null, null, 1000)).Name);
     }
 }

@@ -17,7 +17,8 @@ namespace Resourcefull.Sqlite;
 /// they write, and no name needs a lock of its own.
 /// </summary>
 internal class ResourceSqliteRepository(IDbContextFactory<ResourceDbContext> dbContextFactory, TimeProvider? timeProvider = null,
-    string? storeName = null) : EntityFrameworkRepository(dbContextFactory, timeProvider, storeName)
+    string? storeName = null, IReadOnlySet<string>? searchableMetadataKeys = null)
+    : EntityFrameworkRepository(dbContextFactory, timeProvider, storeName, searchableMetadataKeys)
 {
     private const int ForeignKeyViolation = 787;
     private const int UniqueViolation = 2067;
@@ -113,7 +114,7 @@ internal class ResourceSqliteRepository(IDbContextFactory<ResourceDbContext> dbC
             .Select(r => r.ContentLength)
             .FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
 
-    protected override Task<SessionRow?> LockSessionAsync(ResourceDbContext attempt, ResourceLocation resource, string versionId,
+    protected override Task<SessionRow?> LockSessionAsync(ResourceDbContext attempt, ResourceAddress resource, string versionId,
         CancellationToken cancellationToken) =>
         attempt.Resources.IgnoreQueryFilters()
             .Where(r => r.ContainerName == resource.ContainerName && r.Name == resource.ResourceName && r.VersionId == versionId
@@ -213,7 +214,7 @@ internal class ResourceSqliteRepository(IDbContextFactory<ResourceDbContext> dbC
             .ExecuteDeleteAsync(cancellationToken);
 
     /// <summary>Nothing to do: the transaction holds the database's write lock from its start.</summary>
-    protected override Task LockNamesAsync(ResourceDbContext dbContext, IReadOnlyList<ResourceLocation> names,
+    protected override Task LockNamesAsync(ResourceDbContext dbContext, IReadOnlyList<ResourceAddress> names,
         CancellationToken cancellationToken) => Task.CompletedTask;
 
     /// <summary>What <see cref="MeasureContainerAsync"/> reads, named as its query's columns.</summary>

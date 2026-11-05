@@ -274,7 +274,7 @@ public abstract partial class ResourcefullContractTests
         using ServiceProvider provider = BuildServiceProvider();
         IResourceContainerClient container = await NewContainerAsync(provider);
         ResourceRepository repository = provider.GetRequiredService<ResourceRepository>();
-        var location = new ResourceLocation(container.Name, "a");
+        var location = new ResourceAddress(container.Name, "a");
         ResourceUpload upload = await container.StartUploadAsync("a");
         await container.AppendUploadAsync("a", upload.UploadId, 0, new MemoryStream([1, 2, 3, 4, 5]));
 

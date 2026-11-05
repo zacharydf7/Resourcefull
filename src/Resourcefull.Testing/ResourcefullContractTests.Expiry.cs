@@ -71,15 +71,15 @@ public abstract partial class ResourcefullContractTests
         ResourceRepository repository = provider.GetRequiredService<ResourceRepository>();
 
         // Act
-        IReadOnlyCollection<(ResourceLocation, string)> deleted = await repository.DeleteExpiredVersionsAsync(
+        IReadOnlyCollection<(ResourceAddress, string)> deleted = await repository.DeleteExpiredVersionsAsync(
         [
-            (new ResourceLocation(containerName, "a"), current.VersionId),
-            (new ResourceLocation(containerName, "b"), extended.VersionId),
-            (new ResourceLocation(containerName, "c"), "missing")
+            (new ResourceAddress(containerName, "a"), current.VersionId),
+            (new ResourceAddress(containerName, "b"), extended.VersionId),
+            (new ResourceAddress(containerName, "c"), "missing")
         ], DateTimeOffset.UtcNow);
 
         // Assert
-        Assert.Equal([(new ResourceLocation(containerName, "a"), current.VersionId)], deleted);
+        Assert.Equal([(new ResourceAddress(containerName, "a"), current.VersionId)], deleted);
         ResourceInfo nowCurrent = (await container.GetResourceInfoAsync("a"))!;
         Assert.Equal(older.VersionId, nowCurrent.VersionId);
         Assert.True(nowCurrent.IsLatest);
@@ -94,14 +94,14 @@ public abstract partial class ResourcefullContractTests
         // Arrange: three versions of a name, the two latest of them expired.
         using ServiceProvider provider = BuildServiceProvider(o => o.UseVersioning());
         IResourceContainerClient container = await NewContainerAsync(provider);
-        var location = new ResourceLocation(container.Name, "a");
+        var location = new ResourceAddress(container.Name, "a");
         ResourceInfo kept = await container.UploadAsync("a", BinaryData.FromString("kept"));
         ResourceInfo second = await container.UploadAsync("a", BinaryData.FromString("second"), Expiring(Past));
         ResourceInfo third = await container.UploadAsync("a", BinaryData.FromString("third"), Expiring(Past));
         ResourceRepository repository = provider.GetRequiredService<ResourceRepository>();
 
         // Act
-        IReadOnlyCollection<(ResourceLocation, string VersionId)> deleted = await repository.DeleteExpiredVersionsAsync(
+        IReadOnlyCollection<(ResourceAddress, string VersionId)> deleted = await repository.DeleteExpiredVersionsAsync(
             [(location, second.VersionId), (location, third.VersionId)], DateTimeOffset.UtcNow);
 
         // Assert
@@ -405,7 +405,7 @@ public abstract partial class ResourcefullContractTests
         ResourceRepository repository = provider.GetRequiredService<ResourceRepository>();
 
         // Act
-        bool deleted = await repository.DeleteExpiredVersionAsync(new ResourceLocation(container.Name, "a"),
+        bool deleted = await repository.DeleteExpiredVersionAsync(new ResourceAddress(container.Name, "a"),
             stored.VersionId, sweepTime);
 
         // Assert

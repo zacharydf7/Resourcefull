@@ -70,7 +70,7 @@ public static class ResourcefullAzureBlobOptionsExtensions
             BlobServiceClient client = options.Client ?? services.GetService<BlobServiceClient>() ?? throw new InvalidOperationException(
                 "UseAzureBlobStorage needs a client: set Client, for example to new BlobServiceClient(connectionString), or register a BlobServiceClient in the application's services.");
             return new ObjectStoreRepository(new AzureBlobObjectStore(client.GetBlobContainerClient(containerName)), options.KeyPrefix,
-                services.GetService<TimeProvider>(), storeName);
+                services.GetService<TimeProvider>(), storeName, services.SearchableMetadataKeys(storeName));
         }, ServiceLifetime.Singleton);
         return builder;
     }

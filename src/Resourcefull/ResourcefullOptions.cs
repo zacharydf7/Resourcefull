@@ -27,6 +27,22 @@ public class ResourcefullOptions
     /// </summary>
     public IReadOnlySet<string> SearchableMetadataKeys => _searchableMetadataKeys;
 
+    /// <summary>
+    /// Throws when <paramref name="metadata"/> gives one of <see cref="SearchableMetadataKeys"/> a value longer than an
+    /// index can hold.
+    /// </summary>
+    internal void ThrowIfUnsearchable(IReadOnlyDictionary<string, string> metadata, string paramName)
+    {
+        foreach (string key in _searchableMetadataKeys)
+        {
+            if (metadata.TryGetValue(key, out string? value) && value.Length > ResourceMetadataMatch.MaxValueLength)
+            {
+                throw new ArgumentException($"The metadata value of {key} is {value.Length} characters long; a searchable " +
+                    $"key's value can be at most {ResourceMetadataMatch.MaxValueLength}.", paramName);
+            }
+        }
+    }
+
     internal readonly HashSet<string> _searchableMetadataKeys = new(StringComparer.Ordinal);
 
     /// <summary>

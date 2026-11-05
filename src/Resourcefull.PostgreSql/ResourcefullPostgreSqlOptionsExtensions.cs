@@ -67,7 +67,7 @@ public static partial class ResourcefullPostgreSqlOptionsExtensions
         string? storeName = builder.StoreName;
         builder.UseProvider(services => new ResourcePostgreSqlRepository(
             services.GetRequiredStoreService<IDbContextFactory<ResourceDbContext>>(storeName), services.GetService<TimeProvider>(),
-            storeName));
+            storeName, services.SearchableMetadataKeys(storeName)));
 
         builder.Services.AddKeyedSingleton<IDbContextFactory<ResourceDbContext>>(storeName, (services, _) =>
         {

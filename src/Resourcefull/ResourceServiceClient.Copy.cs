@@ -50,7 +50,8 @@ internal partial class ResourceServiceClient
                 };
             }
             ResourceImportResult imported = await ContainerArchive.ImportAsync(versions, resourceContainerName, newContainer: false,
-                "the source", resourceRepository, policies, _telemetry, uploadInspector, cancellationToken).ConfigureAwait(false);
+                "the source", resourceRepository, _options, policies, _telemetry, uploadInspector, cancellationToken)
+                .ConfigureAwait(false);
             activity?.SetTag("resourcefull.resources", imported.ResourceCount);
             activity?.SetTag("resourcefull.versions", imported.VersionCount);
             return imported;
@@ -76,7 +77,7 @@ internal partial class ResourceServiceClient
             try
             {
                 imported = await ContainerArchive.ImportAsync(versions, resourceContainerName, newContainer: true, source,
-                    resourceRepository, policies, _telemetry, uploadInspector, cancellationToken).ConfigureAwait(false);
+                    resourceRepository, _options, policies, _telemetry, uploadInspector, cancellationToken).ConfigureAwait(false);
             }
             finally
             {
@@ -237,7 +238,7 @@ internal partial class ResourceServiceClient
 
     /// <summary>One of this store's versions, to import elsewhere.</summary>
     private ImportedVersion ToImport(string resourceContainerName, ResourceInfo version) =>
-        new(version, ct => resourceRepository.GetResourceStreamAsync(new ResourceLocation(resourceContainerName, version.Name),
+        new(version, ct => resourceRepository.GetResourceStreamAsync(new ResourceAddress(resourceContainerName, version.Name),
             version.VersionId, ct));
 
     public Task<StoreCopyResult> CopyStoreToAsync(IResourceServiceClient destination, StoreCopyOptions? options = null,
@@ -458,7 +459,7 @@ internal partial class ResourceServiceClient
             }
             await foreach (ResourceInfo resource in _destination.ListResourcesAsync(cancellationToken: cancellationToken).ConfigureAwait(false))
             {
-                if (await repository.GetResourceInfoAsync(new ResourceLocation(container.Name, resource.Name), null,
+                if (await repository.GetResourceInfoAsync(new ResourceAddress(container.Name, resource.Name), null,
                     cancellationToken).ConfigureAwait(false) is not null)
                 {
                     continue;

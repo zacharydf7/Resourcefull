@@ -112,12 +112,12 @@ public class RetryPolicyIntegrationTests(SqlServerFixture fixture)
         await using SqlTransaction transaction = (SqlTransaction)await opponent.BeginTransactionAsync();
         // On its own: a command with parameters runs through sp_executesql, which undoes its SET when it ends.
         await ExecuteAsync(opponent, transaction, "SET DEADLOCK_PRIORITY HIGH;");
-        await LockNameAsync(opponent, transaction, new ResourceLocation(containerName, "b"));
+        await LockNameAsync(opponent, transaction, new ResourceAddress(containerName, "b"));
 
         // Act: once the delete holds "a" and waits for "b", the opponent asks for "a", closing the cycle.
-        Task<IReadOnlyCollection<(ResourceLocation, string)>> delete = provider.GetRequiredService<ResourceRepository>()
-            .DeleteExpiredVersionsAsync([(new ResourceLocation(containerName, "a"), a.VersionId),
-                (new ResourceLocation(containerName, "b"), b.VersionId)], DateTimeOffset.UtcNow);
+        Task<IReadOnlyCollection<(ResourceAddress, string)>> delete = provider.GetRequiredService<ResourceRepository>()
+            .DeleteExpiredVersionsAsync([(new ResourceAddress(containerName, "a"), a.VersionId),
+                (new ResourceAddress(containerName, "b"), b.VersionId)], DateTimeOffset.UtcNow);
         await using (SqlCommand waiting = opponent.CreateCommand())
         {
             waiting.Transaction = transaction;
@@ -129,16 +129,16 @@ public class RetryPolicyIntegrationTests(SqlServerFixture fixture)
                 await Task.Delay(50);
             }
         }
-        await LockNameAsync(opponent, transaction, new ResourceLocation(containerName, "a"));
+        await LockNameAsync(opponent, transaction, new ResourceAddress(containerName, "a"));
         await transaction.CommitAsync();
-        IReadOnlyCollection<(ResourceLocation, string)> deleted = await delete;
+        IReadOnlyCollection<(ResourceAddress, string)> deleted = await delete;
 
         // Assert: the delete's lock lost the deadlock, and the retry deleted both.
         Assert.Contains(ResourceSqlRepository.NameLockNotGrantedError.ToString(), retries);
         Assert.Equal(2, deleted.Count);
     }
 
-    private static async Task LockNameAsync(SqlConnection connection, SqlTransaction transaction, ResourceLocation name)
+    private static async Task LockNameAsync(SqlConnection connection, SqlTransaction transaction, ResourceAddress name)
     {
         await using SqlCommand command = connection.CreateCommand();
         command.Transaction = transaction;

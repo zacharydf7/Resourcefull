@@ -59,21 +59,6 @@ public class ResourceListingTests
     }
 
     [Fact]
-    public async Task GetResourcePageAsync_ShouldFilterSortAndCutTheFullListing_WhenTheProviderDoesNotOverrideIt()
-    {
-        // Arrange: a provider that answers only the full listing, in no particular order.
-        var repository = new Mock<ResourceRepository> { CallBase = true };
-        repository.Setup(r => r.GetAllResourceInfoAsync(Container, It.IsAny<CancellationToken>()))
-            .ReturnsAsync([Current("p/d"), Current("q/a"), Current("p/B"), Current("p/a"), Current("p/c")]);
-
-        // Act
-        IReadOnlyList<ResourceInfo> page = await repository.Object.GetResourcePageAsync(Container, "p/", "p/a", 2);
-
-        // Assert
-        Assert.Equal(["p/c", "p/d"], page.Select(r => r.Name));
-    }
-
-    [Fact]
     public async Task GetResourcePageAsync_ShouldThrowNotSupported_WhenAClientWrittenFor30IsAskedForAPage()
     {
         // Arrange

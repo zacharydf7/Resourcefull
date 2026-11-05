@@ -63,7 +63,7 @@ public sealed class RetryIntegrationTests(PostgreSqlFixture fixture)
         // Assert
         Assert.True(failure.Failed);
         Assert.Equal(PayloadHash, written.ContentHash);
-        Assert.True(Assert.Single(await repository.GetResourceVersionsAsync(new ResourceLocation(c, "n"))).IsLatest);
+        Assert.True(Assert.Single(await repository.GetResourceVersionsAsync(new ResourceAddress(c, "n"))).IsLatest);
         Assert.Equal(Payload, await ReadAsync(repository, c));
     }
 
@@ -84,7 +84,7 @@ public sealed class RetryIntegrationTests(PostgreSqlFixture fixture)
         // Assert
         Assert.True(failure.Failed);
         Assert.Equal(PayloadHash, written.ContentHash);
-        Assert.True(Assert.Single(await repository.GetResourceVersionsAsync(new ResourceLocation(c, "n"))).IsLatest);
+        Assert.True(Assert.Single(await repository.GetResourceVersionsAsync(new ResourceAddress(c, "n"))).IsLatest);
         Assert.Equal(Payload, await ReadAsync(repository, c));
     }
 
@@ -116,7 +116,7 @@ public sealed class RetryIntegrationTests(PostgreSqlFixture fixture)
         // itself stored.
         var failure = new FailOnceAfterCommitInterceptor();
         (ResourcePostgreSqlRepository repository, string c) = await NewRepositoryAsync(failure);
-        var location = new ResourceLocation(c, "n");
+        var location = new ResourceAddress(c, "n");
         await repository.StartStagedVersionAsync(Version(c));
         failure.Arm();
 
@@ -141,7 +141,7 @@ public sealed class RetryIntegrationTests(PostgreSqlFixture fixture)
         // current.
         var failure = new FailOnceAfterCommitInterceptor();
         (ResourcePostgreSqlRepository repository, string c) = await NewRepositoryAsync(failure);
-        var location = new ResourceLocation(c, "n");
+        var location = new ResourceAddress(c, "n");
         await repository.StartStagedVersionAsync(Version(c));
         await repository.AppendStagedContentAsync(location, "v1", 0, new MemoryStream(Payload));
         failure.Arm();
@@ -166,15 +166,15 @@ public sealed class RetryIntegrationTests(PostgreSqlFixture fixture)
         (ResourcePostgreSqlRepository repository, string c) = await NewRepositoryAsync(failure);
         await repository.AddResourceAsync(Version(c), new MemoryStream(Payload));
         failure.Arm();
-        var copy = new NewResourceVersion(new ResourceLocation(c, "copy"), "v2");
+        var copy = new NewResourceVersion(new ResourceAddress(c, "copy"), "v2");
 
         // Act
-        WrittenContent? written = await repository.CopyResourceAsync(new ResourceLocation(c, "n"), "v1", copy, new ResourceWriteCondition());
+        WrittenContent? written = await repository.CopyResourceAsync(new ResourceAddress(c, "n"), "v1", copy, new ResourceWriteCondition());
 
         // Assert
         Assert.True(failure.Failed);
         Assert.Equal(Payload.Length, written!.ContentLength);
-        Assert.Equal(["v2"], (await repository.GetResourceVersionsAsync(new ResourceLocation(c, "copy"))).Select(v => v.VersionId));
+        Assert.Equal(["v2"], (await repository.GetResourceVersionsAsync(new ResourceAddress(c, "copy"))).Select(v => v.VersionId));
     }
 
     [Fact]
@@ -188,8 +188,8 @@ public sealed class RetryIntegrationTests(PostgreSqlFixture fixture)
         IResourceContainerClient container =
             await provider.GetRequiredService<IResourceServiceClient>().CreateContainerAsync($"c-{Guid.NewGuid():N}");
         await container.UploadAsync("a", BinaryData.FromString("a"));
-        long a = ResourcePostgreSqlRepository.NameLockKey(new ResourceLocation(container.Name, "a"));
-        long b = ResourcePostgreSqlRepository.NameLockKey(new ResourceLocation(container.Name, "b"));
+        long a = ResourcePostgreSqlRepository.NameLockKey(new ResourceAddress(container.Name, "a"));
+        long b = ResourcePostgreSqlRepository.NameLockKey(new ResourceAddress(container.Name, "b"));
         // Other tests may retry at the same time, so only a deadlock's SQLSTATE is looked for.
         var retries = new ConcurrentQueue<string?>();
         using MeterListener listener = ListenForRetries(retries);
@@ -270,11 +270,11 @@ public sealed class RetryIntegrationTests(PostgreSqlFixture fixture)
         return (repository, containerName);
     }
 
-    private static NewResourceVersion Version(string containerName) => new(new ResourceLocation(containerName, "n"), "v1");
+    private static NewResourceVersion Version(string containerName) => new(new ResourceAddress(containerName, "n"), "v1");
 
     private static async Task<byte[]> ReadAsync(ResourcePostgreSqlRepository repository, string containerName)
     {
-        await using Stream stream = (await repository.GetResourceStreamAsync(new ResourceLocation(containerName, "n")))!;
+        await using Stream stream = (await repository.GetResourceStreamAsync(new ResourceAddress(containerName, "n")))!;
         using var copy = new MemoryStream();
         await stream.CopyToAsync(copy);
         return copy.ToArray();

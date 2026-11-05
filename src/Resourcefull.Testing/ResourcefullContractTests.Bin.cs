@@ -105,7 +105,7 @@ public abstract partial class ResourcefullContractTests
         ResourceInfo deleted = await container.UploadAsync("a", BinaryData.FromString("a"));
         await container.DeleteResourceIfExistsAsync("a");
         ResourceRepository repository = provider.GetRequiredService<ResourceRepository>();
-        var version = new NewResourceVersion(new ResourceLocation(container.Name, "a"), deleted.VersionId) { LastModified = clock.Now };
+        var version = new NewResourceVersion(new ResourceAddress(container.Name, "a"), deleted.VersionId) { LastModified = clock.Now };
 
         // Act & Assert
         await Assert.ThrowsAsync<ResourceConflictException>(() => repository.ImportVersionAsync(version, new MemoryStream([1])));
@@ -270,7 +270,7 @@ public abstract partial class ResourcefullContractTests
         await container.UndeleteAsync("a");
 
         // Act
-        int purged = await repository.PurgeDeletedAsync(new ResourceLocation(container.Name, "a"), listed.VersionId, clock.Now);
+        int purged = await repository.PurgeDeletedAsync(new ResourceAddress(container.Name, "a"), listed.VersionId, clock.Now);
 
         // Assert
         Assert.Equal(0, purged);

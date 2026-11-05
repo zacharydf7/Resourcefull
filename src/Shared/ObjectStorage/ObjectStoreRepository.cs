@@ -21,8 +21,9 @@ namespace Resourcefull.ObjectStorage;
 /// <param name="keyPrefix">What every key starts with.</param>
 /// <param name="timeProvider">The clock versions are stamped with.</param>
 /// <param name="storeName">The store's name, for telemetry; <see langword="null"/> for the store without one.</param>
-internal sealed partial class ObjectStoreRepository(IObjectStore store, string keyPrefix, TimeProvider? timeProvider, string? storeName)
-    : ResourceRepository
+/// <param name="searchableMetadataKeys">The metadata keys the store's listings can search for, which it indexes.</param>
+internal sealed partial class ObjectStoreRepository(IObjectStore store, string keyPrefix, TimeProvider? timeProvider, string? storeName,
+    IReadOnlySet<string>? searchableMetadataKeys = null) : ResourceRepository(searchableMetadataKeys)
 {
     /// <summary>
     /// The real time, to tell an expiry entry's age by: the store stamps entries with it, while the clock versions are
@@ -32,9 +33,6 @@ internal sealed partial class ObjectStoreRepository(IObjectStore store, string k
 
     /// <summary>How many heads or records a listing reads at once.</summary>
     private const int ParallelReads = 16;
-
-    /// <summary>How many names <see cref="GetAllResourceInfoAsync"/> lists at a time.</summary>
-    private const int ListAllPageSize = 1000;
 
     /// <summary>
     /// How many times in a row a conditional write may be refused before it fails: a store that keeps refusing one
@@ -77,7 +75,7 @@ internal sealed partial class ObjectStoreRepository(IObjectStore store, string k
     private async Task<WrittenContent> AddVersionAsync(NewResourceVersion version, Stream content, ResourceWriteCondition condition,
         DateTimeOffset? lastModified, CancellationToken cancellationToken)
     {
-        ResourceLocation location = version.Location;
+        ResourceAddress location = version.Resource;
         ContainerRecord container = await GetContainerAsync(location.ContainerName, cancellationToken).ConfigureAwait(false)
             ?? throw ContainerMissing(location.ContainerName);
         string headKey = _keys.Head(container.Id, location.ResourceName);
@@ -146,7 +144,7 @@ internal sealed partial class ObjectStoreRepository(IObjectStore store, string k
     /// Throws unless a version with <paramref name="versionId"/> may be added to the name: a version ID in its bin, which
     /// a head read with its bin holds, is taken too.
     /// </summary>
-    private static void ThrowUnlessAddable(ResourceLocation location, Head? head, string versionId, ResourceWriteCondition condition)
+    private static void ThrowUnlessAddable(ResourceAddress location, Head? head, string versionId, ResourceWriteCondition condition)
     {
         StoredVersion? current = head?.Versions.LastOrDefault();
         if (condition.CreateOnly && current is not null) throw ResourceExists(location);
@@ -170,7 +168,7 @@ internal sealed partial class ObjectStoreRepository(IObjectStore store, string k
     /// upload takes.
     /// </summary>
     /// <exception cref="ResourceUploadLimitException">The content is larger than the provider can store in one object.</exception>
-    private async Task UploadContentAsync(ResourceLocation location, string key, Stream content, CancellationToken cancellationToken)
+    private async Task UploadContentAsync(ResourceAddress location, string key, Stream content, CancellationToken cancellationToken)
     {
         string recordKey = _keys.PiecesOf(Guid.NewGuid().ToString("N"));
         List<string> pieces = [key];
@@ -255,7 +253,7 @@ internal sealed partial class ObjectStoreRepository(IObjectStore store, string k
         }
     }
 
-    private static ResourceUploadLimitException TooLarge(ResourceLocation location, long limit) =>
+    private static ResourceUploadLimitException TooLarge(ResourceAddress location, long limit) =>
         new($"The content of the resource {location.ResourceName} in the container {location.ContainerName} is larger " +
             $"than the {limit} bytes the provider can store in one object.")
         {
@@ -277,21 +275,6 @@ internal sealed partial class ObjectStoreRepository(IObjectStore store, string k
         {
             // Left in place: deleting content a head names would lose a stored version.
         }
-    }
-
-    public override async Task<IReadOnlyList<ResourceInfo>> GetAllResourceInfoAsync(string resourceContainerName,
-        CancellationToken cancellationToken = default)
-    {
-        var all = new List<ResourceInfo>();
-        IReadOnlyList<ResourceInfo> page;
-        do
-        {
-            page = await GetResourcePageAsync(resourceContainerName, null, all.LastOrDefault()?.Name, ListAllPageSize, cancellationToken)
-                .ConfigureAwait(false);
-            all.AddRange(page);
-        }
-        while (page.Count == ListAllPageSize);
-        return all;
     }
 
     /// <summary>Lists the names' heads in key order, which is their names' code point order, and reads them.</summary>
@@ -319,7 +302,7 @@ internal sealed partial class ObjectStoreRepository(IObjectStore store, string k
         return page;
     }
 
-    public override async Task<IReadOnlyList<ResourceInfo>> GetResourceVersionsAsync(ResourceLocation resource,
+    public override async Task<IReadOnlyList<ResourceInfo>> GetResourceVersionsAsync(ResourceAddress resource,
         CancellationToken cancellationToken = default)
     {
         if (await GetHeadAsync(resource, cancellationToken).ConfigureAwait(false) is not { } head) return [];
@@ -327,7 +310,7 @@ internal sealed partial class ObjectStoreRepository(IObjectStore store, string k
             .Reverse()];
     }
 
-    public override async Task<ResourceInfo?> GetResourceInfoAsync(ResourceLocation resource, string? versionId = null,
+    public override async Task<ResourceInfo?> GetResourceInfoAsync(ResourceAddress resource, string? versionId = null,
         CancellationToken cancellationToken = default)
     {
         if (await GetHeadAsync(resource, cancellationToken).ConfigureAwait(false) is not { } head) return null;
@@ -336,12 +319,12 @@ internal sealed partial class ObjectStoreRepository(IObjectStore store, string k
         return version is null ? null : ToInfo(resource.ContainerName, resource.ResourceName, version, version == current);
     }
 
-    public override Task<Stream?> GetResourceStreamAsync(ResourceLocation resource, string? versionId = null,
+    public override Task<Stream?> GetResourceStreamAsync(ResourceAddress resource, string? versionId = null,
         CancellationToken cancellationToken = default) =>
         GetResourceStreamAsync(resource, versionId, 0, null, cancellationToken);
 
     /// <summary>Opens a version's content from <paramref name="offset"/>, asking the store for only the range read.</summary>
-    public override async Task<Stream?> GetResourceStreamAsync(ResourceLocation resource, string? versionId, long offset,
+    public override async Task<Stream?> GetResourceStreamAsync(ResourceAddress resource, string? versionId, long offset,
         long? length, CancellationToken cancellationToken = default)
     {
         ContainerRecord? container = await GetContainerAsync(resource.ContainerName, cancellationToken).ConfigureAwait(false);
@@ -364,7 +347,7 @@ internal sealed partial class ObjectStoreRepository(IObjectStore store, string k
     /// Takes the versions off the name's head in one write, deciding the conditions there, then deletes their content.
     /// Content whose delete fails is no longer named by any head, and stays until the sweep deletes it.
     /// </summary>
-    public override async Task<bool> DeleteResourceAsync(ResourceLocation resource, string? versionId = null,
+    public override async Task<bool> DeleteResourceAsync(ResourceAddress resource, string? versionId = null,
         ResourceConditions? conditions = null, CancellationToken cancellationToken = default)
     {
         ContainerRecord? container = await GetContainerAsync(resource.ContainerName, cancellationToken).ConfigureAwait(false);
@@ -410,15 +393,15 @@ internal sealed partial class ObjectStoreRepository(IObjectStore store, string k
             ? _keys.Expiry(expiresAt, version.VersionId, token, containerId, version.Blob)
             : null;
 
-    public override Task<bool> SetResourceMetadataAsync(ResourceLocation resource, string? versionId,
+    public override Task<bool> SetResourceMetadataAsync(ResourceAddress resource, string? versionId,
         IReadOnlyDictionary<string, string> metadata, CancellationToken cancellationToken = default) =>
         ChangeVersionAsync(resource, versionId, v => v with { Metadata = new Dictionary<string, string>(metadata) }, cancellationToken);
 
-    public override Task<bool> SetContentTypeAsync(ResourceLocation resource, string? versionId, string? contentType,
+    public override Task<bool> SetContentTypeAsync(ResourceAddress resource, string? versionId, string? contentType,
         CancellationToken cancellationToken = default) =>
         ChangeVersionAsync(resource, versionId, v => v with { ContentType = contentType }, cancellationToken);
 
-    private async Task<bool> ChangeVersionAsync(ResourceLocation resource, string? versionId, Func<StoredVersion, StoredVersion> change,
+    private async Task<bool> ChangeVersionAsync(ResourceAddress resource, string? versionId, Func<StoredVersion, StoredVersion> change,
         CancellationToken cancellationToken)
     {
         if (await GetContainerAsync(resource.ContainerName, cancellationToken).ConfigureAwait(false) is not { } container) return false;
@@ -530,7 +513,7 @@ internal sealed partial class ObjectStoreRepository(IObjectStore store, string k
     /// Takes the version off its name's head only if its expiry is still due, checked within the conditional head write,
     /// then deletes its content and its expiry entry.
     /// </summary>
-    public override async Task<bool> DeleteExpiredVersionAsync(ResourceLocation resource, string versionId, DateTimeOffset now,
+    public override async Task<bool> DeleteExpiredVersionAsync(ResourceAddress resource, string versionId, DateTimeOffset now,
         CancellationToken cancellationToken = default)
     {
         if (await GetContainerAsync(resource.ContainerName, cancellationToken).ConfigureAwait(false) is not { } container) return false;
@@ -551,7 +534,7 @@ internal sealed partial class ObjectStoreRepository(IObjectStore store, string k
     /// Writes an expiry entry for the new time, if there is one, under a new token, then sets both on the version with a
     /// head write, and deletes the old entry, which nothing names anymore.
     /// </summary>
-    public override async Task<bool> SetExpiryAsync(ResourceLocation resource, string? versionId, DateTimeOffset? expiresAt,
+    public override async Task<bool> SetExpiryAsync(ResourceAddress resource, string? versionId, DateTimeOffset? expiresAt,
         CancellationToken cancellationToken = default)
     {
         if (await GetContainerAsync(resource.ContainerName, cancellationToken).ConfigureAwait(false) is not { } container) return false;
@@ -585,7 +568,7 @@ internal sealed partial class ObjectStoreRepository(IObjectStore store, string k
     /// Writes an expiry or protection entry holding the version's container and resource names, since its key has
     /// neither.
     /// </summary>
-    private Task PutEntryAsync(string key, ResourceLocation resource, CancellationToken cancellationToken) =>
+    private Task PutEntryAsync(string key, ResourceAddress resource, CancellationToken cancellationToken) =>
         store.UploadAsync(key, new MemoryStream(JsonSerializer.SerializeToUtf8Bytes(new ExpiryEntry(resource.ContainerName,
             resource.ResourceName))), cancellationToken);
 
@@ -681,7 +664,7 @@ internal sealed partial class ObjectStoreRepository(IObjectStore store, string k
                 record = existing.Value;
             }
 
-            (ResourceLocation Location, StoredVersion Version)? retained;
+            (ResourceAddress Location, StoredVersion Version)? retained;
             try
             {
                 retained = await FindProtectedAsync(record.Id, cancellationToken).ConfigureAwait(false);
@@ -728,7 +711,7 @@ internal sealed partial class ObjectStoreRepository(IObjectStore store, string k
         (await GetAsync<ContainerRecord>(_keys.Container(resourceContainerName), cancellationToken).ConfigureAwait(false)).Value
             is { Deleted: false } record ? record : null;
 
-    private async Task<Head?> GetHeadAsync(ResourceLocation resource, CancellationToken cancellationToken) =>
+    private async Task<Head?> GetHeadAsync(ResourceAddress resource, CancellationToken cancellationToken) =>
         await GetContainerAsync(resource.ContainerName, cancellationToken).ConfigureAwait(false) is { } container
             ? await ReadHeadAsync(_keys.Head(container.Id, resource.ResourceName), cancellationToken).ConfigureAwait(false)
             : null;
@@ -953,7 +936,7 @@ internal sealed partial class ObjectStoreRepository(IObjectStore store, string k
         Name = name, Metadata = new Dictionary<string, string>(record.Metadata)
     };
 
-    private static ResourceConflictException ResourceExists(ResourceLocation location) =>
+    private static ResourceConflictException ResourceExists(ResourceAddress location) =>
         new($"The resource {location.ResourceName} already exists in the container {location.ContainerName}.")
         {
             ContainerName = location.ContainerName, ResourceName = location.ResourceName

@@ -8,9 +8,9 @@ namespace Resourcefull.Providers;
 /// <see cref="WrittenContent"/>, with the time the version became current.
 /// <para>Coming in 4.0.</para>
 /// </summary>
-/// <param name="Location">The container and name the version is stored under.</param>
+/// <param name="Resource">The container and name the version is stored under.</param>
 /// <param name="VersionId">The version's ID, which the clients choose.</param>
-public sealed record NewResourceVersion(ResourceLocation Location, string VersionId)
+public sealed record NewResourceVersion(ResourceAddress Resource, string VersionId)
 {
     /// <summary>
     /// <inheritdoc cref="ResourceHeaders.ContentType"/>

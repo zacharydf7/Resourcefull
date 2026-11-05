@@ -43,7 +43,7 @@ public static class ResourcefullSqliteOptionsExtensions
         string? storeName = builder.StoreName;
         builder.UseProvider(services => new ResourceSqliteRepository(
             services.GetRequiredStoreService<IDbContextFactory<ResourceDbContext>>(storeName), services.GetService<TimeProvider>(),
-            storeName));
+            storeName, services.SearchableMetadataKeys(storeName)));
 
         builder.Services.AddKeyedSingleton<IDbContextFactory<ResourceDbContext>>(storeName, (services, _) =>
         {

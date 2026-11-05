@@ -9,7 +9,6 @@ using Moq;
 using Resourcefull.InMemory;
 using Resourcefull.Providers;
 using Resourcefull.SqlServer;
-using ResourceLocation = Resourcefull.Providers.ResourceLocation;
 
 namespace Resourcefull.Tests.Unit;
 
@@ -82,7 +81,7 @@ public sealed class TelemetryTests : IDisposable
         await (await service.CreateContainerAsync("expiring")).UploadAsync("r", BinaryData.FromString("x"),
             new ResourceUploadOptions { ExpiresAt = DateTimeOffset.UtcNow.AddDays(-1) });
         await (await service.CreateContainerAsync("binned")).UploadAsync("r", BinaryData.FromString("x"));
-        await provider.GetRequiredService<ResourceRepository>().SoftDeleteResourceAsync(new ResourceLocation("binned", "r"), null, null,
+        await provider.GetRequiredService<ResourceRepository>().SoftDeleteResourceAsync(new ResourceAddress("binned", "r"), null, null,
             DateTimeOffset.UtcNow.AddDays(-1));
         var silent = new List<string>();
 
@@ -180,11 +179,11 @@ public sealed class TelemetryTests : IDisposable
     {
         // Arrange: a provider that stored 5 bytes of the append before it failed.
         var repository = new Mock<ResourceRepository>();
-        var staged = new StagedVersion(new NewResourceVersion(new ResourceLocation("c", "a"), "u1"), 0);
-        repository.SetupSequence(r => r.GetStagedVersionAsync(new ResourceLocation("c", "a"), "u1", It.IsAny<CancellationToken>()))
+        var staged = new StagedVersion(new NewResourceVersion(new ResourceAddress("c", "a"), "u1"), 0);
+        repository.SetupSequence(r => r.GetStagedVersionAsync(new ResourceAddress("c", "a"), "u1", It.IsAny<CancellationToken>()))
             .ReturnsAsync(staged)
             .ReturnsAsync(staged with { StoredLength = 5 });
-        repository.Setup(r => r.AppendStagedContentAsync(new ResourceLocation("c", "a"), "u1", 0, It.IsAny<Stream>(),
+        repository.Setup(r => r.AppendStagedContentAsync(new ResourceAddress("c", "a"), "u1", 0, It.IsAny<Stream>(),
             It.IsAny<CancellationToken>())).ThrowsAsync(new IOException("The connection dropped."));
         var container = new ResourceContainerClient(repository.Object, null, new ResourcefullOptions(), "c", null);
 
@@ -502,10 +501,10 @@ public sealed class TelemetryTests : IDisposable
             {
                 ContainerName = "c", Name = "a", VersionId = "v1", ExpiresAt = DateTimeOffset.UnixEpoch
             }]);
-        repository.Setup(r => r.DeleteExpiredVersionsAsync(It.IsAny<IReadOnlyList<(ResourceLocation, string)>>(),
+        repository.Setup(r => r.DeleteExpiredVersionsAsync(It.IsAny<IReadOnlyList<(ResourceAddress, string)>>(),
             It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("The batch failed."));
-        repository.Setup(r => r.DeleteExpiredVersionAsync(It.IsAny<ResourceLocation>(), "v1", It.IsAny<DateTimeOffset>(),
+        repository.Setup(r => r.DeleteExpiredVersionAsync(It.IsAny<ResourceAddress>(), "v1", It.IsAny<DateTimeOffset>(),
             It.IsAny<CancellationToken>())).ThrowsAsync(new InvalidOperationException("The version failed."));
         var service = new ResourceServiceClient(repository.Object, Options.Create(new ResourcefullOptions()));
 
@@ -532,9 +531,9 @@ public sealed class TelemetryTests : IDisposable
             {
                 ContainerName = "c", Name = "a", VersionId = "v1", ExpiresAt = DateTimeOffset.UnixEpoch
             }]);
-        repository.Setup(r => r.DeleteExpiredVersionsAsync(It.IsAny<IReadOnlyList<(ResourceLocation, string)>>(),
+        repository.Setup(r => r.DeleteExpiredVersionsAsync(It.IsAny<IReadOnlyList<(ResourceAddress, string)>>(),
             It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync([(new ResourceLocation("c", "a"), "v1")]);
+            .ReturnsAsync([(new ResourceAddress("c", "a"), "v1")]);
         var service = new ResourceServiceClient(repository.Object, Options.Create(new ResourcefullOptions()));
 
         // Act
@@ -542,7 +541,7 @@ public sealed class TelemetryTests : IDisposable
 
         // Assert
         Assert.Equal("The sweep failed.", (await Assert.ThrowsAsync<InvalidOperationException>(act)).Message);
-        repository.Verify(r => r.DeleteExpiredVersionsAsync(It.IsAny<IReadOnlyList<(ResourceLocation, string)>>(),
+        repository.Verify(r => r.DeleteExpiredVersionsAsync(It.IsAny<IReadOnlyList<(ResourceAddress, string)>>(),
             It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -557,10 +556,10 @@ public sealed class TelemetryTests : IDisposable
         };
         repository.Setup(r => r.GetExpiredAsync(It.IsAny<DateTimeOffset>(), It.IsAny<int>(), null,
             It.IsAny<CancellationToken>())).ReturnsAsync([expired]);
-        repository.Setup(r => r.DeleteExpiredVersionsAsync(It.IsAny<IReadOnlyList<(ResourceLocation, string)>>(),
+        repository.Setup(r => r.DeleteExpiredVersionsAsync(It.IsAny<IReadOnlyList<(ResourceAddress, string)>>(),
             It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("Deleting secret.txt failed."));
-        repository.Setup(r => r.DeleteExpiredVersionAsync(It.IsAny<ResourceLocation>(), "v1", It.IsAny<DateTimeOffset>(),
+        repository.Setup(r => r.DeleteExpiredVersionAsync(It.IsAny<ResourceAddress>(), "v1", It.IsAny<DateTimeOffset>(),
             It.IsAny<CancellationToken>())).ReturnsAsync(true);
         var service = new ResourceServiceClient(repository.Object, Options.Create(new ResourcefullOptions()));
         using Activity root = TestSource.StartActivity("test")!;
@@ -957,7 +956,7 @@ public sealed class TelemetryTests : IDisposable
     /// <summary>A store where every delete finds its version protected, as when a hold lands just before it.</summary>
     private sealed class RefusingDeletes : ResourceInMemoryRepository
     {
-        public override Task<bool> DeleteResourceAsync(ResourceLocation resource, string? versionId = null,
+        public override Task<bool> DeleteResourceAsync(ResourceAddress resource, string? versionId = null,
             ResourceConditions? conditions = null, CancellationToken cancellationToken = default) =>
             throw new ResourceRetainedException("Held since the prune read it.", versionId ?? "", null, true);
     }
@@ -1032,7 +1031,7 @@ public sealed class TelemetryTests : IDisposable
         }).BuildServiceProvider();
         IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>().CreateContainerAsync("c");
         await container.UploadAsync("due", BinaryData.FromString("x"));
-        await provider.GetRequiredService<ResourceRepository>().SoftDeleteResourceAsync(new ResourceLocation("c", "due"), null, null,
+        await provider.GetRequiredService<ResourceRepository>().SoftDeleteResourceAsync(new ResourceAddress("c", "due"), null, null,
             DateTimeOffset.UtcNow.AddDays(-1));
         return (provider, container);
     }

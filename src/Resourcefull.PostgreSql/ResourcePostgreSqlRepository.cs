@@ -17,7 +17,8 @@ namespace Resourcefull.PostgreSql;
 /// The PostgreSQL provider's repository: the shared EF Core one, with PostgreSQL's own statements, locks and errors.
 /// </summary>
 internal class ResourcePostgreSqlRepository(IDbContextFactory<ResourceDbContext> dbContextFactory, TimeProvider? timeProvider = null,
-    string? storeName = null) : EntityFrameworkRepository(dbContextFactory, timeProvider, storeName)
+    string? storeName = null, IReadOnlySet<string>? searchableMetadataKeys = null)
+    : EntityFrameworkRepository(dbContextFactory, timeProvider, storeName, searchableMetadataKeys)
 {
     private const string ForeignKeyViolation = "23503";
     private const string UniqueViolation = "23505";
@@ -79,7 +80,7 @@ internal class ResourcePostgreSqlRepository(IDbContextFactory<ResourceDbContext>
             SELECT "ContentLength" AS "Value" FROM "Resources" WHERE "Id" = {resourceId} AND "StagedAt" IS NOT NULL
             """)).ToListAsync(cancellationToken).ConfigureAwait(false)).FirstOrDefault();
 
-    protected override async Task<SessionRow?> LockSessionAsync(ResourceDbContext attempt, ResourceLocation resource, string versionId,
+    protected override async Task<SessionRow?> LockSessionAsync(ResourceDbContext attempt, ResourceAddress resource, string versionId,
         CancellationToken cancellationToken) =>
         (await attempt.Database.SqlQuery<SessionRow>(attempt.QualifyTables($"""
             SELECT "Id", "ContentLength", "StagedAt" FROM "Resources"
@@ -192,7 +193,7 @@ internal class ResourcePostgreSqlRepository(IDbContextFactory<ResourceDbContext>
     }
 
     /// <summary>Takes an exclusive advisory lock on each name, rather than locks on its rows.</summary>
-    protected override async Task LockNamesAsync(ResourceDbContext dbContext, IReadOnlyList<ResourceLocation> names,
+    protected override async Task LockNamesAsync(ResourceDbContext dbContext, IReadOnlyList<ResourceAddress> names,
         CancellationToken cancellationToken)
     {
         if (names.Count == 0) return;
@@ -213,7 +214,7 @@ internal class ResourcePostgreSqlRepository(IDbContextFactory<ResourceDbContext>
     /// which can find the schema another store was given, so a single lock across every store is what keeps writers of
     /// a name taking turns.
     /// </summary>
-    internal static long NameLockKey(ResourceLocation name) =>
+    internal static long NameLockKey(ResourceAddress name) =>
         BitConverter.ToInt64(SHA256.HashData(Encoding.UTF8.GetBytes($"{name.ContainerName}\n{name.ResourceName}")));
 
     /// <summary>What <see cref="MeasureContainerAsync"/> reads, named as its query's columns.</summary>

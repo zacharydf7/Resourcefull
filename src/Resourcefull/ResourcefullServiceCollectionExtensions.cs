@@ -62,8 +62,6 @@ public static class ResourcefullServiceCollectionExtensions
         {
             ResourcefullOptions options = provider.GetRequiredService<IOptionsMonitor<ResourcefullOptions>>().Get(builder.OptionsName);
             ResourceRepository repository = provider.GetRequiredStoreService<ResourceRepository>(name);
-            // Before any client calls it, so every write indexes the keys listings can search for.
-            repository.SearchableMetadataKeys = options.SearchableMetadataKeys;
             return new ResourceServiceClient(repository, Options.Create(options), provider.GetStoreService<IUriProvider>(name),
                 provider.GetService<ILogger<ResourceContainerClient>>(), provider.GetStoreService<ContainerPolicies>(name),
                 provider.GetStoreService<IResourceCleanupHandler>(name), provider.GetService<TimeProvider>(),

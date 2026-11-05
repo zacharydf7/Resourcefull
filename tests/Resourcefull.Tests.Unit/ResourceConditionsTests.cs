@@ -15,7 +15,7 @@ public class ResourceConditionsTests
     private static Mock<ResourceRepository> NewRepository()
     {
         var repository = new Mock<ResourceRepository>();
-        repository.Setup(r => r.GetResourceVersionsAsync(It.Is<ResourceLocation>(l => l.ContainerName == Container), It.IsAny<CancellationToken>())).ReturnsAsync([]);
+        repository.Setup(r => r.GetResourceVersionsAsync(It.Is<ResourceAddress>(l => l.ContainerName == Container), It.IsAny<CancellationToken>())).ReturnsAsync([]);
         repository.Setup(r => r.AddResourceAsync(It.IsAny<NewResourceVersion>(), It.IsAny<Stream>(), It.IsAny<ResourceWriteCondition?>(),
             It.IsAny<CancellationToken>())).ReturnsAsync(Written);
         return repository;
@@ -73,14 +73,14 @@ public class ResourceConditionsTests
     {
         // Arrange
         var repository = NewRepository();
-        repository.Setup(r => r.GetResourceInfoAsync(new ResourceLocation(Container, "r"), null, It.IsAny<CancellationToken>()))
+        repository.Setup(r => r.GetResourceInfoAsync(new ResourceAddress(Container, "r"), null, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ResourceInfo { ContainerName = Container, Name = "r", VersionId = "v1" });
 
         // Act
         await NewClient(repository.Object).CopyResourceAsync("r", Container, "copy", new ResourceCopyOptions());
 
         // Assert
-        repository.Verify(r => r.CopyResourceAsync(new ResourceLocation(Container, "r"), "v1", It.IsAny<NewResourceVersion>(),
+        repository.Verify(r => r.CopyResourceAsync(new ResourceAddress(Container, "r"), "v1", It.IsAny<NewResourceVersion>(),
             It.Is<ResourceWriteCondition?>(c => c!.CreateOnly && c.Conditions == null), It.IsAny<CancellationToken>()));
     }
 
@@ -119,7 +119,7 @@ public class ResourceConditionsTests
     {
         // Arrange
         var repository = new Mock<ResourceRepository>();
-        repository.Setup(r => r.DeleteResourceAsync(new ResourceLocation(Container, "r"), null, null, It.IsAny<CancellationToken>()))
+        repository.Setup(r => r.DeleteResourceAsync(new ResourceAddress(Container, "r"), null, null, It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
 
         // Act
@@ -130,7 +130,7 @@ public class ResourceConditionsTests
         Assert.True(deleted);
     }
 
-    private static readonly ResourceLocation Name = new(Container, "r");
+    private static readonly ResourceAddress Name = new(Container, "r");
 
     [Theory]
     [InlineData("v1", null)]

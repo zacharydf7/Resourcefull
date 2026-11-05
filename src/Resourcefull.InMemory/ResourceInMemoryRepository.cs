@@ -29,7 +29,7 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : R
     private async Task<WrittenContent> AddVersionAsync(NewResourceVersion version, Stream stream,
         ResourceWriteCondition condition, DateTimeOffset? lastModified, CancellationToken cancellationToken)
     {
-        (string resourceContainerName, string resourceName) = version.Location;
+        (string resourceContainerName, string resourceName) = version.Resource;
         bool createOnly = condition.CreateOnly;
         ResourceConditions? conditions = condition.Conditions;
 
@@ -83,13 +83,13 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : R
         }, cancellationToken).ConfigureAwait(false);
     }
 
-    public override Task<WrittenContent?> CopyResourceAsync(ResourceLocation source, string? sourceVersionId,
+    public override Task<WrittenContent?> CopyResourceAsync(ResourceAddress source, string? sourceVersionId,
         NewResourceVersion destination, ResourceWriteCondition? condition = null, CancellationToken cancellationToken = default) =>
         UnderLockAsync(() =>
         {
             if (Resolve(VersionsOf(source.ContainerName, source.ResourceName), sourceVersionId) is not { } from) return null;
 
-            (string containerName, string resourceName) = destination.Location;
+            (string containerName, string resourceName) = destination.Resource;
             InMemoryResourceContainer container = _containers.GetValueOrDefault(containerName)
                 ?? throw ContainerMissing(containerName);
             container.Resources.TryGetValue(resourceName, out List<InMemoryResource>? versions);
@@ -104,7 +104,7 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : R
             return (WrittenContent?)written;
         }, cancellationToken);
 
-    public override Task<bool> MoveResourceAsync(ResourceLocation source, ResourceLocation destination,
+    public override Task<bool> MoveResourceAsync(ResourceAddress source, ResourceAddress destination,
         ResourceConditions? sourceConditions, CancellationToken cancellationToken = default) =>
         UnderLockAsync(() =>
         {
@@ -137,7 +137,7 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : R
     /// <summary>Stores a new version as the name's current one; called under the lock.</summary>
     private void AddVersion(InMemoryResourceContainer container, NewResourceVersion version, byte[] content, WrittenContent written)
     {
-        string resourceName = version.Location.ResourceName;
+        string resourceName = version.Resource.ResourceName;
         if (!container.Resources.TryGetValue(resourceName, out List<InMemoryResource>? versions))
             container.Resources[resourceName] = versions = [];
 
@@ -179,7 +179,7 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : R
                 .Take(maxVersions)
         ], cancellationToken);
 
-    public override Task<bool> DeleteExpiredVersionAsync(ResourceLocation resource, string versionId, DateTimeOffset now,
+    public override Task<bool> DeleteExpiredVersionAsync(ResourceAddress resource, string versionId, DateTimeOffset now,
         CancellationToken cancellationToken = default) =>
         UnderLockAsync(() =>
         {
@@ -197,34 +197,34 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : R
             return true;
         }, cancellationToken);
 
-    public override Task<bool> SetExpiryAsync(ResourceLocation resource, string? versionId, DateTimeOffset? expiresAt,
+    public override Task<bool> SetExpiryAsync(ResourceAddress resource, string? versionId, DateTimeOffset? expiresAt,
         CancellationToken cancellationToken = default) =>
         ChangeAsync(resource, versionId, info => info with { ExpiresAt = expiresAt }, cancellationToken);
 
     public override bool SupportsRetention => true;
 
-    public override Task<bool> SetRetentionAsync(ResourceLocation resource, string? versionId, DateTimeOffset retainUntil,
+    public override Task<bool> SetRetentionAsync(ResourceAddress resource, string? versionId, DateTimeOffset retainUntil,
         CancellationToken cancellationToken = default) =>
         ChangeAsync(resource, versionId, info => info.RetainUntil > retainUntil
             ? throw RetentionShortened(resource, info, retainUntil)
             : info with { RetainUntil = retainUntil }, cancellationToken);
 
-    public override Task<bool> SetLegalHoldAsync(ResourceLocation resource, string? versionId, bool hold,
+    public override Task<bool> SetLegalHoldAsync(ResourceAddress resource, string? versionId, bool hold,
         CancellationToken cancellationToken = default) =>
         ChangeAsync(resource, versionId, info => info with { LegalHold = hold }, cancellationToken);
 
-    public override Task<bool> SetResourceMetadataAsync(ResourceLocation resource, string? versionId,
+    public override Task<bool> SetResourceMetadataAsync(ResourceAddress resource, string? versionId,
         IReadOnlyDictionary<string, string> metadata, CancellationToken cancellationToken = default) =>
         ChangeAsync(resource, versionId, info => info with { Metadata = new Dictionary<string, string>(metadata) },
             cancellationToken);
 
-    public override Task<bool> SetContentTypeAsync(ResourceLocation resource, string? versionId, string? contentType,
+    public override Task<bool> SetContentTypeAsync(ResourceAddress resource, string? versionId, string? contentType,
         CancellationToken cancellationToken = default) =>
         ChangeAsync(resource, versionId, info => info with { ContentType = contentType }, cancellationToken);
 
     /// <summary>Replaces one version's <see cref="ResourceInfo"/> with what <paramref name="change"/> returns for it.</summary>
     /// <returns><see langword="false"/> if the version doesn't exist.</returns>
-    private Task<bool> ChangeAsync(ResourceLocation resource, string? versionId, Func<ResourceInfo, ResourceInfo> change,
+    private Task<bool> ChangeAsync(ResourceAddress resource, string? versionId, Func<ResourceInfo, ResourceInfo> change,
         CancellationToken cancellationToken) =>
         UnderLockAsync(() =>
         {
@@ -233,12 +233,6 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : R
             version.ResourceInfo = change(version.ResourceInfo);
             return true;
         }, cancellationToken);
-
-    public override Task<IReadOnlyList<ResourceInfo>> GetAllResourceInfoAsync(string resourceContainerName,
-        CancellationToken cancellationToken = default) =>
-        UnderLockAsync<IReadOnlyList<ResourceInfo>>(() => _containers.GetValueOrDefault(resourceContainerName) is { } container
-            ? [.. container.Resources.Values.Select(versions => ToResourceInfo(versions.MaxBy(r => r.Sequence)!, isLatest: true))]
-            : [], cancellationToken);
 
     public override Task<IReadOnlyList<ResourceInfo>> GetResourcePageAsync(string resourceContainerName, string? prefix,
         string? afterName, int pageSize, CancellationToken cancellationToken = default) =>
@@ -251,13 +245,13 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : R
                 .Select(pair => ToResourceInfo(pair.Value.MaxBy(r => r.Sequence)!, isLatest: true))]
             : [], cancellationToken);
 
-    public override Task<IReadOnlyList<ResourceInfo>> GetResourceVersionsAsync(ResourceLocation resource,
+    public override Task<IReadOnlyList<ResourceInfo>> GetResourceVersionsAsync(ResourceAddress resource,
         CancellationToken cancellationToken = default) =>
         UnderLockAsync<IReadOnlyList<ResourceInfo>>(() => [.. VersionsOf(resource.ContainerName, resource.ResourceName)
             .OrderByDescending(r => r.Sequence)
             .Select((r, index) => ToResourceInfo(r, isLatest: index == 0))], cancellationToken);
 
-    public override Task<ResourceInfo?> GetResourceInfoAsync(ResourceLocation resource, string? versionId = null,
+    public override Task<ResourceInfo?> GetResourceInfoAsync(ResourceAddress resource, string? versionId = null,
         CancellationToken cancellationToken = default) =>
         UnderLockAsync(() =>
         {
@@ -266,28 +260,28 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : R
             return found is null ? null : ToResourceInfo(found, isLatest: found == versions.MaxBy(r => r.Sequence));
         }, cancellationToken);
 
-    public override Task<Stream?> GetResourceStreamAsync(ResourceLocation resource, string? versionId = null,
+    public override Task<Stream?> GetResourceStreamAsync(ResourceAddress resource, string? versionId = null,
         CancellationToken cancellationToken = default) =>
         GetResourceStreamAsync(resource, versionId, 0, null, cancellationToken);
 
-    public override Task<Stream?> GetResourceStreamAsync(ResourceLocation resource, string? versionId, long offset,
+    public override Task<Stream?> GetResourceStreamAsync(ResourceAddress resource, string? versionId, long offset,
         long? length, CancellationToken cancellationToken = default) =>
         UnderLockAsync<Stream?>(() => Resolve(VersionsOf(resource.ContainerName, resource.ResourceName), versionId) is { } found
             ? new InMemoryResourceStream(found.Content, offset)
             : null, cancellationToken);
 
-    public override Task<bool> DeleteResourceAsync(ResourceLocation resource, string? versionId = null,
+    public override Task<bool> DeleteResourceAsync(ResourceAddress resource, string? versionId = null,
         ResourceConditions? conditions = null, CancellationToken cancellationToken = default) =>
         DeleteAsync(resource, versionId, conditions, null, cancellationToken);
 
     public override bool SupportsSoftDelete => true;
 
-    public override Task<bool> SoftDeleteResourceAsync(ResourceLocation resource, string? versionId, ResourceConditions? conditions,
+    public override Task<bool> SoftDeleteResourceAsync(ResourceAddress resource, string? versionId, ResourceConditions? conditions,
         DateTimeOffset purgeAt, CancellationToken cancellationToken = default) =>
         DeleteAsync(resource, versionId, conditions, purgeAt, cancellationToken);
 
     /// <summary>Deletes into the bin, until <paramref name="purgeAt"/>, or for good when that's <see langword="null"/>.</summary>
-    private Task<bool> DeleteAsync(ResourceLocation resource, string? versionId, ResourceConditions? conditions, DateTimeOffset? purgeAt,
+    private Task<bool> DeleteAsync(ResourceAddress resource, string? versionId, ResourceConditions? conditions, DateTimeOffset? purgeAt,
         CancellationToken cancellationToken) =>
         UnderLockAsync(() =>
         {
@@ -333,7 +327,7 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : R
             return new DeletedVersionPage(found, (found[^1].DeletedAt!.Value, found[^1].VersionId));
         }, cancellationToken);
 
-    public override Task<IReadOnlyList<ResourceInfo>> GetDeletedVersionsAsync(ResourceLocation resource,
+    public override Task<IReadOnlyList<ResourceInfo>> GetDeletedVersionsAsync(ResourceAddress resource,
         CancellationToken cancellationToken = default) =>
         UnderLockAsync<IReadOnlyList<ResourceInfo>>(() =>
             [.. InBinOrder(_containers.GetValueOrDefault(resource.ContainerName)?.Deleted.GetValueOrDefault(resource.ResourceName) ?? [])],
@@ -345,7 +339,7 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : R
         .OrderByDescending(v => v.DeletedAt)
         .ThenBy(v => v.VersionId, StringComparer.Ordinal);
 
-    public override Task<int> UndeleteAsync(ResourceLocation resource, string? versionId, CancellationToken cancellationToken = default) =>
+    public override Task<int> UndeleteAsync(ResourceAddress resource, string? versionId, CancellationToken cancellationToken = default) =>
         UnderLockAsync(() =>
         {
             if (_containers.GetValueOrDefault(resource.ContainerName) is not { } container
@@ -372,7 +366,7 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : R
             return returning.Count;
         }, cancellationToken);
 
-    public override Task<int> PurgeDeletedAsync(ResourceLocation resource, string? versionId, DateTimeOffset? dueBy,
+    public override Task<int> PurgeDeletedAsync(ResourceAddress resource, string? versionId, DateTimeOffset? dueBy,
         CancellationToken cancellationToken = default) =>
         UnderLockAsync(() =>
         {
@@ -447,7 +441,7 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : R
     public override Task StartStagedVersionAsync(NewResourceVersion version, CancellationToken cancellationToken = default) =>
         UnderLockAsync(() =>
         {
-            (string resourceContainerName, string resourceName) = version.Location;
+            (string resourceContainerName, string resourceName) = version.Resource;
             InMemoryResourceContainer container = _containers.GetValueOrDefault(resourceContainerName)
                 ?? throw ContainerMissing(resourceContainerName);
             container.Staged.Add((resourceName, version.VersionId),
@@ -455,13 +449,13 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : R
             return true;
         }, cancellationToken);
 
-    public override Task<StagedVersion?> GetStagedVersionAsync(ResourceLocation resource, string versionId,
+    public override Task<StagedVersion?> GetStagedVersionAsync(ResourceAddress resource, string versionId,
         CancellationToken cancellationToken = default) =>
         UnderLockAsync(() => StagedOf(resource, versionId) is { } staged
             ? new StagedVersion(staged.Version, staged.Content.Length)
             : null, cancellationToken);
 
-    public override async Task<long?> AppendStagedContentAsync(ResourceLocation resource, string versionId, long offset,
+    public override async Task<long?> AppendStagedContentAsync(ResourceAddress resource, string versionId, long offset,
         Stream content, CancellationToken cancellationToken = default)
     {
         // Checked before the content is read, to spare reading an append that will fail, and again as it's added.
@@ -480,13 +474,13 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : R
         }, cancellationToken).ConfigureAwait(false);
     }
 
-    public override Task<Stream?> GetStagedStreamAsync(ResourceLocation resource, string versionId,
+    public override Task<Stream?> GetStagedStreamAsync(ResourceAddress resource, string versionId,
         CancellationToken cancellationToken = default) =>
         UnderLockAsync(() => StagedOf(resource, versionId) is { } staged
             ? (Stream?)new MemoryStream(staged.Content.ToArray(), writable: false)
             : null, cancellationToken);
 
-    public override Task<WrittenContent?> CompleteStagedVersionAsync(ResourceLocation resource, string versionId,
+    public override Task<WrittenContent?> CompleteStagedVersionAsync(ResourceAddress resource, string versionId,
         long contentLength, string contentHash, ResourceWriteCondition? condition = null,
         CancellationToken cancellationToken = default) =>
         UnderLockAsync(() =>
@@ -506,7 +500,7 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : R
             return (WrittenContent?)written;
         }, cancellationToken);
 
-    public override Task<bool> DeleteStagedVersionAsync(ResourceLocation resource, string versionId,
+    public override Task<bool> DeleteStagedVersionAsync(ResourceAddress resource, string versionId,
         CancellationToken cancellationToken = default) =>
         UnderLockAsync(() => _containers.GetValueOrDefault(resource.ContainerName) is { } container
             && container.Staged.Remove((resource.ResourceName, versionId)), cancellationToken);
@@ -527,14 +521,14 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : R
         }, cancellationToken);
 
     /// <summary>The staged version, or <see langword="null"/> if there's none; called under the lock.</summary>
-    private InMemoryStagedVersion? StagedOf(ResourceLocation resource, string versionId) =>
+    private InMemoryStagedVersion? StagedOf(ResourceAddress resource, string versionId) =>
         _containers.GetValueOrDefault(resource.ContainerName)?.Staged.GetValueOrDefault((resource.ResourceName, versionId));
 
     /// <summary>
     /// The staged version, provided its content ends at <paramref name="offset"/>, or <see langword="null"/> if
     /// there's none; called under the lock.
     /// </summary>
-    private InMemoryStagedVersion? ThrowIfNotAt(ResourceLocation resource, string versionId, long offset)
+    private InMemoryStagedVersion? ThrowIfNotAt(ResourceAddress resource, string versionId, long offset)
     {
         if (StagedOf(resource, versionId) is not { } staged) return null;
         if (staged.Content.Length != offset)
@@ -584,12 +578,12 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : R
         DateTimeOffset now = _clock.GetUtcNow();
         if (versions.Select(v => v.ResourceInfo).FirstOrDefault(v => !v.IsDeletableAt(now)) is { } retained)
         {
-            throw ResourceRetainedException.Create(new ResourceLocation(retained.ContainerName, retained.Name), retained.VersionId,
+            throw ResourceRetainedException.Create(new ResourceAddress(retained.ContainerName, retained.Name), retained.VersionId,
                 retained.RetainUntil, retained.LegalHold, now);
         }
     }
 
-    private static ArgumentOutOfRangeException RetentionShortened(ResourceLocation resource, ResourceInfo version,
+    private static ArgumentOutOfRangeException RetentionShortened(ResourceAddress resource, ResourceInfo version,
         DateTimeOffset retainUntil) =>
         new("retainUntil", retainUntil, $"The version {version.VersionId} of the resource {resource.ResourceName} in the " +
             $"container {resource.ContainerName} is retained until {version.RetainUntil:O}, and that can't move earlier.");
@@ -606,7 +600,7 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : R
 
     private static void ThrowIfNotMet(ResourceConditions conditions, string resourceContainerName, string resourceName,
         InMemoryResource? current) =>
-        conditions.ThrowIfNotMet(new ResourceLocation(resourceContainerName, resourceName), current?.ResourceInfo.VersionId,
+        conditions.ThrowIfNotMet(new ResourceAddress(resourceContainerName, resourceName), current?.ResourceInfo.VersionId,
             current?.ResourceInfo.ContentHash);
 
     private List<InMemoryResource> VersionsOf(string resourceContainerName, string resourceName) =>

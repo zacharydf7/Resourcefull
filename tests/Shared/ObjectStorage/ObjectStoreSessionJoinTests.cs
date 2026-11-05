@@ -50,7 +50,7 @@ public abstract class ObjectStoreSessionJoinTests
         string prefix = $"session-stages-{Guid.NewGuid():N}/";
         var store = new InterferingStore(NewStore()) { MaxParts = 3 };
         ObjectStoreRepository repository = await NewRepositoryAsync(prefix, segmentSize: 9 * 1024 * 1024, store: store);
-        var location = new ResourceLocation("c", "big.bin");
+        var location = new ResourceAddress("c", "big.bin");
         byte[] payload = new byte[40 * 1024 * 1024];
         new Random(160).NextBytes(payload);
         await repository.StartStagedVersionAsync(new NewResourceVersion(location, "v1"));
@@ -79,7 +79,7 @@ public abstract class ObjectStoreSessionJoinTests
         var store = new InterferingStore(NewStore()) { MaxParts = 4 };
         ObjectStoreRepository repository = await NewRepositoryAsync(prefix, segmentSize: 9 * 1024 * 1024, store: store,
             copyPartSize: 2 * ObjectParts.PartSize);
-        var location = new ResourceLocation("c", "big.bin");
+        var location = new ResourceAddress("c", "big.bin");
         byte[] payload = new byte[63 * 1024 * 1024];
         new Random(1601).NextBytes(payload);
         await repository.StartStagedVersionAsync(new NewResourceVersion(location, "v1"));
@@ -107,7 +107,7 @@ public abstract class ObjectStoreSessionJoinTests
         var store = new InterferingStore(NewStore()) { MaxParts = 2 };
         ObjectStoreRepository repository = await NewRepositoryAsync(prefix, segmentSize: 9 * 1024 * 1024, store: store,
             copyPartSize: ObjectParts.PartSize);
-        var location = new ResourceLocation("c", "big.bin");
+        var location = new ResourceAddress("c", "big.bin");
         await repository.StartStagedVersionAsync(new NewResourceVersion(location, "v1"));
         long stored = (await repository.AppendStagedContentAsync(location, "v1", 0, new MemoryStream(new byte[18 * 1024 * 1024])))!.Value;
 
@@ -132,7 +132,7 @@ public abstract class ObjectStoreSessionJoinTests
         string prefix = $"session-join-race-{Guid.NewGuid():N}/";
         var store = new InterferingStore(NewStore()) { MaxParts = 2 };
         ObjectStoreRepository repository = await NewRepositoryAsync(prefix, segmentSize: 9 * 1024 * 1024, store: store);
-        var location = new ResourceLocation("c", "big.bin");
+        var location = new ResourceAddress("c", "big.bin");
         byte[] payload = new byte[18 * 1024 * 1024];
         new Random(1602).NextBytes(payload);
         await repository.StartStagedVersionAsync(new NewResourceVersion(location, "v1"));
@@ -166,7 +166,7 @@ public abstract class ObjectStoreSessionJoinTests
         string prefix = $"session-join-deleted-{Guid.NewGuid():N}/";
         var store = new InterferingStore(NewStore()) { MaxParts = 2 };
         ObjectStoreRepository repository = await NewRepositoryAsync(prefix, segmentSize: 9 * 1024 * 1024, store: store);
-        var location = new ResourceLocation("c", "big.bin");
+        var location = new ResourceAddress("c", "big.bin");
         await repository.StartStagedVersionAsync(new NewResourceVersion(location, "v1"));
         long stored = (await repository.AppendStagedContentAsync(location, "v1", 0, new MemoryStream(new byte[18 * 1024 * 1024])))!.Value;
         store.BeforeJoin = () => repository.DeleteStagedVersionAsync(location, "v1");
@@ -190,7 +190,7 @@ public abstract class ObjectStoreSessionJoinTests
         string prefix = $"session-joins-race-{Guid.NewGuid():N}/";
         var store = new InterferingStore(NewStore()) { MaxParts = 2 };
         ObjectStoreRepository repository = await NewRepositoryAsync(prefix, segmentSize: 9 * 1024 * 1024, store: store);
-        var location = new ResourceLocation("c", "big.bin");
+        var location = new ResourceAddress("c", "big.bin");
         byte[] payload = new byte[18 * 1024 * 1024];
         new Random(1603).NextBytes(payload);
         await repository.StartStagedVersionAsync(new NewResourceVersion(location, "v1"));
@@ -229,7 +229,7 @@ public abstract class ObjectStoreSessionJoinTests
         string prefix = $"session-join-canceled-{Guid.NewGuid():N}/";
         var store = new InterferingStore(NewStore()) { MaxParts = 2 };
         ObjectStoreRepository repository = await NewRepositoryAsync(prefix, segmentSize: 9 * 1024 * 1024, store: store);
-        var location = new ResourceLocation("c", "big.bin");
+        var location = new ResourceAddress("c", "big.bin");
         byte[] payload = new byte[18 * 1024 * 1024];
         new Random(1604).NextBytes(payload);
         await repository.StartStagedVersionAsync(new NewResourceVersion(location, "v1"));

@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 
 namespace Resourcefull.EntityFramework;
 
@@ -13,4 +14,9 @@ internal static class StoreServices
 
     public static T GetRequiredStoreService<T>(this IServiceProvider services, string? storeName) where T : notnull =>
         storeName is null ? services.GetRequiredService<T>() : services.GetRequiredKeyedService<T>(storeName);
+
+    /// <summary>The metadata keys the store's listings can search for, which its provider indexes.</summary>
+    public static IReadOnlySet<string> SearchableMetadataKeys(this IServiceProvider services, string? storeName) =>
+        services.GetRequiredService<IOptionsMonitor<ResourcefullOptions>>().Get(storeName ?? Options.DefaultName)
+            .SearchableMetadataKeys;
 }

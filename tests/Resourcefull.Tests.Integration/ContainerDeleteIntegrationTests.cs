@@ -33,11 +33,11 @@ public class ContainerDeleteIntegrationTests(SqlServerFixture fixture)
         // Act
         Exception? cancellation =
             await Record.ExceptionAsync(() => canceledAfterOneBatch.DeleteContainerAsync(containerName, token));
-        IReadOnlyList<ResourceInfo> remaining = await repository.GetAllResourceInfoAsync(containerName);
+        IReadOnlyList<ResourceInfo> remaining = await repository.GetResourcePageAsync(containerName, null, null, 1000);
         var remainingContent = new List<byte[]>();
         foreach (ResourceInfo resource in remaining)
         {
-            await using Stream content = (await repository.GetResourceStreamAsync(new ResourceLocation(containerName, resource.Name)))!;
+            await using Stream content = (await repository.GetResourceStreamAsync(new ResourceAddress(containerName, resource.Name)))!;
             var copy = new MemoryStream();
             await content.CopyToAsync(copy);
             remainingContent.Add(copy.ToArray());
@@ -50,7 +50,7 @@ public class ContainerDeleteIntegrationTests(SqlServerFixture fixture)
         Assert.All(remainingContent, content => Assert.Equal(Payload, content));
         Assert.True(finished);
         Assert.Null(await repository.GetContainerInfoAsync(containerName));
-        Assert.Empty(await repository.GetAllResourceInfoAsync(containerName));
+        Assert.Empty(await repository.GetResourcePageAsync(containerName, null, null, 1000));
     }
 
     [Fact]
@@ -69,7 +69,7 @@ public class ContainerDeleteIntegrationTests(SqlServerFixture fixture)
 
         // Assert
         Assert.IsAssignableFrom<OperationCanceledException>(cancellation);
-        ResourceInfo current = Assert.Single(await repository.GetResourceVersionsAsync(new ResourceLocation(containerName, "n")));
+        ResourceInfo current = Assert.Single(await repository.GetResourceVersionsAsync(new ResourceAddress(containerName, "n")));
         Assert.Equal("a", current.VersionId);
         Assert.True(current.IsLatest);
         await repository.DeleteContainerAsync(containerName);
@@ -100,7 +100,7 @@ public class ContainerDeleteIntegrationTests(SqlServerFixture fixture)
 
         // Assert
         Assert.Null(await repository.GetContainerInfoAsync(containerName));
-        Assert.Equal(["moved"], (await repository.GetAllResourceInfoAsync(destination)).Select(r => r.Name));
+        Assert.Equal(["moved"], (await repository.GetResourcePageAsync(destination, null, null, 1000)).Select(r => r.Name));
         Assert.Equal(chunks, await CountChunksAsync(destination, "moved"));
         await repository.DeleteContainerAsync(destination);
     }
@@ -164,7 +164,7 @@ public class ContainerDeleteIntegrationTests(SqlServerFixture fixture)
 
     private static Task<WrittenContent> AddAsync(ResourceSqlRepository repository, string containerName, string name,
         string versionId)
-        => repository.AddResourceAsync(new NewResourceVersion(new ResourceLocation(containerName, name), versionId),
+        => repository.AddResourceAsync(new NewResourceVersion(new ResourceAddress(containerName, name), versionId),
             new MemoryStream(Payload));
 
     /// <summary>

@@ -411,8 +411,8 @@ public class ResourceServiceClientTests
         var repository = new Mock<ResourceRepository>();
         var expired = new ResourceInfo { ContainerName = "c", Name = "n", VersionId = "v1", ExpiresAt = DateTimeOffset.UnixEpoch };
         repository.Setup(r => r.GetExpiredAsync(It.IsAny<DateTimeOffset>(), It.IsAny<int>(), null, It.IsAny<CancellationToken>())).ReturnsAsync([expired]);
-        repository.Setup(r => r.DeleteExpiredVersionsAsync(It.IsAny<IReadOnlyList<(ResourceLocation, string)>>(),
-            It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>())).ReturnsAsync([(new ResourceLocation("c", "n"), "v1")]);
+        repository.Setup(r => r.DeleteExpiredVersionsAsync(It.IsAny<IReadOnlyList<(ResourceAddress, string)>>(),
+            It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>())).ReturnsAsync([(new ResourceAddress("c", "n"), "v1")]);
         var service = NewService(repository.Object);
 
         // Act
@@ -421,13 +421,13 @@ public class ResourceServiceClientTests
         // Assert: the check for any, the page, and its batch delete.
         repository.Verify(r => r.GetExpiredAsync(It.IsAny<DateTimeOffset>(), It.IsAny<int>(), null, cts.Token), Times.Exactly(2));
         repository.Verify(r => r.DeleteExpiredVersionsAsync(
-            It.Is<IReadOnlyList<(ResourceLocation, string)>>(v => IsOnly(v, "c", "n", "v1")),
+            It.Is<IReadOnlyList<(ResourceAddress, string)>>(v => IsOnly(v, "c", "n", "v1")),
             It.IsAny<DateTimeOffset>(), cts.Token), Times.Once);
     }
 
-    private static bool IsOnly(IReadOnlyList<(ResourceLocation, string)> versions, string container, string name,
+    private static bool IsOnly(IReadOnlyList<(ResourceAddress, string)> versions, string container, string name,
         string versionId) =>
-        versions.Count == 1 && versions[0] == (new ResourceLocation(container, name), versionId);
+        versions.Count == 1 && versions[0] == (new ResourceAddress(container, name), versionId);
 
     /// <summary>
     /// Without versioning, an expired current version with the version it replaced waiting behind it, and a provider
@@ -444,12 +444,12 @@ public class ResourceServiceClientTests
         var replaced = new ResourceInfo { ContainerName = "c", Name = "n", VersionId = "replaced" };
         repository.Setup(r => r.GetExpiredAsync(It.IsAny<DateTimeOffset>(), It.IsAny<int>(), null,
             It.IsAny<CancellationToken>())).ReturnsAsync([current]);
-        repository.Setup(r => r.GetResourceVersionsAsync(new ResourceLocation("c", "n"), It.IsAny<CancellationToken>()))
+        repository.Setup(r => r.GetResourceVersionsAsync(new ResourceAddress("c", "n"), It.IsAny<CancellationToken>()))
             .ReturnsAsync([current, replaced]);
-        repository.Setup(r => r.DeleteExpiredVersionsAsync(It.IsAny<IReadOnlyList<(ResourceLocation, string)>>(),
+        repository.Setup(r => r.DeleteExpiredVersionsAsync(It.IsAny<IReadOnlyList<(ResourceAddress, string)>>(),
             It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()))
-            .Returns(() => Task.FromException<IReadOnlyCollection<(ResourceLocation, string)>>(failure()));
-        repository.Setup(r => r.GetResourceInfoAsync(new ResourceLocation("c", "n"), "current", It.IsAny<CancellationToken>()))
+            .Returns(() => Task.FromException<IReadOnlyCollection<(ResourceAddress, string)>>(failure()));
+        repository.Setup(r => r.GetResourceInfoAsync(new ResourceAddress("c", "n"), "current", It.IsAny<CancellationToken>()))
             .ReturnsAsync((ResourceInfo?)null);
         var service = new ResourceServiceClient(repository.Object, Options.Create(new ResourcefullOptions()),
             expiry: new ExpirySettings(TimeSpan.FromMinutes(1)));
@@ -467,7 +467,7 @@ public class ResourceServiceClientTests
 
         // Assert: counted, and the replaced version didn't become current again.
         Assert.Equal(1, deleted);
-        repository.Verify(r => r.DeleteResourceAsync(new ResourceLocation("c", "n"), "replaced", It.IsAny<ResourceConditions?>(), It.IsAny<CancellationToken>()), Times.Once);
+        repository.Verify(r => r.DeleteResourceAsync(new ResourceAddress("c", "n"), "replaced", It.IsAny<ResourceConditions?>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -486,7 +486,7 @@ public class ResourceServiceClientTests
 
         // Assert
         await Assert.ThrowsAnyAsync<OperationCanceledException>(act);
-        repository.Verify(r => r.DeleteResourceAsync(new ResourceLocation("c", "n"), "replaced", It.IsAny<ResourceConditions?>(), It.IsAny<CancellationToken>()), Times.Once);
+        repository.Verify(r => r.DeleteResourceAsync(new ResourceAddress("c", "n"), "replaced", It.IsAny<ResourceConditions?>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -498,16 +498,16 @@ public class ResourceServiceClientTests
             new() { ContainerName = container, Name = name, VersionId = id, ExpiresAt = DateTimeOffset.UnixEpoch };
         repository.Setup(r => r.GetExpiredAsync(It.IsAny<DateTimeOffset>(), It.IsAny<int>(), null,
             It.IsAny<CancellationToken>())).ReturnsAsync([Expired("c", "n", "v1"), Expired("d", "n", "v1"), Expired("c", "o", "v2")]);
-        repository.Setup(r => r.DeleteExpiredVersionsAsync(It.Is<IReadOnlyList<(ResourceLocation, string)>>(v => v.Count == 3),
+        repository.Setup(r => r.DeleteExpiredVersionsAsync(It.Is<IReadOnlyList<(ResourceAddress, string)>>(v => v.Count == 3),
             It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync([(new ResourceLocation("c", "n"), "v1"), (new ResourceLocation("c", "o"), "v2")]);
+            .ReturnsAsync([(new ResourceAddress("c", "n"), "v1"), (new ResourceAddress("c", "o"), "v2")]);
 
         // Act
         int deleted = await NewService(repository.Object).DeleteExpiredAsync();
 
         // Assert
         Assert.Equal(2, deleted);
-        repository.Verify(r => r.DeleteExpiredVersionAsync(It.IsAny<ResourceLocation>(), It.IsAny<string>(),
+        repository.Verify(r => r.DeleteExpiredVersionAsync(It.IsAny<ResourceAddress>(), It.IsAny<string>(),
             It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
@@ -516,7 +516,7 @@ public class ResourceServiceClientTests
     {
         // Arrange: a provider written before exceptions said what they're about.
         var repository = new Mock<ResourceRepository>();
-        repository.Setup(r => r.DeleteResourceAsync(new ResourceLocation("c", "n"), null, It.IsAny<ResourceConditions>(),
+        repository.Setup(r => r.DeleteResourceAsync(new ResourceAddress("c", "n"), null, It.IsAny<ResourceConditions>(),
             It.IsAny<CancellationToken>()))
             .ThrowsAsync(new ResourcePreconditionFailedException("Not met.", null, null));
         IResourceContainerClient container = NewService(repository.Object).GetContainerClient("c");
@@ -535,9 +535,9 @@ public class ResourceServiceClientTests
     {
         // Arrange: a provider written before exceptions said what they're about, whose destination name exists.
         var repository = new Mock<ResourceRepository>();
-        repository.Setup(r => r.GetResourceInfoAsync(new ResourceLocation("c", "a"), null, It.IsAny<CancellationToken>()))
+        repository.Setup(r => r.GetResourceInfoAsync(new ResourceAddress("c", "a"), null, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ResourceInfo { ContainerName = "c", Name = "a", VersionId = "v1" });
-        repository.Setup(r => r.CopyResourceAsync(It.IsAny<ResourceLocation>(), "v1", It.IsAny<NewResourceVersion>(),
+        repository.Setup(r => r.CopyResourceAsync(It.IsAny<ResourceAddress>(), "v1", It.IsAny<NewResourceVersion>(),
             It.IsAny<ResourceWriteCondition?>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new ResourceConflictException("Exists."));
         IResourceContainerClient container = NewService(repository.Object).GetContainerClient("c");
@@ -555,7 +555,7 @@ public class ResourceServiceClientTests
     {
         // Arrange
         var repository = new Mock<ResourceRepository>();
-        repository.Setup(r => r.MoveResourceAsync(It.IsAny<ResourceLocation>(), It.IsAny<ResourceLocation>(),
+        repository.Setup(r => r.MoveResourceAsync(It.IsAny<ResourceAddress>(), It.IsAny<ResourceAddress>(),
             It.IsAny<ResourceConditions?>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new ResourceContainerNotFoundException("Missing."));
         IResourceContainerClient container = NewService(repository.Object).GetContainerClient("c");
@@ -577,10 +577,10 @@ public class ResourceServiceClientTests
             new() { ContainerName = "c", Name = id, VersionId = id, ExpiresAt = DateTimeOffset.UnixEpoch };
         repository.Setup(r => r.GetExpiredAsync(It.IsAny<DateTimeOffset>(), It.IsAny<int>(), null,
             It.IsAny<CancellationToken>())).ReturnsAsync([Expired("a"), Expired("b")]);
-        repository.Setup(r => r.DeleteExpiredVersionsAsync(It.IsAny<IReadOnlyList<(ResourceLocation, string)>>(),
+        repository.Setup(r => r.DeleteExpiredVersionsAsync(It.IsAny<IReadOnlyList<(ResourceAddress, string)>>(),
             It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("The batch failed."));
-        repository.Setup(r => r.DeleteExpiredVersionAsync(It.IsAny<ResourceLocation>(), It.IsAny<string>(),
+        repository.Setup(r => r.DeleteExpiredVersionAsync(It.IsAny<ResourceAddress>(), It.IsAny<string>(),
             It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>())).ReturnsAsync(true);
 
         // Act
@@ -590,7 +590,7 @@ public class ResourceServiceClientTests
         Assert.Equal(2, deleted);
         foreach (string id in new[] { "a", "b" })
         {
-            repository.Verify(r => r.DeleteExpiredVersionAsync(new ResourceLocation("c", id), id,
+            repository.Verify(r => r.DeleteExpiredVersionAsync(new ResourceAddress("c", id), id,
                 It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()), Times.Once);
         }
     }
@@ -607,7 +607,7 @@ public class ResourceServiceClientTests
             .ReturnsAsync([version]);
         repository.Setup(r => r.GetVersionPageAsync("name", "a", It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
-        repository.Setup(r => r.GetResourceStreamAsync(new ResourceLocation("name", "a"), "v1", It.IsAny<CancellationToken>())).ReturnsAsync(() => new MemoryStream([1]));
+        repository.Setup(r => r.GetResourceStreamAsync(new ResourceAddress("name", "a"), "v1", It.IsAny<CancellationToken>())).ReturnsAsync(() => new MemoryStream([1]));
         var service = NewService(repository.Object);
 
         // Act
@@ -616,7 +616,7 @@ public class ResourceServiceClientTests
         // Assert: the container, its page of names' versions, and each version's content.
         repository.Verify(r => r.GetContainerInfoAsync("name", cts.Token), Times.Once);
         repository.Verify(r => r.GetVersionPageAsync("name", null, It.IsAny<int>(), cts.Token), Times.Once);
-        repository.Verify(r => r.GetResourceStreamAsync(new ResourceLocation("name", "a"), "v1", cts.Token), Times.Once);
+        repository.Verify(r => r.GetResourceStreamAsync(new ResourceAddress("name", "a"), "v1", cts.Token), Times.Once);
     }
 
     [Fact]
@@ -634,7 +634,7 @@ public class ResourceServiceClientTests
             .ReturnsAsync([Version("b")]);
         repository.Setup(r => r.GetVersionPageAsync("c", "b", It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
-        repository.Setup(r => r.GetResourceStreamAsync(It.Is<ResourceLocation>(l => l.ContainerName == "c"), It.IsAny<string>(),
+        repository.Setup(r => r.GetResourceStreamAsync(It.Is<ResourceAddress>(l => l.ContainerName == "c"), It.IsAny<string>(),
             It.IsAny<CancellationToken>())).ReturnsAsync(() => new MemoryStream([1]));
 
         // Act
@@ -672,7 +672,7 @@ public class ResourceServiceClientTests
                 steps.Add("metadata: " + string.Join(", ", metadata.OrderBy(e => e.Key).Select(e => $"{e.Key}={e.Value}"))))
             .ReturnsAsync(true);
         repository.Setup(r => r.ImportVersionAsync( It.IsAny<NewResourceVersion>(), It.IsAny<Stream>(), It.IsAny<CancellationToken>()))
-            .Callback((NewResourceVersion version, Stream _, CancellationToken _) => steps.Add("version: " + version.Location.ResourceName))
+            .Callback((NewResourceVersion version, Stream _, CancellationToken _) => steps.Add("version: " + version.Resource.ResourceName))
             .ReturnsAsync(Hello);
         var clock = new Testing.ManualTimeProvider { Now = new DateTimeOffset(2026, 11, 4, 12, 0, 0, TimeSpan.Zero) };
         var client = new ResourceServiceClient(repository.Object, Options.Create(new ResourcefullOptions()), timeProvider: clock);

@@ -5,7 +5,7 @@ Every public type and member of the seven library packages, generated from their
 - **`Resourcefull`**: the clients you use (`IResourceServiceClient`, `IResourceContainerClient`), their models and
   exceptions, registration (`AddResourcefull`, `ResourcefullOptionsBuilder`), provisioning
   (`MigrateResourcefullDatabaseAsync`, `GenerateResourcefullScript`), and, in `Resourcefull.Providers`, what a provider
-  builds on (`ResourceRepository`, `NewResourceVersion`, `ResourceLocation`, `ResourceDatabase`, `HashingStream`,
+  builds on (`ResourceRepository`, `NewResourceVersion`, `ResourceAddress`, `ResourceDatabase`, `HashingStream`,
   `WrittenContent`).
 - **`Resourcefull.InMemory`**: `UseInMemory`.
 - **`Resourcefull.SqlServer`**: `UseSqlServer` and `ContentHashBackfill`.

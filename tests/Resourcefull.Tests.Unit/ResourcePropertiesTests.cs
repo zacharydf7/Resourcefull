@@ -14,7 +14,7 @@ public class ResourcePropertiesTests
         // Arrange
         ResourceRepository repository = new Mock<ResourceRepository> { CallBase = true }.Object;
         IResourceContainerClient container = new Mock<IResourceContainerClient> { CallBase = true }.Object;
-        var location = new ResourceLocation("c", "a");
+        var location = new ResourceAddress("c", "a");
         var metadata = new Dictionary<string, string>();
 
         // Act & Assert

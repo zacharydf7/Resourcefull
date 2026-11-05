@@ -53,7 +53,7 @@ Check these, even where your code compiles:
 | `ResourceContainerInfo`, and `IResourceContainerClient.ResourceContainerInfo` | `ContainerInfo`, read with `IResourceContainerClient.GetInfoAsync`, and `IResourceContainerClient.Name` for the name |
 | `SetUriProvider` | `UseUriProvider`, like the other `Use…` methods |
 | `ResourceUploadOptions`' settable properties | `init` properties, like the other per-call options types: set them when you create the options |
-| `IResourceRepository`, `ResourceWriteCondition`, `HashingStream` and `WrittenContent` in `Resourcefull` | `ResourceRepository`, `NewResourceVersion`, `ResourceLocation`, `ResourceWriteCondition`, `HashingStream` and `WrittenContent` in `Resourcefull.Providers` |
+| `IResourceRepository`, `ResourceWriteCondition`, `HashingStream` and `WrittenContent` in `Resourcefull` | `ResourceRepository`, `NewResourceVersion`, `ResourceAddress`, `ResourceWriteCondition`, `HashingStream` and `WrittenContent` in `Resourcefull.Providers` |
 
 Some methods already had the shorter names and keep them, such as `ContainerExistsAsync` and `ExportContainerAsync`.
 For a provider of your own, the container members are renamed the same way: `AddContainerAsync`,
@@ -172,7 +172,8 @@ change the members whose signatures changed:
 |---|---|
 | The two `AddResourceAsync` overloads, one taking `bool createOnly` and one taking a `ResourceWriteCondition` | One `AddResourceAsync(NewResourceVersion version, Stream content, ResourceWriteCondition? condition, ...)`; `condition` is `null` for no condition, and `createOnly` is now `condition.CreateOnly` |
 | The two `DeleteResourceAsync` overloads, with and without `ResourceConditions` | One, with `ResourceConditions? conditions`, `null` for no condition |
-| Reads and deletes taking `string resourceContainerName, string resourceName` | A `ResourceLocation` |
+| Reads and deletes taking `string resourceContainerName, string resourceName` | A `ResourceAddress` |
+| `GetAllResourceInfoAsync`, which every provider implemented, and the default `GetResourcePageAsync` built on it | `GetResourcePageAsync`, now abstract: return one page of names without reading the whole container (see [Listing by page](providers/writing-a-provider.md#listing-by-page)); `GetAllResourceInfoAsync` is gone |
 | `AddResourceContainerAsync(ResourceContainerInfo)` | `AddContainerAsync(string resourceContainerName, IReadOnlyDictionary<string, string> metadata, ...)` |
 | `CopyResourceAsync`'s `ResourceInfo destination` | A `NewResourceVersion` |
 | `ImportVersionAsync(string resourceContainerName, ResourceInfo version, ...)` | `ImportVersionAsync(NewResourceVersion version, ...)` |
@@ -180,11 +181,11 @@ change the members whose signatures changed:
 | `IDictionary<string, string>` metadata parameters | `IReadOnlyDictionary<string, string>` |
 | Lists returned as `List<T>` | `IReadOnlyList<T>` |
 
-`NewResourceVersion` holds what a write is given: the location, version ID, content type, declared length
-(`DeclaredLength`, which was `ContentLength`), metadata, expiry and origin, and for an import, `LastModified`. It has
-none of the properties a write's caller couldn't know, such as `IsLatest`, `ContentHash` and `Uri`. Build a
-`ResourceInfo` for each read as before, but leave `Uri` unset: the clients fill it in from your URI provider, and
-providers no longer store it.
+`NewResourceVersion` holds what a write is given: the container and name (`Resource`), version ID, content type,
+declared length (`DeclaredLength`, which was `ContentLength`), metadata, expiry and origin, and for an import,
+`LastModified`. It has none of the properties a write's caller couldn't know, such as `IsLatest`, `ContentHash` and
+`Uri`. Build a `ResourceInfo` for each read as before, but leave `Uri` unset: the clients fill it in from your URI
+provider, and providers no longer store it.
 
 Conditional uploads and deletes are now part of the abstract members, rather than overloads whose defaults throw
 `NotSupportedException`, so every provider decides conditions itself. See [The contract](providers/writing-a-provider.md#the-contract).

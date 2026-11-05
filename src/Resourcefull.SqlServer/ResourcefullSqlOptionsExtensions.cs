@@ -65,7 +65,7 @@ public static partial class ResourcefullSqlOptionsExtensions
         string? storeName = builder.StoreName;
         builder.UseProvider(services => new ResourceSqlRepository(
             services.GetRequiredStoreService<IDbContextFactory<ResourceDbContext>>(storeName), services.GetService<TimeProvider>(),
-            storeName));
+            storeName, services.SearchableMetadataKeys(storeName)));
 
         builder.Services.AddKeyedSingleton<IDbContextFactory<ResourceDbContext>>(storeName, (services, _) =>
         {

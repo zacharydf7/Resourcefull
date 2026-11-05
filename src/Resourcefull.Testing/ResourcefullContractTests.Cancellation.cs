@@ -32,20 +32,20 @@ public abstract partial class ResourcefullContractTests
         // Act
         Task act() => operation switch
         {
-            "upload" => repository.AddResourceAsync(new NewResourceVersion(new ResourceLocation(containerName, "new"), "v1"),
+            "upload" => repository.AddResourceAsync(new NewResourceVersion(new ResourceAddress(containerName, "new"), "v1"),
                 new MemoryStream([1, 2, 3]), null, canceled.Token),
-            "delete" => repository.DeleteResourceAsync(new ResourceLocation(containerName, "kept"), null, null, canceled.Token),
+            "delete" => repository.DeleteResourceAsync(new ResourceAddress(containerName, "kept"), null, null, canceled.Token),
             "create container" => repository.AddContainerAsync(newContainer, new Dictionary<string, string>(), canceled.Token),
             "delete container" => repository.DeleteContainerAsync(containerName, canceled.Token),
-            "list" => repository.GetAllResourceInfoAsync(containerName, canceled.Token),
-            "read" => repository.GetResourceStreamAsync(new ResourceLocation(containerName, "kept"), null, canceled.Token),
+            "list" => repository.GetResourcePageAsync(containerName, null, null, 100, canceled.Token),
+            "read" => repository.GetResourceStreamAsync(new ResourceAddress(containerName, "kept"), null, canceled.Token),
             _ => throw new ArgumentOutOfRangeException(nameof(operation))
         };
 
         // Assert: a container delete may stop between whole versions, so only the container itself must remain.
         await Assert.ThrowsAnyAsync<OperationCanceledException>(act);
-        Assert.Null(await repository.GetResourceInfoAsync(new ResourceLocation(containerName, "new")));
-        if (operation != "delete container") Assert.NotNull(await repository.GetResourceInfoAsync(new ResourceLocation(containerName, "kept")));
+        Assert.Null(await repository.GetResourceInfoAsync(new ResourceAddress(containerName, "new")));
+        if (operation != "delete container") Assert.NotNull(await repository.GetResourceInfoAsync(new ResourceAddress(containerName, "kept")));
         Assert.NotNull(await repository.GetContainerInfoAsync(containerName));
         Assert.Null(await repository.GetContainerInfoAsync(newContainer));
     }
@@ -66,13 +66,13 @@ public abstract partial class ResourcefullContractTests
         });
 
         // Act
-        Task act() => repository.AddResourceAsync(new NewResourceVersion(new ResourceLocation(containerName, "n"), "v1"),
+        Task act() => repository.AddResourceAsync(new NewResourceVersion(new ResourceAddress(containerName, "n"), "v1"),
             content, null, cancellation.Token);
 
         // Assert: it stops reading too, rather than reading a large upload to its end before giving up.
         await Assert.ThrowsAnyAsync<OperationCanceledException>(act);
         Assert.True(content.Position < content.Length);
-        Assert.Null(await repository.GetResourceInfoAsync(new ResourceLocation(containerName, "n")));
+        Assert.Null(await repository.GetResourceInfoAsync(new ResourceAddress(containerName, "n")));
     }
 
     [Fact]
@@ -101,7 +101,7 @@ public abstract partial class ResourcefullContractTests
         IResourceContainerClient container = await NewContainerAsync(provider);
         string containerName = container.Name;
         var given = new Dictionary<string, string> { ["author"] = "finance" };
-        var location = new ResourceLocation(containerName, "n");
+        var location = new ResourceAddress(containerName, "n");
         await repository.AddResourceAsync(new NewResourceVersion(location, "v1") { Metadata = given }, new MemoryStream([1]));
 
         // Act

@@ -2,9 +2,7 @@
 
 To store resources somewhere else, such as a file system, object storage or another database, derive a class from
 `ResourceRepository` (in the `Resourcefull.Providers` namespace) and register it with `UseProvider`. The clients handle
-names, versioning, pruning, URIs and cancellation plumbing; a provider stores and retrieves. A file that also uses
-`System.Reflection` sees two `ResourceLocation` types, so it needs an alias:
-`using ResourceLocation = Resourcefull.Providers.ResourceLocation;`.
+names, versioning, pruning, URIs and cancellation plumbing; a provider stores and retrieves.
 
 <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> This page describes 4.0, where providers derive
 from the `ResourceRepository` base class. In 3.1, a provider implements the `IResourceRepository` interface instead;
@@ -52,9 +50,10 @@ The XML documentation on each member states its contract in full. In short, a pr
   them at the moment the version would become current, or under whatever serializes writes to the name.
 - **Treat a name with no current version as meeting no condition,** and empty conditions as none. A write that fails
   its conditions throws `ResourcePreconditionFailedException` with the current version's ID and content hash, and
-  changes nothing. `ResourceConditions.ThrowIfNotMet(resource, currentVersionId, currentContentHash)`
+  changes nothing. `conditions.ThrowIfNotMet(resource, currentVersionId, currentContentHash)`
   <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> does exactly this check, so call it with the
-  current version the write reads; `IsEmpty` tells you when there's nothing to check.
+  current version the write reads; `IsEmpty` tells you when there's nothing to check. It's an extension method in
+  `Resourcefull.Providers`, as are the other helpers for providers.
 - **Measure what it stores.** Read the content through a `HashingStream`, store the length it measured, and return
   `HashingStream.Complete(declaredLength, lastModified)`, which also rejects a wrong declared length. Call it as the
   write makes the version current but before it commits, so a wrong length stores nothing.
@@ -127,7 +126,7 @@ public sealed class FileSystemRepository(FileSystemOptions options, TimeProvider
         // time from _clock as the version becomes current), and store its length and hash with the version.
         => throw new NotImplementedException();
 
-    public override Task<bool> DeleteResourceAsync(ResourceLocation resource, string? versionId = null,
+    public override Task<bool> DeleteResourceAsync(ResourceAddress resource, string? versionId = null,
         ResourceConditions? conditions = null, CancellationToken cancellationToken = default)
         // One version, or every version of the name when versionId is null; false if there was nothing to delete.
         // Deleting the current version makes the next most recently stored one current. Conditions the current
@@ -136,23 +135,24 @@ public sealed class FileSystemRepository(FileSystemOptions options, TimeProvider
 
     // Reading
 
-    public override Task<IReadOnlyList<ResourceInfo>> GetAllResourceInfoAsync(string resourceContainerName,
-        CancellationToken cancellationToken = default)
-        // The current version of every name in the container.
+    public override Task<IReadOnlyList<ResourceInfo>> GetResourcePageAsync(string resourceContainerName, string? prefix,
+        string? afterName, int pageSize, CancellationToken cancellationToken = default)
+        // Up to pageSize current versions whose names start with prefix and come after afterName, ordered by name:
+        // see Listing by page. Answer it without reading the whole container.
         => throw new NotImplementedException();
 
-    public override Task<IReadOnlyList<ResourceInfo>> GetResourceVersionsAsync(ResourceLocation resource,
+    public override Task<IReadOnlyList<ResourceInfo>> GetResourceVersionsAsync(ResourceAddress resource,
         CancellationToken cancellationToken = default)
         // Every version of the name, the current one first, then from the most recently stored to the oldest.
         => throw new NotImplementedException();
 
-    public override Task<ResourceInfo?> GetResourceInfoAsync(ResourceLocation resource, string? versionId = null,
+    public override Task<ResourceInfo?> GetResourceInfoAsync(ResourceAddress resource, string? versionId = null,
         CancellationToken cancellationToken = default)
         // One version, or the current one when versionId is null; null if there's no such version. The version ID
         // comes from the caller unchecked: never let it, or the name, reach outside the name's own storage.
         => throw new NotImplementedException();
 
-    public override Task<Stream?> GetResourceStreamAsync(ResourceLocation resource, string? versionId = null,
+    public override Task<Stream?> GetResourceStreamAsync(ResourceAddress resource, string? versionId = null,
         CancellationToken cancellationToken = default)
         // The version's content as a read-only, forward-only stream whose Length is the full length; null if there's
         // no such version.
@@ -160,8 +160,8 @@ public sealed class FileSystemRepository(FileSystemOptions options, TimeProvider
 }
 ```
 
-The rest are virtual, with defaults. Paging, reading a range, copying and container usage work through the members
-above, more slowly than a provider that answers them itself. Moving, importing, changing a container's metadata,
+The rest are virtual, with defaults. Reading a range, copying and container usage work through the members above,
+more slowly than a provider that answers them itself. Moving, importing, changing a container's metadata,
 changing a version's metadata or content type in place, and `GetExpiredAsync`, `DeleteExpiredVersionAsync` and
 `SetExpiryAsync` throw `NotSupportedException` until the provider overrides them, and the features that need them
 report that they aren't supported. The sections below say what each default does, and what to do to
@@ -169,8 +169,7 @@ override it.
 
 ## Listing by page
 
-`GetResourcePageAsync`'s default reads the whole container through `GetAllResourceInfoAsync` and sorts and filters it
-in memory, so it lists correctly, just without the savings. To answer it directly, return at most `pageSize` current
+`GetResourcePageAsync` is how every listing reads a container, so it has no default: return at most `pageSize` current
 versions whose names start with `prefix`, ordinally, and come after `afterName`, ordered by name. Use ordinal order,
 or your storage's binary order if its ordering and its "after" comparison agree, so no name is skipped or repeated
 between pages.
@@ -216,8 +215,7 @@ go unmarked.
 of up to `maxNames` names after `afterName`: the names in `GetResourcePageAsync`'s order, and each name's versions in
 `GetResourceVersionsAsync`'s, the current version first. Its default lists the names with `GetResourcePageAsync` and
 then asks for each name's versions, a query apiece, so exports work with any provider, just more slowly than with one
-that answers it in a single query. A provider that overrides neither `GetResourcePageAsync` nor this reads its whole
-container once for every 1,000 names an export lists; override either one to avoid that.
+that answers it in a single query.
 
 ## Expiry
 
@@ -312,10 +310,11 @@ The container client's `SetMetadataAsync` calls the provider's `SetContainerMeta
   `ArgumentOutOfRangeException`, deciding that in the change, under whatever serializes writes to the name.
 - **Refuse protected deletes in the delete itself.** `DeleteResourceAsync` throws `ResourceRetainedException` when
   any version it would delete can't be deleted now (`ResourceInfo.IsDeletableAt` is `false`), and deletes nothing;
-  `ResourceRetainedException.Create` builds it with the clients' message. Decide it as you decide conditions, in the
-  same step as the delete, so a hold set at the same moment either lands first and stops the delete or finds the
-  version gone. `DeleteContainerAsync` does the same for any version in the container. A container deleted in batches
-  must also refuse a version protected after the delete started, before it deletes that version.
+  `ResourceRetainedException.Create`, from `Resourcefull.Providers`, builds it with the clients' message. Decide it as
+  you decide conditions, in the same step as the delete, so a hold set at the same moment either lands first and stops
+  the delete or finds the version gone. `DeleteContainerAsync` does the same for any version in the container. A
+  container deleted in batches must also refuse a version protected after the delete started, before it deletes that
+  version.
 - **Leave protected versions to expiry.** `GetExpiredAsync` lists only versions that may be deleted, and
   `DeleteExpiredVersionAsync` and `DeleteExpiredVersionsAsync` leave a protected version as they leave one whose
   expiry was extended.
@@ -354,7 +353,9 @@ default, and the clients then refuse every delete in a container whose policy ke
 a provider whose store can keep an index should override it:
 
 - **Index the searchable keys.** `SearchableMetadataKeys` holds the keys the application named with
-  `UseMetadataSearch`; the clients set it before they call your provider. Keep an index of each current version's
+  `UseMetadataSearch`. Your provider gets them through the base class's constructor: read them from the store's
+  `ResourcefullOptions` in the factory that makes the provider, as below, where `storeName` is `builder.StoreName`
+  (see [Several stores](#several-stores)). Keep an index of each current version's
   values for those keys, and update it in the same step as any write that changes which version is current or changes
   the current version's metadata: uploads, copies, restores, imports, completed upload sessions, moves, deletes, expiry
   and `SetResourceMetadataAsync`. Keys are at most 128 characters. The clients refuse a value over 256 characters for
@@ -364,6 +365,21 @@ a provider whose store can keep an index should override it:
   `GetResourcePageAsync` lists them: in name order, with the prefix, after the name given, up to the page size.
 - **Override `IndexMetadataAsync`** to index a container's current versions, for keys added after they were stored. Its
   default does nothing, which suits a provider without an index.
+
+```csharp
+public sealed class FileRepository(FileStoreSettings settings, IReadOnlySet<string> searchableMetadataKeys)
+    : ResourceRepository(searchableMetadataKeys)
+{
+    // ...
+}
+
+builder.UseProvider(services => new FileRepository(services.GetRequiredKeyedService<FileStoreSettings>(storeName),
+    services.GetRequiredService<IOptionsMonitor<ResourcefullOptions>>().Get(storeName ?? Options.DefaultName)
+        .SearchableMetadataKeys));
+```
+
+A provider that wraps another, such as one that caches or encrypts, passes `FindResourcePageAsync` and
+`IndexMetadataAsync` on, so the wrapped provider's index answers searches.
 
 ## Container usage
 
@@ -419,7 +435,8 @@ public static ResourcefullOptionsBuilder UseFiles(this ResourcefullOptionsBuilde
 ```
 
 The store `AddResourcefull` adds has no name, and in .NET's own container a `null` key is the same as no key, so the
-same code works for named and unnamed stores.
+same code works for named and unnamed stores. A provider that indexes metadata for search also passes the store's
+search keys, as in [Metadata search](#metadata-search).
 
 ## Testing a provider
 
@@ -493,7 +510,7 @@ public class FileSystemContractTests : ResourcefullContractTests
 }
 ```
 
-The members with a default that works, such as `CopyResourceAsync` and `GetResourcePageAsync`, need no switch: the
+The members with a default that works, such as `CopyResourceAsync` and `GetContainerUsageAsync`, need no switch: the
 suite tests them either way.
 
 ### How the store keeps things

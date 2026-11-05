@@ -136,7 +136,7 @@ public class AzureBlobIntegrationTests(AzureBlobFixture fixture)
         ResourceInfo stored = await container.UploadAsync("big.bin", new MemoryStream(payload));
         byte[] whole = (await container.DownloadContentAsync("big.bin"))!.Content.ToArray();
         await using Stream? range = await provider.GetRequiredService<ResourceRepository>().GetResourceStreamAsync(
-            new ResourceLocation("c", "big.bin"), null, ObjectParts.PartSize - 2, 4);
+            new ResourceAddress("c", "big.bin"), null, ObjectParts.PartSize - 2, 4);
         using var ranged = new MemoryStream();
         await range!.CopyToAsync(ranged);
 
@@ -156,7 +156,7 @@ public class AzureBlobIntegrationTests(AzureBlobFixture fixture)
         var repository = new ObjectStoreRepository(new AzureBlobObjectStore(fixture.Client.GetBlobContainerClient(fixture.ContainerName)),
             prefix, null, null) { SegmentSize = 9 * 1024 * 1024 };
         await repository.AddContainerAsync("c", new Dictionary<string, string>());
-        var location = new ResourceLocation("c", "big.bin");
+        var location = new ResourceAddress("c", "big.bin");
         byte[] payload = RandomNumberGenerator.GetBytes(21 * 1024 * 1024);
         await repository.StartStagedVersionAsync(new NewResourceVersion(location, "v1"));
         await repository.AppendStagedContentAsync(location, "v1", 0, new MemoryStream(payload, 0, 1024 * 1024));
@@ -190,7 +190,7 @@ public class AzureBlobIntegrationTests(AzureBlobFixture fixture)
         var repository = new ObjectStoreRepository(store, prefix, null, null);
         await repository.AddContainerAsync("c", new Dictionary<string, string>());
         byte[] payload = RandomNumberGenerator.GetBytes(40 * 1024 * 1024);
-        var location = new ResourceLocation("c", "big.bin");
+        var location = new ResourceAddress("c", "big.bin");
 
         // Act
         WrittenContent written = await repository.AddResourceAsync(new NewResourceVersion(location, "v1"), new MemoryStream(payload));
@@ -215,8 +215,8 @@ public class AzureBlobIntegrationTests(AzureBlobFixture fixture)
         await repository.AddContainerAsync("c", new Dictionary<string, string>());
         await repository.AddContainerAsync("d", new Dictionary<string, string>());
         byte[] payload = RandomNumberGenerator.GetBytes(17 * 1024 * 1024);
-        var from = new ResourceLocation("c", "big.bin");
-        var to = new ResourceLocation("d", "big.bin");
+        var from = new ResourceAddress("c", "big.bin");
+        var to = new ResourceAddress("d", "big.bin");
         await repository.AddResourceAsync(new NewResourceVersion(from, "v1"), new MemoryStream(payload));
 
         // Act
@@ -241,7 +241,7 @@ public class AzureBlobIntegrationTests(AzureBlobFixture fixture)
         var client = new BlobContainerClient(signed.GenerateSasUri(BlobContainerSasPermissions.All, DateTimeOffset.UtcNow.AddHours(1)));
         var repository = new ObjectStoreRepository(new AzureBlobObjectStore(client), $"sas-{Guid.NewGuid():N}/", null, null);
         await repository.AddContainerAsync("c", new Dictionary<string, string>());
-        var location = new ResourceLocation("c", "a.txt");
+        var location = new ResourceAddress("c", "a.txt");
         await repository.StartStagedVersionAsync(new NewResourceVersion(location, "v1"));
         await repository.AppendStagedContentAsync(location, "v1", 0, new MemoryStream("a"u8.ToArray()));
 

@@ -35,7 +35,7 @@ public abstract partial class ResourcefullContractTests
         const string spoofed = "invoice\u202Efdp.exe", tabbed = "tab\tname";
         foreach (string name in new[] { spoofed, tabbed })
         {
-            await repository.AddResourceAsync(new NewResourceVersion(new ResourceLocation(container.Name, name), Guid.NewGuid().ToString()),
+            await repository.AddResourceAsync(new NewResourceVersion(new ResourceAddress(container.Name, name), Guid.NewGuid().ToString()),
                 new MemoryStream([1]));
         }
 
@@ -60,7 +60,7 @@ public abstract partial class ResourcefullContractTests
         using ServiceProvider provider = BuildServiceProvider();
         IResourceContainerClient container = await NewContainerAsync(provider);
         await provider.GetRequiredService<ResourceRepository>().AddResourceAsync(
-            new NewResourceVersion(new ResourceLocation(container.Name, "tab\tname"), Guid.NewGuid().ToString()), new MemoryStream([1]));
+            new NewResourceVersion(new ResourceAddress(container.Name, "tab\tname"), Guid.NewGuid().ToString()), new MemoryStream([1]));
         using var export = new MemoryStream();
         await ServiceOf(provider).ExportContainerAsync(container.Name, export);
         export.Position = 0;
