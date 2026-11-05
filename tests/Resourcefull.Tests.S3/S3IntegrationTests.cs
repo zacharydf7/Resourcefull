@@ -400,9 +400,10 @@ public class S3IntegrationTests(S3Fixture fixture)
 
     /// <summary>A repository on the test bucket under <paramref name="prefix"/>, with a container named c.</summary>
     private async Task<ObjectStoreRepository> NewRepositoryAsync(string prefix, TimeProvider? realTime = null, int? segmentSize = null,
-        IObjectStore? store = null)
+        IObjectStore? store = null, IReadOnlySet<string>? searchableMetadataKeys = null)
     {
-        var repository = new ObjectStoreRepository(store ?? new S3ObjectStore(fixture.Client, fixture.BucketName), prefix, null, null)
+        var repository = new ObjectStoreRepository(store ?? new S3ObjectStore(fixture.Client, fixture.BucketName), prefix, null, null,
+            searchableMetadataKeys)
         {
             RealTime = realTime ?? TimeProvider.System, SegmentSize = segmentSize ?? 64 * 1024 * 1024
         };
@@ -975,12 +976,8 @@ public class S3IntegrationTests(S3Fixture fixture)
         // end needs.
         string prefix = $"search-race-{Guid.NewGuid():N}/";
         var store = new InterferingStore(new S3ObjectStore(fixture.Client, fixture.BucketName));
-        ObjectStoreRepository repository = await NewRepositoryAsync(prefix, store: store);
-        using ServiceProvider services = new ServiceCollection()
-            .AddResourcefull(o => o.UseProvider(_ => repository, ServiceLifetime.Singleton).UseMetadataSearch("customer"))
-            .BuildServiceProvider();
-        // Resolving a client gives the repository the searchable keys.
-        services.GetRequiredService<IResourceServiceClient>();
+        ObjectStoreRepository repository = await NewRepositoryAsync(prefix, store: store,
+            searchableMetadataKeys: new HashSet<string> { "customer" });
         var name = new ResourceAddress("c", "a.txt");
         NewResourceVersion Version(string id, string customer) =>
             new(name, id) { Metadata = new Dictionary<string, string> { ["customer"] = customer } };
