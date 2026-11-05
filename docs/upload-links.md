@@ -238,7 +238,7 @@ limits every upload through the endpoints, whatever the link. For a store added 
 ```csharp
 app.MapResourcefullUploadLinks("/upload-links", options =>
 {
-    options.OnCompletedAsync = (context, version) => claims.FileReceivedAsync(version.ResourceName);
+    options.OnCompletedAsync = (context, version) => claims.FileReceivedAsync(version.Name);
     options.MaxSize = 10L * 1024 * 1024 * 1024;     // 10 GiB
 });
 ```

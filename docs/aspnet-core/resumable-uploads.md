@@ -49,7 +49,7 @@ app.MapResourcefullUploads("/uploads", options =>
 
     // Runs once a file is stored, to record it in the app's own database.
     options.OnCompletedAsync = (context, version) =>
-        claims.AttachFileAsync(version.ResourceName, version.Metadata["original-name"]);
+        claims.AttachFileAsync(version.Name, version.Metadata["original-name"]);
 }).RequireAuthorization();
 ```
 

@@ -5,7 +5,7 @@
 namespace Resourcefull.Sqlite.Migrations
 {
     /// <inheritdoc />
-    public partial class Resourcefull_InitialCreate : Migration
+    internal partial class Resourcefull_InitialCreate : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)

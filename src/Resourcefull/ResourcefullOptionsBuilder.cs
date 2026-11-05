@@ -130,7 +130,7 @@ public class ResourcefullOptionsBuilder
     /// keeps only its current version.
     /// </summary>
     /// <param name="maxVersions">How many versions of each name to keep, including the current one; 100 when null.</param>
-    /// <exception cref="InvalidOperationException"><paramref name="maxVersions"/> is zero or negative.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="maxVersions"/> is zero or negative.</exception>
     public ResourcefullOptionsBuilder UseVersioning(int? maxVersions = null)
     {
         if (maxVersions <= 0)
