@@ -53,11 +53,11 @@ logged as a warning, with its exception, under the `Resourcefull.ResourceContain
 application has logging set up, so one that keeps failing doesn't go unnoticed.
 
 To prune a whole container at once <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>, such as after fixing what made prunes fail, or after an
-[import](backup-and-move.md), which keeps every version it's given, call the service client's `PruneContainerAsync`. It
+[import](backup-and-move.md), which keeps every version it's given, call the container client's `PruneAsync`. It
 prunes every name as an upload would, and returns how many versions were past the limit:
 
 ```csharp
-int pruned = await resources.PruneContainerAsync("contracts");
+int pruned = await resources.GetContainerClient("contracts").PruneAsync();
 ```
 
 With [expiry](expiry.md) turned on <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>, pruning doesn't delete a version at once: it sets it to expire five
@@ -87,7 +87,7 @@ files. Every application that writes to the same store applies its own limit to 
 - **An application without `UseVersioning` or a policy's `MaxVersions` keeps one version per name,** so its
   next replacing upload of a name deletes every older version of that name.
 - **Lowering the limit** deletes each name's extra versions the next time that name is uploaded, not straight away;
-  `PruneContainerAsync` applies it to a whole container at once.
+  `PruneAsync` applies it to a whole container at once.
 
 So give every application that shares a store, workers and scheduled jobs included, the same `UseVersioning` setting
 and policies. To turn versioning off for good, expect each name's history to go at its next upload; a

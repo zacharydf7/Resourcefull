@@ -282,7 +282,7 @@ public class AzureBlobIntegrationTests(AzureBlobFixture fixture)
     }
 
     [Fact]
-    public async Task GetContainerInfoAsync_ShouldThrowRatherThanFindNothing_WhenTheBlobContainerDoesntExist()
+    public async Task GetInfoAsync_ShouldThrowRatherThanFindNothing_WhenTheBlobContainerDoesntExist()
     {
         fixture.SkipIfUnavailable();
 
@@ -292,7 +292,7 @@ public class AzureBlobIntegrationTests(AzureBlobFixture fixture)
         await using ServiceProvider provider = services.BuildServiceProvider();
 
         // Act
-        Exception? exception = await Record.ExceptionAsync(() => provider.GetRequiredService<IResourceServiceClient>().GetContainerInfoAsync("c"));
+        Exception? exception = await Record.ExceptionAsync(() => provider.GetRequiredService<IResourceServiceClient>().GetContainerClient("c").GetInfoAsync());
 
         // Assert
         Assert.Equal(BlobErrorCode.ContainerNotFound.ToString(), Assert.IsType<RequestFailedException>(exception).ErrorCode);

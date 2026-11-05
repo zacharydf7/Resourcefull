@@ -95,7 +95,7 @@ public sealed class PerformanceTests(SqlServerFixture fixture, ITestOutputHelper
         await source.UploadAsync("r", new GeneratedStream(length));
 
         await MeasureAsync("copy-16MiB", length,
-            run: iteration => source.CopyResourceAsync("r", destination.Info.Name, $"r{iteration}"));
+            run: iteration => source.CopyResourceAsync("r", destination.Name, $"r{iteration}"));
     }
 
     [Fact]
@@ -325,7 +325,7 @@ public sealed class PerformanceTests(SqlServerFixture fixture, ITestOutputHelper
     {
         // A move changes only the versions' name, whatever their size.
         IResourceContainerClient container = await NewContainerAsync();
-        string containerName = container.Info.Name;
+        string containerName = container.Name;
         for (int i = 0; i <= Repetitions; i++) await container.UploadAsync($"r{i}", new GeneratedStream(16 * Mebibyte));
 
         await MeasureAsync("move-16MiB", 0,
@@ -345,7 +345,7 @@ public sealed class PerformanceTests(SqlServerFixture fixture, ITestOutputHelper
             length += 4 * Mebibyte + i;
         }
         IResourceServiceClient service = _provider!.GetRequiredService<IResourceServiceClient>();
-        string name = container.Info.Name;
+        string name = container.Name;
         var export = new MemoryStream();
         await service.ExportContainerAsync(name, export);
 
@@ -364,9 +364,9 @@ public sealed class PerformanceTests(SqlServerFixture fixture, ITestOutputHelper
         // In a database of its own, since it lists the container's rows.
         IResourceContainerClient first = await NewContainerAsync(ownDatabase: "containers");
         IResourceServiceClient service = _provider!.GetRequiredService<IResourceServiceClient>();
-        var names = new List<string> { first.Info.Name };
+        var names = new List<string> { first.Name };
         for (int i = 1; i <= Repetitions; i++)
-            names.Add((await service.CreateContainerAsync($"{names[0]}-{i}")).Info.Name);
+            names.Add((await service.CreateContainerAsync($"{names[0]}-{i}")).Name);
         foreach (string name in names)
         {
             IResourceContainerClient container = service.GetContainerClient(name);

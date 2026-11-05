@@ -63,7 +63,7 @@ public abstract partial class ResourcefullContractTests
         // extended since it was listed, and a version that doesn't exist.
         using ServiceProvider provider = BuildServiceProvider(o => o.UseVersioning());
         IResourceContainerClient container = await NewContainerAsync(provider);
-        string containerName = container.Info.Name;
+        string containerName = container.Name;
         ResourceInfo older = await container.UploadAsync("a", BinaryData.FromString("older"));
         ResourceInfo current = await container.UploadAsync("a", BinaryData.FromString("current"), Expiring(Past));
         ResourceInfo extended = await container.UploadAsync("b", BinaryData.FromString("b"), Expiring(Past));
@@ -94,7 +94,7 @@ public abstract partial class ResourcefullContractTests
         // Arrange: three versions of a name, the two latest of them expired.
         using ServiceProvider provider = BuildServiceProvider(o => o.UseVersioning());
         IResourceContainerClient container = await NewContainerAsync(provider);
-        var location = new ResourceLocation(container.Info.Name, "a");
+        var location = new ResourceLocation(container.Name, "a");
         ResourceInfo kept = await container.UploadAsync("a", BinaryData.FromString("kept"));
         ResourceInfo second = await container.UploadAsync("a", BinaryData.FromString("second"), Expiring(Past));
         ResourceInfo third = await container.UploadAsync("a", BinaryData.FromString("third"), Expiring(Past));
@@ -187,7 +187,7 @@ public abstract partial class ResourcefullContractTests
         // Arrange
         using ServiceProvider provider = BuildServiceProvider(o => o.UseVersioning());
         IResourceContainerClient container = await NewContainerAsync(provider);
-        string name = container.Info.Name;
+        string name = container.Name;
         ResourceInfo first = await container.UploadAsync("a", BinaryData.FromString("1"), Expiring(Future));
         await container.UploadAsync("a", BinaryData.FromString("2"), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace });
 
@@ -214,7 +214,7 @@ public abstract partial class ResourcefullContractTests
         // Arrange
         using ServiceProvider provider = BuildServiceProvider(o => o.UseVersioning(1).UseCleanupHandler<RecordingCleanupHandler>());
         IResourceContainerClient container = await NewContainerAsync(provider);
-        string name = container.Info.Name;
+        string name = container.Name;
         ResourceInfo expired = await container.UploadAsync("temporary", BinaryData.FromString("x"), Expiring(Past));
         ResourceInfo pruned = await container.UploadAsync("notes.txt", BinaryData.FromString("1"));
 
@@ -248,7 +248,7 @@ public abstract partial class ResourcefullContractTests
         // Act
         await container.UploadAsync("notes.txt", BinaryData.FromString("2"), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace });
         ResourceInfo? kept = await container.GetResourceInfoAsync("notes.txt", first.VersionId);
-        bool reportedWhilePruning = RecordingCleanupHandler.In(container.Info.Name).Count > 0;
+        bool reportedWhilePruning = RecordingCleanupHandler.In(container.Name).Count > 0;
         clock.Now = clock.Now.AddMinutes(6);
         await ServiceOf(provider).DeleteExpiredAsync();
 
@@ -256,7 +256,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Equal(Kept(pruned.AddMinutes(5)), kept!.ExpiresAt);
         Assert.False(reportedWhilePruning);
         Assert.False(await container.ExistsAsync("notes.txt", first.VersionId));
-        ResourceCleanup cleanup = Assert.Single(RecordingCleanupHandler.In(container.Info.Name));
+        ResourceCleanup cleanup = Assert.Single(RecordingCleanupHandler.In(container.Name));
         Assert.Equal((ResourceCleanupReason.Expired, first.VersionId), (cleanup.Reason, cleanup.Resource.VersionId));
     }
 
@@ -365,7 +365,7 @@ public abstract partial class ResourcefullContractTests
         using ServiceProvider provider = BuildServiceProvider(o => o.UseVersioning(1).UseCleanupHandler<RecordingCleanupHandler>());
         IResourceContainerClient container = await NewContainerAsync(provider);
         IResourceContainerClient other = await NewContainerAsync(provider);
-        string name = container.Info.Name;
+        string name = container.Name;
         await container.UploadAsync("temporary", BinaryData.FromString("x"), Expiring(Past));
         await other.UploadAsync("temporary", BinaryData.FromString("x"), Expiring(Past.AddMinutes(1)));
         await container.UploadAsync("notes.txt", BinaryData.FromString("1"));
@@ -405,7 +405,7 @@ public abstract partial class ResourcefullContractTests
         ResourceRepository repository = provider.GetRequiredService<ResourceRepository>();
 
         // Act
-        bool deleted = await repository.DeleteExpiredVersionAsync(new ResourceLocation(container.Info.Name, "a"),
+        bool deleted = await repository.DeleteExpiredVersionAsync(new ResourceLocation(container.Name, "a"),
             stored.VersionId, sweepTime);
 
         // Assert
@@ -497,7 +497,7 @@ public abstract partial class ResourcefullContractTests
 
         // Assert
         Assert.Equal(stored.OrderBy(v => v.ExpiresAt).ThenBy(v => v.VersionId, StringComparer.Ordinal).Select(v => v.VersionId),
-            listed.Where(v => v.ContainerName == container.Info.Name).Select(v => v.VersionId));
+            listed.Where(v => v.ContainerName == container.Name).Select(v => v.VersionId));
         await ServiceOf(provider).DeleteExpiredAsync();
     }
 

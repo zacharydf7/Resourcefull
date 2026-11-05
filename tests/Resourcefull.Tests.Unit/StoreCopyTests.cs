@@ -42,7 +42,7 @@ public class StoreCopyTests : IDisposable
         // Assert
         Assert.Equal(("invoices", "invoices", 2L, 3L, 12L), (copied.SourceContainerName, copied.DestinationContainerName,
             copied.ResourceCount, copied.VersionCount, copied.ContentSize.Bytes));
-        Assert.Equal(new Dictionary<string, string> { ["team"] = "billing" }, (await Target.GetContainerInfoAsync("invoices"))!.Metadata);
+        Assert.Equal(new Dictionary<string, string> { ["team"] = "billing" }, (await Target.GetContainerClient("invoices").GetInfoAsync())!.Metadata);
         IResourceContainerClient copy = Target.GetContainerClient("invoices");
         foreach (string name in new[] { "a.pdf", "b.pdf" })
         {
@@ -185,7 +185,7 @@ public class StoreCopyTests : IDisposable
         await Source.CopyStoreToAsync(Target);
         await files.UploadAsync("b", BinaryData.FromString("b"));
         DateTimeOffset markedAt = DateTimeOffset.UtcNow - (stopped ? TimeSpan.FromHours(1) : TimeSpan.Zero);
-        await Target.SetContainerMetadataAsync("files", new Dictionary<string, string>
+        await Target.GetContainerClient("files").SetMetadataAsync(new Dictionary<string, string>
         {
             ["team"] = "a", ["resourcefull.import"] = "in-progress", ["resourcefull.import_at"] = markedAt.ToString("O")
         });
@@ -200,7 +200,7 @@ public class StoreCopyTests : IDisposable
         if (stopped)
         {
             Assert.Equal(new ContainerUpdateResult("files", 1, 0, 0), Assert.Single(result.Updated));
-            Assert.Equal(new Dictionary<string, string> { ["team"] = "a" }, (await Target.GetContainerInfoAsync("files"))!.Metadata);
+            Assert.Equal(new Dictionary<string, string> { ["team"] = "a" }, (await Target.GetContainerClient("files").GetInfoAsync())!.Metadata);
         }
         else
         {

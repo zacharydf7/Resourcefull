@@ -16,7 +16,7 @@ public class ResourceContainerClientTests
         IUriProvider? uriProvider = null,
         ILogger? logger = null)
         => new(repository, uriProvider, options ?? new ResourcefullOptions(),
-            new ContainerInfo { Name = containerName }, logger);
+            containerName, logger);
 
     private static readonly WrittenContent Written = new(5, "sha256:written", new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero));
 

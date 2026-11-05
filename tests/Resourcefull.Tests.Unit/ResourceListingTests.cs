@@ -8,7 +8,7 @@ public class ResourceListingTests
     private const string Container = "containerName";
 
     private static IResourceContainerClient NewClient(ResourceRepository repository) =>
-        new ResourceContainerClient(repository, null, new ResourcefullOptions(), new ContainerInfo { Name = Container }, null);
+        new ResourceContainerClient(repository, null, new ResourcefullOptions(), Container, null);
 
     private static ResourceInfo Current(string name) => new() { ContainerName = Container, Name = name, VersionId = $"v-{name}", IsLatest = true };
 

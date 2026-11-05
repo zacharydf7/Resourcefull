@@ -8,7 +8,7 @@ public abstract partial class ResourcefullContractTests
     // seem to succeed. Each test runs only when its Supports switch is off.
 
     [Fact]
-    public async Task SetContainerMetadataAsync_ShouldThrowNotSupportedException_WhenTheProviderDoesNotSupportIt()
+    public async Task SetMetadataAsync_ShouldThrowNotSupportedException_WhenTheProviderDoesNotSupportIt()
     {
         Assert.SkipWhen(SupportsContainerMetadata, "The provider changes container metadata.");
 
@@ -18,8 +18,8 @@ public abstract partial class ResourcefullContractTests
 
         // Act & Assert
         await Assert.ThrowsAsync<NotSupportedException>(() =>
-            ServiceOf(provider).SetContainerMetadataAsync(container.Name, new Dictionary<string, string> { ["a"] = "b" }));
-        Assert.Empty((await ServiceOf(provider).GetContainerInfoAsync(container.Name))!.Metadata);
+            ServiceOf(provider).GetContainerClient(container.Name).SetMetadataAsync(new Dictionary<string, string> { ["a"] = "b" }));
+        Assert.Empty((await ServiceOf(provider).GetContainerClient(container.Name).GetInfoAsync())!.Metadata);
     }
 
     [Fact]

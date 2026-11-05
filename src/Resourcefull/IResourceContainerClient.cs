@@ -18,18 +18,20 @@ namespace Resourcefull;
 public interface IResourceContainerClient
 {
     /// <summary>
-    /// The attributes of the container this client targets, as known when the client was made: the stored ones for a
-    /// client from <see cref="IResourceServiceClient.CreateContainerAsync"/>
-    /// or <see cref="IResourceServiceClient.CreateContainerIfNotExistsAsync"/>,
-    /// the name and URI but no metadata for one from <see cref="IResourceServiceClient.GetContainerClient(string)"/>.
-    /// </summary>
-    public ContainerInfo Info { get; }
-
-    /// <summary>
-    /// The name of the container this client targets: <see cref="Info"/>'s <see cref="ContainerInfo.Name"/>.
+    /// The name of the container this client targets.
     /// <para>Coming in 4.0.</para>
     /// </summary>
-    public string Name => Info.Name;
+    public string Name { get; }
+
+    /// <summary>
+    /// Reads the container's attributes as they're stored now: its name, its metadata, and the URI from the URI
+    /// provider.
+    /// <para>Coming in 4.0.</para>
+    /// </summary>
+    /// <param name="cancellationToken">Cancels the lookup.</param>
+    /// <returns>The container's attributes, or <see langword="null"/> if it doesn't exist.</returns>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
+    public Task<ContainerInfo?> GetInfoAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Uploads a resource to the container.
@@ -624,6 +626,53 @@ public interface IResourceContainerClient
     /// </exception>
     public Task<ResourceContainerPolicy> GetPolicyAsync(CancellationToken cancellationToken = default)
         => throw new NotSupportedException($"{GetType().Name} doesn't report its policy.");
+
+    /// <summary>
+    /// Replaces the container's metadata, which otherwise is set only when the container is created. The whole
+    /// dictionary is replaced, including the <c>resourcefull.import</c> entry that marks an unfinished import; to change
+    /// one entry, read the metadata with <see cref="GetInfoAsync"/>, change it and set it. An import running at the same
+    /// time replaces the metadata again when it finishes.
+    /// <para>Coming in 4.0.</para>
+    /// </summary>
+    /// <param name="metadata">The container's new metadata, which is copied.</param>
+    /// <param name="cancellationToken">Cancels the change.</param>
+    /// <returns><see langword="true"/> if the container exists; otherwise <see langword="false"/>.</returns>
+    /// <exception cref="ResourcePolicyViolationException">The container is read-only.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="metadata"/> is null.</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
+    /// <exception cref="NotSupportedException">The provider doesn't change container metadata.</exception>
+    public Task<bool> SetMetadataAsync(IReadOnlyDictionary<string, string> metadata, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Prunes every resource in the container to its <see cref="ResourceContainerPolicy.MaxVersions"/>,
+    /// as each upload prunes its own name, telling the <see cref="IResourceCleanupHandler"/> as a prune does. Run it after
+    /// an import, which keeps every version it was given, or after a prune failed and its name hasn't been written since.
+    /// With <see cref="ResourcefullOptionsBuilder.UseExpiry"/>, the versions past the limit are set to expire five
+    /// minutes later rather than deleted at once, as a prune does.
+    /// <para>Coming in 4.0.</para>
+    /// </summary>
+    /// <param name="cancellationToken">Stops the pruning; the versions already pruned stay pruned.</param>
+    /// <returns>How many versions were past the limit. A container that doesn't exist has nothing to prune.</returns>
+    /// <exception cref="AggregateException">
+    /// Some resources weren't pruned, because the cleanup handler or the provider failed for them; the others were, and
+    /// the failed ones keep their extra versions until a later prune. Its message counts them, and it holds the first few
+    /// failures.
+    /// </exception>
+    /// <exception cref="ResourcePolicyViolationException">The container is read-only.</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
+    public Task<int> PruneAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Indexes the keys <see cref="ResourcefullOptionsBuilder.UseMetadataSearch"/> names for every current version in
+    /// the container, so a listing by <see cref="ResourceListOptions.Metadata"/> finds versions stored before a key was
+    /// added. New writes are indexed as they're stored, so run it once after adding a key, for each container that
+    /// holds versions from before. With a provider that keeps no index, it does nothing, since searches read every name.
+    /// <para>Coming in 4.0.</para>
+    /// </summary>
+    /// <param name="cancellationToken">Stops the indexing; what's indexed by then stays indexed, and running it again finishes.</param>
+    /// <returns>How many versions were indexed. A container that doesn't exist has nothing to index.</returns>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
+    public Task<int> IndexMetadataAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Lists the container's largest versions, or the ones that expire soonest, current and older versions alike, each

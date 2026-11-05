@@ -48,9 +48,9 @@ Check these, even where your code compiles:
 | 3.x | 4.0 |
 |---|---|
 | `CreateResourceContainerAsync`, `CreateResourceContainerIfNotExistsAsync` | `CreateContainerAsync`, `CreateContainerIfNotExistsAsync` |
-| `GetResourceContainerInfoAsync`, `GetResourceContainersAsync` | `GetContainerInfoAsync`, and `ListContainersAsync`, which lists a page at a time: see [Listing containers](containers.md#listing-containers) |
+| `GetResourceContainerInfoAsync`, `GetResourceContainersAsync` | The container client's `GetInfoAsync`, and `ListContainersAsync`, which lists a page at a time: see [Listing containers](containers.md#listing-containers) |
 | `DeleteResourceContainerIfExistsAsync`, `GetResourceContainerClient` | `DeleteContainerIfExistsAsync`, `GetContainerClient` |
-| `ResourceContainerInfo`, and `IResourceContainerClient.ResourceContainerInfo` | `ContainerInfo`, and `IResourceContainerClient.Info` |
+| `ResourceContainerInfo`, and `IResourceContainerClient.ResourceContainerInfo` | `ContainerInfo`, read with `IResourceContainerClient.GetInfoAsync`, and `IResourceContainerClient.Name` for the name |
 | `SetUriProvider` | `UseUriProvider`, like the other `Use…` methods |
 | `ResourceUploadOptions`' settable properties | `init` properties, like the other per-call options types: set them when you create the options |
 | `IResourceRepository`, `ResourceWriteCondition`, `HashingStream` and `WrittenContent` in `Resourcefull` | `ResourceRepository`, `NewResourceVersion`, `ResourceLocation`, `ResourceWriteCondition`, `HashingStream` and `WrittenContent` in `Resourcefull.Providers` |

@@ -59,7 +59,7 @@ public class ResourceCopyTests
             .ReturnsAsync(Written);
         repository.Setup(r => r.GetResourceVersionsAsync(new ResourceLocation("c", "a"), It.IsAny<CancellationToken>())).ReturnsAsync([]);
         var client = new ResourceContainerClient(repository.Object, null, new ResourcefullOptions { MaxVersions = 100 },
-            new ContainerInfo { Name = "c" }, null);
+            "c", null);
 
         // Act
         ResourceInfo? restored = await client.RestoreVersionAsync("a", "v1");
@@ -92,7 +92,6 @@ public class ResourceCopyTests
             repository.ImportVersionAsync(new NewResourceVersion(new ResourceLocation("c", "a"), "v1"), new MemoryStream()));
         await Assert.ThrowsAsync<NotSupportedException>(() => service.ExportContainerAsync("c", new MemoryStream()));
         await Assert.ThrowsAsync<NotSupportedException>(() => service.ImportContainerAsync("c", new MemoryStream()));
-        await Assert.ThrowsAsync<NotSupportedException>(() => service.PruneContainerAsync("c"));
     }
 
     [Fact]

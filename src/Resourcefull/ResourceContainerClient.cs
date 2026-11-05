@@ -6,7 +6,7 @@ using Resourcefull.Providers;
 namespace Resourcefull;
 
 internal partial class ResourceContainerClient(ResourceRepository resourceRepository, IUriProvider? uriProvider,
-    ResourcefullOptions options, ContainerInfo containerInfo, ILogger? logger, ContainerPolicies? policies = null,
+    ResourcefullOptions options, string containerName, ILogger? logger, ContainerPolicies? policies = null,
     IResourceCleanupHandler? cleanupHandler = null, TimeProvider? timeProvider = null, ExpirySettings? expiry = null,
     IResourceUploadInspector? uploadInspector = null)
     : IResourceContainerClient
@@ -14,9 +14,9 @@ internal partial class ResourceContainerClient(ResourceRepository resourceReposi
     private readonly ILogger _logger = logger ?? NullLogger.Instance;
     private readonly ClientTelemetry _telemetry = new(Telemetry.ProviderName(resourceRepository), options);
 
-    public ContainerInfo Info { get; } = containerInfo;
+    public string Name { get; } = containerName;
 
-    private string ContainerName => Info.Name;
+    private string ContainerName => Name;
 
     public Task<ResourceInfo> UploadAsync(string resourceName, Stream content, ResourceUploadOptions? options = null,
         CancellationToken cancellationToken = default)
@@ -256,7 +256,7 @@ internal partial class ResourceContainerClient(ResourceRepository resourceReposi
     /// </summary>
     /// <returns>How many versions were past the limit, in the names pruned.</returns>
     /// <exception cref="AggregateException">Some names weren't pruned; the others were.</exception>
-    internal async Task<int> PruneAllAsync(Activity? activity, CancellationToken cancellationToken)
+    private async Task<int> PruneAllAsync(Activity? activity, CancellationToken cancellationToken)
     {
         if (policies is not null) await policies.ThrowIfReadOnlyAsync(ContainerName, _telemetry, cancellationToken).ConfigureAwait(false);
         int keep = await MaxVersionsAsync(ContainerName, cancellationToken).ConfigureAwait(false);
@@ -840,6 +840,33 @@ internal partial class ResourceContainerClient(ResourceRepository resourceReposi
             int purged = await resourceRepository.PurgeDeletedAsync(At(resourceName), versionId, null, cancellationToken).ConfigureAwait(false);
             _telemetry.CountPurged(purged);
             return purged > 0;
+        });
+
+    public Task<ContainerInfo?> GetInfoAsync(CancellationToken cancellationToken = default)
+        => _telemetry.RunAsync("get_container", ContainerName, null, async () =>
+            await resourceRepository.GetContainerInfoAsync(ContainerName, cancellationToken).ConfigureAwait(false) is { } stored
+                ? ResourceServiceClient.WithUri(stored, uriProvider)
+                : null);
+
+    public Task<bool> SetMetadataAsync(IReadOnlyDictionary<string, string> metadata, CancellationToken cancellationToken = default)
+        => _telemetry.RunAsync("set_container_metadata", ContainerName, null, async () =>
+        {
+            ArgumentNullException.ThrowIfNull(metadata);
+            if (policies is not null) await policies.ThrowIfReadOnlyAsync(ContainerName, _telemetry, cancellationToken).ConfigureAwait(false);
+            return await resourceRepository.SetContainerMetadataAsync(ContainerName,
+                new Dictionary<string, string>(metadata), cancellationToken).ConfigureAwait(false);
+        });
+
+    public Task<int> PruneAsync(CancellationToken cancellationToken = default)
+        => _telemetry.RunAsync("prune_container", ContainerName, null, activity => PruneAllAsync(activity, cancellationToken));
+
+    public Task<int> IndexMetadataAsync(CancellationToken cancellationToken = default)
+        => _telemetry.RunAsync("index_metadata", ContainerName, null, async activity =>
+        {
+            int indexed = await resourceRepository.IndexMetadataAsync(ContainerName, cancellationToken).ConfigureAwait(false);
+            activity?.SetTag("resourcefull.indexed", indexed);
+            _telemetry.CountIndexed(indexed);
+            return indexed;
         });
 
     public Task<ResourceContainerUsage> GetUsageAsync(CancellationToken cancellationToken = default)

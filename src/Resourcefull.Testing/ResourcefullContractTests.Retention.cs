@@ -61,7 +61,7 @@ public abstract partial class ResourcefullContractTests
 
         // Assert
         Assert.Equal((current.VersionId, Kept(clock.Now.AddHours(1)), false), (refused.VersionId, refused.RetainUntil, refused.LegalHold));
-        Assert.Equal((container.Info.Name, "a"), (refused.ContainerName, refused.ResourceName));
+        Assert.Equal((container.Name, "a"), (refused.ContainerName, refused.ResourceName));
         Assert.Equal([current.VersionId, older.VersionId], (await container.GetResourceVersionsAsync("a")).Select(v => v.VersionId));
     }
 

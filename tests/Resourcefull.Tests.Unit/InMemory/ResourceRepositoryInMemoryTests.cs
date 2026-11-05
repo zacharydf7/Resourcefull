@@ -513,7 +513,7 @@ public class ResourceInMemoryRepositoryTests
     }
 
     [Fact]
-    public async Task GetContainerInfoAsync_ShouldReturnACopyOfTheStoredMetadata_WhenTheContainerWasAddedWithIt()
+    public async Task AddContainerAsync_ShouldKeepItsOwnCopyOfTheMetadata_WhenTheCallersDictionaryChanges()
     {
         // Arrange
         var repository = new ResourceInMemoryRepository();
@@ -522,8 +522,6 @@ public class ResourceInMemoryRepositoryTests
         metadata["key"] = "changed by the caller";
 
         // Act
-        ContainerInfo? first = await repository.GetContainerInfoAsync("c");
-        first!.Metadata["key"] = "changed by a reader";
         ContainerInfo listed = Assert.Single(await repository.GetContainerPageAsync(null, null, 100));
 
         // Assert

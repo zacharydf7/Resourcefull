@@ -61,9 +61,15 @@ public sealed record ResourceInfo
     public string? Uri { get; init; }
 
     /// <summary>
-    /// The metadata of a stored resource.
+    /// The metadata of a stored resource, compared by its entries, so two reads of the same version are equal.
     /// </summary>
-    public IReadOnlyDictionary<string, string> Metadata { get; init; } = new Dictionary<string, string>();
+    public IReadOnlyDictionary<string, string> Metadata
+    {
+        get => _metadata;
+        init => _metadata = MetadataDictionary.From(value);
+    }
+
+    private readonly MetadataDictionary _metadata = MetadataDictionary.Empty;
 
     /// <summary>
     /// The version this one was copied or restored from; <see langword="null"/> for a version that was uploaded, or

@@ -16,7 +16,7 @@ public abstract partial class ResourcefullContractTests
         for (int i = 0; i < 3; i++)
             versionsOfB.Add((await container.UploadAsync("b", BinaryData.FromString($"b{i}"), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace })).VersionId);
         ResourceRepository repository = provider.GetRequiredService<ResourceRepository>();
-        string containerName = container.Info.Name;
+        string containerName = container.Name;
 
         // Act
         IReadOnlyList<ResourceInfo> first = await repository.GetVersionPageAsync(containerName, null, 2);

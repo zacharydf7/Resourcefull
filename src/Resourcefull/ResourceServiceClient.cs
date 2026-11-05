@@ -22,7 +22,7 @@ internal partial class ResourceServiceClient(ResourceRepository resourceReposito
     public IResourceContainerClient GetContainerClient(string resourceContainerName)
     {
         ResourceNames.ThrowIfInvalidContainerName(resourceContainerName);
-        return NewContainerClient(new ContainerInfo { Name = resourceContainerName });
+        return NewContainerClient(resourceContainerName);
     }
 
     public Task<IResourceContainerClient> CreateContainerAsync(string resourceContainerName, IDictionary<string, string>? metadata = null,
@@ -43,8 +43,8 @@ internal partial class ResourceServiceClient(ResourceRepository resourceReposito
         ResourceNames.ThrowIfInvalidContainerName(resourceContainerName);
 
         // The usual case is a container that already exists; finding it with a read avoids a failed insert each time.
-        if (await resourceRepository.GetContainerInfoAsync(resourceContainerName, cancellationToken).ConfigureAwait(false) is { } existing)
-            return NewContainerClient(existing);
+        if (await resourceRepository.GetContainerInfoAsync(resourceContainerName, cancellationToken).ConfigureAwait(false) is not null)
+            return GetContainerClient(resourceContainerName);
 
         ResourceNames.ThrowIfInvalidNewContainerName(resourceContainerName);
 
@@ -54,48 +54,28 @@ internal partial class ResourceServiceClient(ResourceRepository resourceReposito
         }
         catch (ResourceConflictException)
         {
-            // Created concurrently; the caller gets a client for it all the same, with what was stored (or, should it
-            // already be gone again, what a client made without a read has).
-            return await resourceRepository.GetContainerInfoAsync(resourceContainerName, cancellationToken).ConfigureAwait(false) is { } stored
-                ? NewContainerClient(stored)
-                : GetContainerClient(resourceContainerName);
+            // Created concurrently; the caller gets a client for it all the same.
+            return GetContainerClient(resourceContainerName);
         }
     }
 
     private async Task<IResourceContainerClient> CreateContainerCoreAsync(string resourceContainerName, IDictionary<string, string>? metadata, CancellationToken cancellationToken)
     {
-        ContainerInfo containerInfo = WithUri(new ContainerInfo
-        {
-            Name = resourceContainerName,
-            Metadata = metadata ?? new Dictionary<string, string>()
-        });
-
         await resourceRepository.AddContainerAsync(resourceContainerName,
-            new Dictionary<string, string>(containerInfo.Metadata), cancellationToken).ConfigureAwait(false);
-        return new ResourceContainerClient(resourceRepository, uriProvider, _options, containerInfo, containerLogger, policies, cleanupHandler,
-            timeProvider, expiry, uploadInspector);
+            metadata is null ? new Dictionary<string, string>() : new Dictionary<string, string>(metadata), cancellationToken).ConfigureAwait(false);
+        return NewContainerClient(resourceContainerName);
     }
 
-    private ResourceContainerClient NewContainerClient(ContainerInfo containerInfo)
-        => new(resourceRepository, uriProvider, _options, WithUri(containerInfo), containerLogger, policies, cleanupHandler, timeProvider, expiry,
+    private ResourceContainerClient NewContainerClient(string containerName)
+        => new(resourceRepository, uriProvider, _options, containerName, containerLogger, policies, cleanupHandler, timeProvider, expiry,
             uploadInspector);
 
     // URIs come from the URI provider whenever a container is returned, not from storage, so a changed provider or base
     // URL applies to containers created before the change as well.
-    private ContainerInfo WithUri(ContainerInfo containerInfo)
-    {
-        containerInfo.Uri = uriProvider?.GetAbsoluteUri(new ResourcefullContext(containerInfo.Name));
-        return containerInfo;
-    }
+    private ContainerInfo WithUri(ContainerInfo containerInfo) => WithUri(containerInfo, uriProvider);
 
-    public Task<ContainerInfo?> GetContainerInfoAsync(string resourceContainerName,
-        CancellationToken cancellationToken = default)
-        => _telemetry.RunAsync("get_container", resourceContainerName, null, async () =>
-        {
-            ResourceNames.ThrowIfInvalidContainerName(resourceContainerName);
-            ContainerInfo? containerInfo = await resourceRepository.GetContainerInfoAsync(resourceContainerName, cancellationToken).ConfigureAwait(false);
-            return containerInfo is null ? null : WithUri(containerInfo);
-        });
+    internal static ContainerInfo WithUri(ContainerInfo containerInfo, IUriProvider? uriProvider)
+        => containerInfo with { Uri = uriProvider?.GetAbsoluteUri(new ResourcefullContext(containerInfo.Name)) };
 
     public Task<ContainerPage> GetContainerPageAsync(ContainerListOptions? options = null, string? continuationToken = null,
         CancellationToken cancellationToken = default)
@@ -120,8 +100,7 @@ internal partial class ResourceServiceClient(ResourceRepository resourceReposito
             containers = [.. containers.Take(options.PageSize)];
             next = ResourcePageToken.Encode(prefix, containers[^1].Name);
         }
-        foreach (ContainerInfo containerInfo in containers) WithUri(containerInfo);
-        return new ContainerPage(containers, next);
+        return new ContainerPage([.. containers.Select(WithUri)], next);
     }
 
     public Task<bool> ContainerExistsAsync(string resourceContainerName, CancellationToken cancellationToken = default)
@@ -129,34 +108,6 @@ internal partial class ResourceServiceClient(ResourceRepository resourceReposito
         {
             ResourceNames.ThrowIfInvalidContainerName(resourceContainerName);
             return await resourceRepository.GetContainerInfoAsync(resourceContainerName, cancellationToken).ConfigureAwait(false) != null;
-        });
-
-    public Task<int> PruneContainerAsync(string resourceContainerName, CancellationToken cancellationToken = default)
-        => _telemetry.RunAsync("prune_container", resourceContainerName, null, async activity =>
-        {
-            ResourceNames.ThrowIfInvalidContainerName(resourceContainerName);
-            return await NewContainerClient(new ContainerInfo { Name = resourceContainerName }).PruneAllAsync(activity, cancellationToken).ConfigureAwait(false);
-        });
-
-    public Task<int> IndexMetadataAsync(string resourceContainerName, CancellationToken cancellationToken = default)
-        => _telemetry.RunAsync("index_metadata", resourceContainerName, null, async activity =>
-        {
-            ResourceNames.ThrowIfInvalidContainerName(resourceContainerName);
-            int indexed = await resourceRepository.IndexMetadataAsync(resourceContainerName, cancellationToken).ConfigureAwait(false);
-            activity?.SetTag("resourcefull.indexed", indexed);
-            _telemetry.CountIndexed(indexed);
-            return indexed;
-        });
-
-    public Task<bool> SetContainerMetadataAsync(string resourceContainerName, IDictionary<string, string> metadata,
-        CancellationToken cancellationToken = default)
-        => _telemetry.RunAsync("set_container_metadata", resourceContainerName, null, async () =>
-        {
-            ResourceNames.ThrowIfInvalidContainerName(resourceContainerName);
-            ArgumentNullException.ThrowIfNull(metadata);
-            if (policies is not null) await policies.ThrowIfReadOnlyAsync(resourceContainerName, _telemetry, cancellationToken).ConfigureAwait(false);
-            return await resourceRepository.SetContainerMetadataAsync(resourceContainerName,
-                new Dictionary<string, string>(metadata), cancellationToken).ConfigureAwait(false);
         });
 
     public Task<IReadOnlyList<ResourceInfo>> GetExpiredVersionsAsync(int maxVersions = 100, CancellationToken cancellationToken = default)
@@ -273,7 +224,7 @@ internal partial class ResourceServiceClient(ResourceRepository resourceReposito
                             continue;
 
                         IReadOnlyList<ResourceInfo> waiting = version.IsLatest
-                            ? await NewContainerClient(new ContainerInfo { Name = version.ContainerName })
+                            ? await NewContainerClient(version.ContainerName)
                                 .WaitingBehindAsync(version.Name, version.VersionId, cancellationToken).ConfigureAwait(false)
                             : [];
                         // Left while a version it replaced is protected: deleting it would make that version current again.
@@ -311,7 +262,7 @@ internal partial class ResourceServiceClient(ResourceRepository resourceReposito
                         {
                             if (await GoneAsync(version).ConfigureAwait(false))
                             {
-                                await NewContainerClient(new ContainerInfo { Name = version.ContainerName })
+                                await NewContainerClient(version.ContainerName)
                                     .DeleteWaitingAsync(version.Name, waiting).ConfigureAwait(false);
                             }
                         }
@@ -322,7 +273,7 @@ internal partial class ResourceServiceClient(ResourceRepository resourceReposito
                     {
                         deleted++;
                         _telemetry.CountExpired();
-                        await NewContainerClient(new ContainerInfo { Name = version.ContainerName })
+                        await NewContainerClient(version.ContainerName)
                             .DeleteWaitingAsync(version.Name, waiting).ConfigureAwait(false);
                     }
                 }

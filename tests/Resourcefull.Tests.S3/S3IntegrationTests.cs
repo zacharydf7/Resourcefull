@@ -1290,7 +1290,7 @@ public class S3IntegrationTests(S3Fixture fixture)
     }
 
     [Fact]
-    public async Task GetContainerInfoAsync_ShouldThrowRatherThanFindNothing_WhenTheBucketDoesntExist()
+    public async Task GetInfoAsync_ShouldThrowRatherThanFindNothing_WhenTheBucketDoesntExist()
     {
         fixture.SkipIfUnavailable();
 
@@ -1300,7 +1300,7 @@ public class S3IntegrationTests(S3Fixture fixture)
         await using ServiceProvider provider = services.BuildServiceProvider();
 
         // Act
-        Task act() => provider.GetRequiredService<IResourceServiceClient>().GetContainerInfoAsync("c");
+        Task act() => provider.GetRequiredService<IResourceServiceClient>().GetContainerClient("c").GetInfoAsync();
 
         // Assert
         Assert.Equal("NoSuchBucket", (await Assert.ThrowsAsync<AmazonS3Exception>(act)).ErrorCode);

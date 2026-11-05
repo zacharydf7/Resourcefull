@@ -47,7 +47,7 @@ PostgreSQL `retries` also carry `error.type`:
 
 | Instrument | Unit | What it counts |
 |---|---|---|
-| `resourcefull.client.prune.failures` | {failure} | prunes of older versions that failed after the upload, restore or copy was stored, or for a resource `PruneContainerAsync` couldn't prune; the older versions stay until a later prune |
+| `resourcefull.client.prune.failures` | {failure} | prunes of older versions that failed after the upload, restore or copy was stored, or for a resource `PruneAsync` couldn't prune; the older versions stay until a later prune |
 | `resourcefull.client.expired` | {version} | expired versions that [expiry](expiry.md) sweeps deleted |
 | `resourcefull.client.expire.failures` | {version} | expired versions a sweep failed to delete; they stay for the next sweep |
 | `resourcefull.client.purged` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | {version} | versions purged from a [bin](deleting-safely.md#the-bin) for good, by sweeps and by `PurgeDeletedAsync` |
@@ -130,13 +130,13 @@ metrics. It also has:
 | `set_retention` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | `SetRetentionAsync` | |
 | `set_legal_hold` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | `SetLegalHoldAsync` | `resourcefull.legal_hold`: whether it set or lifted the hold |
 | `set_content_type` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | `SetContentTypeAsync` | |
-| `set_container_metadata` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | `SetContainerMetadataAsync` | |
+| `set_container_metadata` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | `SetMetadataAsync` | |
 | `export` | `ExportContainerAsync` | `resourcefull.resources`, `resourcefull.versions`: what it wrote; `resourcefull.pages`: the pages of 1,000 names it read |
 | `import` | `ImportContainerAsync`, from an export or <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> from a stream of versions | `resourcefull.resources`, `resourcefull.versions`: what it stored; with an [upload inspector](upload-inspection.md) <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>, a `resourcefull inspect` child span for each version; with SQL Server <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>, `resourcefull.batches`: the batches of about a MiB every version's content was stored in |
 | `import_versions` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | `ImportVersionsAsync` | `resourcefull.resources`, `resourcefull.versions`: what it stored |
 | `copy_container` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | `CopyContainerToAsync` | `resourcefull.destination_container`; `resourcefull.destination_store`, when the destination is a store with a name; `resourcefull.resources`, `resourcefull.versions`: what it copied; the destination's `import` as a child span |
 | `copy_store` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | `CopyStoreToAsync`, which [moves a store](moving-providers.md) | `resourcefull.destination_store`, as for `copy_container`; `resourcefull.copied`, `resourcefull.updated`, `resourcefull.matching`, `resourcefull.failed`: how many containers it copied, brought up to date, found matching and failed |
-| `prune_container` | `PruneContainerAsync` | `resourcefull.pruned`: how many versions were past the limit |
+| `prune_container` | `PruneAsync` | `resourcefull.pruned`: how many versions were past the limit |
 | `expire` | `DeleteExpiredAsync`, and each sweep of [`UseExpiry`](expiry.md), when it finds expired versions, read-only containers' included | `resourcefull.expired`: how many versions it deleted; `resourcefull.batches`: how many batches of up to 100 it deleted them in; `resourcefull.batch_fallbacks`, when a batch failed and its versions were deleted one at a time instead: how many. Each failed batch's exception is recorded too, as on a failed operation, but the span isn't marked failed: the sweep carried on |
 | `list_page` | `GetResourcePageAsync`, and each page `ListResourcesAsync` fetches | `resourcefull.page_size`; for a [search by metadata](listing.md#finding-resources-by-metadata) <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>, also `resourcefull.metadata_key`: the key searched, never its value; and with the file system, S3 and Azure Blob, `resourcefull.search_examined`: how many index entries the page read |
 | `index_metadata` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | `IndexMetadataAsync` | `resourcefull.indexed`: how many versions it indexed |
@@ -149,7 +149,7 @@ metrics. It also has:
 | `purge` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | `PurgeDeletedAsync` on the service client, and each sweep of [`UseExpiry`](expiry.md), when it finds versions due to leave a bin | `resourcefull.purged`: how many versions it purged |
 | `delete` | `DeleteResourceIfExistsAsync` | `resourcefull.conditional`; when a [retained or held](deleting-safely.md) version refuses it, `resourcefull.refusal_reason` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> |
 | `create_container` | `CreateContainerAsync`, `CreateContainerIfNotExistsAsync` | |
-| `get_container` | `GetContainerInfoAsync` | |
+| `get_container` | `GetInfoAsync` | |
 | `container_exists` | `ContainerExistsAsync` | |
 | `list_containers` | `GetContainerPageAsync` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>, and each page `ListContainersAsync` fetches | `resourcefull.page_size` |
 | `delete_container` | `DeleteContainerIfExistsAsync` | when a [retained or held](deleting-safely.md) version refuses it, `resourcefull.refusal_reason` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> |

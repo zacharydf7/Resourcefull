@@ -67,10 +67,10 @@ public sealed class ScaleTests(SqlServerFixture fixture, ITestOutputHelper outpu
         await container.UploadAsync("warm-up", BinaryData.FromString("x"));
         await service.DeleteExpiredAsync();
         IResourceContainerClient warmUp =
-            await service.CreateContainerAsync($"{container.Info.Name}-warm-up");
+            await service.CreateContainerAsync($"{container.Name}-warm-up");
         await warmUp.UploadAsync("r", BinaryData.FromString("x"));
-        await service.ExportContainerAsync(warmUp.Info.Name, Stream.Null);
-        await service.DeleteContainerIfExistsAsync(warmUp.Info.Name);
+        await service.ExportContainerAsync(warmUp.Name, Stream.Null);
+        await service.DeleteContainerIfExistsAsync(warmUp.Name);
 
         await MeasureAsync($"get-info-of-{rows}", () => container.GetResourceInfoAsync(NameOf(Rows / 2)));
         var middlePage = new ResourceListOptions { Prefix = NameOf(Rows / 2)[..^1], PageSize = 100 };
@@ -81,9 +81,9 @@ public sealed class ScaleTests(SqlServerFixture fixture, ITestOutputHelper outpu
         // Every seeded name shares one content, which an export writes once, so this measures reading the container
         // and writing its manifest.
         await MeasureAsync($"export-of-{rows}",
-            () => service.ExportContainerAsync(container.Info.Name, Stream.Null));
+            () => service.ExportContainerAsync(container.Name, Stream.Null));
         await MeasureAsync($"delete-container-of-{rows}",
-            () => service.DeleteContainerIfExistsAsync(container.Info.Name));
+            () => service.DeleteContainerIfExistsAsync(container.Name));
     }
 
     public void Dispose()
@@ -155,7 +155,7 @@ public sealed class ScaleTests(SqlServerFixture fixture, ITestOutputHelper outpu
             CROSS JOIN [ResourceChunks] c JOIN [Resources] t ON t.[Id] = c.[ResourceId]
             WHERE r.[Id] > @lastId AND t.[ContainerName] = @container AND t.[Name] = 'template';
             """;
-        command.Parameters.Add(new SqlParameter("@container", container.Info.Name));
+        command.Parameters.Add(new SqlParameter("@container", container.Name));
         SqlParameter start = command.Parameters.Add(new SqlParameter("@start", System.Data.SqlDbType.Int));
         SqlParameter count = command.Parameters.Add(new SqlParameter("@count", System.Data.SqlDbType.Int));
 

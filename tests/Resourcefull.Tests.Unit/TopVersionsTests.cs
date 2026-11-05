@@ -8,7 +8,7 @@ public class TopVersionsTests
     private const string Container = "containerName";
 
     private static IResourceContainerClient NewClient(ResourceRepository repository) =>
-        new ResourceContainerClient(repository, null, new ResourcefullOptions(), new ContainerInfo { Name = Container }, null);
+        new ResourceContainerClient(repository, null, new ResourcefullOptions(), Container, null);
 
     private static ResourceInfo Version(string name, string versionId, long? length, DateTimeOffset? expiresAt = null) =>
         new() { ContainerName = Container, Name = name, VersionId = versionId, ContentLength = length, ExpiresAt = expiresAt };

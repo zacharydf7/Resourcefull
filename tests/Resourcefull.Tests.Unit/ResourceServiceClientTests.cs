@@ -35,7 +35,6 @@ public class ResourceServiceClientTests
         Assert.ThrowsAny<ArgumentException>(() => service.GetContainerClient(name!));
         await Assert.ThrowsAnyAsync<ArgumentException>(() => service.CreateContainerAsync(name!));
         await Assert.ThrowsAnyAsync<ArgumentException>(() => service.CreateContainerIfNotExistsAsync(name!));
-        await Assert.ThrowsAnyAsync<ArgumentException>(() => service.GetContainerInfoAsync(name!));
         await Assert.ThrowsAnyAsync<ArgumentException>(() => service.ContainerExistsAsync(name!));
         await Assert.ThrowsAnyAsync<ArgumentException>(() => service.DeleteContainerIfExistsAsync(name!));
         repository.VerifyNoOtherCalls();
@@ -67,23 +66,8 @@ public class ResourceServiceClientTests
         IResourceContainerClient client = service.GetContainerClient("myContainer");
 
         // Assert
-        Assert.Equal("myContainer", client.Info.Name);
+        Assert.Equal("myContainer", client.Name);
         repository.VerifyNoOtherCalls();
-    }
-
-    [Fact]
-    public void GetContainerClient_ShouldCarryTheUriProvidersUri_WhenAUriProviderIsConfigured()
-    {
-        // Arrange
-        var uriProvider = new Mock<IUriProvider>();
-        uriProvider.Setup(p => p.GetAbsoluteUri(new ResourcefullContext("myContainer", null, null))).Returns("https://resources.test/myContainer");
-        var service = NewService(new Mock<ResourceRepository>(MockBehavior.Strict).Object, uriProvider.Object);
-
-        // Act
-        IResourceContainerClient client = service.GetContainerClient("myContainer");
-
-        // Assert
-        Assert.Equal("https://resources.test/myContainer", client.Info.Uri);
     }
 
     private static IUriProvider NewBaseUrlUriProvider()
@@ -108,26 +92,26 @@ public class ResourceServiceClientTests
     }
 
     [Fact]
-    public async Task GetContainerInfoAsync_ShouldReturnTheUriProvidersUri_WhenTheStoredUriIsOutOfDate()
+    public async Task GetInfoAsync_ShouldReturnTheUriProvidersUri_WhenTheStoredUriIsOutOfDate()
     {
         // Arrange
         var service = NewService(NewRepositoryWithStoredUris().Object, NewBaseUrlUriProvider());
 
         // Act
-        ContainerInfo? containerInfo = await service.GetContainerInfoAsync("stored");
+        ContainerInfo? containerInfo = await service.GetContainerClient("stored").GetInfoAsync();
 
         // Assert
         Assert.Equal("https://new.test/stored", containerInfo!.Uri);
     }
 
     [Fact]
-    public async Task GetContainerInfoAsync_ShouldReturnNoUri_WhenNoUriProviderIsConfigured()
+    public async Task GetInfoAsync_ShouldReturnNoUri_WhenNoUriProviderIsConfigured()
     {
         // Arrange
         var service = NewService(NewRepositoryWithStoredUris().Object);
 
         // Act
-        ContainerInfo? containerInfo = await service.GetContainerInfoAsync("stored");
+        ContainerInfo? containerInfo = await service.GetContainerClient("stored").GetInfoAsync();
 
         // Assert
         Assert.Null(containerInfo!.Uri);
@@ -162,19 +146,6 @@ public class ResourceServiceClientTests
     }
 
     [Fact]
-    public async Task CreateContainerIfNotExistsAsync_ShouldReturnTheUriProvidersUri_WhenTheExistingContainersStoredUriIsOutOfDate()
-    {
-        // Arrange
-        var service = NewService(NewRepositoryWithStoredUris().Object, NewBaseUrlUriProvider());
-
-        // Act
-        IResourceContainerClient client = await service.CreateContainerIfNotExistsAsync("stored");
-
-        // Assert
-        Assert.Equal("https://new.test/stored", client.Info.Uri);
-    }
-
-    [Fact]
     public async Task CreateContainerAsync_ShouldCreateContainer_WhenItDoesNotExist()
     {
         // Arrange
@@ -185,7 +156,7 @@ public class ResourceServiceClientTests
         IResourceContainerClient client = await service.CreateContainerAsync("newContainer");
 
         // Assert
-        Assert.Equal("newContainer", client.Info.Name);
+        Assert.Equal("newContainer", client.Name);
         repository.Verify(r => r.AddContainerAsync("newContainer", It.IsAny<IReadOnlyDictionary<string, string>>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -215,34 +186,14 @@ public class ResourceServiceClientTests
         IResourceContainerClient client = await service.CreateContainerIfNotExistsAsync("existing");
 
         // Assert
-        Assert.Equal("existing", client.Info.Name);
+        Assert.Equal("existing", client.Name);
         repository.Verify(r => r.AddContainerAsync(It.IsAny<string>(), It.IsAny<IReadOnlyDictionary<string, string>>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
-    public async Task CreateContainerIfNotExistsAsync_ShouldReturnAClientWithTheStoredInfo_WhenAConcurrentCreateWinsTheAdd()
+    public async Task CreateContainerIfNotExistsAsync_ShouldReturnAClientForTheName_WhenAConcurrentCreateWinsTheAdd()
     {
-        // Arrange: absent when checked, then created by someone else, with their metadata, before this add.
-        var repository = new Mock<ResourceRepository>();
-        repository.SetupSequence(r => r.GetContainerInfoAsync("existing", It.IsAny<CancellationToken>()))
-            .ReturnsAsync((ContainerInfo?)null)
-            .ReturnsAsync(new ContainerInfo { Name = "existing", Uri = "https://old.test/existing", Metadata = new Dictionary<string, string> { ["owner"] = "them" } });
-        repository.Setup(r => r.AddContainerAsync(It.IsAny<string>(), It.IsAny<IReadOnlyDictionary<string, string>>(), It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new ResourceConflictException("already exists"));
-        var service = NewService(repository.Object, NewBaseUrlUriProvider());
-
-        // Act
-        IResourceContainerClient client = await service.CreateContainerIfNotExistsAsync("existing", new Dictionary<string, string> { ["owner"] = "us" });
-
-        // Assert
-        Assert.Equal("them", client.Info.Metadata["owner"]);
-        Assert.Equal("https://new.test/existing", client.Info.Uri);
-    }
-
-    [Fact]
-    public async Task CreateContainerIfNotExistsAsync_ShouldReturnAClientForTheName_WhenTheConcurrentlyCreatedContainerIsGoneAgain()
-    {
-        // Arrange: created by someone else before this add, and deleted again before it can be read.
+        // Arrange: absent when checked, then created by someone else before this add.
         var repository = new Mock<ResourceRepository>();
         repository.Setup(r => r.AddContainerAsync(It.IsAny<string>(), It.IsAny<IReadOnlyDictionary<string, string>>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new ResourceConflictException("already exists"));
@@ -252,8 +203,7 @@ public class ResourceServiceClientTests
         IResourceContainerClient client = await service.CreateContainerIfNotExistsAsync("existing", new Dictionary<string, string> { ["owner"] = "us" });
 
         // Assert
-        Assert.Equal("existing", client.Info.Name);
-        Assert.Empty(client.Info.Metadata);
+        Assert.Equal("existing", client.Name);
     }
 
     [Fact]
@@ -299,7 +249,7 @@ public class ResourceServiceClientTests
     }
 
     [Fact]
-    public async Task GetContainerInfoAsync_ShouldReturnNull_WhenContainerDoesNotExist()
+    public async Task GetInfoAsync_ShouldReturnNull_WhenContainerDoesNotExist()
     {
         // Arrange
         var repository = new Mock<ResourceRepository>();
@@ -307,7 +257,7 @@ public class ResourceServiceClientTests
         var service = NewService(repository.Object);
 
         // Act
-        ContainerInfo? info = await service.GetContainerInfoAsync("missing");
+        ContainerInfo? info = await service.GetContainerClient("missing").GetInfoAsync();
 
         // Assert
         Assert.Null(info);
@@ -391,7 +341,7 @@ public class ResourceServiceClientTests
     }
 
     [Fact]
-    public async Task GetContainerInfoAsync_ShouldPassTheToken_WhenCalledWithOne()
+    public async Task GetInfoAsync_ShouldPassTheToken_WhenCalledWithOne()
     {
         // Arrange
         using var cts = new CancellationTokenSource();
@@ -399,7 +349,7 @@ public class ResourceServiceClientTests
         var service = NewService(repository.Object);
 
         // Act
-        await service.GetContainerInfoAsync("name", cts.Token);
+        await service.GetContainerClient("name").GetInfoAsync(cts.Token);
 
         // Assert
         repository.Verify(r => r.GetContainerInfoAsync("name", cts.Token), Times.Once);
@@ -794,7 +744,7 @@ public class ResourceServiceClientTests
         await service.ImportContainerAsync("restored", export);
 
         // Assert
-        Assert.Equal(new Dictionary<string, string> { ["team"] = "billing" }, (await service.GetContainerInfoAsync("restored"))!.Metadata);
+        Assert.Equal(new Dictionary<string, string> { ["team"] = "billing" }, (await service.GetContainerClient("restored").GetInfoAsync())!.Metadata);
     }
 
     [Fact]

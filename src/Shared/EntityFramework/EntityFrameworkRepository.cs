@@ -1900,7 +1900,7 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
             .Select(x => new ContainerInfo
             {
                 Name = x.Name,
-                Metadata = x.Metadata
+                Metadata = (IReadOnlyDictionary<string, string>)x.Metadata
             }).ToListAsync(cancellationToken).ConfigureAwait(false);
     }
 
@@ -1913,7 +1913,7 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
         return await dbContext.ResourceContainers.Where(x => x.Name == resourceContainerName).Select(x => new ContainerInfo
         {
             Name = x.Name,
-            Metadata = x.Metadata
+            Metadata = (IReadOnlyDictionary<string, string>)x.Metadata
         }).FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
     }
 

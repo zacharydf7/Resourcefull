@@ -186,7 +186,7 @@ public sealed class TelemetryTests : IDisposable
             .ReturnsAsync(staged with { StoredLength = 5 });
         repository.Setup(r => r.AppendStagedContentAsync(new ResourceLocation("c", "a"), "u1", 0, It.IsAny<Stream>(),
             It.IsAny<CancellationToken>())).ThrowsAsync(new IOException("The connection dropped."));
-        var container = new ResourceContainerClient(repository.Object, null, new ResourcefullOptions(), new ContainerInfo { Name = "c" }, null);
+        var container = new ResourceContainerClient(repository.Object, null, new ResourcefullOptions(), "c", null);
 
         // Act
         await Assert.ThrowsAsync<IOException>(() => container.AppendUploadAsync("a", "u1", 0, new MemoryStream(new byte[9])));
@@ -430,7 +430,7 @@ public sealed class TelemetryTests : IDisposable
         // Act
         await container.SetResourceMetadataAsync("a", null, new Dictionary<string, string>());
         await container.SetContentTypeAsync("a", null, "text/plain");
-        await service.SetContainerMetadataAsync("c", new Dictionary<string, string>());
+        await service.GetContainerClient("c").SetMetadataAsync(new Dictionary<string, string>());
 
         // Assert
         foreach (string operation in new[] { "set_metadata", "set_content_type", "set_container_metadata" })
@@ -578,7 +578,7 @@ public sealed class TelemetryTests : IDisposable
     }
 
     [Fact]
-    public async Task PruneContainerAsync_ShouldRecordHowManyVersionsWerePastTheLimit_WhenCalled()
+    public async Task PruneAsync_ShouldRecordHowManyVersionsWerePastTheLimit_WhenCalled()
     {
         // Arrange: versioning keeps three, then a service keeping one prunes the container.
         using ServiceProvider provider = NewServices();
@@ -591,7 +591,7 @@ public sealed class TelemetryTests : IDisposable
         using Activity root = TestSource.StartActivity("test")!;
 
         // Act
-        await keepingOne.PruneContainerAsync("c");
+        await keepingOne.GetContainerClient("c").PruneAsync();
 
         // Assert
         Activity prune = Assert.Single(SpansIn(root), s => s.OperationName == "resourcefull prune_container");
@@ -606,7 +606,7 @@ public sealed class TelemetryTests : IDisposable
     }
 
     [Fact]
-    public async Task PruneContainerAsync_ShouldRecordWhatItPruned_WhenSomeResourcesFail()
+    public async Task PruneAsync_ShouldRecordWhatItPruned_WhenSomeResourcesFail()
     {
         // Arrange: two names with three versions each, then a service keeping one whose cleanup handler refuses one name.
         using ServiceProvider provider = NewServices();
@@ -621,7 +621,7 @@ public sealed class TelemetryTests : IDisposable
         using Activity root = TestSource.StartActivity("test")!;
 
         // Act
-        await Assert.ThrowsAsync<AggregateException>(() => keepingOne.PruneContainerAsync("c"));
+        await Assert.ThrowsAsync<AggregateException>(() => keepingOne.GetContainerClient("c").PruneAsync());
 
         // Assert
         Activity prune = Assert.Single(SpansIn(root), s => s.OperationName == "resourcefull prune_container");
@@ -670,6 +670,22 @@ public sealed class TelemetryTests : IDisposable
         // Fewer names than a page holds, so the export read one.
         Activity exportSpan = Assert.Single(SpansIn(root), s => s.OperationName == "resourcefull export");
         Assert.Equal(1, exportSpan.GetTagItem("resourcefull.pages"));
+    }
+
+    [Fact]
+    public async Task GetInfoAsync_ShouldRecordAGetContainerOperation_WhenCalled()
+    {
+        // Arrange
+        using ServiceProvider provider = NewServices();
+        IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>().CreateContainerAsync("c");
+        using Activity root = TestSource.StartActivity("test")!;
+
+        // Act
+        await container.GetInfoAsync();
+
+        // Assert
+        Activity span = Assert.Single(SpansIn(root));
+        Assert.Equal(("resourcefull get_container", "c"), (span.OperationName, span.GetTagItem("resourcefull.container")));
     }
 
     [Fact]
@@ -771,7 +787,6 @@ public sealed class TelemetryTests : IDisposable
         // Act & Assert
         await Assert.ThrowsAsync<ArgumentNullException>(() => service.CreateContainerAsync(null!));
         await Assert.ThrowsAsync<ArgumentNullException>(() => service.CreateContainerIfNotExistsAsync(null!));
-        await Assert.ThrowsAsync<ArgumentNullException>(() => service.GetContainerInfoAsync(null!));
         await Assert.ThrowsAsync<ArgumentNullException>(() => service.ContainerExistsAsync(null!));
         await Assert.ThrowsAsync<ArgumentNullException>(() => service.DeleteContainerIfExistsAsync(null!));
     }
@@ -929,7 +944,7 @@ public sealed class TelemetryTests : IDisposable
 
         // Act
         await container.GetResourcePageAsync(new ResourceListOptions { Metadata = new ResourceMetadataMatch("customer", "secret-42") });
-        int indexed = await service.IndexMetadataAsync("c");
+        int indexed = await service.GetContainerClient("c").IndexMetadataAsync();
 
         // Assert: the value may be personal data, so no tag carries it.
         Activity page = SpansIn(root).Single(s => s.OperationName == "resourcefull list_page");

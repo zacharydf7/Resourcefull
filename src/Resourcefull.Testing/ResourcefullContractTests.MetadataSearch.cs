@@ -210,7 +210,7 @@ public abstract partial class ResourcefullContractTests
         IResourceContainerClient container = ServiceOf(after).GetContainerClient(stored.Name);
 
         // Act: indexing, then writes that make the version with the long value current, and move it.
-        await ServiceOf(after).IndexMetadataAsync(stored.Name);
+        await ServiceOf(after).GetContainerClient(stored.Name).IndexMetadataAsync();
         await container.DeleteResourceIfExistsAsync("a", current.VersionId);
         await container.RenameResourceAsync("a", "b");
 
@@ -233,7 +233,7 @@ public abstract partial class ResourcefullContractTests
         IResourceContainerClient container = ServiceOf(after).GetContainerClient(stored.Name);
 
         // Act
-        await ServiceOf(after).IndexMetadataAsync(stored.Name);
+        await ServiceOf(after).GetContainerClient(stored.Name).IndexMetadataAsync();
 
         // Assert
         Assert.Equal(["a"], await FindAsync(container, "42"));

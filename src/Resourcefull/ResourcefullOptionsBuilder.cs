@@ -274,7 +274,7 @@ public class ResourcefullOptionsBuilder
     /// the provider keeps an index of each current version's value for each key, so a search reads only what matches.
     /// A value of one of these keys can be at most <see cref="ResourceMetadataMatch.MaxValueLength"/> characters, and a
     /// write that gives a longer one throws <see cref="ArgumentException"/>. Versions stored before a key was added
-    /// aren't found by it until <see cref="IResourceServiceClient.IndexMetadataAsync"/> indexes their container. Calling
+    /// aren't found by it until <see cref="IResourceContainerClient.IndexMetadataAsync"/> indexes their container. Calling
     /// this method again adds more keys.
     /// <para>Coming in 4.0.</para>
     /// </summary>

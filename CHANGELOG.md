@@ -217,10 +217,11 @@
   version has that value, in name order, by page, with a prefix if you like. Every provider supports it: SQL Server,
   PostgreSQL and SQLite keep the index in a `ResourceMetadata` table, which the `Resourcefull_AddMetadataSearch`
   migration adds, and the file system, S3 and Azure Blob keep an index entry for each value, so a search reads only the
-  matches. A searchable key's value is limited to 256 characters. `IndexMetadataAsync` indexes versions stored before a
-  key was named. It has an `index_metadata` span and counts what it indexed in `resourcefull.client.metadata.indexed`; a
-  search's `list_page` span carries the key searched, never its value, and the file system, S3 and Azure Blob count the
-  stale index entries a search dropped in `resourcefull.*.stale_search_entries`. S3's key prefix can be at most 190
+  matches. A searchable key's value is limited to 256 characters. The container client's `IndexMetadataAsync` indexes
+  versions stored before a key was named. It has an `index_metadata` span and counts what it indexed in
+  `resourcefull.client.metadata.indexed`; a search's `list_page` span carries the key searched, never its value, and
+  the file system, S3 and Azure Blob count the stale index entries a search dropped in
+  `resourcefull.*.stale_search_entries`. S3's key prefix can be at most 190
   bytes of UTF-8, and Azure Blob's at most 190 characters, to leave room for the index entries. Providers get
   `FindResourcePageAsync`, whose default reads every name, and `IndexMetadataAsync`. See [Finding resources by
   metadata](docs/listing.md#finding-resources-by-metadata).
@@ -254,7 +255,7 @@
 - **Changing metadata and content type.** `SetResourceMetadataAsync` and `SetContentTypeAsync` change a version's
   metadata or content type in place, without uploading it again: it keeps its ID, content, `LastModified` and ETag,
   and no new version is made. A new content type is checked against `AllowedContentTypes`, and a read-only container
-  refuses both. `IResourceServiceClient.SetContainerMetadataAsync` replaces a container's metadata, which
+  refuses both. `IResourceContainerClient.SetMetadataAsync` replaces a container's metadata, which
   could only be set when the container was created. Providers get `SetResourceMetadataAsync` and
   `SetContentTypeAsync`, whose defaults throw `NotSupportedException`. See
   [Changing metadata and content type](docs/uploading.md#changing-metadata-and-content-type).
@@ -286,8 +287,8 @@
   for failed prunes, expired versions deleted and failed, cleanup handler failures, and SQL Server's retries show work
   that doesn't fail the call that started it. Nothing is measured until something subscribes. See
   [Telemetry](docs/telemetry.md).
-- **Pruning a whole container.** `PruneContainerAsync` prunes every resource in a container to `MaxVersions`, as each
-  upload prunes its own name, for after an import or a failed prune. See
+- **Pruning a whole container.** The container client's `PruneAsync` prunes every resource in its container to
+  `MaxVersions`, as each upload prunes its own name, for after an import or a failed prune. See
   [Versioning](docs/versioning.md#keeping-a-limited-number).
 - **SQL Server options.** `UseSqlServer(connectionString, sql => ...)` changes EF Core's SQL Server options after
   Resourcefull's own, such as the command timeout or the retries. See [SQL Server](docs/providers/sql-server.md#retries).
@@ -322,12 +323,21 @@
 - **Adding Resourcefull twice throws.** A second `AddResourcefull` replaced the provider and kept the first call's other
   settings; it now throws `InvalidOperationException`. Add a second store with `AddKeyedResourcefull`. See
   [Upgrading to 4.0](docs/upgrading-to-4.md#adding-resourcefull-twice).
+- **A container client holds only the container's name.** `IResourceContainerClient.Info` is gone, so changing it can
+  no longer send the client's calls to another container, and `Name` is the container's name. `GetInfoAsync` reads the
+  container's attributes as they're stored now (`Info` on a client from `GetContainerClient` had empty metadata). The
+  operations on one existing container are on its client: `GetInfoAsync`, `SetMetadataAsync`, `PruneAsync` and
+  `IndexMetadataAsync`, in place of the service client's `GetContainerInfoAsync` (`GetResourceContainerInfoAsync` in
+  3.x), `SetContainerMetadataAsync`, `PruneContainerAsync` and `IndexMetadataAsync`. `ContainerInfo` is a sealed record
+  with `init` properties and read-only metadata, like `ResourceInfo`, so changing its metadata can't look like it
+  changed what's stored. `ResourceInfo` and `ContainerInfo` compare their metadata by its entries, so two reads of the
+  same version, or of the same container, are equal. Telemetry's operation names don't change. See
+  [Containers](docs/containers.md).
 - **Consistent names.** The container methods drop "Resource": `CreateContainerAsync`,
-  `CreateContainerIfNotExistsAsync`, `GetContainerInfoAsync`, `DeleteContainerIfExistsAsync` and
-  `GetContainerClient`, beside the existing `ContainerExistsAsync`. `GetResourceContainersAsync`, which read every
-  container into memory, is replaced by `ListContainersAsync`, which lists a page at a time. `ResourceContainerInfo`
-  is `ContainerInfo`, and `IResourceContainerClient.ResourceContainerInfo` is `Info`. `SetUriProvider` is `UseUriProvider`.
-  `ResourceUploadOptions` has `init` properties. The provider types move to `Resourcefull.Providers`,
+  `CreateContainerIfNotExistsAsync`, `DeleteContainerIfExistsAsync` and `GetContainerClient`, beside the existing
+  `ContainerExistsAsync`. `GetResourceContainersAsync`, which read every container into memory, is replaced by
+  `ListContainersAsync`, which lists a page at a time. `ResourceContainerInfo` is `ContainerInfo`. `SetUriProvider` is
+  `UseUriProvider`. `ResourceUploadOptions` has `init` properties. The provider types move to `Resourcefull.Providers`,
   and the provider's container members are renamed to match. Telemetry's operation names don't change. See
   [Upgrading to 4.0](docs/upgrading-to-4.md#consistent-names).
 - **Stricter names.** Uploads, copies, moves and renames, and creating or importing a container, refuse new names with

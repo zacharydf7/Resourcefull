@@ -94,8 +94,8 @@ public class KeyedStoreTests
         IResourceContainerClient archiveContainer = await archive.CreateContainerAsync("c");
 
         // Assert
-        Assert.Null(hotContainer.Info.Uri);
-        Assert.Equal("https://archive.test/c", archiveContainer.Info.Uri);
+        Assert.Null((await hotContainer.GetInfoAsync())!.Uri);
+        Assert.Equal("https://archive.test/c", (await archiveContainer.GetInfoAsync())!.Uri);
     }
 
     [Fact]

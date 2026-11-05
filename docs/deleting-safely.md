@@ -71,7 +71,7 @@ An upload or copy can also start out held, with `LegalHold = true` in its option
   has passed and its hold is lifted.
 - **Pruning** keeps it past the container's `MaxVersions`. An upload that replaces it still succeeds, and the
   protected version stays on as an older version. Once it's no longer protected, the next prune removes it: the next
-  upload of that name, or `PruneContainerAsync`.
+  upload of that name, or the container client's `PruneAsync`.
 - **In a container that keeps one version,** the current version can't be deleted on its own while a version it
   replaced is protected, since that version would become current again; delete the whole name once nothing in it is
   protected. Expiry leaves such a current version too, until then. The check runs just before the delete, so a hold

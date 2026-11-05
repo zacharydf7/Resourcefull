@@ -688,30 +688,6 @@ public class ResourceSqlRepositoryTests
     }
 
     [Fact]
-    public async Task GetResourceInfoAsync_ShouldReturnACopyOfMetadata_WhenCallerMutatesTheReturnedDictionary()
-    {
-        // Arrange
-        var containerName = "containerName";
-        var resourceName = "resourceName";
-        (_, var dbContextFactory) = NewDatabase();
-        var resourceRepository = new ResourceSqlRepository(dbContextFactory);
-        await resourceRepository.AddContainerAsync(containerName, new Dictionary<string, string>());
-        NewResourceVersion resourceInfo = Version(containerName, resourceName, DateTime.UtcNow) with
-        {
-            Metadata = new Dictionary<string, string> { ["key"] = "original" }
-        };
-        await resourceRepository.AddResourceAsync(resourceInfo, new MemoryStream());
-        ResourceInfo? first = await resourceRepository.GetResourceInfoAsync(new ResourceLocation(containerName, resourceName));
-
-        // Act
-        ((IDictionary<string, string>)first!.Metadata)["key"] = "changed";
-
-        // Assert
-        ResourceInfo? second = await resourceRepository.GetResourceInfoAsync(new ResourceLocation(containerName, resourceName));
-        Assert.Equal("original", second!.Metadata["key"]);
-    }
-
-    [Fact]
     public async Task AddResourceAsync_ShouldThrowOperationCanceledAndStoreNothing_WhenTokenIsAlreadyCanceled()
     {
         // Arrange

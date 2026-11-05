@@ -156,7 +156,7 @@ internal partial class ResourceServiceClient
     /// doesn't, <see langword="true"/> when the import wrote its mark within <see cref="StaleImportAge"/>, and
     /// <see langword="false"/> when it's older, or from a release that didn't write the time, and the import stopped.
     /// </summary>
-    private bool? ImportRunning(IDictionary<string, string> metadata)
+    private bool? ImportRunning(IReadOnlyDictionary<string, string> metadata)
     {
         if (!metadata.TryGetValue(ImportMarkerKey, out string? state) || state != ImportMarkerValue) return null;
         return metadata.TryGetValue(ImportMarkedAtKey, out string? at)
@@ -309,7 +309,7 @@ internal partial class ResourceServiceClient
         CancellationToken cancellationToken)
     {
         ThrowIfUnfinished(container);
-        ContainerInfo? theirs = await destination.GetContainerInfoAsync(container.Name, cancellationToken).ConfigureAwait(false);
+        ContainerInfo? theirs = await destination.GetContainerClient(container.Name).GetInfoAsync(cancellationToken).ConfigureAwait(false);
         if (theirs is null)
         {
             copied.Add(await CopyContainerToAsync(container.Name, destination, null, cancellationToken).ConfigureAwait(false));
@@ -419,7 +419,7 @@ internal partial class ResourceServiceClient
             Dictionary<string, string> metadata = WithoutImportMark(container.Metadata);
             if (!SameMetadata(metadata, theirs.Metadata))
             {
-                await destination.SetContainerMetadataAsync(container.Name, metadata, cancellationToken).ConfigureAwait(false);
+                await destination.GetContainerClient(container.Name).SetMetadataAsync(metadata, cancellationToken).ConfigureAwait(false);
                 MetadataChanged = true;
             }
 
@@ -546,17 +546,8 @@ internal partial class ResourceServiceClient
             || ours.CopiedFrom != theirs.CopiedFrom;
     }
 
-    private static bool SameMetadata(IEnumerable<KeyValuePair<string, string>> ours, IEnumerable<KeyValuePair<string, string>> theirs)
-    {
-        var their = new Dictionary<string, string>(theirs, StringComparer.Ordinal);
-        int count = 0;
-        foreach ((string key, string value) in ours)
-        {
-            if (!their.TryGetValue(key, out string? other) || other != value) return false;
-            count++;
-        }
-        return count == their.Count;
-    }
+    private static bool SameMetadata(IReadOnlyDictionary<string, string> ours, IReadOnlyDictionary<string, string> theirs)
+        => MetadataDictionary.From(ours).Equals(MetadataDictionary.From(theirs));
 
     /// <summary>A time cut to the microsecond, the finest every provider keeps, for comparing stores.</summary>
     private static DateTimeOffset? Micro(DateTimeOffset? time) =>

@@ -24,9 +24,8 @@ public interface IResourceServiceClient
 
     /// <summary>
     /// Returns a client for a container without contacting the store. The container need not exist
-    /// yet; operations report absence at the time they run. Since nothing is read, the client's
-    /// <see cref="IResourceContainerClient.Info"/> carries the name and the URI provider's URI but no
-    /// metadata; use <see cref="GetContainerInfoAsync(string, CancellationToken)"/> for the stored metadata.
+    /// yet; operations report absence at the time they run. Use the client's
+    /// <see cref="IResourceContainerClient.GetInfoAsync"/> for the container's stored attributes.
     /// </summary>
     /// <param name="resourceContainerName">The name of the resource container.</param>
     /// <exception cref="ArgumentException"><paramref name="resourceContainerName"/> is null, empty, longer than 128 characters, or starts or ends with whitespace (<see cref="ArgumentNullException"/> when null).</exception>
@@ -55,17 +54,6 @@ public interface IResourceServiceClient
     /// <exception cref="ArgumentException"><paramref name="resourceContainerName"/> is null, empty, longer than 128 characters, or starts or ends with whitespace (<see cref="ArgumentNullException"/> when null).</exception>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
     public Task<IResourceContainerClient> CreateContainerIfNotExistsAsync(string resourceContainerName, IDictionary<string, string>? metadata = null,
-        CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Retrieves the attributes of a container.
-    /// </summary>
-    /// <param name="resourceContainerName">The name of the container.</param>
-    /// <param name="cancellationToken">Cancels the lookup.</param>
-    /// <returns>The <see cref="ContainerInfo"/>, or <see langword="null"/> if the container does not exist.</returns>
-    /// <exception cref="ArgumentException"><paramref name="resourceContainerName"/> is null, empty, longer than 128 characters, or starts or ends with whitespace (<see cref="ArgumentNullException"/> when null).</exception>
-    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
-    public Task<ContainerInfo?> GetContainerInfoAsync(string resourceContainerName,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -369,74 +357,4 @@ public interface IResourceServiceClient
     /// </exception>
     public Task<IReadOnlyList<ResourceInfo>> GetExpiredVersionsAsync(int maxVersions = 100, CancellationToken cancellationToken = default)
         => throw new NotSupportedException($"{GetType().Name} doesn't support expiry.");
-
-    /// <summary>
-    /// Prunes every resource in the container to its <see cref="ResourceContainerPolicy.MaxVersions"/>,
-    /// as each upload prunes its own name, telling the <see cref="IResourceCleanupHandler"/> as a prune does. Run it after
-    /// an import, which keeps every version it was given, or after a prune failed and its name hasn't been written since.
-    /// With <see cref="ResourcefullOptionsBuilder.UseExpiry"/>, the versions past the limit are set to expire five
-    /// minutes later rather than deleted at once, as a prune does.
-    /// <para>Coming in 4.0.</para>
-    /// </summary>
-    /// <param name="resourceContainerName">The container to prune; a container that doesn't exist has nothing to prune.</param>
-    /// <param name="cancellationToken">Stops the pruning; the versions already pruned stay pruned.</param>
-    /// <returns>How many versions were past the limit.</returns>
-    /// <exception cref="AggregateException">
-    /// Some resources weren't pruned, because the cleanup handler or the provider failed for them; the others were, and
-    /// the failed ones keep their extra versions until a later prune. Its message counts them, and it holds the first few
-    /// failures.
-    /// </exception>
-    /// <exception cref="ResourcePolicyViolationException">The container is read-only.</exception>
-    /// <exception cref="ArgumentException">
-    /// <paramref name="resourceContainerName"/> breaks the name rules (<see cref="ResourceNameException"/>), or is null
-    /// (<see cref="ArgumentNullException"/>).
-    /// </exception>
-    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
-    /// <exception cref="NotSupportedException">
-    /// This default implementation, kept so implementations written for 3.1 still compile, doesn't prune.
-    /// </exception>
-    public Task<int> PruneContainerAsync(string resourceContainerName, CancellationToken cancellationToken = default)
-        => throw new NotSupportedException($"{GetType().Name} doesn't prune containers.");
-
-    /// <summary>
-    /// Indexes the keys <see cref="ResourcefullOptionsBuilder.UseMetadataSearch"/> names for every current version in
-    /// the container, so a listing by <see cref="ResourceListOptions.Metadata"/> finds versions stored before a key was
-    /// added. New writes are indexed as they're stored, so run it once after adding a key, for each container that
-    /// holds versions from before. With a provider that keeps no index, it does nothing, since searches read every name.
-    /// <para>Coming in 4.0.</para>
-    /// </summary>
-    /// <param name="resourceContainerName">The container to index; a container that doesn't exist has nothing to index.</param>
-    /// <param name="cancellationToken">Stops the indexing; what's indexed by then stays indexed, and running it again finishes.</param>
-    /// <returns>How many versions were indexed.</returns>
-    /// <exception cref="ArgumentException">
-    /// <paramref name="resourceContainerName"/> breaks the name rules (<see cref="ResourceNameException"/>), or is null
-    /// (<see cref="ArgumentNullException"/>).
-    /// </exception>
-    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
-    /// <exception cref="NotSupportedException">This default implementation doesn't index metadata.</exception>
-    public Task<int> IndexMetadataAsync(string resourceContainerName, CancellationToken cancellationToken = default)
-        => throw new NotSupportedException($"{GetType().Name} doesn't index metadata.");
-
-    /// <summary>
-    /// Replaces a container's metadata, which otherwise is set only when the container is created. The whole dictionary
-    /// is replaced, including the <c>resourcefull.import</c> entry that marks an unfinished import; to change one entry,
-    /// read the container's metadata, change it and set it. An import running at the same time replaces the metadata
-    /// again when it finishes.
-    /// <para>Coming in 4.0.</para>
-    /// </summary>
-    /// <param name="resourceContainerName">The container.</param>
-    /// <param name="metadata">The container's new metadata, which is copied.</param>
-    /// <param name="cancellationToken">Cancels the change.</param>
-    /// <returns><see langword="true"/> if the container exists; otherwise <see langword="false"/>.</returns>
-    /// <exception cref="ResourcePolicyViolationException">The container is read-only.</exception>
-    /// <exception cref="ArgumentNullException"><paramref name="metadata"/> is null.</exception>
-    /// <exception cref="ArgumentException"><paramref name="resourceContainerName"/> breaks the name rules.</exception>
-    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
-    /// <exception cref="NotSupportedException">
-    /// The provider doesn't change container metadata, or this is the default implementation, kept so implementations
-    /// written for 3.1 still compile.
-    /// </exception>
-    public Task<bool> SetContainerMetadataAsync(string resourceContainerName, IDictionary<string, string> metadata,
-        CancellationToken cancellationToken = default)
-        => throw new NotSupportedException($"{GetType().Name} doesn't change container metadata.");
 }

@@ -386,7 +386,7 @@ public class ContainerPolicyTests
 
     /// <summary>A versioned client of container <c>c</c> whose policies come from <paramref name="settings"/>.</summary>
     private static ResourceContainerClient NewMovingClient(ResourceRepository repository, ContainerPolicySettings settings) =>
-        new(repository, null, new ResourcefullOptions { MaxVersions = 100 }, new ContainerInfo { Name = "c" }, null,
+        new(repository, null, new ResourcefullOptions { MaxVersions = 100 }, "c", null,
             new ContainerPolicies(settings, repository));
 
     [Fact]
@@ -520,7 +520,7 @@ public class ContainerPolicyTests
             .BuildServiceProvider();
         IResourceContainerClient container = await NewFlakyContainerAsync(services);
         await container.UploadAsync("small", BinaryData.FromString("12345"));
-        FlakyPolicies.Down[container.Info.Name] = true;
+        FlakyPolicies.Down[container.Name] = true;
 
         // Act
         Task tooLarge() => container.UploadAsync("large", new BinaryData(new byte[50]));
@@ -544,7 +544,7 @@ public class ContainerPolicyTests
             .BuildServiceProvider();
         IResourceContainerClient container = await NewFlakyContainerAsync(services);
         if (givenBefore) await container.UploadAsync("small", BinaryData.FromString("12345"));
-        FlakyPolicies.Down[container.Info.Name] = true;
+        FlakyPolicies.Down[container.Name] = true;
 
         // Act
         Task act() => container.UploadAsync("small2", BinaryData.FromString("12345"));
@@ -564,7 +564,7 @@ public class ContainerPolicyTests
             .BuildServiceProvider();
         IResourceContainerClient container = await NewFlakyContainerAsync(services);
         await container.UploadAsync("small", BinaryData.FromString("12345"));
-        FlakyPolicies.Down[container.Info.Name] = true;
+        FlakyPolicies.Down[container.Name] = true;
         await Task.Delay(TimeSpan.FromMilliseconds(300));
 
         // Act
@@ -646,7 +646,7 @@ public class ContainerPolicyTests
     }
 
     [Fact]
-    public async Task PruneContainerAsync_ShouldThrowPolicyViolation_WhenTheContainerIsReadOnly()
+    public async Task PruneAsync_ShouldThrowPolicyViolation_WhenTheContainerIsReadOnly()
     {
         // Arrange
         using ServiceProvider services = new ServiceCollection()
@@ -656,7 +656,7 @@ public class ContainerPolicyTests
         await service.CreateContainerAsync("c");
 
         // Act
-        Task act() => service.PruneContainerAsync("c");
+        Task act() => service.GetContainerClient("c").PruneAsync();
 
         // Assert
         Assert.Equal(ResourcePolicyRule.ReadOnly, (await Assert.ThrowsAsync<ResourcePolicyViolationException>(act)).Rule);

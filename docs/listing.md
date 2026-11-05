@@ -84,7 +84,7 @@ page, with continuation tokens, which work only with the same prefix and the sam
   container, such as from a maintenance job; writes from then on are indexed as they're stored:
 
   ```csharp
-  await resources.IndexMetadataAsync("invoices");
+  await resources.GetContainerClient("invoices").IndexMetadataAsync();
   ```
 
 - **What it costs:** with SQL Server, PostgreSQL and SQLite, once you name a key, every write updates the index in the

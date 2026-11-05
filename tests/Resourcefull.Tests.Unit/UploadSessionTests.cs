@@ -15,7 +15,7 @@ public class UploadSessionTests
             .ReturnsAsync(new StagedVersion(new NewResourceVersion(location, "u1") { DeclaredLength = 3 }, 3));
         repository.Setup(r => r.GetStagedStreamAsync(location, "u1", It.IsAny<CancellationToken>()))
             .ReturnsAsync(new MemoryStream(new byte[5]));
-        var container = new ResourceContainerClient(repository.Object, null, new ResourcefullOptions(), new ContainerInfo { Name = "c" }, null);
+        var container = new ResourceContainerClient(repository.Object, null, new ResourcefullOptions(), "c", null);
 
         // Act
         var exception = await Assert.ThrowsAsync<ResourceUploadOffsetException>(() => container.CompleteUploadAsync("a", "u1"));

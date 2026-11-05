@@ -17,7 +17,7 @@ public abstract partial class ResourcefullContractTests
         ResourceInfo uploaded = await container.UploadAsync("report.txt", BinaryData.FromString("x"));
 
         // Assert
-        ContainerInfo? stored = await service.GetContainerInfoAsync(name);
+        ContainerInfo? stored = await service.GetContainerClient(name).GetInfoAsync();
         Assert.Equal($"https://resources.test/{name}", stored!.Uri);
         Assert.Equal("ops", stored.Metadata["owner"]);
         ContainerInfo listed = Assert.Single(await ListContainersAsync(service, name), c => c.Name == name);
@@ -27,7 +27,7 @@ public abstract partial class ResourcefullContractTests
     }
 
     [Fact]
-    public async Task CreateContainerIfNotExistsAsync_ShouldReturnAClientWithTheStoredMetadataAndTheProvidersUri_WhenTheContainerExists()
+    public async Task CreateContainerIfNotExistsAsync_ShouldKeepTheStoredMetadata_WhenTheContainerExists()
     {
         // Arrange
         using ServiceProvider provider = BuildServiceProvider(o => o.UseUriProvider<PathUriProvider>());
@@ -39,8 +39,8 @@ public abstract partial class ResourcefullContractTests
         IResourceContainerClient container = await service.CreateContainerIfNotExistsAsync(name, new Dictionary<string, string> { ["owner"] = "ignored" });
 
         // Assert
-        Assert.Equal("ops", container.Info.Metadata["owner"]);
-        Assert.Equal($"https://resources.test/{name}", container.Info.Uri);
+        ContainerInfo stored = (await container.GetInfoAsync())!;
+        Assert.Equal(("ops", $"https://resources.test/{name}"), (stored.Metadata["owner"], stored.Uri));
     }
 
     [Fact]

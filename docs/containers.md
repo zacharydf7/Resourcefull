@@ -2,22 +2,36 @@
 
 Every resource lives in a **container**: a named group, such as `invoices` or `user-42`. Two resources can share a
 name as long as they're in different containers. A container can carry metadata, a dictionary of strings you set when
-you create it and can replace later with `SetContainerMetadataAsync` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>.
+you create it and can replace later with the container client's `SetMetadataAsync` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>.
 
 ```csharp
 IResourceContainerClient invoices = await resources.CreateContainerAsync("invoices",
     new Dictionary<string, string> { ["owner"] = "billing" });
 ```
 
+The service client, `IResourceServiceClient`, manages containers by name:
+
 | Method | When the container already exists | When it doesn't |
 |---|---|---|
 | `CreateContainerAsync` | throws `ResourceConflictException` | creates it |
 | `CreateContainerIfNotExistsAsync` | returns a client for it, keeping its stored metadata | creates it |
 | `GetContainerClient` | returns a client without contacting storage | returns a client; operations then report the container missing |
-| `GetContainerInfoAsync` | returns its name, URI and metadata | returns `null` |
 | `ContainerExistsAsync` | `true` | `false` |
 | `DeleteContainerIfExistsAsync` | deletes it and every resource in it, returns `true` | returns `false` |
-| `SetContainerMetadataAsync` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | replaces its metadata, returns `true` | returns `false` |
+
+A container client, `IResourceContainerClient`, works with the container it's for: its resources, and the container
+itself.
+
+| Method | When the container exists | When it doesn't |
+|---|---|---|
+| `GetInfoAsync` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | returns its name, URI and metadata, as stored now | returns `null` |
+| `SetMetadataAsync` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | replaces its metadata, returns `true` | returns `false` |
+| `PruneAsync` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | prunes every name to its version limit, and returns how many versions were past it: see [Versioning](versioning.md#keeping-a-limited-number) | returns 0 |
+| `IndexMetadataAsync` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | indexes versions for [searching by metadata](listing.md#finding-resources-by-metadata), and returns how many | returns 0 |
+| `GetUsageAsync`, `GetPolicyAsync` | report its usage and its [policy](container-policies.md) | report nothing stored, and the policy that would apply |
+
+A container client holds only the container's name, so it never shows stale attributes: read them with `GetInfoAsync`
+when you need them.
 
 Reads from a missing container return `null` or an empty list. An upload into one throws
 `ResourceContainerNotFoundException`, even when the container was deleted a moment before the upload ran.
@@ -26,10 +40,10 @@ Deleting a large SQL Server container happens in batches that commit one at a ti
 fails partway, the versions it reached are gone, every other version is still whole, and each remaining name still has
 a current version. The container still exists, so call the delete again to finish.
 
-Metadata dictionaries are copied in both directions: changing one you passed in or got back doesn't change what's
-stored. `SetContainerMetadataAsync` replaces the whole dictionary, including the `resourcefull.import` entry
-that marks an [unfinished import](backup-and-move.md), so carry it over if it's there; an import still running
-replaces the metadata again when it finishes.
+Metadata is copied when it's stored: changing a dictionary you passed in doesn't change what's stored, and the
+metadata you get back can't be changed. `SetMetadataAsync` replaces the whole dictionary, including the
+`resourcefull.import` entry that marks an [unfinished import](backup-and-move.md), so carry it over if it's there; an
+import still running replaces the metadata again when it finishes.
 
 ## Listing containers
 

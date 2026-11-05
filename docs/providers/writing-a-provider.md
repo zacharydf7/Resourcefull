@@ -291,9 +291,9 @@ the metadata you're given, so the caller can't change it afterward, and serializ
 name, as for `SetExpiryAsync`. Their defaults throw `NotSupportedException`, so the clients' methods report that the
 provider doesn't support them.
 
-The service client's `SetContainerMetadataAsync` calls the provider member of the same name, described under
-[Importing versions](#importing-versions), so with a provider that doesn't override it, the service client's method
-throws `NotSupportedException`.
+The container client's `SetMetadataAsync` calls the provider's `SetContainerMetadataAsync`, described under
+[Importing versions](#importing-versions), so with a provider that doesn't override it, `SetMetadataAsync` throws
+`NotSupportedException`.
 
 ## Retention and legal holds
 

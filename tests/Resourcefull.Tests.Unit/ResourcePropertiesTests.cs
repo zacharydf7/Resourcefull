@@ -14,7 +14,6 @@ public class ResourcePropertiesTests
         // Arrange
         ResourceRepository repository = new Mock<ResourceRepository> { CallBase = true }.Object;
         IResourceContainerClient container = new Mock<IResourceContainerClient> { CallBase = true }.Object;
-        IResourceServiceClient service = new Mock<IResourceServiceClient> { CallBase = true }.Object;
         var location = new ResourceLocation("c", "a");
         var metadata = new Dictionary<string, string>();
 
@@ -23,7 +22,6 @@ public class ResourcePropertiesTests
         await Assert.ThrowsAsync<NotSupportedException>(() => repository.SetContentTypeAsync(location, null, "text/plain"));
         await Assert.ThrowsAsync<NotSupportedException>(() => container.SetResourceMetadataAsync("a", null, metadata));
         await Assert.ThrowsAsync<NotSupportedException>(() => container.SetContentTypeAsync("a", null, "text/plain"));
-        await Assert.ThrowsAsync<NotSupportedException>(() => service.SetContainerMetadataAsync("c", metadata));
     }
 
     [Fact]
@@ -36,6 +34,6 @@ public class ResourcePropertiesTests
 
         // Act & Assert
         await Assert.ThrowsAsync<ArgumentNullException>(() => container.SetResourceMetadataAsync("a", null, null!));
-        await Assert.ThrowsAsync<ArgumentNullException>(() => service.SetContainerMetadataAsync("c", null!));
+        await Assert.ThrowsAsync<ArgumentNullException>(() => service.GetContainerClient("c").SetMetadataAsync(null!));
     }
 }

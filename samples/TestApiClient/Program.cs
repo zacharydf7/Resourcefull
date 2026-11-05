@@ -59,7 +59,7 @@ app.MapGet("/api/containers", async (string? continuationToken, IResourceService
 
 app.MapGet("/api/containers/{containerName}", async (string containerName, IResourceServiceClient resourceServiceClient) =>
 {
-    ContainerInfo? containerInfo = await resourceServiceClient.GetContainerInfoAsync(containerName);
+    ContainerInfo? containerInfo = await resourceServiceClient.GetContainerClient(containerName).GetInfoAsync();
     if (containerInfo is null)
     {
         return Results.NotFound("Resource Container not found.");
@@ -130,7 +130,7 @@ app.MapPost("/api/containers/{containerName}", async (string containerName, IRes
     if (!TryReadMetadata(metadataJson, out Dictionary<string, string> metadata)) return Results.BadRequest(InvalidMetadata);
 
     IResourceContainerClient containerClient = await resourceServiceClient.CreateContainerAsync(containerName, metadata);
-    ContainerInfo containerInfo = containerClient.Info;
+    ContainerInfo containerInfo = (await containerClient.GetInfoAsync())!;
     return Results.Created(containerInfo.Uri, containerInfo);
 }).DisableAntiforgery();
 

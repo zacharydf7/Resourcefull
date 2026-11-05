@@ -173,7 +173,7 @@ public static partial class ResourcefullDashboardEndpointRouteBuilderExtensions
             CancellationToken cancellationToken) =>
         {
             Record(httpContext, "container");
-            return await resources.GetContainerInfoAsync(name, cancellationToken).ConfigureAwait(false) is { } container
+            return await resources.GetContainerClient(name).GetInfoAsync(cancellationToken).ConfigureAwait(false) is { } container
                 ? Results.Json(await ViewAsync(resources, container, cancellationToken).ConfigureAwait(false), Json)
                 : Results.NotFound();
         });
@@ -304,7 +304,7 @@ public static partial class ResourcefullDashboardEndpointRouteBuilderExtensions
 
     private sealed record ExpiredView(bool Supported, int Count, bool More, DateTimeOffset? OldestExpiry);
 
-    private sealed record ContainerView(string Name, IDictionary<string, string> Metadata, UsageView Usage, PolicyView Policy);
+    private sealed record ContainerView(string Name, IReadOnlyDictionary<string, string> Metadata, UsageView Usage, PolicyView Policy);
 
     private sealed record UsageView(long StoredSize, long ResourceCount, long VersionCount, long DeletedSize, long DeletedVersionCount);
 

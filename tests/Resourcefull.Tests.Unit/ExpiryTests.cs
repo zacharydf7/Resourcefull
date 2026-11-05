@@ -294,7 +294,7 @@ public class ExpiryTests
             new ResourceInfo { ContainerName = "c", Name = "a", VersionId = "v1" }
         ]);
         var handler = new Mock<IResourceCleanupHandler>();
-        var client = new ResourceContainerClient(repository.Object, null, new ResourcefullOptions(), new ContainerInfo { Name = "c" },
+        var client = new ResourceContainerClient(repository.Object, null, new ResourcefullOptions(), "c",
             null, cleanupHandler: handler.Object, expiry: new ExpirySettings(TimeSpan.FromMinutes(1)));
 
         // Act
@@ -341,14 +341,14 @@ public class ExpiryTests
         .BuildServiceProvider();
 
     [Fact]
-    public async Task PruneContainerAsync_ShouldPruneEveryName_WhenTheContainerHasMoreThanOnePageOfNames()
+    public async Task PruneAsync_ShouldPruneEveryName_WhenTheContainerHasMoreThanOnePageOfNames()
     {
         // Arrange
         using ServiceProvider services = NewRefusingServices();
         (IResourceServiceClient service, string name) = await OverLimitAsync(services, ResourceListOptions.DefaultPageSize + 1);
 
         // Act
-        int pruned = await service.PruneContainerAsync(name);
+        int pruned = await service.GetContainerClient(name).PruneAsync();
 
         // Assert
         Assert.Equal(ResourceListOptions.DefaultPageSize + 1, pruned);
@@ -356,7 +356,7 @@ public class ExpiryTests
     }
 
     [Fact]
-    public async Task PruneContainerAsync_ShouldPruneTheOtherNamesThenThrow_WhenOneNamesPruneFails()
+    public async Task PruneAsync_ShouldPruneTheOtherNamesThenThrow_WhenOneNamesPruneFails()
     {
         // Arrange: the cleanup handler refuses the first name.
         using ServiceProvider services = NewRefusingServices();
@@ -364,7 +364,7 @@ public class ExpiryTests
         RefusingCleanupHandler.Refusing[name + "/n00000"] = true;
 
         // Act
-        Task act() => service.PruneContainerAsync(name);
+        Task act() => service.GetContainerClient(name).PruneAsync();
 
         // Assert
         AggregateException failed = await Assert.ThrowsAsync<AggregateException>(act);
