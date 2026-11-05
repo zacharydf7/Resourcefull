@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text.Json;
+using Resourcefull.AspNetCore;
 
 namespace Resourcefull.Tests.AspNetCore;
 
@@ -68,6 +69,25 @@ public class TusClientTests
         ResourceInfo stored = (await app.Files.GetResourceInfoAsync("tus/resumed.bin"))!;
         Assert.Equal("sha256:" + summary.Sha256, stored.ContentHash);
         Assert.Single(app.Completed);
+    }
+
+    [Fact]
+    public async Task TusJsClient_ShouldResumeAndFinish_WhenItsUploadThroughALinkIsInterrupted()
+    {
+        // Arrange: a link that takes files under in/, used without signing in.
+        string folder = ClientFolder();
+        await using UploadApp app = await UploadApp.StartAsync(onPort: true);
+        string token = app.Links.CreateUploadToken(new ResourceUploadLink(UploadApp.Container) { NamePrefix = "in/" });
+
+        // Act
+        Summary summary = await UploadAsync(folder, new Uri(app.Address!, $"/upload-links/{token}"), "linked.bin", "interrupted");
+
+        // Assert: the new client resumed from the upload's URL under the link's, and the whole file is stored.
+        Assert.True(summary.Ok, summary.Message);
+        Request[] resumed = [.. summary.Requests.SkipWhile(r => r.Method != "ABORT").Skip(1)];
+        Assert.Equal(("HEAD", 200, "1048576"), (resumed[0].Method, resumed[0].Status, resumed[0].Offset));
+        Assert.DoesNotContain(resumed, r => r.Method == "POST");
+        Assert.Equal("sha256:" + summary.Sha256, (await app.Files.GetResourceInfoAsync("in/linked.bin"))!.ContentHash);
     }
 
     [Fact]

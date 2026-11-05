@@ -24,8 +24,9 @@ public sealed record ResourceUploadLink(string ContainerName)
     public TimeSpan ExpiresIn { get; init; } = TimeSpan.FromHours(1);
 
     /// <summary>
-    /// The most bytes one upload may hold, or <see langword="null"/> for no limit of the link's own. With a limit, the
-    /// request must send <c>Content-Length</c>, and is refused before its body is read if that's over the limit.
+    /// The most bytes one upload may hold, or <see langword="null"/> for no limit of the link's own. With a limit, a
+    /// request to <c>Results.SharedUpload</c> must send <c>Content-Length</c>, and is refused before its body is read
+    /// if that's over the limit; a resumable upload is refused when it starts if the length it declares is over it.
     /// </summary>
     public long? MaxSize { get; init; }
 

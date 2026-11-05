@@ -66,7 +66,7 @@ public sealed class SharedUploadHttpResult : IResult, IActionResult
             return;
         }
 
-        if (Refusal(link, request) is { } refusal)
+        if (Refusal(link, request.ContentLength, request.ContentType) is { } refusal)
         {
             await refusal.ExecuteAsync(httpContext).ConfigureAwait(false);
             return;
@@ -102,9 +102,9 @@ public sealed class SharedUploadHttpResult : IResult, IActionResult
     /// What to tell the holder about an upload the store refused, in place of the exception's message, which names the
     /// container and can say how full it is; <see langword="null"/> for an exception that isn't a refusal.
     /// </summary>
-    private static string? RefusalTitle(Exception exception) => exception switch
+    internal static string? RefusalTitle(Exception exception) => exception switch
     {
-        ResourceConflictException => "A file with this name already exists.",
+        ResourceConflictException => NameTaken,
         ResourceContainerNotFoundException => "The link has nowhere to store files.",
         ResourcePolicyViolationException { Rule: ResourcePolicyRule.MaxResourceSize } => "The file is larger than this store accepts.",
         ResourcePolicyViolationException { Rule: ResourcePolicyRule.MaxContainerSize } => "There's no room left for the file.",
@@ -117,12 +117,18 @@ public sealed class SharedUploadHttpResult : IResult, IActionResult
         _ => null
     };
 
-    /// <summary>How to answer a request the link's own limits refuse, or <see langword="null"/> if they allow it.</summary>
-    private static IResult? Refusal(SignedResourceUploadLink link, HttpRequest request)
+    /// <summary>What a link's holder is told when the name a create-only link uploads to already has a file.</summary>
+    internal const string NameTaken = "A file with this name already exists.";
+
+    /// <summary>
+    /// How to answer an upload of <paramref name="length"/> bytes of <paramref name="contentType"/> that the link's own
+    /// limits refuse, or <see langword="null"/> if they allow it.
+    /// </summary>
+    internal static IResult? Refusal(SignedResourceUploadLink link, long? length, string? contentType)
     {
         if (link.MaxSize is { } maxSize)
         {
-            if (request.ContentLength is not { } length)
+            if (length is null)
             {
                 return TypedResults.Problem(statusCode: StatusCodes.Status411LengthRequired,
                     title: "The upload link limits the size of an upload, so the request must send Content-Length.");
@@ -130,10 +136,10 @@ public sealed class SharedUploadHttpResult : IResult, IActionResult
             if (length > maxSize)
             {
                 return TypedResults.Problem(statusCode: StatusCodes.Status413PayloadTooLarge,
-                    title: $"The upload link accepts at most {maxSize} bytes, and the request has {length}.");
+                    title: $"The upload link accepts at most {maxSize} bytes, and the upload has {length}.");
             }
         }
-        if (!new ResourceContainerPolicy { AllowedContentTypes = link.AllowedContentTypes }.AllowsContentType(request.ContentType))
+        if (!new ResourceContainerPolicy { AllowedContentTypes = link.AllowedContentTypes }.AllowsContentType(contentType))
         {
             return TypedResults.Problem(statusCode: StatusCodes.Status415UnsupportedMediaType,
                 title: $"The upload link accepts only {string.Join(", ", link.AllowedContentTypes!)}.");

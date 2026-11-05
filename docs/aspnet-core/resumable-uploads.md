@@ -208,6 +208,13 @@ endpoints say when in `Upload-Expires`, so a client knows whether it can still r
 deletes unfinished uploads, and the endpoints don't send `Upload-Expires`. A client can also cancel an upload with
 `DELETE` on its URL, which deletes what it stored; tus-js-client does that with `upload.abort(true)`.
 
+## People who can't sign in
+
+To take resumable uploads from people who can't sign in, such as customers sending claim photos, hand them an
+[upload link](../upload-links.md), and map the endpoints for links with `MapResourcefullUploadLinks`. The link then
+decides where each upload goes, in place of `ResolveAsync`. See
+[Large files: resumable uploads](../upload-links.md#large-files-resumable-uploads).
+
 ## Several stores
 
 For a store added with [`AddKeyedResourcefull`](../several-stores.md), set `StoreName`, and map the endpoints once for

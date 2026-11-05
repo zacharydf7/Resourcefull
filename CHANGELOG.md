@@ -72,8 +72,11 @@
   more than its upload has left, so the endpoints lift ASP.NET Core's request size limit for their own requests;
   `MaxSize` sets a limit of their own, and `WithResourcefullUploadHeaders` adds what they need to a CORS policy. Each
   request's span gets `resourcefull.tus`. The core gains `ResourcefullOptions.AbandonedUploadsDeletedAfter`, which the
-  endpoints send as `Upload-Expires`. See
-  [Resumable uploads](docs/aspnet-core/resumable-uploads.md).
+  endpoints send as `Upload-Expires`. `MapResourcefullUploadLinks` maps the same endpoints for upload links, so
+  whoever holds one can resume an upload without signing in: the link's name or prefix, size limit, content types and
+  mode are checked when the upload starts, and its expiry stops new uploads, not those under way. See
+  [Resumable uploads](docs/aspnet-core/resumable-uploads.md) and
+  [Large files: resumable uploads](docs/upload-links.md#large-files-resumable-uploads).
 - **Uploading in parts.** An upload session stores a large file over several appends, and what's stored survives a
   dropped connection or a restart: `StartUploadAsync`, then `AppendUploadAsync` from each part's offset,
   `GetUploadAsync` to find where to resume, and `CompleteUploadAsync`, which makes the version current with the

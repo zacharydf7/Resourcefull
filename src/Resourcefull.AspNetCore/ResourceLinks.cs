@@ -109,8 +109,10 @@ public interface IResourceLinkSigner
 
     /// <summary>
     /// Creates a token for an upload <paramref name="link"/>, to put into a URL your application serves with
-    /// <c>Results.SharedUpload</c>. Anyone with the URL can upload what the link allows until it expires. Upload tokens
-    /// and download tokens are sealed apart, so neither works as the other.
+    /// <c>Results.SharedUpload</c>, or to add after the pattern
+    /// <see cref="ResourcefullUploadsEndpointRouteBuilderExtensions.MapResourcefullUploadLinks"/> maps, for resumable
+    /// uploads. Anyone with the URL can upload what the link allows until it expires. Upload tokens and download tokens
+    /// are sealed apart, so neither works as the other.
     /// </summary>
     /// <param name="link">Where uploads go, what they may be, and for how long.</param>
     /// <returns>The token.</returns>
@@ -296,8 +298,11 @@ public static class ResourceLinkServiceCollectionExtensions
         string? storeName = resources.StoreName;
         IServiceProvider services = httpContext.RequestServices;
         return (storeName is null ? services.GetService<IResourceLinkSigner>() : services.GetKeyedService<IResourceLinkSigner>(storeName))
-            ?? throw new InvalidOperationException(storeName is null
-                ? $"{caller} needs signed links added with {nameof(AddResourcefullLinks)}."
-                : $"{caller} needs signed links for the store '{storeName}' added with {nameof(AddResourcefullLinks)}(\"{storeName}\").");
+            ?? throw new InvalidOperationException(NoSignerMessage(caller, storeName));
     }
+
+    /// <summary>Says that <paramref name="caller"/> needs the signed links of the store named <paramref name="storeName"/> added.</summary>
+    internal static string NoSignerMessage(string caller, string? storeName) => storeName is null
+        ? $"{caller} needs signed links added with {nameof(AddResourcefullLinks)}."
+        : $"{caller} needs signed links for the store '{storeName}' added with {nameof(AddResourcefullLinks)}(\"{storeName}\").";
 }

@@ -48,6 +48,39 @@ public sealed class ResourceUploadEndpointOptions
 }
 
 /// <summary>
+/// How the resumable upload endpoints that <see cref="ResourcefullUploadsEndpointRouteBuilderExtensions.MapResourcefullUploadLinks"/>
+/// maps for signed upload links find their store, how large an upload they take, and what they do once an upload is
+/// stored. Each link decides where its uploads go.
+/// <para>Coming in 4.0.</para>
+/// </summary>
+public sealed class ResourceUploadLinkEndpointOptions
+{
+    /// <summary>
+    /// Called once an upload is stored and has become its name's current version, before the client is told it
+    /// finished, as <see cref="ResourceUploadEndpointOptions.OnCompletedAsync"/> is, and with the same caveats: it may
+    /// be missed when it throws, and called twice for one version.
+    /// </summary>
+    public Func<HttpContext, ResourceInfo, Task>? OnCompletedAsync { get; set; }
+
+    /// <summary>
+    /// The store whose upload links the endpoints take, added with
+    /// <see cref="ResourcefullServiceCollectionExtensions.AddKeyedResourcefull"/> and given signed links with
+    /// <see cref="ResourceLinkServiceCollectionExtensions.AddResourcefullLinks"/>; <see langword="null"/>, the default,
+    /// for the store <see cref="ResourcefullServiceCollectionExtensions.AddResourcefull"/> adds.
+    /// </summary>
+    public string? StoreName { get; set; }
+
+    /// <summary>
+    /// The largest upload the endpoints take through any link, in bytes, sent to clients in <c>Tus-Max-Size</c>; a
+    /// larger one is refused with 413 Content Too Large before any of it is sent. <see langword="null"/>, the default,
+    /// leaves sizes to each link's <see cref="ResourceUploadLink.MaxSize"/> and the container's policies. The endpoints
+    /// lift ASP.NET Core's limit on the size of a request's body, so when neither the link nor the container sets a
+    /// limit, an upload has no limit at all.
+    /// </summary>
+    public long? MaxSize { get; set; }
+}
+
+/// <summary>
 /// What a client asks to upload, given to <see cref="ResourceUploadEndpointOptions.ResolveAsync"/>.
 /// <para>Coming in 4.0.</para>
 /// </summary>

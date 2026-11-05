@@ -131,6 +131,29 @@ public sealed class PreconditionTelemetryTests
     }
 
     [Theory]
+    [InlineData("valid", HttpStatusCode.Created)]
+    [InlineData("expired", HttpStatusCode.Gone)]
+    [InlineData("invalid", HttpStatusCode.NotFound)]
+    public async Task MapResourcefullUploadLinks_ShouldRecordTheLinksStatusOnTheRequestSpan_WhenAnUploadStarts(string expected,
+        HttpStatusCode expectedStatus)
+    {
+        // Arrange
+        var clock = new ManualTimeProvider();
+        await using UploadApp app = await UploadApp.StartAsync(clock: clock);
+        string token = expected == "invalid" ? "not-a-token"
+            : app.Links.CreateUploadToken(new ResourceUploadLink(UploadApp.Container) { ResourceName = "report.txt" });
+        if (expected == "expired") clock.Now = clock.Now.AddHours(2);
+
+        // Act
+        (HttpStatusCode status, object? link) = await SendAsync(app.Client,
+            TusRequests.Create(4, TusRequests.Metadata(("filename", "a.bin")), $"/upload-links/{token}"), "resourcefull.link");
+
+        // Assert
+        Assert.Equal(expectedStatus, status);
+        Assert.Equal(expected, link);
+    }
+
+    [Theory]
     [InlineData("/archive-uploads", "archive")]
     [InlineData("/uploads", null)]
     public async Task MapResourcefullUploads_ShouldRecordANamedStoreOnTheRequestSpan_WhenItsEndpointsAreCalled(string path, string? expected)

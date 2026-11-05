@@ -29,6 +29,10 @@ namespace Resourcefull.Tests.AspNetCore;
 /// <item><c>/flaky-uploads</c> does the same through a client whose completions fail while
 /// <see cref="FailCompletions"/> is above zero, as a store that can't be reached fails them, and whose next completion,
 /// once <see cref="TakeNameBeforeCompleting"/> is set, finds the name taken by another upload.</item>
+/// <item><c>/upload-links</c> takes the upload links <see cref="Links"/> makes, and records completions and limits
+/// sizes as <c>/uploads</c> does.</item>
+/// <item><c>/links/uploads</c> takes the same links, mapped inside a <c>/links</c> group with the pattern string
+/// <c>/uploads</c>, the same string <c>/uploads</c> is mapped with.</item>
 /// </list>
 /// A request with an <c>X-Test-User</c> header is signed in as that user.
 /// </summary>
@@ -84,8 +88,10 @@ internal sealed class UploadApp : IAsyncDisposable
     public IResourceContainerClient ArchiveFiles => _app.Services.CreateScope().ServiceProvider
         .GetRequiredKeyedService<IResourceServiceClient>(ArchiveStore).GetContainerClient(Container);
 
+    public IResourceLinkSigner Links => _app.Services.CreateScope().ServiceProvider.GetRequiredService<IResourceLinkSigner>();
+
     public static async Task<UploadApp> StartAsync(bool expiry = false, long? maxSize = null, ResourceContainerPolicy? policy = null,
-        bool onPort = false)
+        bool onPort = false, TimeProvider? clock = null)
     {
         WebApplicationBuilder builder = WebApplication.CreateSlimBuilder();
         if (onPort) builder.WebHost.UseKestrel().UseUrls("http://127.0.0.1:0");
@@ -94,6 +100,8 @@ internal sealed class UploadApp : IAsyncDisposable
         builder.Logging.AddProvider(logs);
         builder.Services.AddDataProtection().UseEphemeralDataProtectionProvider();
         builder.Services.AddProblemDetails();
+        if (clock is not null) builder.Services.AddSingleton(clock);
+        builder.Services.AddResourcefullLinks();
         builder.Services.AddResourcefull(options =>
         {
             options.UseInMemory().UseVersioning();
@@ -149,6 +157,12 @@ internal sealed class UploadApp : IAsyncDisposable
             options.OnCompletedAsync = OnCompleted;
             options.StoreName = FlakyStore;
         });
+        app.MapResourcefullUploadLinks("/upload-links", options =>
+        {
+            options.OnCompletedAsync = OnCompleted;
+            options.MaxSize = maxSize;
+        });
+        app.MapGroup("/links").MapResourcefullUploadLinks("/uploads");
 
         await app.StartAsync();
         await app.Services.CreateScope().ServiceProvider.GetRequiredService<IResourceServiceClient>().CreateContainerAsync(Container);
