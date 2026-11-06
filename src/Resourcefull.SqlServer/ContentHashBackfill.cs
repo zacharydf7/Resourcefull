@@ -104,19 +104,50 @@ public sealed class ContentHashBackfill
                 .Where(r => r.ContentLength != null && r.ContentLength != r.StoredLength)
                 .ToListAsync(cancellationToken).ConfigureAwait(false);
 
-            return new ContentHashBackfillResult(hashed,
-                [.. mismatches.Select(m => new ContentLengthMismatch(m.ContainerName, m.Name, m.VersionId!, m.ContentLength!.Value, m.StoredLength))]);
+            return new ContentHashBackfillResult
+            {
+                Hashed = hashed,
+                Mismatches = [.. mismatches.Select(m => new ContentLengthMismatch
+                {
+                    ContainerName = m.ContainerName,
+                    Name = m.Name,
+                    VersionId = m.VersionId!,
+                    RecordedLength = m.ContentLength!.Value,
+                    StoredLength = m.StoredLength
+                })]
+            };
         }
     }
 }
 
 /// <summary>What a <see cref="ContentHashBackfill"/> run did.</summary>
-/// <param name="Hashed">How many versions this run recorded a hash for.</param>
-/// <param name="Mismatches">
-/// Every version whose recorded <see cref="ResourceInfo.ContentLength"/> differs from its stored content. A version's
-/// hash is recorded either way; its recorded length is left for you to correct, and every run reports it until then.
-/// </param>
-public sealed record ContentHashBackfillResult(long Hashed, IReadOnlyList<ContentLengthMismatch> Mismatches);
+public sealed record ContentHashBackfillResult
+{
+    /// <summary>How many versions this run recorded a hash for.</summary>
+    public required long Hashed { get; init; }
+
+    /// <summary>
+    /// Every version whose recorded <see cref="ResourceInfo.ContentLength"/> differs from its stored content. A version's
+    /// hash is recorded either way; its recorded length is left for you to correct, and every run reports it until then.
+    /// </summary>
+    public required IReadOnlyList<ContentLengthMismatch> Mismatches { get; init; }
+}
 
 /// <summary>A version whose recorded length differs from the length of its stored content.</summary>
-public sealed record ContentLengthMismatch(string ContainerName, string Name, string VersionId, long RecordedLength, long StoredLength);
+public sealed record ContentLengthMismatch
+{
+    /// <summary>The name of the container the version is in.</summary>
+    public required string ContainerName { get; init; }
+
+    /// <summary>The resource's name.</summary>
+    public required string Name { get; init; }
+
+    /// <summary>The version's ID.</summary>
+    public required string VersionId { get; init; }
+
+    /// <summary>The length recorded for the version, its <see cref="ResourceInfo.ContentLength"/>.</summary>
+    public required long RecordedLength { get; init; }
+
+    /// <summary>The length of the version's stored content.</summary>
+    public required long StoredLength { get; init; }
+}

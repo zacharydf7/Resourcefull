@@ -39,18 +39,32 @@ public interface IResourceUploadInspector
 /// An upload for an <see cref="IResourceUploadInspector"/> to inspect.
 /// <para>Coming in 4.0.</para>
 /// </summary>
-/// <param name="ContainerName">The container it's going into.</param>
-/// <param name="ResourceName">The resource's name.</param>
-/// <param name="VersionId">The ID the new version will have if it's stored.</param>
-/// <param name="ContentType">The content type the upload declares, which nothing has checked against the content.</param>
-/// <param name="ContentLength">The length the upload declares, if it declares one.</param>
-/// <param name="Metadata">The upload's metadata.</param>
-/// <param name="Content">
-/// The content, as it arrives: read-only and forward-only. Read it as far as the inspection needs; there's no need to
-/// read it to its end.
-/// </param>
-public sealed record ResourceUploadInspection(string ContainerName, string ResourceName, string VersionId,
-    string? ContentType, long? ContentLength, IReadOnlyDictionary<string, string> Metadata, Stream Content);
+public sealed record ResourceUploadInspection
+{
+    /// <summary>The container it's going into.</summary>
+    public required string ContainerName { get; init; }
+
+    /// <summary>The resource's name.</summary>
+    public required string ResourceName { get; init; }
+
+    /// <summary>The ID the new version will have if it's stored.</summary>
+    public required string VersionId { get; init; }
+
+    /// <summary>The content type the upload declares, which nothing has checked against the content.</summary>
+    public string? ContentType { get; init; }
+
+    /// <summary>The length the upload declares, if it declares one.</summary>
+    public long? ContentLength { get; init; }
+
+    /// <summary>The upload's metadata.</summary>
+    public required IReadOnlyDictionary<string, string> Metadata { get; init; }
+
+    /// <summary>
+    /// The content, as it arrives: read-only and forward-only. Read it as far as the inspection needs; there's no need to
+    /// read it to its end.
+    /// </summary>
+    public required Stream Content { get; init; }
+}
 
 /// <summary>
 /// An <see cref="IResourceUploadInspector"/>'s answer: the content may be stored, or it's refused, with the reason.
@@ -107,8 +121,16 @@ internal sealed class InspectedContentStream : Stream
         _content = content;
         _location = version.Resource;
         _stop = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        var upload = new ResourceUploadInspection(version.Resource.ContainerName, version.Resource.ResourceName, version.VersionId,
-            version.ContentType, contentLength, version.Metadata.ToDictionary().AsReadOnly(), _pipe.Reader.AsStream());
+        var upload = new ResourceUploadInspection
+        {
+            ContainerName = version.Resource.ContainerName,
+            ResourceName = version.Resource.ResourceName,
+            VersionId = version.VersionId,
+            ContentType = version.ContentType,
+            ContentLength = contentLength,
+            Metadata = version.Metadata.ToDictionary().AsReadOnly(),
+            Content = _pipe.Reader.AsStream()
+        };
         // On the thread pool, so an inspector that reads synchronously can't block the upload that feeds it.
         _inspection = Task.Run(() => InspectAsync(inspector, upload, telemetry, operation, _stop.Token));
     }

@@ -200,7 +200,12 @@ public class ResourcefullServiceCollectionExtensionsTests
         var failure = new InvalidOperationException("storage unavailable");
         var repository = new Mock<ResourceRepository>();
         repository.Setup(r => r.AddResourceAsync( It.IsAny<NewResourceVersion>(), It.IsAny<Stream>(), It.IsAny<ResourceWriteCondition?>(),
-            It.IsAny<CancellationToken>())).ReturnsAsync(new WrittenContent(0, "sha256:empty", DateTimeOffset.UnixEpoch));
+            It.IsAny<CancellationToken>())).ReturnsAsync(new WrittenContent
+            {
+                ContentLength = 0,
+                ContentHash = "sha256:empty",
+                LastModified = DateTimeOffset.UnixEpoch
+            });
         repository.Setup(r => r.GetResourceVersionsAsync(new ResourceAddress("reports", "name"), It.IsAny<CancellationToken>()))
             .ReturnsAsync(
             [

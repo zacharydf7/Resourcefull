@@ -128,7 +128,8 @@ public class DashboardTests
         {
             MaxContainerSize = ResourceSize.Parse("1 MB"), MaxResourceCount = 10, AllowedContentTypes = ["text/plain"]
         });
-        await app.Files.UploadAsync("a.txt", BinaryData.FromString("hello"), new ResourceUploadOptions { Headers = new ResourceHeaders("text/plain", null) });
+        await app.Files.UploadAsync("a.txt", BinaryData.FromString("hello"), new ResourceUploadOptions { Headers =
+            new ResourceHeaders { ContentType = "text/plain" } });
         IResourceServiceClient resources = app.Services.CreateScope().ServiceProvider.GetRequiredService<IResourceServiceClient>();
         for (int i = 0; i < 50; i++) await resources.CreateContainerAsync($"other-{i:00}");
 
@@ -194,7 +195,8 @@ public class DashboardTests
         await using TestApp app = await TestApp.StartAsync();
         var expiresAt = new DateTimeOffset(2030, 1, 1, 0, 0, 0, TimeSpan.Zero);
         await app.Files.UploadAsync("reports/a.txt", BinaryData.FromString("abc"),
-            new ResourceUploadOptions { Headers = new ResourceHeaders("text/plain", null), ExpiresAt = expiresAt });
+            new ResourceUploadOptions { Headers =
+                new ResourceHeaders { ContentType = "text/plain" }, ExpiresAt = expiresAt });
         await app.Files.UploadAsync("other.txt", BinaryData.FromString("x"));
 
         // Act

@@ -4,8 +4,13 @@ namespace Resourcefull.Providers;
 /// A version an upload session is storing, as <see cref="ResourceRepository.GetStagedVersionAsync"/> reports it.
 /// <para>Coming in 4.0.</para>
 /// </summary>
-/// <param name="Version">
-/// The version as it was staged: its location, ID, content type, metadata, expiry and declared length.
-/// </param>
-/// <param name="StoredLength">How many bytes have been appended to it so far.</param>
-public sealed record StagedVersion(NewResourceVersion Version, long StoredLength);
+public sealed record StagedVersion
+{
+    /// <summary>
+    /// The version as it was staged: its location, ID, content type, metadata, expiry and declared length.
+    /// </summary>
+    public required NewResourceVersion Version { get; init; }
+
+    /// <summary>How many bytes have been appended to it so far.</summary>
+    public required long StoredLength { get; init; }
+}

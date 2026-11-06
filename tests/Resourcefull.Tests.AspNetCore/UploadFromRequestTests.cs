@@ -111,7 +111,7 @@ public class UploadFromRequestTests
         context.Request.ContentType = "text/plain";
         var options = new ResourceUploadOptions
         {
-            Headers = new ResourceHeaders("application/x-report", null),
+            Headers = new ResourceHeaders { ContentType = "application/x-report" },
             Metadata = new Dictionary<string, string> { ["owner"] = "ops" },
             ExpiresAt = new DateTimeOffset(2099, 1, 1, 0, 0, 0, TimeSpan.Zero)
         };

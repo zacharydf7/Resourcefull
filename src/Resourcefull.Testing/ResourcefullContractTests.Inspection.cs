@@ -49,7 +49,7 @@ public abstract partial class ResourcefullContractTests
         byte[] payload = RandomNumberGenerator.GetBytes(InspectedSize);
         var options = new ResourceUploadOptions
         {
-            Headers = new ResourceHeaders("application/pdf", payload.Length),
+            Headers = new ResourceHeaders { ContentType = "application/pdf", ContentLength = payload.Length },
             Metadata = new Dictionary<string, string> { ["author"] = "ada" }
         };
 
@@ -79,7 +79,11 @@ public abstract partial class ResourcefullContractTests
         };
         byte[] payload = RandomNumberGenerator.GetBytes(InspectedSize);
         Task<ResourceInfo> upload = container.UploadAsync("report.pdf", new MemoryStream(payload),
-            new ResourceUploadOptions { Headers = new ResourceHeaders("application/pdf", payload.Length) });
+            new ResourceUploadOptions { Headers = new ResourceHeaders
+            {
+                ContentType = "application/pdf",
+                ContentLength = payload.Length
+            } });
         // Bounded, and a failed upload throws its own exception rather than leaving this to wait.
         await await Task.WhenAny(read.Task, upload).WaitAsync(TimeSpan.FromSeconds(30));
 

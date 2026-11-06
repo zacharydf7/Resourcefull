@@ -304,7 +304,12 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
             if (written is not null && await attempt.Resources.AsNoTracking()
                 .FirstOrDefaultAsync(r => r.Id == staged.Id, ct).ConfigureAwait(false) is { } stored)
             {
-                return new WrittenContent(stored.ContentLength!.Value, stored.ContentHash!, stored.LastModified);
+                return new WrittenContent
+                {
+                    ContentLength = stored.ContentLength!.Value,
+                    ContentHash = stored.ContentHash!,
+                    LastModified = stored.LastModified
+                };
             }
 
             List<ResourceModel> priorLatest =
@@ -413,7 +418,7 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
             .FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
         return staged is null
             ? null
-            : new StagedVersion(new NewResourceVersion(resource, versionId)
+            : new StagedVersion { Version = new NewResourceVersion(resource, versionId)
             {
                 ContentType = staged.ContentType,
                 Metadata = new Dictionary<string, string>(staged.Metadata),
@@ -421,7 +426,7 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
                 RetainUntil = staged.RetainUntil,
                 LegalHold = staged.LegalHold,
                 DeclaredLength = staged.DeclaredLength
-            }, staged.ContentLength!.Value);
+            }, StoredLength = staged.ContentLength!.Value };
     }
 
     public override async Task<long?> AppendStagedContentAsync(ResourceAddress resource, string versionId, long offset,
@@ -537,7 +542,12 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
 
             List<ResourceModel> priorLatest =
                 await CurrentForWriteAsync(attempt, containerName, resourceName, condition, ct).ConfigureAwait(false);
-            var completed = new WrittenContent(contentLength, contentHash, Now());
+            var completed = new WrittenContent
+            {
+                ContentLength = contentLength,
+                ContentHash = contentHash,
+                LastModified = Now()
+            };
             ResourceModel current = attempt.Resources.Attach(new ResourceModel
             {
                 Id = staged.Id, ContainerName = containerName, Name = resourceName, StagedAt = staged.StagedAt
@@ -733,7 +743,12 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
                 // Copied by the server, so no content passes through the application.
                 await CopyChunksAsync(attempt, from.Id, copy.Id, ct).ConfigureAwait(false);
 
-                var stored = new WrittenContent(from.Length, from.ContentHash!, Now());
+                var stored = new WrittenContent
+                {
+                    ContentLength = from.Length,
+                    ContentHash = from.ContentHash!,
+                    LastModified = Now()
+                };
                 await MakeCurrentAsync(attempt, priorLatest, copy, stored, ct).ConfigureAwait(false);
                 return written = stored;
             }, cancellationToken).ConfigureAwait(false);
@@ -1678,7 +1693,7 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
     public override async Task<DeletedVersionPage> GetDeletedPageAsync(string containerName, string? prefix,
         ResourceVersionKey? after, int pageSize, CancellationToken cancellationToken = default)
     {
-        if (HasNul(containerName) || HasNul(prefix)) return new DeletedVersionPage([], null);
+        if (HasNul(containerName) || HasNul(prefix)) return new DeletedVersionPage { Versions = [], Next = null };
         using ResourceDbContext dbContext = dbContextFactory.CreateDbContext();
         IQueryable<ResourceModel> bin = Bin(dbContext).Where(r => r.ContainerName == containerName);
         if (prefix is not null) bin = WithNamePrefix(bin, prefix, null);
@@ -1701,10 +1716,10 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
             .Take(pageSize + 1)
             .Select(AsResourceInfo)
             .ToListAsync(cancellationToken).ConfigureAwait(false);
-        if (found.Count <= pageSize) return new DeletedVersionPage(found, null);
+        if (found.Count <= pageSize) return new DeletedVersionPage { Versions = found, Next = null };
         found.RemoveAt(pageSize);
-        return new DeletedVersionPage(found, new ResourceVersionKey(found[^1].DeletedAt!.Value,
-            new ResourceAddress(containerName, found[^1].Name), found[^1].VersionId));
+        return new DeletedVersionPage { Versions = found, Next = new ResourceVersionKey(found[^1].DeletedAt!.Value,
+            new ResourceAddress(containerName, found[^1].Name), found[^1].VersionId) };
     }
 
     public override async Task<IReadOnlyList<ResourceInfo>> GetDeletedVersionsAsync(ResourceAddress resource,
@@ -1922,7 +1937,7 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
     public override async Task<ContainerUsage> GetContainerUsageAsync(string containerName,
         CancellationToken cancellationToken = default)
     {
-        if (HasNul(containerName)) return new ContainerUsage(0, 0, 0);
+        if (HasNul(containerName)) return new ContainerUsage { StoredSize = 0, ResourceCount = 0, VersionCount = 0 };
         using ResourceDbContext dbContext = dbContextFactory.CreateDbContext();
         return await MeasureContainerAsync(dbContext, containerName, cancellationToken).ConfigureAwait(false);
     }

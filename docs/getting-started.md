@@ -109,7 +109,7 @@ public class Invoices(IResourceServiceClient resources)
         return await invoices.UploadAsync(fileName, content, new ResourceUploadOptions
         {
             Mode = ResourceWriteMode.Replace,
-            Headers = new ResourceHeaders("application/pdf", null)
+            Headers = new ResourceHeaders { ContentType = "application/pdf" }
         }, cancellationToken);
     }
 

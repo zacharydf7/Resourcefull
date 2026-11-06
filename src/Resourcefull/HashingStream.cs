@@ -46,7 +46,12 @@ public sealed class HashingStream(Stream source) : Stream
                 $"The content length was declared as {declaredLength} bytes, but the content was {_bytesRead} bytes.");
         }
 
-        return new WrittenContent(_bytesRead, HashPrefix + Convert.ToHexStringLower(_hash.GetCurrentHash()), lastModified);
+        return new WrittenContent
+        {
+            ContentLength = _bytesRead,
+            ContentHash = HashPrefix + Convert.ToHexStringLower(_hash.GetCurrentHash()),
+            LastModified = lastModified
+        };
     }
 
     /// <inheritdoc />

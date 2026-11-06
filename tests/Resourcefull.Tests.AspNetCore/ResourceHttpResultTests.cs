@@ -12,7 +12,8 @@ public class ResourceHttpResultTests
     private static async Task<TestApp> StartWithAsync(string name, string content)
     {
         TestApp app = await TestApp.StartAsync();
-        await app.Files.UploadAsync(name, BinaryData.FromString(content), new ResourceUploadOptions { Headers = new ResourceHeaders("text/plain", null) });
+        await app.Files.UploadAsync(name, BinaryData.FromString(content), new ResourceUploadOptions { Headers =
+            new ResourceHeaders { ContentType = "text/plain" } });
         return app;
     }
 
@@ -147,7 +148,10 @@ public class ResourceHttpResultTests
     {
         // Arrange
         await using TestApp app = await TestApp.StartAsync();
-        await app.Files.UploadAsync("page", BinaryData.FromString("<script></script>"), new ResourceUploadOptions { Headers = new ResourceHeaders(contentType, null) });
+        await app.Files.UploadAsync("page", BinaryData.FromString("<script></script>"), new ResourceUploadOptions { Headers = new ResourceHeaders
+        {
+            ContentType = contentType
+        } });
         var options = allowed is null ? new ResourceResultOptions { Inline = true } : new ResourceResultOptions { Inline = true, InlineContentTypes = [allowed] };
 
         // Act
@@ -167,7 +171,8 @@ public class ResourceHttpResultTests
     {
         // Arrange
         await using TestApp app = await TestApp.StartAsync();
-        await app.Files.UploadAsync("file", BinaryData.FromString("x"), new ResourceUploadOptions { Headers = new ResourceHeaders(contentType, null) });
+        await app.Files.UploadAsync("file", BinaryData.FromString("x"), new ResourceUploadOptions { Headers =
+            new ResourceHeaders { ContentType = contentType } });
         var options = allowed is null ? new ResourceResultOptions { Inline = true } : new ResourceResultOptions { Inline = true, InlineContentTypes = [allowed] };
 
         // Act

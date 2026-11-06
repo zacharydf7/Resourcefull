@@ -15,7 +15,11 @@ public abstract partial class ResourcefullContractTests
     }
 
     private static ResourceUploadOptions Typed(string contentType, long? length = null) =>
-        new() { Mode = ResourceWriteMode.Replace, Headers = new ResourceHeaders(contentType, length) };
+        new() { Mode = ResourceWriteMode.Replace, Headers = new ResourceHeaders
+        {
+            ContentType = contentType,
+            ContentLength = length
+        } };
 
     /// <summary>Content that throws if it's read, for a write that must be refused before its content is.</summary>
     private sealed class UnreadableStream : MemoryStream
@@ -81,7 +85,7 @@ public abstract partial class ResourcefullContractTests
 
         // Act
         Exception? refused = await Record.ExceptionAsync(() => container.UploadAsync("file", BinaryData.FromString("x"),
-            new ResourceUploadOptions { Headers = new ResourceHeaders(contentType, null) }));
+            new ResourceUploadOptions { Headers = new ResourceHeaders { ContentType = contentType } }));
 
         // Assert
         Assert.Equal(allowed, refused is null);
@@ -102,7 +106,7 @@ public abstract partial class ResourcefullContractTests
 
         // Act
         Exception? refused = await Record.ExceptionAsync(() => container.UploadAsync("file", content,
-            new ResourceUploadOptions { Headers = new ResourceHeaders(null, contentLength) }));
+            new ResourceUploadOptions { Headers = new ResourceHeaders { ContentLength = contentLength } }));
 
         // Assert
         Assert.Equal(!tooLarge, await container.ExistsAsync("file"));
@@ -125,7 +129,7 @@ public abstract partial class ResourcefullContractTests
 
         // Act
         Exception? declared = await Record.ExceptionAsync(() => container.UploadAsync("b", new UnreadableStream(),
-            new ResourceUploadOptions { Headers = new ResourceHeaders(null, 50) }));
+            new ResourceUploadOptions { Headers = new ResourceHeaders { ContentLength = 50 } }));
         Exception? undeclared = await Record.ExceptionAsync(() => container.UploadAsync("c", new MemoryStream(new byte[50])));
         ResourceInfo fits = await container.UploadAsync("d", new MemoryStream(new byte[40]));
 
@@ -135,7 +139,12 @@ public abstract partial class ResourcefullContractTests
         Assert.False(await container.ExistsAsync("b"));
         Assert.False(await container.ExistsAsync("c"));
         Assert.Equal(40, fits.ContentLength);
-        Assert.Equal(new ContainerUsage(100, 2, 3), await container.GetUsageAsync());
+        Assert.Equal(new ContainerUsage
+        {
+            StoredSize = 100,
+            ResourceCount = 2,
+            VersionCount = 3
+        }, await container.GetUsageAsync());
     }
 
     [Fact]
@@ -241,7 +250,7 @@ public abstract partial class ResourcefullContractTests
         ContainerUsage empty = await ServiceOf(provider).GetContainerClient(NewContainerName()).GetUsageAsync();
 
         // Assert
-        Assert.Equal(new ContainerUsage(100_012, 2, 3), usage);
-        Assert.Equal(new ContainerUsage(0, 0, 0), empty);
+        Assert.Equal(new ContainerUsage { StoredSize = 100_012, ResourceCount = 2, VersionCount = 3 }, usage);
+        Assert.Equal(new ContainerUsage { StoredSize = 0, ResourceCount = 0, VersionCount = 0 }, empty);
     }
 }

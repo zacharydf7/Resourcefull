@@ -10,20 +10,36 @@ namespace Resourcefull;
 /// What <see cref="IResourceServiceClient.ExportContainerAsync"/> wrote.
 /// <para>Coming in 4.0.</para>
 /// </summary>
-/// <param name="ResourceCount">How many resources (names) it exported.</param>
-/// <param name="VersionCount">How many versions it exported, current and older.</param>
-/// <param name="ContentSize">The size of the distinct content it wrote, before compression; content that versions share counts once.</param>
-public sealed record ContainerExportResult(long ResourceCount, long VersionCount, ResourceSize ContentSize);
+public sealed record ContainerExportResult
+{
+    /// <summary>How many resources (names) were exported.</summary>
+    public required long ResourceCount { get; init; }
+
+    /// <summary>How many versions were exported, current and older.</summary>
+    public required long VersionCount { get; init; }
+
+    /// <summary>
+    /// The size of the distinct content written, before compression; content that versions share counts once.
+    /// </summary>
+    public required ResourceSize ContentSize { get; init; }
+}
 
 /// <summary>
 /// What an import stored: <see cref="IResourceServiceClient.ImportContainerAsync(string, Stream, CancellationToken)"/>, or
 /// another import of versions.
 /// <para>Coming in 4.0.</para>
 /// </summary>
-/// <param name="ResourceCount">How many resources (names) it imported.</param>
-/// <param name="VersionCount">How many versions it imported, current and older.</param>
-/// <param name="ContentSize">The size of every version it stored, as the container now holds them.</param>
-public sealed record ContainerImportResult(long ResourceCount, long VersionCount, ResourceSize ContentSize);
+public sealed record ContainerImportResult
+{
+    /// <summary>How many resources (names) were imported.</summary>
+    public required long ResourceCount { get; init; }
+
+    /// <summary>How many versions were imported, current and older.</summary>
+    public required long VersionCount { get; init; }
+
+    /// <summary>The size of every version stored, as the container now holds them.</summary>
+    public required ResourceSize ContentSize { get; init; }
+}
 
 /// <summary>
 /// A container as a zip: <c>manifest.json</c>, describing the container and every version of every resource in the
@@ -188,7 +204,12 @@ internal static class ContainerArchive
 
         await output.FlushAsync(cancellationToken).ConfigureAwait(false);
         activity?.SetTag("resourcefull.pages", pages);
-        return new ContainerExportResult(resourceCount, versionCount, contentSize);
+        return new ContainerExportResult
+        {
+            ResourceCount = resourceCount,
+            VersionCount = versionCount,
+            ContentSize = contentSize
+        };
     }
 
     /// <summary>
@@ -232,8 +253,8 @@ internal static class ContainerArchive
                 };
                 // Able to go back to its start, so a provider that retries a transient failure can read it again, unless
                 // an upload inspector reads it too: the content is then read once.
-                yield return new ImportedVersion(info, async ct =>
-                    new RewindableEntryStream(entry, await entry.OpenAsync(ct).ConfigureAwait(false), version.ContentLength));
+                yield return new ImportedVersion { Version = info, OpenContentAsync = async ct =>
+                    new RewindableEntryStream(entry, await entry.OpenAsync(ct).ConfigureAwait(false), version.ContentLength) };
             }
         }
     }
@@ -282,7 +303,12 @@ internal static class ContainerArchive
 
             // A new container's usage is what the import has stored so far; a name is counted once its first version is
             // stored, and a policy's count limit lets a name it already has take more versions.
-            ContainerUsage? usage = newContainer ? new ContainerUsage(contentSize, names.Count, versionCount) : null;
+            ContainerUsage? usage = newContainer ? new ContainerUsage
+            {
+                StoredSize = contentSize,
+                ResourceCount = names.Count,
+                VersionCount = versionCount
+            } : null;
             Stream checkedContent = policies is not null && await policies.CheckNewVersionAsync(containerName, version.Name, restore: false,
                 version.ContentType, version.ContentLength, telemetry, cancellationToken, usage).ConfigureAwait(false) is { Limit: { } limit }
                 ? new LimitedContentStream(opened, limit)
@@ -331,7 +357,12 @@ internal static class ContainerArchive
         foreach ((string name, ResourceInfo version) in protectedVersions)
             await ProtectAsync(repository, new ResourceAddress(containerName, name), version, cancellationToken).ConfigureAwait(false);
 
-        return new ContainerImportResult(names.Count, versionCount, contentSize);
+        return new ContainerImportResult
+        {
+            ResourceCount = names.Count,
+            VersionCount = versionCount,
+            ContentSize = contentSize
+        };
     }
 
     /// <summary>Gives an imported version the retention date and hold it had.</summary>

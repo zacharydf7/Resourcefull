@@ -83,7 +83,7 @@ public class Reports(IResourceServiceClient resources)
         return await reports.UploadAsync(name, content, new ResourceUploadOptions
         {
             Mode = ResourceWriteMode.Replace,
-            Headers = new ResourceHeaders("application/pdf", null)
+            Headers = new ResourceHeaders { ContentType = "application/pdf" }
         });
     }
 

@@ -234,7 +234,12 @@ internal partial class ResourceServiceClient(ResourceRepository resourceReposito
                         // Told first, so a handler that fails leaves the version for the next sweep rather than deleted unreported.
                         if (cleanupHandler is not null)
                         {
-                            await _telemetry.NotifyCleanupAsync(cleanupHandler, new ResourceCleanup(version, ResourceCleanupReason.Expired, now),
+                            await _telemetry.NotifyCleanupAsync(cleanupHandler, new ResourceCleanup
+                            {
+                                Version = version,
+                                Reason = ResourceCleanupReason.Expired,
+                                At = now
+                            },
                                 cancellationToken).ConfigureAwait(false);
                         }
                         ready.Add((version, waiting));
@@ -335,7 +340,12 @@ internal partial class ResourceServiceClient(ResourceRepository resourceReposito
                         // Told first, so a handler that fails leaves the version for the next sweep rather than purged unreported.
                         if (cleanupHandler is not null)
                         {
-                            await _telemetry.NotifyCleanupAsync(cleanupHandler, new ResourceCleanup(version, ResourceCleanupReason.Purged, now),
+                            await _telemetry.NotifyCleanupAsync(cleanupHandler, new ResourceCleanup
+                            {
+                                Version = version,
+                                Reason = ResourceCleanupReason.Purged,
+                                At = now
+                            },
                                 cancellationToken).ConfigureAwait(false);
                         }
                         long count = await resourceRepository.PurgeDeletedAsync(new ResourceAddress(version.ContainerName, version.Name),

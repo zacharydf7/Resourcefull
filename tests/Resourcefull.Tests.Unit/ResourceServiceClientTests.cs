@@ -659,7 +659,7 @@ public class ResourceServiceClientTests
     }
 
     private static readonly WrittenContent Hello =
-        new(5, "sha256:2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824", DateTimeOffset.UtcNow);
+        new() { ContentLength = 5, ContentHash = "sha256:2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824", LastModified = DateTimeOffset.UtcNow };
 
     [Fact]
     public async Task ImportContainerAsync_ShouldMarkTheContainerUntilEveryVersionIsStored_WhenImporting()
@@ -704,11 +704,11 @@ public class ResourceServiceClientTests
         var client = new ResourceServiceClient(repository.Object, Options.Create(new ResourcefullOptions()), timeProvider: time);
         var release = new TaskCompletionSource();
         var version = new ResourceInfo { ContainerName = "", Name = "a", VersionId = "v1", LastModified = DateTimeOffset.UnixEpoch };
-        ImportedVersion[] versions = [new(version, async _ =>
+        ImportedVersion[] versions = [new() { Version = version, OpenContentAsync = async _ =>
         {
             await release.Task;
             return new MemoryStream("hello"u8.ToArray());
-        })];
+        } }];
 
         // Act: the clock moves on until the mark has been written again after the rewrite that timed out.
         Task<ContainerImportResult> importing = client.ImportContainerAsync("d", versions.ToAsyncEnumerable());
@@ -804,7 +804,12 @@ public class ResourceServiceClientTests
                 reads.Add(await new StreamReader(content, leaveOpen: true).ReadToEndAsync());
                 content.Position = 0;
                 reads.Add(await new StreamReader(content, leaveOpen: true).ReadToEndAsync());
-                return new WrittenContent(5, "sha256:2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824", DateTimeOffset.UtcNow);
+                return new WrittenContent
+                {
+                    ContentLength = 5,
+                    ContentHash = "sha256:2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824",
+                    LastModified = DateTimeOffset.UtcNow
+                };
             });
         var client = new ResourceServiceClient(repository.Object, Options.Create(new ResourcefullOptions()));
 
@@ -823,7 +828,12 @@ public class ResourceServiceClientTests
         var repository = new Mock<ResourceRepository>();
         string hash = "sha256:" + Convert.ToHexStringLower(SHA256.HashData([1]));
         repository.Setup(r => r.ImportVersionAsync( It.IsAny<NewResourceVersion>(), It.IsAny<Stream>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new WrittenContent(1, hash, DateTimeOffset.UnixEpoch));
+            .ReturnsAsync(new WrittenContent
+            {
+                ContentLength = 1,
+                ContentHash = hash,
+                LastModified = DateTimeOffset.UnixEpoch
+            });
         var export = new MemoryStream();
         using (var zip = new ZipArchive(export, ZipArchiveMode.Create, leaveOpen: true))
         {

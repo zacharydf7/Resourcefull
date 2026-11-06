@@ -30,7 +30,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\src\Resourcefull.AspNetCore\Resourcefull.AspNetCore.csproj" />
+    <ProjectReference Include="..\..\src\Resourcefull.AzureBlob\Resourcefull.AzureBlob.csproj" />
+    <ProjectReference Include="..\..\src\Resourcefull.FileSystem\Resourcefull.FileSystem.csproj" />
     <ProjectReference Include="..\..\src\Resourcefull.InMemory\Resourcefull.InMemory.csproj" />
+    <ProjectReference Include="..\..\src\Resourcefull.S3\Resourcefull.S3.csproj" />
     <ProjectReference Include="..\..\src\Resourcefull.PostgreSql\Resourcefull.PostgreSql.csproj" />
     <ProjectReference Include="..\..\src\Resourcefull.SqlServer\Resourcefull.SqlServer.csproj" />
     <ProjectReference Include="..\..\src\Resourcefull.Sqlite\Resourcefull.Sqlite.csproj" />

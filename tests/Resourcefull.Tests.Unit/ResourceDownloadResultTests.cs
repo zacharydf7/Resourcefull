@@ -3,7 +3,7 @@ namespace Resourcefull.Tests.Unit;
 public class ResourceDownloadResultTests
 {
     private static ResourceDownloadResult NewDownload(Stream stream) =>
-        new(new ResourceInfo { ContainerName = "c", Name = "n", VersionId = "v1" }, stream);
+        new(new ResourceInfo { ContainerName = "c", Name = "n", VersionId = "v1" }, stream, 0);
 
     [Fact]
     public void Dispose_ShouldDisposeTheStream_WhenCalled()

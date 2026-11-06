@@ -417,7 +417,7 @@ public class ProvisioningScriptTests(SqlServerFixture fixture)
         {
             await container.UploadAsync(resourceName, upload, new ResourceUploadOptions
             {
-                Headers = new("text/plain", payload.Length),
+                Headers = new() { ContentType = "text/plain", ContentLength = payload.Length },
                 Metadata = new Dictionary<string, string>()
             });
         }

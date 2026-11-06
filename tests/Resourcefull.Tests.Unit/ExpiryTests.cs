@@ -251,7 +251,11 @@ public class ExpiryTests
         async IAsyncEnumerable<ImportedVersion> Versions()
         {
             await Task.Yield();
-            yield return new ImportedVersion(version, _ => Task.FromResult<Stream?>(new MemoryStream()));
+            yield return new ImportedVersion
+            {
+                Version = version,
+                OpenContentAsync = _ => Task.FromResult<Stream?>(new MemoryStream())
+            };
         }
 
         // Act & Assert
@@ -458,7 +462,12 @@ public class ExpiryTests
         // Arrange: a provider that doesn't override SetExpiryAsync, which throws NotSupportedException by default.
         var repository = new Mock<ResourceRepository> { CallBase = true };
         repository.Setup(r => r.AddResourceAsync( It.IsAny<NewResourceVersion>(), It.IsAny<Stream>(), It.Is<ResourceWriteCondition?>(c => c == null || !c.CreateOnly), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new WrittenContent(1, "sha256:written", DateTimeOffset.UtcNow));
+            .ReturnsAsync(new WrittenContent
+            {
+                ContentLength = 1,
+                ContentHash = "sha256:written",
+                LastModified = DateTimeOffset.UtcNow
+            });
         repository.Setup(r => r.GetResourceVersionsAsync(new ResourceAddress("c", "a"), It.IsAny<CancellationToken>())).ReturnsAsync(
         [
             new ResourceInfo { ContainerName = "c", Name = "a", VersionId = "v2" },

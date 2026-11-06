@@ -202,7 +202,11 @@ public sealed class TelemetryTests : IDisposable
     {
         // Arrange: a provider that stored 5 bytes of the append before it failed.
         var repository = new Mock<ResourceRepository>();
-        var staged = new StagedVersion(new NewResourceVersion(new ResourceAddress("c", "a"), "u1"), 0);
+        var staged = new StagedVersion
+        {
+            Version = new NewResourceVersion(new ResourceAddress("c", "a"), "u1"),
+            StoredLength = 0
+        };
         repository.SetupSequence(r => r.GetStagedVersionAsync(new ResourceAddress("c", "a"), "u1", It.IsAny<CancellationToken>()))
             .ReturnsAsync(staged)
             .ReturnsAsync(staged with { StoredLength = 5 });
@@ -365,7 +369,7 @@ public sealed class TelemetryTests : IDisposable
             .AddResourcefull(o => o.UseInMemory().UsePolicyProvider<TextOnlyProvider>()).BuildServiceProvider();
         IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>().CreateContainerAsync("c");
         using Activity root = TestSource.StartActivity("test")!;
-        var html = new ResourceUploadOptions { Headers = new ResourceHeaders("text/html", null) };
+        var html = new ResourceUploadOptions { Headers = new ResourceHeaders { ContentType = "text/html" } };
 
         // Act: the second upload finds the policy cached.
         await Record.ExceptionAsync(() => container.UploadAsync("a.html", BinaryData.FromString("x"), html));

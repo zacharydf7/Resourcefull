@@ -61,7 +61,7 @@ public abstract partial class ResourcefullContractTests
         using ServiceProvider provider = BuildServiceProvider();
         IResourceContainerClient container = await NewContainerAsync(provider);
         ResourceInfo stored = await container.UploadAsync("report.pdf", BinaryData.FromString("%PDF-"),
-            new ResourceUploadOptions { Headers = new ResourceHeaders("application/octet-stream", null) });
+            new ResourceUploadOptions { Headers = new ResourceHeaders { ContentType = "application/octet-stream" } });
 
         // Act
         bool set = await container.SetContentTypeAsync("report.pdf", stored.VersionId, "application/pdf");

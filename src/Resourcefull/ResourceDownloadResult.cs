@@ -1,20 +1,34 @@
 ﻿namespace Resourcefull;
 
 /// <summary>
-/// The result of a streaming download: the version's attributes and a stream of its content.
+/// The result of a streaming download: the version's attributes and a stream of its content. The result owns the stream,
+/// and disposing the result disposes the stream.
 /// </summary>
-/// <param name="ResourceInfo">The attributes of the downloaded version.</param>
-/// <param name="Stream">
-/// The content, or the range of it that was asked for, read-only and forward-only; it is read from the store as it is
-/// read. The caller disposes it.
+/// <param name="resourceInfo">The attributes of the downloaded version.</param>
+/// <param name="stream">
+/// The content, or the range of it that was asked for, read-only and forward-only; it's read from the store as you read
+/// it. The result takes ownership of it.
 /// </param>
-public record ResourceDownloadResult(ResourceInfo ResourceInfo, Stream Stream) : IDisposable, IAsyncDisposable
+/// <param name="totalLength">
+/// The length of the version's whole content, measured from what's stored, even when <paramref name="stream"/> holds a
+/// range of it.
+/// </param>
+public sealed class ResourceDownloadResult(ResourceInfo resourceInfo, Stream stream, long totalLength) : IDisposable, IAsyncDisposable
 {
+    /// <summary>The attributes of the downloaded version.</summary>
+    public ResourceInfo ResourceInfo { get; } = resourceInfo;
+
+    /// <summary>
+    /// The content, or the range of it that was asked for, read-only and forward-only; it's read from the store as you
+    /// read it. The caller disposes it, directly or by disposing this result.
+    /// </summary>
+    public Stream Stream { get; } = stream;
+
     /// <summary>
     /// The length of the version's whole content, measured from what's stored, even when <see cref="Stream"/> holds a
     /// range of it.
     /// </summary>
-    public long TotalLength { get; init; }
+    public long TotalLength { get; } = totalLength;
 
     /// <summary>
     /// The bytes <see cref="Stream"/> holds, cut at the end of the content, so its <see cref="ResourceRange.Length"/> is
@@ -26,19 +40,11 @@ public record ResourceDownloadResult(ResourceInfo ResourceInfo, Stream Stream) :
     /// Disposes <see cref="Stream"/>.
     /// <para>Coming in 4.0.</para>
     /// </summary>
-    public void Dispose()
-    {
-        Stream.Dispose();
-        GC.SuppressFinalize(this);
-    }
+    public void Dispose() => Stream.Dispose();
 
     /// <summary>
     /// Disposes <see cref="Stream"/>.
     /// <para>Coming in 4.0.</para>
     /// </summary>
-    public async ValueTask DisposeAsync()
-    {
-        await Stream.DisposeAsync().ConfigureAwait(false);
-        GC.SuppressFinalize(this);
-    }
+    public ValueTask DisposeAsync() => Stream.DisposeAsync();
 }

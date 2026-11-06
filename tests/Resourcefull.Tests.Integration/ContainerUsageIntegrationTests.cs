@@ -33,7 +33,7 @@ public class ContainerUsageIntegrationTests(SqlServerFixture fixture)
         ContainerUsage usage = await container.GetUsageAsync();
 
         // Assert
-        Assert.Equal(new ContainerUsage(150_010, 1, 2), usage);
+        Assert.Equal(new ContainerUsage { StoredSize = 150_010, ResourceCount = 1, VersionCount = 2 }, usage);
     }
 
     [Fact]

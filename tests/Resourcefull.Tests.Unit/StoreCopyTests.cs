@@ -28,7 +28,8 @@ public class StoreCopyTests : IDisposable
         IResourceContainerClient invoices = await Source.CreateContainerAsync("invoices", new Dictionary<string, string> { ["team"] = "billing" });
         await invoices.UploadAsync("a.pdf", BinaryData.FromString("first"), new ResourceUploadOptions
         {
-            Headers = new ResourceHeaders("application/pdf", null), ExpiresAt = DateTimeOffset.UtcNow.AddDays(1)
+            Headers =
+                new ResourceHeaders { ContentType = "application/pdf" }, ExpiresAt = DateTimeOffset.UtcNow.AddDays(1)
         });
         await invoices.UploadAsync("a.pdf", BinaryData.FromString("second"), Replacing("k", "v"));
         await invoices.UploadAsync("b.pdf", BinaryData.FromString("b"), new ResourceUploadOptions
@@ -86,7 +87,11 @@ public class StoreCopyTests : IDisposable
         Assert.True(result.Succeeded);
         Assert.Equal(["app-one", "app-two"], result.Copied.Select(c => c.DestinationContainerName));
         Assert.Equal(["app-theirs"], result.DestinationOnly);
-        Assert.Equal([new ContainerCopied("app-one", ContainerCopyOutcome.Copied), new ContainerCopied("app-two", ContainerCopyOutcome.Copied)], reported);
+        Assert.Equal([new ContainerCopied
+        {
+            Name = "app-one",
+            Outcome = ContainerCopyOutcome.Copied
+        }, new ContainerCopied { Name = "app-two", Outcome = ContainerCopyOutcome.Copied }], reported);
         Assert.False(await Target.ContainerExistsAsync("other"));
     }
 
@@ -131,7 +136,13 @@ public class StoreCopyTests : IDisposable
         StoreCopyResult checkedAfter = await Source.CopyStoreToAsync(Target, new StoreCopyOptions { Existing = ExistingContainers.SkipMatching });
 
         // Assert
-        Assert.Equal(new ContainerUpdateResult("files", 2, 1, 1), Assert.Single(updated.Updated));
+        Assert.Equal(new ContainerUpdateResult
+        {
+            Name = "files",
+            Imported = 2,
+            Changed = 1,
+            Deleted = 1
+        }, Assert.Single(updated.Updated));
         Assert.Equal(["files"], checkedAfter.Matching);
         Assert.Equal("a2", (await Target.GetContainerClient("files").DownloadContentAsync("a"))!.Content.ToString());
         Assert.False(await Target.GetContainerClient("files").ExistsAsync("c"));
@@ -199,7 +210,13 @@ public class StoreCopyTests : IDisposable
         // Assert
         if (stopped)
         {
-            Assert.Equal(new ContainerUpdateResult("files", 1, 0, 0), Assert.Single(result.Updated));
+            Assert.Equal(new ContainerUpdateResult
+            {
+                Name = "files",
+                Imported = 1,
+                Changed = 0,
+                Deleted = 0
+            }, Assert.Single(result.Updated));
             Assert.Equal(new Dictionary<string, string> { ["team"] = "a" }, (await Target.GetContainerClient("files").GetInfoAsync())!.Metadata);
         }
         else
@@ -211,10 +228,10 @@ public class StoreCopyTests : IDisposable
 
     /// <summary>A version to import, named <paramref name="name"/>, with <paramref name="content"/> and a hash that may not be its own.</summary>
     private static ImportedVersion Version(string name, string versionId, string content, string? hash = null) =>
-        new(new ResourceInfo
+        new() { Version = new ResourceInfo
         {
             ContainerName = "", Name = name, VersionId = versionId, LastModified = DateTimeOffset.UnixEpoch, ContentHash = hash
-        }, _ => Task.FromResult<Stream?>(new MemoryStream(System.Text.Encoding.UTF8.GetBytes(content))));
+        }, OpenContentAsync = _ => Task.FromResult<Stream?>(new MemoryStream(System.Text.Encoding.UTF8.GetBytes(content))) };
 
     private const string WrongHash = "sha256:0000000000000000000000000000000000000000000000000000000000000000";
 
@@ -278,8 +295,11 @@ public class StoreCopyTests : IDisposable
         await files.UploadAsync("a", BinaryData.FromString("1"));
         await files.UploadAsync("a", BinaryData.FromString("2"), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace });
         IReadOnlyList<ResourceInfo> newestFirst = await files.GetResourceVersionsAsync("a");
-        await Target.ImportContainerAsync("files", newestFirst.Select(v => new ImportedVersion(v,
-            _ => Task.FromResult<Stream?>(new MemoryStream(System.Text.Encoding.UTF8.GetBytes(v.IsLatest ? "2" : "1"))))).ToAsyncEnumerable());
+        await Target.ImportContainerAsync("files", newestFirst.Select(v => new ImportedVersion
+        {
+            Version = v,
+            OpenContentAsync = _ => Task.FromResult<Stream?>(new MemoryStream(System.Text.Encoding.UTF8.GetBytes(v.IsLatest ? "2" : "1")))
+        }).ToAsyncEnumerable());
 
         // Act
         StoreCopyException stopped = await Assert.ThrowsAsync<StoreCopyException>(() =>
@@ -368,8 +388,11 @@ public class StoreCopyTests : IDisposable
         repository.Setup(r => r.GetResourceInfoAsync(new Providers.ResourceAddress("c", "a"), null, It.IsAny<CancellationToken>()))
             .ReturnsAsync(version);
         var source = new ResourceServiceClient(repository.Object, Microsoft.Extensions.Options.Options.Create(new ResourcefullOptions()));
-        await Target.ImportContainerAsync("c", new[] { new ImportedVersion(version with { ContentLength = null },
-            _ => Task.FromResult<Stream?>(new MemoryStream("a"u8.ToArray()))) }.ToAsyncEnumerable());
+        await Target.ImportContainerAsync("c", new[] { new ImportedVersion
+        {
+            Version = version with { ContentLength = null },
+            OpenContentAsync = _ => Task.FromResult<Stream?>(new MemoryStream("a"u8.ToArray()))
+        } }.ToAsyncEnumerable());
 
         // Act
         StoreCopyResult result = await source.CopyStoreToAsync(Target, new StoreCopyOptions { Existing = ExistingContainers.SkipMatching });

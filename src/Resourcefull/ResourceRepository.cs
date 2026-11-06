@@ -884,7 +884,12 @@ public abstract class ResourceRepository
             afterName = page[^1].Name;
         }
 
-        return new ContainerUsage(storedBytes, resourceCount, versionCount);
+        return new ContainerUsage
+        {
+            StoredSize = storedBytes,
+            ResourceCount = resourceCount,
+            VersionCount = versionCount
+        };
     }
 
     /// <summary>

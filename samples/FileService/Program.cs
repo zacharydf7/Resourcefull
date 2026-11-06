@@ -116,7 +116,11 @@ files.MapPut("/{**name}", async (string name, ClaimsPrincipal user, HttpRequest 
         return Results.StatusCode(StatusCodes.Status415UnsupportedMediaType);
     IResourceContainerClient container =
         await resources.CreateContainerIfNotExistsAsync(ContainerOf(user), cancellationToken: cancellationToken);
-    var upload = new ResourceUploadOptions { Headers = new ResourceHeaders(contentType, request.ContentLength) };
+    var upload = new ResourceUploadOptions { Headers = new ResourceHeaders
+    {
+        ContentType = contentType,
+        ContentLength = request.ContentLength
+    } };
     return await container.UploadFromRequestAsync(name, request, upload, cancellationToken);
 });
 

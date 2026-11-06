@@ -57,7 +57,7 @@ internal sealed partial class ObjectStoreRepository
     public override async Task<StagedVersion?> GetStagedVersionAsync(ResourceAddress resource, string versionId,
         CancellationToken cancellationToken = default) =>
         (await GetUploadAsync(resource, versionId, cancellationToken).ConfigureAwait(false)).Record is { } record
-            ? new StagedVersion(new NewResourceVersion(resource, versionId)
+            ? new StagedVersion { Version = new NewResourceVersion(resource, versionId)
             {
                 ContentType = record.ContentType,
                 DeclaredLength = record.DeclaredLength,
@@ -65,7 +65,7 @@ internal sealed partial class ObjectStoreRepository
                 ExpiresAt = record.ExpiresAt,
                 RetainUntil = record.RetainUntil,
                 LegalHold = record.LegalHold
-            }, record.Length)
+            }, StoredLength = record.Length }
             : null;
 
     /// <summary>
@@ -348,7 +348,12 @@ internal sealed partial class ObjectStoreRepository
                 }
                 ThrowUnlessAddable(resource, head, versionId, condition);
                 replacedSearchKeys = [.. SearchKeysOf(container.Id, resource.ResourceName, head?.Versions.LastOrDefault()).Except(searchKeys)];
-                added = new WrittenContent(contentLength, contentHash, _clock.GetUtcNow());
+                added = new WrittenContent
+                {
+                    ContentLength = contentLength,
+                    ContentHash = contentHash,
+                    LastModified = _clock.GetUtcNow()
+                };
                 return (head ?? new Head([])) with
                 {
                     Versions = [.. head?.Versions ?? [], new StoredVersion(versionId, blob, contentLength, contentHash,
@@ -389,7 +394,12 @@ internal sealed partial class ObjectStoreRepository
     /// <summary>What a completion of the upload stored, if the name's head has its version.</summary>
     private static WrittenContent? Completed(Head? head, string versionId) =>
         head?.Versions.FirstOrDefault(v => v.VersionId == versionId) is { } version
-            ? new WrittenContent(version.ContentLength, version.ContentHash, version.LastModified)
+            ? new WrittenContent
+            {
+                ContentLength = version.ContentLength,
+                ContentHash = version.ContentHash,
+                LastModified = version.LastModified
+            }
             : null;
 
     /// <summary>

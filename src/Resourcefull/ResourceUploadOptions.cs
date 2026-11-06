@@ -3,7 +3,7 @@
 /// <summary>
 /// Defines configuration options for uploading a resource.
 /// </summary>
-public class ResourceUploadOptions
+public sealed class ResourceUploadOptions
 {
     /// <summary>
     /// What the upload does when the name already has a current version: <see cref="ResourceWriteMode.Create"/>, the
@@ -20,9 +20,7 @@ public class ResourceUploadOptions
     /// </summary>
     public ResourceConditions? Conditions { get; init; }
 
-    /// <summary>
-    /// <inheritdoc cref="ResourceHeaders(string?, long?)"/>
-    /// </summary>
+    /// <summary>The upload's content type and length.</summary>
     public ResourceHeaders? Headers { get; init; }
 
     /// <summary>

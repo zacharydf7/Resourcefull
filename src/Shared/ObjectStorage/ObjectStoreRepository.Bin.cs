@@ -112,7 +112,7 @@ internal sealed partial class ObjectStoreRepository
         ResourceVersionKey? after, int pageSize, CancellationToken cancellationToken = default)
     {
         if (await GetContainerAsync(containerName, cancellationToken).ConfigureAwait(false) is not { } container)
-            return new DeletedVersionPage([], null);
+            return new DeletedVersionPage { Versions = [], Next = null };
 
         string bin = _keys.Bin(container.Id);
         string? startAfter = after is { } last ? _keys.BinFrom(container.Id, last.At, last.VersionId) : null;
@@ -152,12 +152,12 @@ internal sealed partial class ObjectStoreRepository
         if (page.Count > pageSize || (page.Count == pageSize && next is not null))
         {
             page.RemoveRange(pageSize, page.Count - pageSize);
-            return new DeletedVersionPage(page, new ResourceVersionKey(page[^1].DeletedAt!.Value,
-                new ResourceAddress(containerName, page[^1].Name), page[^1].VersionId));
+            return new DeletedVersionPage { Versions = page, Next = new ResourceVersionKey(page[^1].DeletedAt!.Value,
+                new ResourceAddress(containerName, page[^1].Name), page[^1].VersionId) };
         }
-        return new DeletedVersionPage(page, next is { } start
+        return new DeletedVersionPage { Versions = page, Next = next is { } start
             ? new ResourceVersionKey(start.At, new ResourceAddress(containerName, ""), start.VersionId)
-            : null);
+            : null };
     }
 
     /// <summary>

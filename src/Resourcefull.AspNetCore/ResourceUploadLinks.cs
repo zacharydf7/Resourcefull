@@ -50,16 +50,31 @@ public sealed record ResourceUploadLink(string ContainerName)
 /// What a valid upload token lets its holder upload.
 /// <para>Coming in 4.0.</para>
 /// </summary>
-/// <param name="ContainerName">The container uploads go into.</param>
-/// <param name="ResourceName">The one name the link uploads to, or <see langword="null"/> for a link with a prefix.</param>
-/// <param name="NamePrefix">What every name the link uploads to starts with, or <see langword="null"/> for a link to one name.</param>
-/// <param name="MaxSize">The most bytes one upload may hold, or <see langword="null"/> for no limit of the link's own.</param>
-/// <param name="AllowedContentTypes">The content types an upload may declare, or <see langword="null"/> for any.</param>
-/// <param name="Mode">What an upload does when its name already has a current version.</param>
-/// <param name="ExpiresAt">When the link stops working.</param>
-public sealed record SignedResourceUploadLink(string ContainerName, string? ResourceName, string? NamePrefix, long? MaxSize,
-    IReadOnlyCollection<string>? AllowedContentTypes, ResourceWriteMode Mode, DateTimeOffset ExpiresAt)
+public sealed record SignedResourceUploadLink
 {
+    /// <summary>The container uploads go into.</summary>
+    public required string ContainerName { get; init; }
+
+    /// <summary>The one name the link uploads to, or <see langword="null"/> for a link with a prefix.</summary>
+    public string? ResourceName { get; init; }
+
+    /// <summary>
+    /// What every name the link uploads to starts with, or <see langword="null"/> for a link to one name.
+    /// </summary>
+    public string? NamePrefix { get; init; }
+
+    /// <summary>The most bytes one upload may hold, or <see langword="null"/> for no limit of the link's own.</summary>
+    public long? MaxSize { get; init; }
+
+    /// <summary>The content types an upload may declare, or <see langword="null"/> for any.</summary>
+    public IReadOnlyCollection<string>? AllowedContentTypes { get; init; }
+
+    /// <summary>What an upload does when its name already has a current version.</summary>
+    public required ResourceWriteMode Mode { get; init; }
+
+    /// <summary>When the link stops working.</summary>
+    public required DateTimeOffset ExpiresAt { get; init; }
+
     /// <summary>
     /// The name an upload through the link is stored as: the link's own name when <paramref name="name"/> is empty, or
     /// the prefix followed by <paramref name="name"/>; <see langword="null"/> when the link doesn't cover it, because a
@@ -75,6 +90,11 @@ public sealed record SignedResourceUploadLink(string ContainerName, string? Reso
 /// The result of checking an upload token.
 /// <para>Coming in 4.0.</para>
 /// </summary>
-/// <param name="Status">Whether it's a link that still works.</param>
-/// <param name="Link">What it allows, for a valid or expired token; <see langword="null"/> for an invalid one.</param>
-public sealed record ResourceUploadLinkCheck(ResourceLinkStatus Status, SignedResourceUploadLink? Link);
+public sealed record ResourceUploadLinkCheck
+{
+    /// <summary>Whether the token is a link that still works.</summary>
+    public required ResourceLinkStatus Status { get; init; }
+
+    /// <summary>What a valid or expired token allows; <see langword="null"/> for an invalid one.</summary>
+    public SignedResourceUploadLink? Link { get; init; }
+}

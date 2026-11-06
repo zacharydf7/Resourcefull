@@ -28,7 +28,11 @@ public class UploadSessionTests
         var repository = new Mock<ResourceRepository>();
         var location = new ResourceAddress("c", "a");
         repository.Setup(r => r.GetStagedVersionAsync(location, "u1", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new StagedVersion(new NewResourceVersion(location, "u1") { DeclaredLength = 3 }, 3));
+            .ReturnsAsync(new StagedVersion
+            {
+                Version = new NewResourceVersion(location, "u1") { DeclaredLength = 3 },
+                StoredLength = 3
+            });
         repository.Setup(r => r.GetStagedStreamAsync(location, "u1", It.IsAny<CancellationToken>()))
             .ReturnsAsync(new MemoryStream(new byte[5]));
         var container = new ResourceContainerClient(repository.Object, null, new ResourcefullOptions(), "c", null);

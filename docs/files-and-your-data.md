@@ -22,7 +22,7 @@ so no other upload can replace it:
 ```csharp
 ResourceInfo stored = await invoices.UploadAsync($"{invoice.Id}.pdf", file, new ResourceUploadOptions
 {
-    Headers = new ResourceHeaders("application/pdf", null)
+    Headers = new ResourceHeaders { ContentType = "application/pdf" }
 });
 ```
 

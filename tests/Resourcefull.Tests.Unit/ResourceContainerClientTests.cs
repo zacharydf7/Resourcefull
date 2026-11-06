@@ -18,7 +18,7 @@ public class ResourceContainerClientTests
         => new(repository, uriProvider, options ?? new ResourcefullOptions(),
             containerName, logger);
 
-    private static readonly WrittenContent Written = new(5, "sha256:written", new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero));
+    private static readonly WrittenContent Written = new() { ContentLength = 5, ContentHash = "sha256:written", LastModified = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero) };
 
     private static Mock<ResourceRepository> NewRepository()
     {
@@ -1024,7 +1024,7 @@ public class ResourceContainerClientTests
         using var cts = new CancellationTokenSource();
         var repository = NewRepository();
         repository.Setup(r => r.GetContainerUsageAsync(Container, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new ContainerUsage(0, 0, 0));
+            .ReturnsAsync(new ContainerUsage { StoredSize = 0, ResourceCount = 0, VersionCount = 0 });
         var client = NewClient(repository.Object);
 
         // Act

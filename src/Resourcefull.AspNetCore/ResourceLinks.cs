@@ -46,12 +46,23 @@ public sealed record ResourceLink(string ContainerName, string ResourceName)
 /// What a valid token says its holder may download.
 /// <para>Coming in 4.0.</para>
 /// </summary>
-/// <param name="ContainerName">The container the resource is in.</param>
-/// <param name="ResourceName">The resource.</param>
-/// <param name="VersionId">The version, or <see langword="null"/> for whichever is current.</param>
-/// <param name="ExpiresAt">When the link stops working.</param>
-/// <param name="Inline">Whether browsers should display the file rather than download it.</param>
-public sealed record SignedResourceLink(string ContainerName, string ResourceName, string? VersionId, DateTimeOffset ExpiresAt, bool Inline);
+public sealed record SignedResourceLink
+{
+    /// <summary>The container the resource is in.</summary>
+    public required string ContainerName { get; init; }
+
+    /// <summary>The resource's name.</summary>
+    public required string ResourceName { get; init; }
+
+    /// <summary>The version's ID, or <see langword="null"/> for whichever is current.</summary>
+    public string? VersionId { get; init; }
+
+    /// <summary>When the link stops working.</summary>
+    public required DateTimeOffset ExpiresAt { get; init; }
+
+    /// <summary>Whether browsers should display the file rather than download it.</summary>
+    public required bool Inline { get; init; }
+}
 
 /// <summary>
 /// Whether a token is a link that still works.
@@ -75,9 +86,14 @@ public enum ResourceLinkStatus
 /// The result of checking a token.
 /// <para>Coming in 4.0.</para>
 /// </summary>
-/// <param name="Status">Whether it's a link that still works.</param>
-/// <param name="Link">What it grants, for a valid or expired token; <see langword="null"/> for an invalid one.</param>
-public sealed record ResourceLinkCheck(ResourceLinkStatus Status, SignedResourceLink? Link);
+public sealed record ResourceLinkCheck
+{
+    /// <summary>Whether the token is a link that still works.</summary>
+    public required ResourceLinkStatus Status { get; init; }
+
+    /// <summary>What a valid or expired token grants; <see langword="null"/> for an invalid one.</summary>
+    public SignedResourceLink? Link { get; init; }
+}
 
 /// <summary>
 /// Creates and checks the tokens of signed links: strings that let whoever holds them download one resource, or upload
@@ -158,10 +174,17 @@ internal sealed class ResourceLinkSigner(IDataProtectionProvider dataProtection,
 
     public ResourceLinkCheck Check(string token)
     {
-        if (Open<Payload>(_protector, token) is not { } payload) return new ResourceLinkCheck(ResourceLinkStatus.Invalid, null);
-        var link = new SignedResourceLink(payload.ContainerName, payload.ResourceName, payload.VersionId,
-            DateTimeOffset.FromUnixTimeMilliseconds(payload.ExpiresAt), payload.Inline);
-        return new ResourceLinkCheck(StatusAt(link.ExpiresAt), link);
+        if (Open<Payload>(_protector, token) is not { } payload)
+            return new ResourceLinkCheck { Status = ResourceLinkStatus.Invalid };
+        var link = new SignedResourceLink
+        {
+            ContainerName = payload.ContainerName,
+            ResourceName = payload.ResourceName,
+            VersionId = payload.VersionId,
+            ExpiresAt = DateTimeOffset.FromUnixTimeMilliseconds(payload.ExpiresAt),
+            Inline = payload.Inline
+        };
+        return new ResourceLinkCheck { Status = StatusAt(link.ExpiresAt), Link = link };
     }
 
     public string CreateUploadToken(ResourceUploadLink link)
@@ -187,11 +210,18 @@ internal sealed class ResourceLinkSigner(IDataProtectionProvider dataProtection,
     public ResourceUploadLinkCheck CheckUpload(string token)
     {
         if (Open<UploadPayload>(_uploadProtector, token) is not { } payload)
-            return new ResourceUploadLinkCheck(ResourceLinkStatus.Invalid, null);
-        var link = new SignedResourceUploadLink(payload.ContainerName, payload.ResourceName, payload.NamePrefix, payload.MaxSize,
-            payload.AllowedContentTypes, payload.Replace ? ResourceWriteMode.Replace : ResourceWriteMode.Create,
-            DateTimeOffset.FromUnixTimeMilliseconds(payload.ExpiresAt));
-        return new ResourceUploadLinkCheck(StatusAt(link.ExpiresAt), link);
+            return new ResourceUploadLinkCheck { Status = ResourceLinkStatus.Invalid };
+        var link = new SignedResourceUploadLink
+        {
+            ContainerName = payload.ContainerName,
+            ResourceName = payload.ResourceName,
+            NamePrefix = payload.NamePrefix,
+            MaxSize = payload.MaxSize,
+            AllowedContentTypes = payload.AllowedContentTypes,
+            Mode = payload.Replace ? ResourceWriteMode.Replace : ResourceWriteMode.Create,
+            ExpiresAt = DateTimeOffset.FromUnixTimeMilliseconds(payload.ExpiresAt)
+        };
+        return new ResourceUploadLinkCheck { Status = StatusAt(link.ExpiresAt), Link = link };
     }
 
     /// <summary>What <paramref name="token"/> holds, or <see langword="null"/> if this application didn't seal it.</summary>

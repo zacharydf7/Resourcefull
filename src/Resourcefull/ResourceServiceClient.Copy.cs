@@ -185,8 +185,14 @@ internal partial class ResourceServiceClient
             activity?.SetTag("resourcefull.resources", imported.ResourceCount);
             activity?.SetTag("resourcefull.versions", imported.VersionCount);
             _telemetry.CountCopied("imported", imported.VersionCount);
-            return new ContainerCopyResult(containerName, destinationName, imported.ResourceCount, imported.VersionCount,
-                imported.ContentSize);
+            return new ContainerCopyResult
+            {
+                SourceContainerName = containerName,
+                DestinationContainerName = destinationName,
+                ResourceCount = imported.ResourceCount,
+                VersionCount = imported.VersionCount,
+                ContentSize = imported.ContentSize
+            };
         }, "resourcefull.destination_container", destinationContainerName ?? containerName);
 
     /// <summary>
@@ -238,8 +244,8 @@ internal partial class ResourceServiceClient
 
     /// <summary>One of this store's versions, to import elsewhere.</summary>
     private ImportedVersion ToImport(string containerName, ResourceInfo version) =>
-        new(version, ct => resourceRepository.GetResourceStreamAsync(new ResourceAddress(containerName, version.Name),
-            version.VersionId, ct));
+        new() { Version = version, OpenContentAsync = ct => resourceRepository.GetResourceStreamAsync(new ResourceAddress(containerName, version.Name),
+            version.VersionId, ct) };
 
     public Task<StoreCopyResult> CopyStoreToAsync(IResourceServiceClient destination, StoreCopyOptions? options = null,
         CancellationToken cancellationToken = default)
@@ -277,16 +283,23 @@ internal partial class ResourceServiceClient
                 }
                 catch (Exception exception) when (exception is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
                 {
-                    failed.Add(new ContainerCopyFailure(container.Name, exception));
+                    failed.Add(new ContainerCopyFailure { Name = container.Name, Exception = exception });
                     if (options.OnFailure == StoreCopyFailures.Stop)
                     {
                         Tag();
                         throw new StoreCopyException($"The copy stopped at the container {container.Name}, which failed: {exception.Message}",
-                            new StoreCopyResult(copied, updated, matching, failed, []), exception);
+                            new StoreCopyResult
+                            {
+                                Copied = copied,
+                                Updated = updated,
+                                Matching = matching,
+                                Failed = failed,
+                                DestinationOnly = []
+                            }, exception);
                     }
                     outcome = ContainerCopyOutcome.Failed;
                 }
-                options.Progress?.Report(new ContainerCopied(container.Name, outcome));
+                options.Progress?.Report(new ContainerCopied { Name = container.Name, Outcome = outcome });
             }
 
             var destinationOnly = new List<string>();
@@ -297,7 +310,14 @@ internal partial class ResourceServiceClient
                     destinationOnly.Add(theirs.Name);
             }
             Tag();
-            return new StoreCopyResult(copied, updated, matching, failed, destinationOnly);
+            return new StoreCopyResult
+            {
+                Copied = copied,
+                Updated = updated,
+                Matching = matching,
+                Failed = failed,
+                DestinationOnly = destinationOnly
+            };
         });
 
     /// <summary>
@@ -427,7 +447,13 @@ internal partial class ResourceServiceClient
             source._telemetry.CountCopied("imported", imported);
             source._telemetry.CountCopied("changed", changed);
             source._telemetry.CountCopied("deleted", deleted);
-            return new ContainerUpdateResult(container.Name, imported, changed, deleted);
+            return new ContainerUpdateResult
+            {
+                Name = container.Name,
+                Imported = imported,
+                Changed = changed,
+                Deleted = deleted
+            };
         }
 
         /// <summary>Gives the destination's version what differs in the source's, of what can change in place.</summary>

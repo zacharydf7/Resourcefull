@@ -5,32 +5,45 @@ namespace Resourcefull;
 /// takes it: the version as it was, and a way to open its content.
 /// <para>Coming in 4.0.</para>
 /// </summary>
-/// <param name="Version">
-/// The version as another store holds it. Its <see cref="ResourceInfo.Name"/>, <see cref="ResourceInfo.VersionId"/>,
-/// <see cref="ResourceInfo.LastModified"/>, content type, metadata, <see cref="ResourceInfo.CopiedFrom"/>, expiry,
-/// retention date and legal hold are kept; its <see cref="ResourceInfo.ContentHash"/>, when it has one, is what the
-/// content stored must hash to, and its <see cref="ResourceInfo.ContentLength"/>, when it has one, is checked against the
-/// container's policy before any content is read. Its container name is ignored.
-/// </param>
-/// <param name="OpenContentAsync">
-/// Opens the version's content, which the import reads to its end and then disposes; <see langword="null"/> when the
-/// version is gone, and the import skips it.
-/// </param>
-public sealed record ImportedVersion(ResourceInfo Version, Func<CancellationToken, Task<Stream?>> OpenContentAsync);
+public sealed record ImportedVersion
+{
+    /// <summary>
+    /// The version as another store holds it. Its <see cref="ResourceInfo.Name"/>, <see cref="ResourceInfo.VersionId"/>,
+    /// <see cref="ResourceInfo.LastModified"/>, content type, metadata, <see cref="ResourceInfo.CopiedFrom"/>, expiry,
+    /// retention date and legal hold are kept; its <see cref="ResourceInfo.ContentHash"/>, when it has one, is what the
+    /// content stored must hash to, and its <see cref="ResourceInfo.ContentLength"/>, when it has one, is checked against the
+    /// container's policy before any content is read. Its container name is ignored.
+    /// </summary>
+    public required ResourceInfo Version { get; init; }
+
+    /// <summary>
+    /// Opens the version's content, which the import reads to its end and then disposes; <see langword="null"/> when the
+    /// version is gone, and the import skips it.
+    /// </summary>
+    public required Func<CancellationToken, Task<Stream?>> OpenContentAsync { get; init; }
+}
 
 /// <summary>
 /// What <see cref="IResourceServiceClient.CopyContainerToAsync"/> copied.
 /// <para>Coming in 4.0.</para>
 /// </summary>
-/// <param name="SourceContainerName">The container copied.</param>
-/// <param name="DestinationContainerName">The container it was copied to.</param>
-/// <param name="ResourceCount">How many resources (names) it copied.</param>
-/// <param name="VersionCount">How many versions it copied, current and older.</param>
-/// <param name="ContentSize">
-/// The size of every version it copied: the sum of their lengths, whatever each store keeps for them.
-/// </param>
-public sealed record ContainerCopyResult(string SourceContainerName, string DestinationContainerName, long ResourceCount,
-    long VersionCount, ResourceSize ContentSize);
+public sealed record ContainerCopyResult
+{
+    /// <summary>The container copied.</summary>
+    public required string SourceContainerName { get; init; }
+
+    /// <summary>The container it was copied to.</summary>
+    public required string DestinationContainerName { get; init; }
+
+    /// <summary>How many resources (names) were copied.</summary>
+    public required long ResourceCount { get; init; }
+
+    /// <summary>How many versions were copied, current and older.</summary>
+    public required long VersionCount { get; init; }
+
+    /// <summary>The size of every version copied: the sum of their lengths, whatever each store keeps for them.</summary>
+    public required ResourceSize ContentSize { get; init; }
+}
 
 /// <summary>
 /// What <see cref="IResourceServiceClient.CopyStoreToAsync"/> does with a container the destination already has.
@@ -96,9 +109,14 @@ public sealed class StoreCopyOptions
 /// <see cref="StoreCopyOptions.Progress"/>.
 /// <para>Coming in 4.0.</para>
 /// </summary>
-/// <param name="Name">The container.</param>
-/// <param name="Outcome">What the copy did with it.</param>
-public sealed record ContainerCopied(string Name, ContainerCopyOutcome Outcome);
+public sealed record ContainerCopied
+{
+    /// <summary>The container's name.</summary>
+    public required string Name { get; init; }
+
+    /// <summary>What the copy did with it.</summary>
+    public required ContainerCopyOutcome Outcome { get; init; }
+}
 
 /// <summary>
 /// What <see cref="IResourceServiceClient.CopyStoreToAsync"/> did with one container.
@@ -123,35 +141,58 @@ public enum ContainerCopyOutcome
 /// What <see cref="ExistingContainers.Update"/> changed in one container.
 /// <para>Coming in 4.0.</para>
 /// </summary>
-/// <param name="Name">The container.</param>
-/// <param name="Imported">How many versions it imported that the destination lacked.</param>
-/// <param name="Changed">How many versions' metadata, content type, expiry, retention date or hold it changed.</param>
-/// <param name="Deleted">How many versions it deleted that the source no longer has.</param>
-public sealed record ContainerUpdateResult(string Name, long Imported, long Changed, long Deleted);
+public sealed record ContainerUpdateResult
+{
+    /// <summary>The container's name.</summary>
+    public required string Name { get; init; }
+
+    /// <summary>How many versions the update imported that the destination lacked.</summary>
+    public required long Imported { get; init; }
+
+    /// <summary>How many versions' metadata, content type, expiry, retention date or hold the update changed.</summary>
+    public required long Changed { get; init; }
+
+    /// <summary>How many versions the update deleted that the source no longer has.</summary>
+    public required long Deleted { get; init; }
+}
 
 /// <summary>
 /// A container <see cref="IResourceServiceClient.CopyStoreToAsync"/> couldn't copy, and why.
 /// <para>Coming in 4.0.</para>
 /// </summary>
-/// <param name="Name">The container.</param>
-/// <param name="Exception">What went wrong.</param>
-public sealed record ContainerCopyFailure(string Name, Exception Exception);
+public sealed record ContainerCopyFailure
+{
+    /// <summary>The container's name.</summary>
+    public required string Name { get; init; }
+
+    /// <summary>What went wrong.</summary>
+    public required Exception Exception { get; init; }
+}
 
 /// <summary>
 /// What <see cref="IResourceServiceClient.CopyStoreToAsync"/> did, container by container.
 /// <para>Coming in 4.0.</para>
 /// </summary>
-/// <param name="Copied">The containers the destination didn't have, now copied.</param>
-/// <param name="Updated">The containers <see cref="ExistingContainers.Update"/> brought up to date.</param>
-/// <param name="Matching">The containers the destination had that matched the source's version for version.</param>
-/// <param name="Failed">The containers that failed.</param>
-/// <param name="DestinationOnly">
-/// The destination's containers, within <see cref="StoreCopyOptions.Prefix"/>, that the source doesn't have, which the
-/// copy leaves alone.
-/// </param>
-public sealed record StoreCopyResult(IReadOnlyList<ContainerCopyResult> Copied, IReadOnlyList<ContainerUpdateResult> Updated,
-    IReadOnlyList<string> Matching, IReadOnlyList<ContainerCopyFailure> Failed, IReadOnlyList<string> DestinationOnly)
+public sealed record StoreCopyResult
 {
+    /// <summary>The containers the destination didn't have, now copied.</summary>
+    public required IReadOnlyList<ContainerCopyResult> Copied { get; init; }
+
+    /// <summary>The containers <see cref="ExistingContainers.Update"/> brought up to date.</summary>
+    public required IReadOnlyList<ContainerUpdateResult> Updated { get; init; }
+
+    /// <summary>The containers the destination had that matched the source's version for version.</summary>
+    public required IReadOnlyList<string> Matching { get; init; }
+
+    /// <summary>The containers that failed.</summary>
+    public required IReadOnlyList<ContainerCopyFailure> Failed { get; init; }
+
+    /// <summary>
+    /// The destination's containers, within <see cref="StoreCopyOptions.Prefix"/>, that the source doesn't have, which the
+    /// copy leaves alone.
+    /// </summary>
+    public required IReadOnlyList<string> DestinationOnly { get; init; }
+
     /// <summary>Whether no container failed.</summary>
     public bool Succeeded => Failed.Count == 0;
 }

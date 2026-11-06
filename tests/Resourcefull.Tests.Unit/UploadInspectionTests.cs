@@ -94,7 +94,7 @@ public class UploadInspectionTests
 
         // Act
         Task act() => container.UploadAsync("r", new MemoryStream(Payload),
-            new ResourceUploadOptions { Headers = new ResourceHeaders(null, Payload.Length) });
+            new ResourceUploadOptions { Headers = new ResourceHeaders { ContentLength = Payload.Length } });
 
         // Assert
         await Assert.ThrowsAsync<ResourceContentRefusedException>(act);

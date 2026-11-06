@@ -13,7 +13,10 @@ public class ActionResultTests
     private static async Task<TestApp> StartWithDigitsAsync()
     {
         TestApp app = await TestApp.StartAsync();
-        await app.Files.UploadAsync("digits.txt", BinaryData.FromString("0123456789"), new ResourceUploadOptions { Headers = new ResourceHeaders("text/plain", null) });
+        await app.Files.UploadAsync("digits.txt", BinaryData.FromString("0123456789"), new ResourceUploadOptions { Headers = new ResourceHeaders
+        {
+            ContentType = "text/plain"
+        } });
         return app;
     }
 

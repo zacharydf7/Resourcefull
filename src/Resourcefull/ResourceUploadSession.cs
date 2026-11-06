@@ -5,15 +5,25 @@ namespace Resourcefull;
 /// becomes current only when the session is completed.
 /// <para>Coming in 4.0.</para>
 /// </summary>
-/// <param name="ContainerName">The container the version is stored in.</param>
-/// <param name="ResourceName">The name the version is stored under.</param>
-/// <param name="UploadId">The session's ID, given to every later call about it. Treat it as opaque.</param>
-/// <param name="Offset">How many bytes are stored so far: where the next append starts.</param>
-/// <param name="DeclaredLength">
-/// The length the session said the version would have, if it did: the session completes only with that many bytes.
-/// </param>
-public sealed record ResourceUploadSession(string ContainerName, string ResourceName, string UploadId, long Offset,
-    long? DeclaredLength = null);
+public sealed record ResourceUploadSession
+{
+    /// <summary>The container the version is stored in.</summary>
+    public required string ContainerName { get; init; }
+
+    /// <summary>The name the version is stored under.</summary>
+    public required string ResourceName { get; init; }
+
+    /// <summary>The session's ID, given to every later call about it. Treat it as opaque.</summary>
+    public required string UploadId { get; init; }
+
+    /// <summary>How many bytes are stored so far: where the next append starts.</summary>
+    public required long Offset { get; init; }
+
+    /// <summary>
+    /// The length the session said the version would have, if it did: the session completes only with that many bytes.
+    /// </summary>
+    public long? DeclaredLength { get; init; }
+}
 
 /// <summary>
 /// What completing an upload session does when the name already has a current version.

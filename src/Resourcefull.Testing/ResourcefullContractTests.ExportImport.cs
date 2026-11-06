@@ -75,15 +75,13 @@ public abstract partial class ResourcefullContractTests
         byte[] large = RandomNumberGenerator.GetBytes(150_000);
         await source.UploadAsync("report.pdf", new MemoryStream(large), new ResourceUploadOptions
         {
-            Headers = new ResourceHeaders("application/pdf", null),
+            Headers = new ResourceHeaders { ContentType = "application/pdf" },
             Metadata = new Dictionary<string, string> { ["author"] = "ada" },
             ExpiresAt = SupportsExpiry ? Future : null
         });
         await source.UploadAsync("report.pdf", BinaryData.FromString("second"), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace });
-        await source.CopyResourceAsync("report.pdf", sourceName, "copy.pdf", new ResourceCopyOptions
-        {
-            VersionId = (await source.GetResourceVersionsAsync("report.pdf"))[1].VersionId
-        });
+        await source.CopyResourceAsync("report.pdf", sourceName, "copy.pdf",
+            new ResourceCopyOptions { VersionId = (await source.GetResourceVersionsAsync("report.pdf"))[1].VersionId });
 
         // Act
         ContainerImportResult imported = await service.ImportContainerAsync(restoredName, await ExportAsync(service, sourceName));

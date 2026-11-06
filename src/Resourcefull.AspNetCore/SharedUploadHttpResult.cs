@@ -103,7 +103,11 @@ public sealed class SharedUploadHttpResult : IResult, IActionResult
             stored = await container.UploadAsync(name, request.Body, new ResourceUploadOptions
             {
                 Mode = link.Mode,
-                Headers = new ResourceHeaders(request.ContentType, request.ContentLength)
+                Headers = new ResourceHeaders
+                {
+                    ContentType = request.ContentType,
+                    ContentLength = request.ContentLength
+                }
             }, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception exception) when (RefusalTitle(exception) is { } title)
@@ -176,7 +180,8 @@ public sealed class SharedUploadHttpResult : IResult, IActionResult
             try
             {
                 ResourceInfo version = await container.UploadAsync(link.ResourceName ?? link.NamePrefix + fileName, content,
-                    new ResourceUploadOptions { Mode = link.Mode, Headers = new ResourceHeaders(section.ContentType, null) },
+                    new ResourceUploadOptions { Mode = link.Mode, Headers =
+                        new ResourceHeaders { ContentType = section.ContentType } },
                     cancellationToken).ConfigureAwait(false);
                 stored.Add(new StoredFile(fileName, Preconditions.EntityTagOf(version)?.ToString()));
             }

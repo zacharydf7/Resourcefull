@@ -11,7 +11,10 @@ public class ResourceLookupHttpResultTests
     private static async Task<TestApp> StartWithDigitsAsync()
     {
         TestApp app = await TestApp.StartAsync();
-        await app.Files.UploadAsync("digits.txt", BinaryData.FromString("0123456789"), new ResourceUploadOptions { Headers = new ResourceHeaders("text/plain", null) });
+        await app.Files.UploadAsync("digits.txt", BinaryData.FromString("0123456789"), new ResourceUploadOptions { Headers = new ResourceHeaders
+        {
+            ContentType = "text/plain"
+        } });
         return app;
     }
 
@@ -257,7 +260,7 @@ public class ResourceLookupHttpResultTests
         var container = new Mock<IResourceContainerClient>(MockBehavior.Strict);
         container.Setup(c => c.DownloadStreamingAsync("n", "v1", null, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ResourceDownloadResult(new ResourceInfo { ContainerName = "c", Name = "n", VersionId = "v1" },
-                new MemoryStream(System.Text.Encoding.ASCII.GetBytes("0123456789"))) { TotalLength = 10 });
+                new MemoryStream(System.Text.Encoding.ASCII.GetBytes("0123456789")), 10));
         container.Setup(c => c.DownloadStreamingAsync("n", "v1", new ResourceRange(7, 3), It.IsAny<CancellationToken>()))
             .ReturnsAsync((ResourceDownloadResult?)null);
         var context = new DefaultHttpContext();
@@ -296,9 +299,8 @@ public class ResourceLookupHttpResultTests
         // Arrange: a suffix range opens the whole content first, to learn its length, then the range of that version;
         // the first time, the version is gone by then, as when a newer upload prunes it.
         static ResourceDownloadResult Download(string versionId, string content, ResourceRange? range = null) =>
-            new(new ResourceInfo { ContainerName = "c", Name = "n", VersionId = versionId }, new MemoryStream(System.Text.Encoding.ASCII.GetBytes(content)))
+            new(new ResourceInfo { ContainerName = "c", Name = "n", VersionId = versionId }, new MemoryStream(System.Text.Encoding.ASCII.GetBytes(content)), 10)
             {
-                TotalLength = 10,
                 Range = range
             };
         var container = new Mock<IResourceContainerClient>(MockBehavior.Strict);

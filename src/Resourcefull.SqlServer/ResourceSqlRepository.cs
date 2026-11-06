@@ -162,7 +162,14 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
                 """)).SingleAsync(cancellationToken).ConfigureAwait(false);
         }
 
-        return new ContainerUsage(storedSize, usage.ResourceCount, usage.VersionCount, usage.DeletedSize, usage.DeletedVersionCount);
+        return new ContainerUsage
+        {
+            StoredSize = storedSize,
+            ResourceCount = usage.ResourceCount,
+            VersionCount = usage.VersionCount,
+            DeletedSize = usage.DeletedSize,
+            DeletedVersionCount = usage.DeletedVersionCount
+        };
     }
 
     protected override async Task<bool> LockVersionInContainerAsync(ResourceDbContext attempt, long resourceId,

@@ -208,7 +208,7 @@
         {
             // When versions are kept, always replace, so another upload of a name adds a version to its history.
             Mode = _overwrite || _options.MaxVersions > 1 ? ResourceWriteMode.Replace : ResourceWriteMode.Create,
-            Headers = new(contentType, args.File.Size)
+            Headers = new() { ContentType = contentType, ContentLength = args.File.Size }
         };
         var containerClient = ResourceServiceClient.GetContainerClient(containerName);
         try

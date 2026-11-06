@@ -83,8 +83,11 @@ public abstract partial class ResourcefullContractTests
         {
             foreach (string name in names.Reverse())
             {
-                yield return new ImportedVersion(new ResourceInfo { ContainerName = "", Name = name, VersionId = versionId, LastModified = at },
-                    _ => Task.FromResult<Stream?>(new MemoryStream([1])));
+                yield return new ImportedVersion
+                {
+                    Version = new ResourceInfo { ContainerName = "", Name = name, VersionId = versionId, LastModified = at },
+                    OpenContentAsync = _ => Task.FromResult<Stream?>(new MemoryStream([1]))
+                };
             }
             await Task.CompletedTask;
         }

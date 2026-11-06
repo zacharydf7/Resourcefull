@@ -15,7 +15,7 @@ public abstract partial class ResourcefullContractTests
         IResourceContainerClient source = await NewContainerAsync(provider);
         await source.UploadAsync("a.pdf", BinaryData.FromString("first"), new ResourceUploadOptions
         {
-            Headers = new ResourceHeaders("application/pdf", null),
+            Headers = new ResourceHeaders { ContentType = "application/pdf" },
             Metadata = new Dictionary<string, string> { ["k"] = "v" },
             ExpiresAt = SupportsExpiry ? DateTimeOffset.UtcNow.AddDays(1) : null
         });
@@ -46,8 +46,10 @@ public abstract partial class ResourcefullContractTests
         // Arrange: a destination store whose policy refuses the second version's type.
         using ServiceProvider provider = BuildServiceProvider();
         IResourceContainerClient source = await NewContainerAsync(provider);
-        await source.UploadAsync("a.pdf", BinaryData.FromString("a"), new ResourceUploadOptions { Headers = new ResourceHeaders("application/pdf", null) });
-        await source.UploadAsync("b.txt", BinaryData.FromString("b"), new ResourceUploadOptions { Headers = new ResourceHeaders("text/plain", null) });
+        await source.UploadAsync("a.pdf", BinaryData.FromString("a"), new ResourceUploadOptions { Headers =
+            new ResourceHeaders { ContentType = "application/pdf" } });
+        await source.UploadAsync("b.txt", BinaryData.FromString("b"), new ResourceUploadOptions { Headers =
+            new ResourceHeaders { ContentType = "text/plain" } });
         using ServiceProvider strict = BuildServiceProvider(o =>
             o.UseContainerPolicies(new ContainerPolicy { AllowedContentTypes = ["application/pdf"] }));
         string copyName = NewContainerName();

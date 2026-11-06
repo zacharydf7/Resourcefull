@@ -24,7 +24,7 @@ using SixLabors.ImageSharp.Processing;
 
 ResourceInfo photo = await photos.UploadAsync(name, content, new ResourceUploadOptions
 {
-    Headers = new ResourceHeaders(contentType, null)
+    Headers = new ResourceHeaders { ContentType = contentType }
 }, cancellationToken);
 
 try
@@ -46,7 +46,7 @@ try
     thumbnail.Position = 0;
     await thumbnails.UploadAsync($"{photo.VersionId}.webp", thumbnail, new ResourceUploadOptions
     {
-        Headers = new ResourceHeaders("image/webp", thumbnail.Length),
+        Headers = new ResourceHeaders { ContentType = "image/webp", ContentLength = thumbnail.Length },
         Metadata = new Dictionary<string, string> { ["photo"] = name },
         ExpiresAt = photo.ExpiresAt,
         Mode = ResourceWriteMode.Replace

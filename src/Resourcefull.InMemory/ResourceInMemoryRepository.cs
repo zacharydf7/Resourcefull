@@ -99,7 +99,12 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : R
                 ThrowIfNotMet(conditions, containerName, resourceName, versions?.MaxBy(r => r.Sequence));
 
             // Stored content is never changed, so the copy can share it.
-            var written = new WrittenContent(from.Content.Length, from.ResourceInfo.ContentHash!, _clock.GetUtcNow());
+            var written = new WrittenContent
+            {
+                ContentLength = from.Content.Length,
+                ContentHash = from.ResourceInfo.ContentHash!,
+                LastModified = _clock.GetUtcNow()
+            };
             AddVersion(container, destination, from.Content, written);
             return (WrittenContent?)written;
         }, cancellationToken);
@@ -334,10 +339,10 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : R
                 .Where(v => after is not { } last || v.DeletedAt < last.At
                     || (v.DeletedAt == last.At && CompareAtSameTime(v, last) > 0))
                 .Take(pageSize + 1)];
-            if (found.Count <= pageSize) return new DeletedVersionPage(found, null);
+            if (found.Count <= pageSize) return new DeletedVersionPage { Versions = found, Next = null };
             found.RemoveAt(pageSize);
-            return new DeletedVersionPage(found, new ResourceVersionKey(found[^1].DeletedAt!.Value,
-                new ResourceAddress(found[^1].ContainerName, found[^1].Name), found[^1].VersionId));
+            return new DeletedVersionPage { Versions = found, Next = new ResourceVersionKey(found[^1].DeletedAt!.Value,
+                new ResourceAddress(found[^1].ContainerName, found[^1].Name), found[^1].VersionId) };
         }, cancellationToken);
 
     public override Task<IReadOnlyList<ResourceInfo>> GetDeletedVersionsAsync(ResourceAddress resource,
@@ -468,7 +473,7 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : R
     public override Task<StagedVersion?> GetStagedVersionAsync(ResourceAddress resource, string versionId,
         CancellationToken cancellationToken = default) =>
         UnderLockAsync(() => StagedOf(resource, versionId) is { } staged
-            ? new StagedVersion(staged.Version, staged.Content.Length)
+            ? new StagedVersion { Version = staged.Version, StoredLength = staged.Content.Length }
             : null, cancellationToken);
 
     public override async Task<long?> AppendStagedContentAsync(ResourceAddress resource, string versionId, long offset,
@@ -510,7 +515,12 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : R
             if (condition?.Conditions is { } conditions)
                 ThrowIfNotMet(conditions, containerName, resourceName, versions?.MaxBy(r => r.Sequence));
 
-            var written = new WrittenContent(contentLength, contentHash, _clock.GetUtcNow());
+            var written = new WrittenContent
+            {
+                ContentLength = contentLength,
+                ContentHash = contentHash,
+                LastModified = _clock.GetUtcNow()
+            };
             AddVersion(container, staged.Version, staged.Content.ToArray(), written);
             container.Staged.Remove((resourceName, versionId));
             return (WrittenContent?)written;
@@ -570,10 +580,15 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : R
     public override Task<ContainerUsage> GetContainerUsageAsync(string containerName,
         CancellationToken cancellationToken = default) =>
         UnderLockAsync(() => _containers.GetValueOrDefault(containerName) is { } container
-            ? new ContainerUsage(container.Resources.Values.Sum(versions => versions.Sum(v => (long)v.Content.Length)),
-                container.Resources.Count, container.Resources.Values.Sum(versions => (long)versions.Count),
-                container.Deleted.Values.Sum(bin => bin.Sum(v => (long)v.Content.Length)), container.Deleted.Values.Sum(bin => (long)bin.Count))
-            : new ContainerUsage(0, 0, 0), cancellationToken);
+            ? new ContainerUsage
+            {
+                StoredSize = container.Resources.Values.Sum(versions => versions.Sum(v => (long)v.Content.Length)),
+                ResourceCount = container.Resources.Count,
+                VersionCount = container.Resources.Values.Sum(versions => (long)versions.Count),
+                DeletedSize = container.Deleted.Values.Sum(bin => bin.Sum(v => (long)v.Content.Length)),
+                DeletedVersionCount = container.Deleted.Values.Sum(bin => (long)bin.Count)
+            }
+            : new ContainerUsage { StoredSize = 0, ResourceCount = 0, VersionCount = 0 }, cancellationToken);
 
     private async Task<T> UnderLockAsync<T>(Func<T> action, CancellationToken cancellationToken)
     {

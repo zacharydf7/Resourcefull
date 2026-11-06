@@ -110,7 +110,7 @@ app.MapPost("/api/resources/{containerName}", async (string containerName, IReso
     var resourceUploadOptions = new ResourceUploadOptions()
     {
         Mode = overwrite ? ResourceWriteMode.Replace : ResourceWriteMode.Create,
-        Headers = new(file.ContentType, file.Length),
+        Headers = new() { ContentType = file.ContentType, ContentLength = file.Length },
         Metadata = metadata
     };
 

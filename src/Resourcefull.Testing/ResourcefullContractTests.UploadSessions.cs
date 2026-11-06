@@ -18,7 +18,7 @@ public abstract partial class ResourcefullContractTests
         byte[] whole = [.. parts.SelectMany(p => p)];
         ResourceUploadSession upload = await container.StartUploadAsync("video.mp4", new ResourceUploadSessionOptions
         {
-            Headers = new ResourceHeaders("video/mp4", whole.Length),
+            Headers = new ResourceHeaders { ContentType = "video/mp4", ContentLength = whole.Length },
             Metadata = new Dictionary<string, string> { ["source"] = "camera" }
         });
 
@@ -190,10 +190,8 @@ public abstract partial class ResourcefullContractTests
         // Arrange: a session that said it would hold 5 bytes, with 3 appended.
         using ServiceProvider provider = BuildServiceProvider();
         IResourceContainerClient container = await NewContainerAsync(provider);
-        ResourceUploadSession upload = await container.StartUploadAsync("a", new ResourceUploadSessionOptions
-        {
-            Headers = new ResourceHeaders(null, 5)
-        });
+        ResourceUploadSession upload = await container.StartUploadAsync("a",
+            new ResourceUploadSessionOptions { Headers = new ResourceHeaders { ContentLength = 5 } });
         await container.AppendUploadAsync("a", upload.UploadId, 0, new MemoryStream([1, 2, 3]));
 
         // Act
@@ -218,13 +216,18 @@ public abstract partial class ResourcefullContractTests
             MaxResourceSize = 10, MaxResourceCount = 1, AllowedContentTypes = ["application/pdf"]
         }));
         IResourceContainerClient container = await NewContainerAsync(provider);
-        var pdf = new ResourceUploadSessionOptions { Headers = new ResourceHeaders("application/pdf", null) };
+        var pdf = new ResourceUploadSessionOptions { Headers =
+            new ResourceHeaders { ContentType = "application/pdf" } };
 
         // Act & Assert: the start refuses a type or an expected length the policy refuses.
         await Assert.ThrowsAsync<ResourcePolicyViolationException>(() => container.StartUploadAsync("a",
-            new ResourceUploadSessionOptions { Headers = new ResourceHeaders("text/html", null) }));
+            new ResourceUploadSessionOptions { Headers = new ResourceHeaders { ContentType = "text/html" } }));
         await Assert.ThrowsAsync<ResourcePolicyViolationException>(() => container.StartUploadAsync("a",
-            new ResourceUploadSessionOptions { Headers = new ResourceHeaders("application/pdf", 11) }));
+            new ResourceUploadSessionOptions { Headers = new ResourceHeaders
+            {
+                ContentType = "application/pdf",
+                ContentLength = 11
+            } }));
 
         // An append stops at the size limit, counting what's already stored.
         ResourceUploadSession upload = await container.StartUploadAsync("a", pdf);
@@ -236,7 +239,7 @@ public abstract partial class ResourcefullContractTests
 
         // Completing a new name in a full container is refused, and the session stays.
         await container.UploadAsync("other.pdf", BinaryData.FromString("x"),
-            new ResourceUploadOptions { Headers = new ResourceHeaders("application/pdf", null) });
+            new ResourceUploadOptions { Headers = new ResourceHeaders { ContentType = "application/pdf" } });
         var full = await Assert.ThrowsAsync<ResourcePolicyViolationException>(() => container.CompleteUploadAsync("a", upload.UploadId));
         Assert.Equal(ResourcePolicyRule.MaxResourceCount, full.Rule);
         Assert.NotNull(await container.GetUploadAsync("a", upload.UploadId));
@@ -248,10 +251,8 @@ public abstract partial class ResourcefullContractTests
         Requires(SupportsUploadSessions, "upload sessions");
 
         // Arrange: the container holds 10 bytes in all, and no limit is set for one resource.
-        using ServiceProvider provider = BuildServiceProvider(o => o.UseContainerPolicies(new ContainerPolicy
-        {
-            MaxContainerSize = 10
-        }));
+        using ServiceProvider provider = BuildServiceProvider(o => o.UseContainerPolicies(
+            new ContainerPolicy { MaxContainerSize = 10 }));
         IResourceContainerClient container = await NewContainerAsync(provider);
         ResourceUploadSession upload = await container.StartUploadAsync("a");
         await container.AppendUploadAsync("a", upload.UploadId, 0, new MemoryStream(new byte[6]));

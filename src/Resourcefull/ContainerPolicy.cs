@@ -156,16 +156,26 @@ public enum ResourcePolicyRule
 /// What a container holds.
 /// <para>Coming in 4.0.</para>
 /// </summary>
-/// <param name="StoredSize">
-/// The size of every version of every resource in it. A version stored by a release before 3.0 counts its recorded
-/// length, which an application may have declared wrongly.
-/// </param>
-/// <param name="ResourceCount">How many resources (names) it holds.</param>
-/// <param name="VersionCount">How many versions it holds, current and older.</param>
-/// <param name="DeletedSize">
-/// The size of the versions in its bin, which <see cref="StoredSize"/> leaves out; see
-/// <see cref="ContainerPolicy.KeepDeletedFor"/>.
-/// </param>
-/// <param name="DeletedVersionCount">How many versions its bin holds, which <see cref="VersionCount"/> leaves out.</param>
-public sealed record ContainerUsage(ResourceSize StoredSize, long ResourceCount, long VersionCount,
-    ResourceSize DeletedSize = default, long DeletedVersionCount = 0);
+public sealed record ContainerUsage
+{
+    /// <summary>
+    /// The size of every version of every resource in it. A version stored by a release before 3.0 counts its recorded
+    /// length, which an application may have declared wrongly.
+    /// </summary>
+    public required ResourceSize StoredSize { get; init; }
+
+    /// <summary>How many resources (names) it holds.</summary>
+    public required long ResourceCount { get; init; }
+
+    /// <summary>How many versions it holds, current and older.</summary>
+    public required long VersionCount { get; init; }
+
+    /// <summary>
+    /// The size of the versions in its bin, which <see cref="StoredSize"/> leaves out; see
+    /// <see cref="ContainerPolicy.KeepDeletedFor"/>.
+    /// </summary>
+    public ResourceSize DeletedSize { get; init; }
+
+    /// <summary>How many versions its bin holds, which <see cref="VersionCount"/> leaves out.</summary>
+    public long DeletedVersionCount { get; init; }
+}

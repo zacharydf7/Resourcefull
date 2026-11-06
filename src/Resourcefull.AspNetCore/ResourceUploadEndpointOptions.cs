@@ -84,12 +84,17 @@ public sealed class ResourceUploadLinkEndpointOptions
 /// What a client asks to upload, given to <see cref="ResourceUploadEndpointOptions.ResolveAsync"/>.
 /// <para>Coming in 4.0.</para>
 /// </summary>
-/// <param name="Length">The upload's length in bytes, from the request's <c>Upload-Length</c>.</param>
-/// <param name="Metadata">
-/// The request's <c>Upload-Metadata</c>, decoded: what the client says about the file, such as <c>filename</c> and
-/// <c>filetype</c>, which tus clients usually send. It comes from the client, so check it before using it.
-/// </param>
-public sealed record ResourceUploadRequest(long Length, IReadOnlyDictionary<string, string> Metadata);
+public sealed record ResourceUploadRequest
+{
+    /// <summary>The upload's length in bytes, from the request's <c>Upload-Length</c>.</summary>
+    public required long Length { get; init; }
+
+    /// <summary>
+    /// The request's <c>Upload-Metadata</c>, decoded: what the client says about the file, such as <c>filename</c> and
+    /// <c>filetype</c>, which tus clients usually send. It comes from the client, so check it before using it.
+    /// </summary>
+    public required IReadOnlyDictionary<string, string> Metadata { get; init; }
+}
 
 /// <summary>
 /// Where an upload goes, and what its version is stored with, returned by

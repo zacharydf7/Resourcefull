@@ -15,7 +15,7 @@ public abstract partial class ResourcefullContractTests
         byte[] payload = RandomNumberGenerator.GetBytes(150_000);
         var options = new ResourceUploadOptions
         {
-            Headers = new ResourceHeaders("application/pdf", null),
+            Headers = new ResourceHeaders { ContentType = "application/pdf" },
             Metadata = new Dictionary<string, string> { ["author"] = "ada" }
         };
 
@@ -50,9 +50,17 @@ public abstract partial class ResourcefullContractTests
         // Act
         ResourceInfo undeclared = await container.UploadAsync("undeclared.bin", new MemoryStream(payload));
         ResourceInfo declared = await container.UploadAsync("declared.bin", new MemoryStream(payload),
-            new ResourceUploadOptions { Headers = new ResourceHeaders("application/octet-stream", payload.Length) });
+            new ResourceUploadOptions { Headers = new ResourceHeaders
+            {
+                ContentType = "application/octet-stream",
+                ContentLength = payload.Length
+            } });
         Exception? wrong = await Record.ExceptionAsync(() => container.UploadAsync("wrong.bin", new MemoryStream(payload),
-            new ResourceUploadOptions { Headers = new ResourceHeaders("application/octet-stream", payload.Length + 1) }));
+            new ResourceUploadOptions { Headers = new ResourceHeaders
+            {
+                ContentType = "application/octet-stream",
+                ContentLength = payload.Length + 1
+            } }));
 
         // Assert
         Assert.Equal(payload.Length, undeclared.ContentLength);

@@ -6,7 +6,7 @@ namespace Resourcefull.Tests.Unit;
 /// <summary>Copies and moves through providers written before they existed.</summary>
 public class ResourceCopyTests
 {
-    private static readonly WrittenContent Written = new(5, "sha256:written", new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero));
+    private static readonly WrittenContent Written = new() { ContentLength = 5, ContentHash = "sha256:written", LastModified = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero) };
 
     [Fact]
     public async Task CopyResourceAsync_ShouldStoreTheSourcesContentThroughAddResource_WhenTheProviderDoesNotOverrideIt()

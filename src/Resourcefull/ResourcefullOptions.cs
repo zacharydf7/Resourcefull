@@ -5,7 +5,7 @@
 /// <c>IOptions&lt;ResourcefullOptions&gt;</c> to read them, or for a named store,
 /// <c>IOptionsMonitor&lt;ResourcefullOptions&gt;</c> and call <c>Get</c> with its name.
 /// </summary>
-public class ResourcefullOptions
+public sealed class ResourcefullOptions
 {
     /// <summary>
     /// Gets how many versions of each name to keep, including the current one, in a container whose

@@ -77,7 +77,11 @@ public static class ResourceContainerClientHttpExtensions
         {
             Mode = mode,
             Conditions = conditions,
-            Headers = options?.Headers ?? new ResourceHeaders(request.ContentType, request.ContentLength),
+            Headers = options?.Headers ?? new ResourceHeaders
+            {
+                ContentType = request.ContentType,
+                ContentLength = request.ContentLength
+            },
             Metadata = options?.Metadata ?? new Dictionary<string, string>(),
             ExpiresAt = options?.ExpiresAt
         };

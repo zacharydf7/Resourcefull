@@ -85,7 +85,7 @@ as any other code does. (A statically rendered component has no `InputFile` even
       // Browsers report an empty type for files they don't recognize; store none rather than an empty one.
       string? type = string.IsNullOrEmpty(e.File.ContentType) ? null : e.File.ContentType;
       await Resources.GetContainerClient("files").UploadAsync(e.File.Name, content,
-          new ResourceUploadOptions { Headers = new ResourceHeaders(type, e.File.Size) });
+          new ResourceUploadOptions { Headers = new ResourceHeaders { ContentType = type, ContentLength = e.File.Size } });
   }
   ```
 

@@ -61,7 +61,7 @@ app.MapPost("/files/{container}", async (string container, IFormFile file, IReso
     ResourceInfo stored = await resources.GetContainerClient(container).UploadAsync(name, content,
         new ResourceUploadOptions
         {
-            Headers = new ResourceHeaders(file.ContentType, file.Length),
+            Headers = new ResourceHeaders { ContentType = file.ContentType, ContentLength = file.Length },
             Metadata = new Dictionary<string, string> { ["fileName"] = file.FileName }
         }, cancellationToken);
     return Results.Created(stored.Uri, stored);

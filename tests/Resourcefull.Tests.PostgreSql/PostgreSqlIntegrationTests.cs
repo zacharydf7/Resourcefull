@@ -148,7 +148,7 @@ public sealed class PostgreSqlIntegrationTests(PostgreSqlFixture fixture)
         await Assert.ThrowsAsync<ArgumentException>(() => repository.ImportVersionAsync(
             new NewResourceVersion(new ResourceAddress(container.Name, "nul\0name"), "v1"), new MemoryStream([1])));
         await Assert.ThrowsAsync<ArgumentException>(() => container.UploadAsync("b", BinaryData.FromString("b"),
-            new ResourceUploadOptions { Headers = new ResourceHeaders("text/plain\0", null) }));
+            new ResourceUploadOptions { Headers = new ResourceHeaders { ContentType = "text/plain\0" } }));
         await Assert.ThrowsAsync<ArgumentException>(() => container.SetContentTypeAsync("a", null, "text/plain\0"));
         await Assert.ThrowsAsync<ResourceContainerNotFoundException>(() => container.CopyResourceAsync("a", container.Name + "\0", "a"));
         Assert.Equal(["a"], (await container.ListResourcesAsync().ToListAsync()).Select(r => r.Name));

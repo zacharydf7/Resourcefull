@@ -13,7 +13,7 @@ public class ResourceLinkTests
     {
         TestApp app = await TestApp.StartAsync(clock: clock);
         await app.Files.UploadAsync("2026/report.txt", BinaryData.FromString("first"),
-            new ResourceUploadOptions { Headers = new ResourceHeaders("text/plain", null) });
+            new ResourceUploadOptions { Headers = new ResourceHeaders { ContentType = "text/plain" } });
         return app;
     }
 
@@ -25,9 +25,13 @@ public class ResourceLinkTests
     {
         // Arrange: an inline link to whatever is current, and the image it was made for replaced by a web page.
         await using TestApp app = await TestApp.StartAsync();
-        await app.Files.UploadAsync("avatar", BinaryData.FromString("png"), new ResourceUploadOptions { Headers = new ResourceHeaders("image/png", null) });
+        await app.Files.UploadAsync("avatar", BinaryData.FromString("png"), new ResourceUploadOptions { Headers =
+            new ResourceHeaders { ContentType = "image/png" } });
         string token = await TokenAsync(app, new ResourceLink(TestApp.Container, "avatar") { Inline = true, FollowCurrent = true });
-        await app.Files.UploadAsync("avatar", BinaryData.FromString("<script></script>"), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace, Headers = new ResourceHeaders("text/html", null) });
+        await app.Files.UploadAsync("avatar", BinaryData.FromString("<script></script>"), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace, Headers = new ResourceHeaders
+        {
+            ContentType = "text/html"
+        } });
 
         // Act
         HttpResponseMessage response = await app.Client.GetAsync("/shared/" + token);
@@ -192,10 +196,17 @@ public class ResourceLinkTests
         ResourceLinkCheck expired = app.Links.Check(token);
 
         // Assert
-        var granted = new SignedResourceLink(TestApp.Container, "2026/report.txt", current.VersionId, new DateTimeOffset(2026, 1, 1, 2, 0, 0, TimeSpan.Zero), true);
-        Assert.Equal(new ResourceLinkCheck(ResourceLinkStatus.Valid, granted), valid);
-        Assert.Equal(new ResourceLinkCheck(ResourceLinkStatus.Expired, granted), expired);
-        Assert.Equal(new ResourceLinkCheck(ResourceLinkStatus.Invalid, null), app.Links.Check(""));
+        var granted = new SignedResourceLink
+        {
+            ContainerName = TestApp.Container,
+            ResourceName = "2026/report.txt",
+            VersionId = current.VersionId,
+            ExpiresAt = new DateTimeOffset(2026, 1, 1, 2, 0, 0, TimeSpan.Zero),
+            Inline = true
+        };
+        Assert.Equal(new ResourceLinkCheck { Status = ResourceLinkStatus.Valid, Link = granted }, valid);
+        Assert.Equal(new ResourceLinkCheck { Status = ResourceLinkStatus.Expired, Link = granted }, expired);
+        Assert.Equal(new ResourceLinkCheck { Status = ResourceLinkStatus.Invalid }, app.Links.Check(""));
     }
 
     [Fact]

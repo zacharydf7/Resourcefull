@@ -369,7 +369,7 @@ public class ContainerPolicyTests
         ContainerUsage usage = await repository.Object.GetContainerUsageAsync("c");
 
         // Assert
-        Assert.Equal(new ContainerUsage(15, 2, 3), usage);
+        Assert.Equal(new ContainerUsage { StoredSize = 15, ResourceCount = 2, VersionCount = 3 }, usage);
     }
 
     [Fact]
@@ -392,7 +392,12 @@ public class ContainerPolicyTests
 
         // Assert
         int names = ResourceListOptions.DefaultPageSize + 1;
-        Assert.Equal(new ContainerUsage(2L * names, names, names), usage);
+        Assert.Equal(new ContainerUsage
+        {
+            StoredSize = 2L * names,
+            ResourceCount = names,
+            VersionCount = names
+        }, usage);
         repository.Verify(r => r.GetResourcePageAsync("c", null, last, It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 

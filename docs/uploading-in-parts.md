@@ -20,7 +20,7 @@ This page is about calling sessions from your own code. For uploads from browser
 // 1. Start: say what the file is. Nothing is stored yet.
 ResourceUploadSession upload = await container.StartUploadAsync("video.mp4", new ResourceUploadSessionOptions
 {
-    Headers = new ResourceHeaders("video/mp4", ContentLength: fileLength),
+    Headers = new ResourceHeaders { ContentType = "video/mp4", ContentLength = fileLength },
     Metadata = new Dictionary<string, string> { ["camera"] = "front door" }
 });
 

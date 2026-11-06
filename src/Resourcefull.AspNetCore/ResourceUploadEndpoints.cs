@@ -296,7 +296,11 @@ internal sealed partial class ResourceUploadEndpoints(ResourceUploadEndpointOpti
             target = await LinkTargetAsync(httpContext, length, metadata).ConfigureAwait(false);
             if (target is null) return;
         }
-        else if ((target = await options.ResolveAsync!(httpContext, new ResourceUploadRequest(length, metadata)).ConfigureAwait(false)) is null)
+        else if ((target = await options.ResolveAsync!(httpContext, new ResourceUploadRequest
+        {
+            Length = length,
+            Metadata = metadata
+        }).ConfigureAwait(false)) is null)
         {
             response.StatusCode = StatusCodes.Status403Forbidden;
             return;
@@ -316,7 +320,7 @@ internal sealed partial class ResourceUploadEndpoints(ResourceUploadEndpointOpti
             }
             upload = await container.StartUploadAsync(target.ResourceName, new ResourceUploadSessionOptions
             {
-                Headers = new ResourceHeaders(target.ContentType, length),
+                Headers = new ResourceHeaders { ContentType = target.ContentType, ContentLength = length },
                 Metadata = target.Metadata,
                 ExpiresAt = target.ExpiresAt,
                 RetainUntil = target.RetainUntil,

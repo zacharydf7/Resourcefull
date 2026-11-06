@@ -35,10 +35,10 @@ public class BinListingTests(FileSystemFixture fixture)
         {
             foreach ((string name, string versionId) in versions)
             {
-                yield return new ImportedVersion(new ResourceInfo
+                yield return new ImportedVersion { Version = new ResourceInfo
                 {
                     ContainerName = "", Name = name, VersionId = versionId, LastModified = new FixedClock().GetUtcNow()
-                }, _ => Task.FromResult<Stream?>(new MemoryStream([1])));
+                }, OpenContentAsync = _ => Task.FromResult<Stream?>(new MemoryStream([1])) };
             }
             await Task.CompletedTask;
         }

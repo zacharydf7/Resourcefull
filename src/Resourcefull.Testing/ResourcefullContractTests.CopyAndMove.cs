@@ -15,7 +15,7 @@ public abstract partial class ResourcefullContractTests
         byte[] payload = RandomNumberGenerator.GetBytes(150_000);
         ResourceInfo original = await source.UploadAsync("report.pdf", new MemoryStream(payload), new ResourceUploadOptions
         {
-            Headers = new ResourceHeaders("application/pdf", null),
+            Headers = new ResourceHeaders { ContentType = "application/pdf" },
             Metadata = new Dictionary<string, string> { ["author"] = "ada" }
         });
 

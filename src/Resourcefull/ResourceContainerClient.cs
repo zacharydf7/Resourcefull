@@ -311,7 +311,12 @@ internal partial class ResourceContainerClient(ResourceRepository resourceReposi
         if (!version.IsDeletableAt(now)) return;
         // Told first, so a handler that fails leaves the version for a later prune rather than deleted unreported.
         if (cleanupHandler is not null)
-            await _telemetry.NotifyCleanupAsync(cleanupHandler, new ResourceCleanup(version, ResourceCleanupReason.Pruned, now), cancellationToken).ConfigureAwait(false);
+            await _telemetry.NotifyCleanupAsync(cleanupHandler, new ResourceCleanup
+            {
+                Version = version,
+                Reason = ResourceCleanupReason.Pruned,
+                At = now
+            }, cancellationToken).ConfigureAwait(false);
         try
         {
             await DeleteAsync(new ResourceAddress(version.ContainerName, version.Name), version.VersionId, null,
@@ -474,7 +479,7 @@ internal partial class ResourceContainerClient(ResourceRepository resourceReposi
 
         long totalLength = stream.Length;
         if (range is not { } part)
-            return new ResourceDownloadResult(resourceInfo, _telemetry.CountDownloaded(stream)) { TotalLength = totalLength };
+            return new ResourceDownloadResult(resourceInfo, _telemetry.CountDownloaded(stream), totalLength);
 
         if (part.Offset > totalLength)
         {
@@ -486,9 +491,8 @@ internal partial class ResourceContainerClient(ResourceRepository resourceReposi
         }
 
         long length = Math.Min(part.Length ?? long.MaxValue, totalLength - part.Offset);
-        return new ResourceDownloadResult(resourceInfo, _telemetry.CountDownloaded(new ResourceRangeStream(stream, length)))
+        return new ResourceDownloadResult(resourceInfo, _telemetry.CountDownloaded(new ResourceRangeStream(stream, length)), totalLength)
         {
-            TotalLength = totalLength,
             Range = new ResourceRange(part.Offset, length)
         };
     }
@@ -504,7 +508,11 @@ internal partial class ResourceContainerClient(ResourceRepository resourceReposi
             await using var streamDisposal = stream.ConfigureAwait(false);
             using var memoryStream = new MemoryStream();
             await stream.CopyToAsync(memoryStream, cancellationToken).ConfigureAwait(false);
-            return new ResourceContent(result.ResourceInfo, BinaryData.FromBytes(memoryStream.ToArray()));
+            return new ResourceContent
+            {
+                ResourceInfo = result.ResourceInfo,
+                Content = BinaryData.FromBytes(memoryStream.ToArray())
+            };
         });
 
     public Task<ResourceInfo?> GetResourceInfoAsync(string resourceName, string? versionId = null,

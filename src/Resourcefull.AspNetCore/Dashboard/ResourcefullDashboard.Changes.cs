@@ -103,7 +103,11 @@ public static partial class ResourcefullDashboardEndpointRouteBuilderExtensions
             ResourceInfo stored = await resources.GetContainerClient(container).UploadAsync(name, request.Body, new ResourceUploadOptions
             {
                 Mode = replace == true ? ResourceWriteMode.Replace : ResourceWriteMode.Create,
-                Headers = new ResourceHeaders(request.ContentType, request.ContentLength)
+                Headers = new ResourceHeaders
+                {
+                    ContentType = request.ContentType,
+                    ContentLength = request.ContentLength
+                }
             }, cancellationToken).ConfigureAwait(false);
             Audit(httpContext, "upload", container, name, stored.VersionId);
             return Results.Json(View(stored), Json, statusCode: StatusCodes.Status201Created);

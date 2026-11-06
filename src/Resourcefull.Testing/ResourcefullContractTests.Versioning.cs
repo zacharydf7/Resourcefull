@@ -203,12 +203,12 @@ public abstract partial class ResourcefullContractTests
         IResourceContainerClient container = await NewContainerAsync(provider);
         ResourceInfo first = await container.UploadAsync("doc", BinaryData.FromString("v1"), new ResourceUploadOptions
         {
-            Headers = new ResourceHeaders("text/plain", null),
+            Headers = new ResourceHeaders { ContentType = "text/plain" },
             Metadata = new Dictionary<string, string> { ["draft"] = "1" }
         });
         await container.UploadAsync("doc", BinaryData.FromString("v2"), new ResourceUploadOptions
         { Mode = ResourceWriteMode.Replace,
-            Headers = new ResourceHeaders("text/markdown", null),
+            Headers = new ResourceHeaders { ContentType = "text/markdown" },
             Metadata = new Dictionary<string, string> { ["draft"] = "2", ["reviewed"] = "yes" }
         });
 

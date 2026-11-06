@@ -155,7 +155,14 @@ internal class ResourcePostgreSqlRepository(IDbContextFactory<ResourceDbContext>
             FROM "Resources" r
             WHERE r."ContainerName" = {containerName} AND r."StagedAt" IS NULL
             """)).ToListAsync(cancellationToken).ConfigureAwait(false))[0];
-        return new ContainerUsage(usage.StoredSize, usage.ResourceCount, usage.VersionCount, usage.DeletedSize, usage.DeletedVersionCount);
+        return new ContainerUsage
+        {
+            StoredSize = usage.StoredSize,
+            ResourceCount = usage.ResourceCount,
+            VersionCount = usage.VersionCount,
+            DeletedSize = usage.DeletedSize,
+            DeletedVersionCount = usage.DeletedVersionCount
+        };
     }
 
     protected override async Task<bool> LockVersionInContainerAsync(ResourceDbContext attempt, long resourceId,

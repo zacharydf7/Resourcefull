@@ -262,7 +262,7 @@ public class UploadLinkTests
         Assert.Equal((TestApp.Container, (string?)null, "in/", (long?)10, ResourceWriteMode.Replace, new DateTimeOffset(2026, 1, 1, 2, 0, 0, TimeSpan.Zero)),
             (allowed.ContainerName, allowed.ResourceName, allowed.NamePrefix, allowed.MaxSize, allowed.Mode, allowed.ExpiresAt));
         Assert.Equal(["image/*"], allowed.AllowedContentTypes!);
-        Assert.Equal(new ResourceUploadLinkCheck(ResourceLinkStatus.Invalid, null), app.Links.CheckUpload(""));
+        Assert.Equal(new ResourceUploadLinkCheck { Status = ResourceLinkStatus.Invalid }, app.Links.CheckUpload(""));
     }
 
     [Fact]

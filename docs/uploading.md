@@ -10,7 +10,7 @@ Resourcefull checks each file's length and hash as it's stored.
 ResourceInfo stored = await container.UploadAsync("report.pdf", stream, new ResourceUploadOptions
 {
     Mode = ResourceWriteMode.Replace,
-    Headers = new ResourceHeaders("application/pdf", ContentLength: null),
+    Headers = new ResourceHeaders { ContentType = "application/pdf" },
     Metadata = new Dictionary<string, string> { ["author"] = "finance" }
 });
 ```

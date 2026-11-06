@@ -7,7 +7,7 @@ public class ResourceConditionsTests
 {
     private const string Container = "containerName";
 
-    private static readonly WrittenContent Written = new(1, "sha256:written", DateTimeOffset.UnixEpoch);
+    private static readonly WrittenContent Written = new() { ContentLength = 1, ContentHash = "sha256:written", LastModified = DateTimeOffset.UnixEpoch };
 
     private static ResourceContainerClient NewClient(ResourceRepository repository, bool versioning = false) =>
         new(repository, null, new ResourcefullOptions { MaxVersions = versioning ? 100 : 1 }, Container, null);

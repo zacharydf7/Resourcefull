@@ -31,7 +31,14 @@ internal partial class ResourceContainerClient
             LegalHold = options.LegalHold
         };
         await resourceRepository.StartStagedVersionAsync(version, cancellationToken).ConfigureAwait(false);
-        return new ResourceUploadSession(ContainerName, resourceName, version.VersionId, 0, version.DeclaredLength);
+        return new ResourceUploadSession
+        {
+            ContainerName = ContainerName,
+            ResourceName = resourceName,
+            UploadId = version.VersionId,
+            Offset = 0,
+            DeclaredLength = version.DeclaredLength
+        };
     }
 
     public Task<ResourceUploadSession?> GetUploadAsync(string resourceName, string uploadId, CancellationToken cancellationToken = default)
@@ -102,8 +109,14 @@ internal partial class ResourceContainerClient
     }
 
     private ResourceUploadSession Describe(StagedVersion staged) =>
-        new(ContainerName, staged.Version.Resource.ResourceName, staged.Version.VersionId, staged.StoredLength,
-            staged.Version.DeclaredLength);
+        new()
+        {
+            ContainerName = ContainerName,
+            ResourceName = staged.Version.Resource.ResourceName,
+            UploadId = staged.Version.VersionId,
+            Offset = staged.StoredLength,
+            DeclaredLength = staged.Version.DeclaredLength
+        };
 
     public Task<ResourceInfo?> CompleteUploadAsync(string resourceName, string uploadId, ResourceCompleteUploadOptions? options = null,
         CancellationToken cancellationToken = default)

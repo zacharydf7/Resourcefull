@@ -28,10 +28,17 @@ public interface IResourceCleanupHandler
 /// A version Resourcefull is about to delete by itself.
 /// <para>Coming in 4.0.</para>
 /// </summary>
-/// <param name="Version">The version, as stored.</param>
-/// <param name="Reason">Why it's being deleted.</param>
-/// <param name="At">When the cleanup that's deleting it started.</param>
-public sealed record ResourceCleanup(ResourceInfo Version, ResourceCleanupReason Reason, DateTimeOffset At);
+public sealed record ResourceCleanup
+{
+    /// <summary>The version, as stored.</summary>
+    public required ResourceInfo Version { get; init; }
+
+    /// <summary>Why it's being deleted.</summary>
+    public required ResourceCleanupReason Reason { get; init; }
+
+    /// <summary>When the cleanup that's deleting it started.</summary>
+    public required DateTimeOffset At { get; init; }
+}
 
 /// <summary>
 /// Why Resourcefull is deleting a version by itself.

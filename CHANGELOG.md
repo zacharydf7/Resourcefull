@@ -304,6 +304,18 @@
 
 ### Changed
 
+- **Records that can grow.** Records that hold results and settings have `init` properties in place of positional
+  parameters, `required` where a value must be given, so a later release can add a member without breaking anything.
+  For example, `new ResourceHeaders { ContentType = type }`. The same goes for `ContainerUsage`, `ResourceCleanup`,
+  `ResourceUploadSession`, `ResourceUploadInspection`, `ResourceContent`, `StoreCopyResult` and the other copy, export
+  and import results, `ImportedVersion`, `DeletedVersionPage`, `StagedVersion`, `WrittenContent`,
+  `ContentHashBackfillResult`, `ContentLengthMismatch`, and ASP.NET Core's `SignedResourceLink`,
+  `SignedResourceUploadLink`, `ResourceLinkCheck`, `ResourceUploadLinkCheck` and `ResourceUploadRequest`. What identifies
+  something stays positional: `ResourceAddress` is all identity, and `ResourceLink` takes its container and resource
+  names by position and the rest as properties.
+- **Sealed types.** `ResourceDownloadResult` is a sealed class, because a record's `with` made a second owner of its
+  stream, and its one constructor requires `totalLength`. `ResourceUploadOptions`, `ResourcefullOptions`,
+  `ResourcefullOptionsBuilder` and every public record are sealed, and the builder's `Services` has no setter.
 - **Consistent names in the core API.** Parameters: `containerName` replaces `resourceContainerName`,
   `destinationContainerName` replaces `destinationContainer` on `CopyResourceAsync` and `MoveResourceAsync`, `count`
   replaces `maxVersions` on `GetExpiredVersionsAsync`, and `storeName` replaces `name` on `AddKeyedResourcefull`. Types:

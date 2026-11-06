@@ -5,12 +5,17 @@ namespace Resourcefull.Providers;
 /// found, newest deletion first, and where the next page starts.
 /// <para>Coming in 4.0.</para>
 /// </summary>
-/// <param name="Versions">
-/// The deleted versions found, each with <see cref="ResourceInfo.DeletedAt"/> and <see cref="ResourceInfo.PurgeAt"/>
-/// set. With a prefix, there may be fewer than were asked for even when more follow.
-/// </param>
-/// <param name="Next">
-/// Where the next page continues, past every version this page looked at, including those the prefix left out;
-/// <see langword="null"/> when the bin has nothing more. Its <see cref="ResourceVersionKey.At"/> is the deletion time.
-/// </param>
-public sealed record DeletedVersionPage(IReadOnlyList<ResourceInfo> Versions, ResourceVersionKey? Next);
+public sealed record DeletedVersionPage
+{
+    /// <summary>
+    /// The deleted versions found, each with <see cref="ResourceInfo.DeletedAt"/> and <see cref="ResourceInfo.PurgeAt"/>
+    /// set. With a prefix, there may be fewer than were asked for even when more follow.
+    /// </summary>
+    public required IReadOnlyList<ResourceInfo> Versions { get; init; }
+
+    /// <summary>
+    /// Where the next page continues, past every version this page looked at, including those the prefix left out;
+    /// <see langword="null"/> when the bin has nothing more. Its <see cref="ResourceVersionKey.At"/> is the deletion time.
+    /// </summary>
+    public required ResourceVersionKey? Next { get; init; }
+}

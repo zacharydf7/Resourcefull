@@ -14,7 +14,7 @@ namespace Resourcefull;
 /// <see cref="ResourcefullServiceCollectionExtensions.AddKeyedResourcefull"/>: its storage provider, versioning, URI
 /// provider, telemetry, container policies and expiry.
 /// </summary>
-public class ResourcefullOptionsBuilder
+public sealed class ResourcefullOptionsBuilder
 {
     private bool _expiryRegistered;
 
@@ -30,7 +30,7 @@ public class ResourcefullOptionsBuilder
     /// <summary>
     /// Gets the application's service collection, for provider extensions to register their services in.
     /// </summary>
-    public IServiceCollection Services { get; init; }
+    public IServiceCollection Services { get; }
 
     /// <summary>
     /// Gets the store's name, given to <see cref="ResourcefullServiceCollectionExtensions.AddKeyedResourcefull"/>, or

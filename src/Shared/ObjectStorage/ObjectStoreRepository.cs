@@ -425,7 +425,7 @@ internal sealed partial class ObjectStoreRepository(IObjectStore store, string k
         CancellationToken cancellationToken = default)
     {
         if (await GetContainerAsync(containerName, cancellationToken).ConfigureAwait(false) is not { } container)
-            return new ContainerUsage(0, 0, 0);
+            return new ContainerUsage { StoredSize = 0, ResourceCount = 0, VersionCount = 0 };
 
         long storedBytes = 0, versions = 0, resources = 0;
         await foreach (ObjectListing content in store.ListAsync(_keys.Contents(container.Id), null, cancellationToken).ConfigureAwait(false))
@@ -446,8 +446,14 @@ internal sealed partial class ObjectStoreRepository(IObjectStore store, string k
         }
         await foreach (ObjectListing _ in store.ListAsync(_keys.EmptiedNames(container.Id), null, cancellationToken).ConfigureAwait(false))
             resources--;
-        return new ContainerUsage(Math.Max(0, storedBytes - deletedBytes), Math.Max(0, resources),
-            Math.Max(0, versions - deletedVersions), deletedBytes, deletedVersions);
+        return new ContainerUsage
+        {
+            StoredSize = Math.Max(0, storedBytes - deletedBytes),
+            ResourceCount = Math.Max(0, resources),
+            VersionCount = Math.Max(0, versions - deletedVersions),
+            DeletedSize = deletedBytes,
+            DeletedVersionCount = deletedVersions
+        };
     }
 
     // Expiry: an index of the versions that expire, one entry each under {prefix}x/, keyed by expiry time, so a sweep
