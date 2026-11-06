@@ -1,6 +1,7 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
+using Resourcefull.InMemory;
 
-namespace Resourcefull.InMemory;
+namespace Resourcefull;
 
 /// <summary>
 /// Configures Resourcefull to keep resources in process memory.

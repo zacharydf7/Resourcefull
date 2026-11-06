@@ -1,4 +1,5 @@
 using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Logging;
@@ -10,6 +11,22 @@ namespace Resourcefull.Tests.Sqlite;
 [Collection(SqliteCollection.Name)]
 public class SqliteIntegrationTests(SqliteFixture fixture)
 {
+    [Fact]
+    public async Task UseSqlite_ShouldApplyTheCallersOptions_WhenGivenConfigureSqlite()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        services.AddResourcefull(options => options.UseSqlite("Data Source=unused", o => o.ConfigureSqlite = sqlite => sqlite.CommandTimeout(77)));
+        await using ServiceProvider provider = services.BuildServiceProvider();
+
+        // Act
+        await using ResourceDbContext dbContext =
+            await provider.GetRequiredService<IDbContextFactory<ResourceDbContext>>().CreateDbContextAsync();
+
+        // Assert
+        Assert.Equal(77, dbContext.Database.GetCommandTimeout());
+    }
+
     [Fact]
     public async Task UploadAsync_ShouldStoreOneVersion_WhenProcessesSharingTheDatabaseCreateTheSameNameAtOnce()
     {

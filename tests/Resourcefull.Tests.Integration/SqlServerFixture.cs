@@ -113,7 +113,7 @@ public class SqlServerFixture : IAsyncLifetime
         var services = new ServiceCollection();
         services.AddResourcefull(options =>
         {
-            options.UseSqlServer(ConnectionString, _ => { }, Schema);
+            options.UseSqlServer(ConnectionString, o => o.Schema = Schema);
             configure?.Invoke(options);
         });
         return services.BuildServiceProvider();

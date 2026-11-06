@@ -1,7 +1,6 @@
 using Azure;
 using Azure.Storage.Blobs;
 using Microsoft.Extensions.DependencyInjection;
-using Resourcefull.AzureBlob;
 
 namespace Resourcefull.Tests.AzureBlob;
 
@@ -51,7 +50,7 @@ public sealed class AzureBlobFixture : IAsyncLifetime
         var services = new ServiceCollection();
         services.AddResourcefull(options =>
         {
-            options.UseAzureBlobStorage(ContainerName, azure =>
+            options.UseAzureBlob(ContainerName, azure =>
             {
                 azure.Client = Client;
                 azure.KeyPrefix = keyPrefix;

@@ -1,7 +1,8 @@
 using Microsoft.Extensions.DependencyInjection;
 using Resourcefull.ObjectStorage;
+using Resourcefull.FileSystem;
 
-namespace Resourcefull.FileSystem;
+namespace Resourcefull;
 
 /// <summary>
 /// Configures Resourcefull to store resources in a directory.

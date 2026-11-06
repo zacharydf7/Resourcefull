@@ -6,7 +6,7 @@
 
 - **PostgreSQL.** The new `Resourcefull.PostgreSql` package stores resources in PostgreSQL, with everything the SQL
   Server provider does: chunked streaming, versions, conditional writes, copies and moves, expiry, staged uploads,
-  container policies, export and import. `UsePostgreSql(connectionString, configure, schema)` registers it, and
+  container policies, export and import. `UsePostgreSql(connectionString, configure)` registers it, and
   `MigrateResourcefullDatabaseAsync` and `GenerateResourcefullScript` provision it. It keeps times to the microsecond,
   lists names in Unicode code point order, and refuses U+0000 in the names, version IDs and content types it stores.
   `AddResourcefullPostgreSqlCheck` is its health check, and it counts retries and abandoned uploads in
@@ -51,7 +51,7 @@
 - **Azure Blob Storage.** The new `Resourcefull.AzureBlob` package stores resources in a blob container of an Azure
   Storage account, working as the S3 provider does and sharing its code: conditional writes (`If-None-Match: *` and
   `If-Match`) keep one current version per name, and content of 8 MiB or more goes up in blocks.
-  `UseAzureBlobStorage(containerName, configure)` registers it, with a `BlobServiceClient` and a key prefix of your
+  `UseAzureBlob(containerName, configure)` registers it, with a `BlobServiceClient` and a key prefix of your
   choosing, or the `BlobServiceClient` registered in your services. It supports everything the S3 provider does.
   Completing an upload session has Azure join its segments with `Put Block From URL`, reading them through a link signed
   with the account key or, with Microsoft Entra ID, a user delegation key. It counts writes retried after a concurrent
@@ -123,7 +123,7 @@
   callers. Providers implement `GetContainerPageAsync` in place of `GetAllResourceContainerInfoAsync`, which returned
   every container. Each page records a `list_containers` span with `resourcefull.page_size`. See
   [Listing containers](docs/containers.md#listing-containers).
-- **A schema for SQL Server's tables.** `UseSqlServer(connectionString, configure, schema: "resourcefull")` puts
+- **A schema for SQL Server's tables.** `UseSqlServer(connectionString, o => o.Schema = "resourcefull")` puts
   Resourcefull's tables, and its own migration history, in a schema of their own, so they don't mix with an
   application's tables in `dbo`. `MigrateResourcefullDatabaseAsync` creates the schema, and the new
   `GenerateResourcefullScript` writes the provisioning script for it, since the packaged scripts are for `dbo`. Without
@@ -294,7 +294,7 @@
 - **Pruning a whole container.** The container client's `PruneAsync` prunes every resource in its container to
   `MaxVersions`, as each upload prunes its own name, for after an import or a failed prune. See
   [Versioning](docs/versioning.md#keeping-a-limited-number).
-- **SQL Server options.** `UseSqlServer(connectionString, sql => ...)` changes EF Core's SQL Server options after
+- **SQL Server options.** `UseSqlServer(connectionString, o => o.ConfigureSqlServer = sql => ...)` changes EF Core's SQL Server options after
   Resourcefull's own, such as the command timeout or the retries. See [SQL Server](docs/providers/sql-server.md#retries).
 - **Disposable downloads.** `ResourceDownloadResult` implements `IDisposable` and `IAsyncDisposable`, disposing its
   stream, so `await using` works on the download itself.
@@ -304,6 +304,15 @@
 
 ### Changed
 
+- **Provider registration is the same everywhere.** `UseSqlServer`, `UsePostgreSql` and `UseSqlite` take a connection
+  string and an optional callback that sets `ResourcefullSqlServerOptions`, `ResourcefullPostgreSqlOptions` or
+  `ResourcefullSqliteOptions`, as `UseS3` and `UseAzureBlob` do with theirs. `Schema` replaces the `schema` parameter,
+  as in `UseSqlServer(connectionString, o => o.Schema = "files")`, and `ConfigureSqlServer`, `ConfigurePostgreSql` and
+  `ConfigureSqlite` replace the EF Core callback. Every provider's `Use…` and health-check extensions are in the
+  `Resourcefull` namespace, so switching providers changes one line and no `using`; options classes and other
+  provider-specific types stay in the provider's namespace. `UseAzureBlobStorage` is now `UseAzureBlob`, and
+  `ResourcefullSqlOptionsExtensions` is now `ResourcefullSqlServerOptionsExtensions`. An invalid schema's
+  `ArgumentException` now has `configure` as its `ParamName`.
 - **Records that can grow.** Records that hold results and settings have `init` properties in place of positional
   parameters, `required` where a value must be given, so a later release can add a member without breaking anything.
   For example, `new ResourceHeaders { ContentType = type }`. The same goes for `ContainerUsage`, `ResourceCleanup`,

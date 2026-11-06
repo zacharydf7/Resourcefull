@@ -11,7 +11,6 @@ dotnet add package Resourcefull.PostgreSql
 
 ```csharp
 using Resourcefull;
-using Resourcefull.PostgreSql;
 
 builder.Services.AddResourcefull(options => options
     .UsePostgreSql(builder.Configuration.GetConnectionString("Resources")!));
@@ -36,7 +35,7 @@ own. To keep them apart, give `UsePostgreSql` a schema:
 
 ```csharp
 builder.Services.AddResourcefull(options => options
-    .UsePostgreSql(connectionString, npgsql => { }, schema: "resourcefull"));
+    .UsePostgreSql(connectionString, o => o.Schema = "resourcefull"));
 ```
 
 Resourcefull then qualifies its tables' names with that schema, as in `resourcefull."Resources"`, so they go there.
@@ -109,11 +108,11 @@ database.
 
 `UsePostgreSql` turns on EF Core's retry policy for PostgreSQL's transient errors, including deadlocks (`40P01`) and
 serialization failures (`40001`): up to 5 retries, at most 10 seconds apart. Change it, or the command timeout, with
-the `configure` callback:
+`ConfigurePostgreSql`:
 
 ```csharp
 builder.Services.AddResourcefull(options => options
-    .UsePostgreSql(connectionString, npgsql => npgsql.CommandTimeout(60)));
+    .UsePostgreSql(connectionString, o => o.ConfigurePostgreSql = npgsql => npgsql.CommandTimeout(60)));
 ```
 
 Replacing the retry policy, such as with `EnableRetryOnFailure`, also stops Resourcefull from counting retries in

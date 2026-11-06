@@ -2,8 +2,9 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
 using Resourcefull.Providers;
+using Resourcefull.Sqlite;
 
-namespace Resourcefull.Sqlite;
+namespace Resourcefull;
 
 /// <summary>
 /// Configures Resourcefull to store resources in SQLite.
@@ -19,26 +20,14 @@ public static class ResourcefullSqliteOptionsExtensions
     /// </summary>
     /// <param name="builder">The builder passed to <c>AddResourcefull</c>.</param>
     /// <param name="connectionString">The connection string of the database that holds Resourcefull's tables.</param>
+    /// <param name="configure">Sets EF Core's SQLite options; <see langword="null"/> keeps the defaults.</param>
     /// <returns><paramref name="builder"/>, for chaining.</returns>
     /// <exception cref="InvalidOperationException">A provider has already been configured.</exception>
-    public static ResourcefullOptionsBuilder UseSqlite(this ResourcefullOptionsBuilder builder, string connectionString)
-        => UseSqlite(builder, connectionString, _ => { });
-
-    /// <summary>
-    /// Stores resources in SQLite as <see cref="UseSqlite(ResourcefullOptionsBuilder, string)"/> does, then applies
-    /// <paramref name="configure"/> to EF Core's SQLite options, to change the command timeout, for example: how long a
-    /// write waits for another to finish before it fails, 30 seconds by default.
-    /// </summary>
-    /// <param name="builder">The builder passed to <c>AddResourcefull</c>.</param>
-    /// <param name="connectionString">The connection string of the database that holds Resourcefull's tables.</param>
-    /// <param name="configure">Changes EF Core's SQLite options, after Resourcefull has set its own.</param>
-    /// <returns><paramref name="builder"/>, for chaining.</returns>
-    /// <exception cref="InvalidOperationException">A provider has already been configured.</exception>
-    /// <exception cref="ArgumentNullException"><paramref name="configure"/> is null.</exception>
     public static ResourcefullOptionsBuilder UseSqlite(this ResourcefullOptionsBuilder builder, string connectionString,
-        Action<SqliteDbContextOptionsBuilder> configure)
+        Action<ResourcefullSqliteOptions>? configure = null)
     {
-        ArgumentNullException.ThrowIfNull(configure);
+        var settings = new ResourcefullSqliteOptions();
+        configure?.Invoke(settings);
         // Each store has its own contexts, so its factory and everything that uses it are registered under its name.
         string? storeName = builder.StoreName;
         builder.UseProvider(services => new ResourceSqliteRepository(
@@ -49,7 +38,7 @@ public static class ResourcefullSqliteOptionsExtensions
         {
             DbContextOptionsBuilder<ResourceDbContext> options = new DbContextOptionsBuilder<ResourceDbContext>()
                 .UseApplicationServiceProvider(services);
-            options.UseSqlite(connectionString, configure);
+            options.UseSqlite(connectionString, settings.ConfigureSqlite);
             // Last, apply the application's ConfigureDbContext calls to every store's contexts, as
             // AddDbContextFactory would.
             foreach (IDbContextOptionsConfiguration<ResourceDbContext> configuration in

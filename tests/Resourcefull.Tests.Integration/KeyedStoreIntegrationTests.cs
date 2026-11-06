@@ -61,7 +61,7 @@ public sealed class KeyedStoreIntegrationTests(SqlServerFixture fixture)
         var services = new ServiceCollection();
         services.AddResourcefull(options => options.UseSqlServer("Server=(non-existent);Database=Hot;Encrypt=False"));
         services.AddKeyedResourcefull("archive", options =>
-            options.UseSqlServer("Server=(non-existent);Database=Archive;Encrypt=False", _ => { }, schema: "archive"));
+            options.UseSqlServer("Server=(non-existent);Database=Archive;Encrypt=False", o => o.Schema = "archive"));
         using ServiceProvider provider = services.BuildServiceProvider();
 
         // Act

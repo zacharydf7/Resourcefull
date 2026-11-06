@@ -10,8 +10,6 @@ using OpenTelemetry.Metrics;
 using OpenTelemetry.Trace;
 using Resourcefull;
 using Resourcefull.AspNetCore;
-using Resourcefull.InMemory;
-using Resourcefull.SqlServer;
 
 var builder = WebApplication.CreateBuilder(args);
 

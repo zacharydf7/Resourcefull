@@ -13,7 +13,6 @@ dotnet add package Resourcefull.FileSystem
 
 ```csharp
 using Resourcefull;
-using Resourcefull.FileSystem;
 
 builder.Services.AddResourcefull(options => options.UseFileSystem("/var/lib/my-app/files"));
 ```

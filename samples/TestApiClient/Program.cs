@@ -2,8 +2,6 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using Resourcefull;
 using Resourcefull.AspNetCore;
-using Resourcefull.InMemory;
-using Resourcefull.SqlServer;
 using System.Text.Json;
 using TestApiClient;
 

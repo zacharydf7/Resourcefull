@@ -14,7 +14,6 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
 using Resourcefull.AspNetCore;
-using Resourcefull.InMemory;
 
 namespace Resourcefull.Tests.AspNetCore;
 

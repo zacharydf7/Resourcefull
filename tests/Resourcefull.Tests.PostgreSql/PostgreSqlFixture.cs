@@ -1,6 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
-using Resourcefull.PostgreSql;
 
 namespace Resourcefull.Tests.PostgreSql;
 
@@ -79,7 +78,7 @@ public class PostgreSqlFixture : IAsyncLifetime
         var services = new ServiceCollection();
         services.AddResourcefull(options =>
         {
-            options.UsePostgreSql(ConnectionString, _ => { }, Schema);
+            options.UsePostgreSql(ConnectionString, o => o.Schema = Schema);
             configure?.Invoke(options);
         });
         return services.BuildServiceProvider();

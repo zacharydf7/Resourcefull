@@ -146,7 +146,7 @@ public sealed class CustomSchemaIntegrationTests(SqlServerFixture fixture)
     private static ServiceProvider BuildServices(string connectionString, string? schema)
     {
         var services = new ServiceCollection();
-        services.AddResourcefull(options => options.UseSqlServer(connectionString, _ => { }, schema));
+        services.AddResourcefull(options => options.UseSqlServer(connectionString, o => o.Schema = schema));
         return services.BuildServiceProvider();
     }
 

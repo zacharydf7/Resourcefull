@@ -4,7 +4,6 @@ using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using Resourcefull.AspNetCore;
-using Resourcefull.InMemory;
 using Resourcefull.Testing;
 using static Resourcefull.Tests.AspNetCore.TusRequests;
 

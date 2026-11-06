@@ -5,11 +5,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Moq;
-using Resourcefull.InMemory;
-using Resourcefull.PostgreSql;
 using Resourcefull.Providers;
-using Resourcefull.Sqlite;
-using Resourcefull.SqlServer;
 
 namespace Resourcefull.Tests.Unit;
 

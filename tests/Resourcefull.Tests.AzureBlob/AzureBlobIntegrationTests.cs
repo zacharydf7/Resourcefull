@@ -29,7 +29,7 @@ public class AzureBlobIntegrationTests(AzureBlobFixture fixture)
         var services = new ServiceCollection();
         services.AddResourcefull(builder =>
         {
-            builder.UseAzureBlobStorage(fixture.ContainerName, azure =>
+            builder.UseAzureBlob(fixture.ContainerName, azure =>
             {
                 azure.Client = new BlobServiceClient(Environment.GetEnvironmentVariable("RESOURCEFULL_TEST_AZUREBLOB"), options);
                 azure.KeyPrefix = keyPrefix ?? $"it-{Guid.NewGuid():N}/";
@@ -288,7 +288,7 @@ public class AzureBlobIntegrationTests(AzureBlobFixture fixture)
 
         // Arrange: a blob container nobody created, as a mistyped setting would give.
         var services = new ServiceCollection();
-        services.AddResourcefull(o => o.UseAzureBlobStorage($"missing-{Guid.NewGuid():N}", azure => azure.Client = fixture.Client));
+        services.AddResourcefull(o => o.UseAzureBlob($"missing-{Guid.NewGuid():N}", azure => azure.Client = fixture.Client));
         await using ServiceProvider provider = services.BuildServiceProvider();
 
         // Act
@@ -299,24 +299,24 @@ public class AzureBlobIntegrationTests(AzureBlobFixture fixture)
     }
 
     [Fact]
-    public void UseAzureBlobStorage_ShouldThrow_WhenTheKeyPrefixIsTooLong()
+    public void UseAzureBlob_ShouldThrow_WhenTheKeyPrefixIsTooLong()
     {
         // Arrange
         var services = new ServiceCollection();
 
         // Act
-        void act() => services.AddResourcefull(o => o.UseAzureBlobStorage("files", azure => azure.KeyPrefix = new string('a', 191)));
+        void act() => services.AddResourcefull(o => o.UseAzureBlob("files", azure => azure.KeyPrefix = new string('a', 191)));
 
         // Assert
         Assert.Throws<ArgumentException>(act);
     }
 
     [Fact]
-    public async Task UseAzureBlobStorage_ShouldSayToSetAClient_WhenNoneIsSetOrRegistered()
+    public async Task UseAzureBlob_ShouldSayToSetAClient_WhenNoneIsSetOrRegistered()
     {
         // Arrange
         var services = new ServiceCollection();
-        services.AddResourcefull(o => o.UseAzureBlobStorage("files"));
+        services.AddResourcefull(o => o.UseAzureBlob("files"));
         await using ServiceProvider provider = services.BuildServiceProvider();
 
         // Act

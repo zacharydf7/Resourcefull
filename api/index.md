@@ -8,10 +8,10 @@ Every public type and member of the seven library packages, generated from their
   builds on (`ResourceRepository`, `NewResourceVersion`, `ResourceAddress`, `ResourceDatabase`, `HashingStream`,
   `WrittenContent`).
 - **`Resourcefull.InMemory`**: `UseInMemory`.
-- **`Resourcefull.SqlServer`**: `UseSqlServer` and `ContentHashBackfill`.
-- **`Resourcefull.PostgreSql`**: `UsePostgreSql` and `AddResourcefullPostgreSqlCheck`.
+- **`Resourcefull.SqlServer`**: `UseSqlServer`, `ResourcefullSqlServerOptions` and `ContentHashBackfill`.
+- **`Resourcefull.PostgreSql`**: `UsePostgreSql`, `ResourcefullPostgreSqlOptions` and `AddResourcefullPostgreSqlCheck`.
 - **`Resourcefull.S3`**: `UseS3` and `ResourcefullS3Options`.
-- **`Resourcefull.AzureBlob`**: `UseAzureBlobStorage` and `ResourcefullAzureBlobOptions`.
+- **`Resourcefull.AzureBlob`**: `UseAzureBlob` and `ResourcefullAzureBlobOptions`.
 - **`Resourcefull.AspNetCore`**: `Results.Resource`, `UploadFromRequestAsync`, `AddResourcefullExceptionHandler`,
   signed download and upload links (`AddResourcefullLinks`, `IResourceLinkSigner`, `Results.SharedResource`,
   `Results.SharedUpload`), and the dashboard (`MapResourcefullDashboard`).

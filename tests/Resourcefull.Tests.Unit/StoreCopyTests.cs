@@ -1,6 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
-using Resourcefull.InMemory;
 
 namespace Resourcefull.Tests.Unit;
 

@@ -20,6 +20,9 @@ public static class ResourcefullFileSystemOptionsExtensions
 }
 ```
 
+Put your `Use…` extension in the `Resourcefull` namespace, as the built-in providers do, so an application switches to
+your provider by changing one line and no `using`.
+
 Every built-in provider aims to support every feature, and a new one ships with an issue for each feature it doesn't
 support yet; [Provider features](features.md) shows where each stands. A provider of your own can leave features out:
 the clients throw `NotSupportedException` for those, and the contract tests skip them when its test class says so.

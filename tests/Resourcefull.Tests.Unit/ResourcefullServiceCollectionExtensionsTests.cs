@@ -5,7 +5,6 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
-using Resourcefull.InMemory;
 using Resourcefull.Providers;
 
 namespace Resourcefull.Tests.Unit;

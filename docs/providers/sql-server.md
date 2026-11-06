@@ -35,7 +35,7 @@ application's database that puts them beside your own tables. To keep them apart
 
 ```csharp
 builder.Services.AddResourcefull(options => options
-    .UseSqlServer(connectionString, sql => { }, schema: "resourcefull"));
+    .UseSqlServer(connectionString, o => o.Schema = "resourcefull"));
 ```
 
 All three tables go in that schema, with their indexes and keys, and every query Resourcefull runs uses it. Resourcefull
@@ -145,13 +145,13 @@ its resource name, so writers of a name take turns, and SQL Server can end that 
 out if you've set a lock timeout. It stops once the operation's cancellation token is canceled. Each retry is
 counted in the `resourcefull.sqlserver.retries` metric, with the error number; see [Telemetry](../telemetry.md).
 
-To change these or other connection settings <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>, pass a second argument, which gets EF Core's SQL Server
+To change these or other connection settings <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>, set `ConfigureSqlServer`, which gets EF Core's SQL Server
 options after Resourcefull has set its own. For example, to give slow statements, such as copying a large file, longer
 than the default 30 seconds:
 
 ```csharp
 builder.Services.AddResourcefull(options => options
-    .UseSqlServer(connectionString, sql => sql.CommandTimeout(120)));
+    .UseSqlServer(connectionString, o => o.ConfigureSqlServer = sql => sql.CommandTimeout(120)));
 ```
 
 Replacing the retry policy, such as with `sql.EnableRetryOnFailure(...)`, works too, but then Resourcefull no longer

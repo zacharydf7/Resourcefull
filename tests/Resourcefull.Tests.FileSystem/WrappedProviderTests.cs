@@ -1,5 +1,4 @@
 using Microsoft.Extensions.DependencyInjection;
-using Resourcefull.FileSystem;
 using Resourcefull.Providers;
 
 namespace Resourcefull.Tests.FileSystem;

@@ -13,7 +13,6 @@ dotnet add package Resourcefull.Sqlite
 
 ```csharp
 using Resourcefull;
-using Resourcefull.Sqlite;
 
 builder.Services.AddResourcefull(options => options.UseSqlite("Data Source=files.db"));
 
@@ -67,12 +66,11 @@ so a slow upload doesn't hold up the others. Many fast writes at once still take
 heavily from many threads, or from several processes, a server database will keep up better.
 
 Copying a version, or deleting a large one, holds the lock until it's done, which for files of many gigabytes can take
-long enough for other writes to time out. If you keep files that large, raise the timeout with the `configure`
-callback:
+long enough for other writes to time out. If you keep files that large, raise the timeout with `ConfigureSqlite`:
 
 ```csharp
 builder.Services.AddResourcefull(options => options
-    .UseSqlite("Data Source=files.db", sqlite => sqlite.CommandTimeout(60)));
+    .UseSqlite("Data Source=files.db", o => o.ConfigureSqlite = sqlite => sqlite.CommandTimeout(60)));
 ```
 
 Unlike the SQL Server and PostgreSQL providers, this one doesn't retry failed calls, since there's no server connection

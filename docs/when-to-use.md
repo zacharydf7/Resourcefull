@@ -67,7 +67,7 @@ Something else serves you better when:
 Your code talks to `IResourceServiceClient`, not to SQL Server, so moving the bytes elsewhere later means changing the
 provider, not the code that uses it. When you move to the cloud, or outgrow your database, change `UseSqlServer` to
 [`UseFileSystem`](providers/file-system.md), [`UseS3`](providers/s3.md) or
-[`UseAzureBlobStorage`](providers/azure-blob.md)
+[`UseAzureBlob`](providers/azure-blob.md)
 <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>. Every provider is meant to support every feature,
 so that this one line is the only change; [Provider features](providers/features.md) shows where each provider stands.
 A [provider of your own](providers/writing-a-provider.md) can store the bytes anywhere else, and

@@ -24,7 +24,6 @@ inside it:
 
 ```csharp
 using Resourcefull;
-using Resourcefull.InMemory;
 
 builder.Services.AddResourcefull(options => options.UseInMemory());
 ```
@@ -34,7 +33,6 @@ database. Here it happens at startup, which suits a single instance:
 
 ```csharp
 using Resourcefull;
-using Resourcefull.SqlServer;
 
 builder.Services.AddResourcefull(options => options
     .UseSqlServer(builder.Configuration.GetConnectionString("Resources")!)
@@ -50,7 +48,7 @@ PostgreSQL, call `UsePostgreSql` in place of `UseSqlServer`; see [PostgreSQL](pr
 `UseSqlite` with the database file's connection string; see [SQLite](providers/sqlite.md). To keep the
 files in a directory, call `UseFileSystem` with its path, and skip provisioning; see
 [File system](providers/file-system.md). For an S3-compatible store, call `UseS3` with the bucket's name, and skip
-provisioning; see [S3-compatible storage](providers/s3.md). For Azure Blob Storage, call `UseAzureBlobStorage` with the
+provisioning; see [S3-compatible storage](providers/s3.md). For Azure Blob Storage, call `UseAzureBlob` with the
 blob container's name and a client, and skip provisioning; see [Azure Blob Storage](providers/azure-blob.md).
 `UseVersioning` is optional; see [Versioning](versioning.md), and give every application that shares the database,
 directory, bucket or blob container the same setting.
@@ -165,7 +163,6 @@ Then replace `Program.cs`:
 ```csharp
 using Resourcefull;
 using Resourcefull.AspNetCore;
-using Resourcefull.SqlServer;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddResourcefull(options => options
@@ -217,7 +214,6 @@ Resourcefull registers its clients as scoped services, so outside a web request 
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Resourcefull;
-using Resourcefull.SqlServer;
 
 HostApplicationBuilder builder = Host.CreateApplicationBuilder(args);
 builder.Services.AddResourcefull(options => options

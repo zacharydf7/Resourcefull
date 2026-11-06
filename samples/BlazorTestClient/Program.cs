@@ -3,8 +3,6 @@ using BlazorTestClient.Utilities;
 using Microsoft.AspNetCore.StaticFiles;
 using Resourcefull;
 using Resourcefull.AspNetCore;
-using Resourcefull.InMemory;
-using Resourcefull.SqlServer;
 
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 

@@ -1,5 +1,4 @@
 using Microsoft.Extensions.DependencyInjection;
-using Resourcefull.InMemory;
 
 namespace Resourcefull.Tests.Unit;
 

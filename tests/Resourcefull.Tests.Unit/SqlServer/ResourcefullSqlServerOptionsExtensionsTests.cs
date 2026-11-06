@@ -3,14 +3,13 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
-using Resourcefull.InMemory;
 using Resourcefull.Providers;
 using Resourcefull.EntityFramework;
 using Resourcefull.SqlServer;
 using Resourcefull.SqlServer.Models;
 
 namespace Resourcefull.Tests.Unit.SqlServer;
-public class ResourcefullSqlOptionsExtensionsTests
+public class ResourcefullSqlServerOptionsExtensionsTests
 {
     [Fact]
     public void UseSqlServer_ShouldThrowAnException_WhenProviderIsAlreadyConfigured()
@@ -49,7 +48,7 @@ public class ResourcefullSqlOptionsExtensionsTests
         // Arrange
         var services = new ServiceCollection();
         services.AddResourcefull(options =>
-            options.UseSqlServer("Server=unused;Database=unused", sql => sql.CommandTimeout(77)));
+            options.UseSqlServer("Server=unused;Database=unused", o => o.ConfigureSqlServer = sql => sql.CommandTimeout(77)));
         await using ServiceProvider provider = services.BuildServiceProvider();
 
         // Act
@@ -64,23 +63,12 @@ public class ResourcefullSqlOptionsExtensionsTests
     }
 
     [Fact]
-    public void UseSqlServer_ShouldThrowAndLeaveTheProviderUnconfigured_WhenGivenNullOptions()
-    {
-        // Arrange
-        var builder = new ResourcefullOptionsBuilder(new ServiceCollection());
-
-        // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => builder.UseSqlServer("Server=unused;Database=unused", null!));
-        Assert.False(builder.ProviderConfigured);
-    }
-
-    [Fact]
     public async Task UseSqlServer_ShouldUseTheCallersRetryPolicy_WhenTheirOptionsReplaceIt()
     {
         // Arrange
         var services = new ServiceCollection();
         services.AddResourcefull(options => options.UseSqlServer("Server=unused;Database=unused",
-            sql => sql.ExecutionStrategy(dependencies => new SqlServerRetryingExecutionStrategy(dependencies, 1))));
+            o => o.ConfigureSqlServer = sql => sql.ExecutionStrategy(dependencies => new SqlServerRetryingExecutionStrategy(dependencies, 1))));
         await using ServiceProvider provider = services.BuildServiceProvider();
 
         // Act
@@ -141,10 +129,10 @@ public class ResourcefullSqlOptionsExtensionsTests
 
         // Act
         ArgumentException exception = Assert.Throws<ArgumentException>(
-            () => builder.UseSqlServer("Server=unused;Database=unused", _ => { }, schema));
+            () => builder.UseSqlServer("Server=unused;Database=unused", o => o.Schema = schema));
 
         // Assert
-        Assert.Equal("schema", exception.ParamName);
+        Assert.Equal("configure", exception.ParamName);
         Assert.False(builder.ProviderConfigured);
     }
 
@@ -156,11 +144,11 @@ public class ResourcefullSqlOptionsExtensionsTests
         var other = new ResourcefullOptionsBuilder(new ServiceCollection());
 
         // Act
-        builder.UseSqlServer("Server=unused;Database=unused", _ => { }, new string('s', 128));
+        builder.UseSqlServer("Server=unused;Database=unused", o => o.Schema = new string('s', 128));
 
         // Assert
         Assert.True(builder.ProviderConfigured);
-        Assert.Throws<ArgumentException>(() => other.UseSqlServer("Server=unused;Database=unused", _ => { }, new string('s', 129)));
+        Assert.Throws<ArgumentException>(() => other.UseSqlServer("Server=unused;Database=unused", o => o.Schema = new string('s', 129)));
     }
 
     [Fact]
@@ -168,7 +156,7 @@ public class ResourcefullSqlOptionsExtensionsTests
     {
         // Arrange
         var services = new ServiceCollection();
-        services.AddResourcefull(options => options.UseSqlServer("Server=unused;Database=unused", _ => { }, "files"));
+        services.AddResourcefull(options => options.UseSqlServer("Server=unused;Database=unused", o => o.Schema = "files"));
         await using ServiceProvider provider = services.BuildServiceProvider();
 
         // Act
@@ -186,9 +174,9 @@ public class ResourcefullSqlOptionsExtensionsTests
     {
         // Arrange: the contexts share EF's internal services, and with them its cache of models.
         var services = new ServiceCollection();
-        services.AddResourcefull(options => options.UseSqlServer("Server=unused;Database=unused", _ => { }, "first"));
+        services.AddResourcefull(options => options.UseSqlServer("Server=unused;Database=unused", o => o.Schema = "first"));
         var otherServices = new ServiceCollection();
-        otherServices.AddResourcefull(options => options.UseSqlServer("Server=unused;Database=unused", _ => { }, "second"));
+        otherServices.AddResourcefull(options => options.UseSqlServer("Server=unused;Database=unused", o => o.Schema = "second"));
         await using ServiceProvider provider = services.BuildServiceProvider();
         await using ServiceProvider otherProvider = otherServices.BuildServiceProvider();
 

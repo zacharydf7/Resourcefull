@@ -3,7 +3,6 @@ using System.Security.Cryptography;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Moq;
-using Resourcefull.InMemory;
 using Resourcefull.Providers;
 
 namespace Resourcefull.Tests.Unit;

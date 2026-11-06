@@ -69,7 +69,7 @@ await app.Services.MigrateResourcefullDatabaseAsync("archive");
 Two stores can share a database if each has its tables in a [schema](providers/sql-server.md#choosing-a-schema) of
 its own. Each store also has its own [`ContentHashBackfill`](providers/sql-server-upgrades.md#recording-hashes-for-older-versions).
 For a named store, resolve it from a scope by the store's name, with
-`GetRequiredKeyedService<ContentHashBackfill>("archive")`.
+`GetRequiredKeyedService<ContentHashBackfill>("archive")`. It's in the `Resourcefull.SqlServer` namespace.
 
 ## Health checks
 

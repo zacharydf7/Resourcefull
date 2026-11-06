@@ -2,7 +2,6 @@ using Amazon.Runtime;
 using Amazon.S3;
 using Amazon.S3.Model;
 using Microsoft.Extensions.DependencyInjection;
-using Resourcefull.S3;
 
 namespace Resourcefull.Tests.S3;
 

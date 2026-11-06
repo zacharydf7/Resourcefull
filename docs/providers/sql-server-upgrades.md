@@ -30,6 +30,8 @@ Every version stored by 3.0 or later records its SHA-256 hash. Versions stored e
 `ContentHashBackfill`, which `UseSqlServer` registers, hashes them:
 
 ```csharp
+using Resourcefull.SqlServer;
+
 using IServiceScope scope = app.Services.CreateScope();
 ContentHashBackfill backfill = scope.ServiceProvider.GetRequiredService<ContentHashBackfill>();
 ContentHashBackfillResult result = await backfill.RunAsync(cancellationToken);

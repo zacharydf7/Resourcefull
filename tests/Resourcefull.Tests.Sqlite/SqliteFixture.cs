@@ -1,6 +1,5 @@
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.DependencyInjection;
-using Resourcefull.Sqlite;
 
 namespace Resourcefull.Tests.Sqlite;
 

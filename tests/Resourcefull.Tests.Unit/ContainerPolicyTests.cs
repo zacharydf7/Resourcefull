@@ -3,7 +3,6 @@ using System.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
-using Resourcefull.InMemory;
 using Resourcefull.Providers;
 
 namespace Resourcefull.Tests.Unit;

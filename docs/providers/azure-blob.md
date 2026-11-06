@@ -14,9 +14,8 @@ dotnet add package Resourcefull.AzureBlob
 ```csharp
 using Azure.Storage.Blobs;
 using Resourcefull;
-using Resourcefull.AzureBlob;
 
-builder.Services.AddResourcefull(options => options.UseAzureBlobStorage("files", azure =>
+builder.Services.AddResourcefull(options => options.UseAzureBlob("files", azure =>
     azure.Client = new BlobServiceClient(builder.Configuration.GetConnectionString("Storage"))));
 ```
 
@@ -35,7 +34,7 @@ It works the same way as the [S3-compatible provider](s3.md), and shares its cod
 
 ## Connecting to an account
 
-Give `UseAzureBlobStorage` a `BlobServiceClient` for the account. Any way of creating one works:
+Give `UseAzureBlob` a `BlobServiceClient` for the account. Any way of creating one works:
 
 - **A connection string**, as above. For Azurite on your own machine, it's `UseDevelopmentStorage=true`.
 - **Microsoft Entra ID**, with no secret to store, using the `Azure.Identity` package:
@@ -43,7 +42,7 @@ Give `UseAzureBlobStorage` a `BlobServiceClient` for the account. Any way of cre
   ```csharp
   using Azure.Identity;
 
-  options.UseAzureBlobStorage("files", azure => azure.Client =
+  options.UseAzureBlob("files", azure => azure.Client =
       new BlobServiceClient(new Uri("https://myaccount.blob.core.windows.net"), new DefaultAzureCredential()));
   ```
 
@@ -72,7 +71,7 @@ Every blob Resourcefull writes has a name starting with `resourcefull/`, so the 
 too. To keep several stores in one blob container, such as one per environment, give each a prefix of its own:
 
 ```csharp
-options.UseAzureBlobStorage("files", azure =>
+options.UseAzureBlob("files", azure =>
 {
     azure.Client = client;
     azure.KeyPrefix = "staging/resourcefull/";

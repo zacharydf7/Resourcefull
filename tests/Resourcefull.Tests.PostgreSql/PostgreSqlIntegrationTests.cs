@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Logging;
@@ -64,8 +65,8 @@ public sealed class PostgreSqlIntegrationTests(PostgreSqlFixture fixture)
         // Arrange: two stores in one database, each in a schema of its own.
         string connectionString = await fixture.AllocateDatabaseAsync("stores");
         var collection = new ServiceCollection();
-        collection.AddResourcefull(options => options.UsePostgreSql(connectionString, _ => { }, "hot"));
-        collection.AddKeyedResourcefull("archive", options => options.UsePostgreSql(connectionString, _ => { }, "archive"));
+        collection.AddResourcefull(options => options.UsePostgreSql(connectionString, o => o.Schema = "hot"));
+        collection.AddKeyedResourcefull("archive", options => options.UsePostgreSql(connectionString, o => o.Schema = "archive"));
         await using ServiceProvider services = collection.BuildServiceProvider();
         await services.MigrateResourcefullDatabaseAsync();
         await services.MigrateResourcefullDatabaseAsync("archive");
@@ -197,10 +198,10 @@ public sealed class PostgreSqlIntegrationTests(PostgreSqlFixture fixture)
         var builder = new ResourcefullOptionsBuilder(new ServiceCollection());
 
         // Act
-        ArgumentException exception = Assert.Throws<ArgumentException>(() => builder.UsePostgreSql("Host=unused", _ => { }, schema));
+        ArgumentException exception = Assert.Throws<ArgumentException>(() => builder.UsePostgreSql("Host=unused", o => o.Schema = schema));
 
         // Assert
-        Assert.Equal("schema", exception.ParamName);
+        Assert.Equal("configure", exception.ParamName);
         Assert.False(builder.ProviderConfigured);
     }
 
@@ -212,17 +213,33 @@ public sealed class PostgreSqlIntegrationTests(PostgreSqlFixture fixture)
         var other = new ResourcefullOptionsBuilder(new ServiceCollection());
 
         // Act
-        builder.UsePostgreSql("Host=unused", _ => { }, new string('s', 63));
+        builder.UsePostgreSql("Host=unused", o => o.Schema = new string('s', 63));
 
         // Assert
         Assert.True(builder.ProviderConfigured);
-        Assert.Throws<ArgumentException>(() => other.UsePostgreSql("Host=unused", _ => { }, new string('s', 64)));
+        Assert.Throws<ArgumentException>(() => other.UsePostgreSql("Host=unused", o => o.Schema = new string('s', 64)));
+    }
+
+    [Fact]
+    public async Task UsePostgreSql_ShouldApplyTheCallersOptions_WhenGivenConfigurePostgreSql()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        services.AddResourcefull(options => options.UsePostgreSql("Host=unused", o => o.ConfigurePostgreSql = npgsql => npgsql.CommandTimeout(77)));
+        await using ServiceProvider provider = services.BuildServiceProvider();
+
+        // Act
+        await using ResourceDbContext dbContext =
+            await provider.GetRequiredService<IDbContextFactory<ResourceDbContext>>().CreateDbContextAsync();
+
+        // Assert
+        Assert.Equal(77, dbContext.Database.GetCommandTimeout());
     }
 
     private static ServiceProvider BuildServices(string connectionString, string? schema)
     {
         var services = new ServiceCollection();
-        services.AddResourcefull(options => options.UsePostgreSql(connectionString, _ => { }, schema));
+        services.AddResourcefull(options => options.UsePostgreSql(connectionString, o => o.Schema = schema));
         return services.BuildServiceProvider();
     }
 

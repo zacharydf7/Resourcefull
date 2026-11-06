@@ -1,27 +1,9 @@
 using Azure.Storage.Blobs;
 using Microsoft.Extensions.DependencyInjection;
+using Resourcefull.AzureBlob;
 using Resourcefull.ObjectStorage;
 
-namespace Resourcefull.AzureBlob;
-
-/// <summary>
-/// How Resourcefull reaches Azure Blob Storage.
-/// <para>Coming in 4.0.</para>
-/// </summary>
-public sealed class ResourcefullAzureBlobOptions
-{
-    /// <summary>
-    /// The client to reach the storage account with, such as <c>new BlobServiceClient(connectionString)</c>. When
-    /// <see langword="null"/>, the <see cref="BlobServiceClient"/> registered in the application's services is used.
-    /// </summary>
-    public BlobServiceClient? Client { get; set; }
-
-    /// <summary>
-    /// What the name of every blob Resourcefull writes starts with, so it can share a container: <c>resourcefull/</c> by
-    /// default. Empty keeps everything at the container's top level.
-    /// </summary>
-    public string KeyPrefix { get; set; } = "resourcefull/";
-}
+namespace Resourcefull;
 
 /// <summary>
 /// Configures Resourcefull to store resources in Azure Blob Storage.
@@ -52,7 +34,7 @@ public static class ResourcefullAzureBlobOptionsExtensions
     /// <paramref name="containerName"/> is null, empty or whitespace (<see cref="ArgumentNullException"/> when null), or
     /// the key prefix is null or longer than 190 characters.
     /// </exception>
-    public static ResourcefullOptionsBuilder UseAzureBlobStorage(this ResourcefullOptionsBuilder builder, string containerName,
+    public static ResourcefullOptionsBuilder UseAzureBlob(this ResourcefullOptionsBuilder builder, string containerName,
         Action<ResourcefullAzureBlobOptions>? configure = null)
     {
         ArgumentNullException.ThrowIfNull(builder);
@@ -68,7 +50,7 @@ public static class ResourcefullAzureBlobOptionsExtensions
         builder.UseProvider(services =>
         {
             BlobServiceClient client = options.Client ?? services.GetService<BlobServiceClient>() ?? throw new InvalidOperationException(
-                "UseAzureBlobStorage needs a client: set Client, for example to new BlobServiceClient(connectionString), or register a BlobServiceClient in the application's services.");
+                "UseAzureBlob needs a client: set Client, for example to new BlobServiceClient(connectionString), or register a BlobServiceClient in the application's services.");
             return new ObjectStoreRepository(new AzureBlobObjectStore(client.GetBlobContainerClient(containerName)), options.KeyPrefix,
                 services.GetService<TimeProvider>(), storeName, services.SearchableMetadataKeys(storeName));
         }, ServiceLifetime.Singleton);

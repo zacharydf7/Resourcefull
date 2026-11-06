@@ -4,10 +4,10 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.Extensions.DependencyInjection;
-using Npgsql.EntityFrameworkCore.PostgreSQL.Infrastructure;
+using Resourcefull.PostgreSql;
 using Resourcefull.Providers;
 
-namespace Resourcefull.PostgreSql;
+namespace Resourcefull;
 
 /// <summary>
 /// Configures Resourcefull to store resources in PostgreSQL.
@@ -26,42 +26,24 @@ public static partial class ResourcefullPostgreSqlOptionsExtensions
     /// </summary>
     /// <param name="builder">The builder passed to <c>AddResourcefull</c>.</param>
     /// <param name="connectionString">The connection string of the database that holds Resourcefull's tables.</param>
+    /// <param name="configure">Sets the schema and EF Core's PostgreSQL options; <see langword="null"/> keeps the defaults.</param>
     /// <returns><paramref name="builder"/>, for chaining.</returns>
     /// <exception cref="InvalidOperationException">A provider has already been configured.</exception>
-    public static ResourcefullOptionsBuilder UsePostgreSql(this ResourcefullOptionsBuilder builder, string connectionString)
-        => UsePostgreSql(builder, connectionString, _ => { });
-
-    /// <summary>
-    /// Stores resources in PostgreSQL as <see cref="UsePostgreSql(ResourcefullOptionsBuilder, string)"/> does, then
-    /// applies <paramref name="configure"/> to EF Core's PostgreSQL options, to change the command timeout or the
-    /// retries, for example. Replacing the retry policy, such as with <c>EnableRetryOnFailure</c>, also stops
-    /// Resourcefull from counting retries in <c>resourcefull.postgresql.retries</c>.
-    /// </summary>
-    /// <param name="builder">The builder passed to <c>AddResourcefull</c>.</param>
-    /// <param name="connectionString">The connection string of the database that holds Resourcefull's tables.</param>
-    /// <param name="configure">Changes EF Core's PostgreSQL options, after Resourcefull has set its own.</param>
-    /// <param name="schema">
-    /// The schema that holds Resourcefull's tables, such as <c>resourcefull</c>, so they don't mix with an application's
-    /// own tables in <c>public</c>. Resourcefull's migration history is then kept in <c>__EFMigrationsHistory</c> in that
-    /// schema too. <see langword="null"/>, the default, leaves the tables' names unqualified, so they're found through the
-    /// connection's search path, normally in <c>public</c>.
-    /// </param>
-    /// <returns><paramref name="builder"/>, for chaining.</returns>
-    /// <exception cref="InvalidOperationException">A provider has already been configured.</exception>
-    /// <exception cref="ArgumentNullException"><paramref name="configure"/> is null.</exception>
     /// <exception cref="ArgumentException">
-    /// <paramref name="schema"/> isn't a regular identifier of up to 63 characters: a letter or underscore, then
-    /// letters, digits or underscores.
+    /// The schema isn't a regular identifier of up to 63 characters: a letter or underscore, then letters, digits or
+    /// underscores.
     /// </exception>
     public static ResourcefullOptionsBuilder UsePostgreSql(this ResourcefullOptionsBuilder builder, string connectionString,
-        Action<NpgsqlDbContextOptionsBuilder> configure, string? schema = null)
+        Action<ResourcefullPostgreSqlOptions>? configure = null)
     {
-        ArgumentNullException.ThrowIfNull(configure);
+        var settings = new ResourcefullPostgreSqlOptions();
+        configure?.Invoke(settings);
+        string? schema = settings.Schema;
         if (schema is not null && !SchemaName().IsMatch(schema))
         {
             throw new ArgumentException(
                 "A schema name must start with a letter or underscore, followed by up to 62 letters, digits or underscores.",
-                nameof(schema));
+                nameof(configure));
         }
         // Each store has its own contexts, so its factory and everything that uses it are registered under its name.
         string? storeName = builder.StoreName;
@@ -80,7 +62,7 @@ public static partial class ResourcefullPostgreSqlOptionsExtensions
                     maxRetryDelay: TimeSpan.FromSeconds(10),
                     errorCodesToAdd: RetriedErrors, storeName));
                 if (schema is not null) npgsql.MigrationsHistoryTable(HistoryRepository.DefaultTableName, schema);
-                configure(npgsql);
+                settings.ConfigurePostgreSql?.Invoke(npgsql);
             });
             options.ReplaceService<IModelCacheKeyFactory, SchemaModelCacheKeyFactory>()
                 .ReplaceService<IMigrationsSqlGenerator, SchemaMigrationsSqlGenerator>();
