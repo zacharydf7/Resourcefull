@@ -265,7 +265,7 @@ public interface IResourceServiceClient
 
     /// <summary>
     /// Copies every container, or those whose names start with <see cref="StoreCopyOptions.Prefix"/>, to another store,
-    /// one at a time, as <see cref="CopyContainerToAsync"/> does. <see cref="StoreCopyOptions.Existing"/> decides what
+    /// one at a time, each the way <see cref="CopyContainerToAsync"/> does. <see cref="StoreCopyOptions.Existing"/> decides what
     /// happens to a container the destination already has: whether it fails, is skipped once it's found to match version
     /// for version, or is brought up to date in place. A destination container still being filled by another copy or
     /// import fails, whatever <see cref="StoreCopyOptions.Existing"/> says; one whose copy stopped partway can be
