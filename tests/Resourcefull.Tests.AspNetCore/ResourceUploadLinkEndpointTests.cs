@@ -158,6 +158,56 @@ public class ResourceUploadLinkEndpointTests
     }
 
     [Fact]
+    public async Task OnCompletedAsync_ShouldGetTheLinkTheUploadStartedWith_WhenALaterRequestsUrlNamesAnotherLink()
+    {
+        // Arrange: an upload started through one link, and finished at a URL holding another.
+        await using UploadApp app = await UploadApp.StartAsync();
+        string started = await TokenAsync(app, prefix: "in/");
+        string other = await TokenAsync(app, prefix: "other/");
+        string url = await StartAsync(app, started, 3, metadata: [("filename", "a.bin"), ("note", "from the client")]);
+
+        // Act
+        HttpResponseMessage response = await PatchAsync(app, url.Replace(started, other, StringComparison.Ordinal), 0, "abc"u8.ToArray());
+
+        // Assert
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        ResourceUploadCompletedContext completed = Assert.Single(app.CompletedContexts);
+        Assert.Equal("in/", completed.Link!.NamePrefix);
+        Assert.Equal("in/a.bin", completed.Version.Name);
+        Assert.Equal("from the client", completed.ClientMetadata["note"]);
+    }
+
+    [Fact]
+    public async Task Post_ShouldGiveAUrlKestrelAccepts_WhenUploadMetadataIsAtTheLimitAndIsNotAscii()
+    {
+        // Arrange: 1,000 characters that JSON's default escaping would take to six each, past the limit on their own.
+        await using UploadApp app = await UploadApp.StartAsync();
+        string token = await TokenAsync(app, prefix: "in/");
+
+        // Act
+        string url = await StartAsync(app, token, 3, metadata: [("filename", "a"), ("note", new string('フ', 1000))]);
+
+        // Assert: Kestrel's default limit on a request line is 8 KiB.
+        Assert.InRange(url.Length, 0, 8000);
+    }
+
+    [Fact]
+    public async Task OnCompletedAsync_ShouldGetTheLink_WhenItExpiredWhileTheUploadWasUnderWay()
+    {
+        // Arrange
+        var clock = new ManualTimeProvider();
+        await using UploadApp app = await UploadApp.StartAsync(clock: clock);
+        string url = await StartAsync(app, await TokenAsync(app, name: "a.bin"), 3, metadata: ("filename", "a.bin"));
+        clock.Now = clock.Now.AddHours(2);
+
+        // Act
+        await PatchAsync(app, url, 0, "abc"u8.ToArray());
+
+        // Assert
+        Assert.Equal("a.bin", Assert.Single(app.CompletedContexts).Link!.ResourceName);
+    }
+
+    [Fact]
     public async Task Upload_ShouldWorkForWhoeverHasItsUrl_WhenItWasStartedSignedIn()
     {
         // Arrange
@@ -247,7 +297,7 @@ public class ResourceUploadLinkEndpointTests
         using WebApplication app = builder.Build();
 
         // Act
-        void act() => app.MapResourcefullUploadLinks("/upload-links", options => options.StoreName = storeName);
+        void act() => app.MapResourcefullUploadLinks("/upload-links", new ResourceUploadLinkEndpointOptions { StoreName = storeName });
 
         // Assert
         string expected = storeName is null ? "AddResourcefullLinks." : "AddResourcefullLinks(\"archive\")";

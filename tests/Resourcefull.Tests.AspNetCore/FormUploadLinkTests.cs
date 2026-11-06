@@ -116,6 +116,38 @@ public class FormUploadLinkTests
     }
 
     [Fact]
+    public async Task SharedUpload_ShouldCallOnStoredForEachFileStoredWithItsNameInTheForm_WhenAFormPostsSeveral()
+    {
+        // Arrange: a form whose third file is refused.
+        await using TestApp app = await TestApp.StartAsync();
+        string token = await TokenAsync(app, prefix: "in/", types: ["image/*"]);
+
+        // Act
+        await app.Client.PostAsync($"/upload-hooked/{token}", Form(("one.jpg", "image/jpeg", "1"), ("two.jpg", "image/jpeg", "2"), ("three.html", "text/html", "3")));
+
+        // Assert
+        Assert.Equal(["one.jpg", "two.jpg"], app.Stored.Select(s => s.ClientMetadata["filename"]));
+        Assert.Equal(["in/one.jpg", "in/two.jpg"], app.Stored.Select(s => s.Version.Name));
+        Assert.All(app.Stored, s => Assert.Equal("in/", s.Link!.NamePrefix));
+    }
+
+    [Fact]
+    public async Task SharedUpload_ShouldKeepTheFileAndStoreNoMore_WhenOnStoredThrowsForAFileInAForm()
+    {
+        // Arrange
+        await using TestApp app = await TestApp.StartAsync();
+        string token = await TokenAsync(app, prefix: "in/");
+
+        // Act
+        HttpResponseMessage response = await app.Client.PostAsync($"/upload-hooked/{token}", Form(("fail", "image/jpeg", "1"), ("next.jpg", "image/jpeg", "2")));
+
+        // Assert
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+        Assert.Equal("1", await ReadAsync(app, "in/fail"));
+        Assert.Null(await ReadAsync(app, "in/next.jpg"));
+    }
+
+    [Fact]
     public async Task SharedUpload_ShouldNameTheLimitAndTheFile_WhenAFormPostsAFileOverALimitInUnits()
     {
         // Arrange

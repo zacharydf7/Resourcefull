@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Hosting;
@@ -37,6 +38,9 @@ internal sealed class TestApp : IAsyncDisposable
     public HttpClient Client { get; }
 
     public IServiceProvider Services => _app.Services;
+
+    /// <summary>What the <c>onStored</c> callback of <c>/upload-hooked</c> was called with.</summary>
+    public ConcurrentQueue<ResourceUploadCompletedContext> Stored { get; private init; } = new();
 
     /// <summary>What the app logged, as each message's category and text.</summary>
     public RecordingLoggerProvider Logs { get; }
@@ -107,6 +111,15 @@ internal sealed class TestApp : IAsyncDisposable
             resources.GetContainerClient(Container).UploadFromRequestAsync(name, request, null, cancellationToken));
         app.MapMethods("/upload/{token}/{**name}", ["PUT", "POST"], (string token, string? name, IResourceServiceClient resources) =>
             Results.SharedUpload(resources, token, name));
+        var storedFiles = new ConcurrentQueue<ResourceUploadCompletedContext>();
+        app.MapMethods("/upload-hooked/{token}/{**name}", ["PUT", "POST"], (string token, string? name, IResourceServiceClient resources) =>
+            Results.SharedUpload(resources, token, stored =>
+            {
+                storedFiles.Enqueue(stored);
+                return stored.Version.Name.EndsWith("fail", StringComparison.Ordinal)
+                    ? throw new InvalidOperationException("The app's save failed.")
+                    : Task.CompletedTask;
+            }, name));
         app.MapGet("/archive/shared/{token}", (string token, [FromKeyedServices(ArchiveStore)] IResourceServiceClient archive) =>
             Results.SharedDownload(archive, token));
         app.MapPut("/archive/upload/{token}/{**name}", (string token, string? name, [FromKeyedServices(ArchiveStore)] IResourceServiceClient archive) =>
@@ -122,7 +135,7 @@ internal sealed class TestApp : IAsyncDisposable
         await app.StartAsync();
         await app.Services.CreateScope().ServiceProvider.GetRequiredService<IResourceServiceClient>().CreateContainerAsync(Container);
         await app.Services.CreateScope().ServiceProvider.GetRequiredKeyedService<IResourceServiceClient>(ArchiveStore).CreateContainerAsync(Container);
-        return new TestApp(app, logs);
+        return new TestApp(app, logs) { Stored = storedFiles };
     }
 
     /// <summary>A request body that throws past <paramref name="limit"/> bytes, as Kestrel's does past its size limit.</summary>

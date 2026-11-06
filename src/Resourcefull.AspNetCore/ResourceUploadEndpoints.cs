@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Builder;
@@ -48,32 +49,25 @@ public static partial class ResourcefullUploadsEndpointRouteBuilderExtensions
     /// </remarks>
     /// <param name="endpoints">The application's endpoints.</param>
     /// <param name="pattern">Where to map the endpoints, such as <c>/uploads</c>.</param>
-    /// <param name="configure">Sets <see cref="ResourceUploadEndpointOptions.ResolveAsync"/>, and any other options.</param>
+    /// <param name="options">The <see cref="ResourceUploadEndpointOptions.ResolveAsync"/> that decides where uploads go, and any other options.</param>
     /// <returns>The group the endpoints are in, to require authorization on, and to add CORS or rate limits to.</returns>
-    /// <exception cref="InvalidOperationException">
-    /// <see cref="ResourceUploadEndpointOptions.ResolveAsync"/> isn't set, or ASP.NET Core Data Protection isn't added.
-    /// </exception>
+    /// <exception cref="ArgumentException"><see cref="ResourceUploadEndpointOptions.ResolveAsync"/> is null, or a store name is empty or white space.</exception>
+    /// <exception cref="InvalidOperationException">ASP.NET Core Data Protection isn't added.</exception>
     public static RouteGroupBuilder MapResourcefullUploads(this IEndpointRouteBuilder endpoints, string pattern,
-        Action<ResourceUploadEndpointOptions> configure)
+        ResourceUploadEndpointOptions options)
     {
         ArgumentNullException.ThrowIfNull(endpoints);
         ArgumentNullException.ThrowIfNull(pattern);
-        ArgumentNullException.ThrowIfNull(configure);
-        var options = new ResourceUploadEndpointOptions();
-        configure(options);
-        if (options.ResolveAsync is null)
-        {
-            throw new InvalidOperationException(
-                $"MapResourcefullUploads needs {nameof(ResourceUploadEndpointOptions.ResolveAsync)}, to decide where each upload goes.");
-        }
-        if (options.StoreName is not null) ArgumentException.ThrowIfNullOrWhiteSpace(options.StoreName, nameof(configure));
+        ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(options.ResolveAsync, nameof(options));
+        if (options.StoreName is not null) ArgumentException.ThrowIfNullOrWhiteSpace(options.StoreName, nameof(options));
         if (endpoints.ServiceProvider.GetService<IServiceProviderIsService>()?.IsService(typeof(IDataProtectionProvider)) == false)
         {
             throw new InvalidOperationException(
                 "MapResourcefullUploads seals upload URLs with ASP.NET Core Data Protection: call builder.Services.AddDataProtection().");
         }
 
-        var uploads = new ResourceUploadEndpoints(options, pattern);
+        var uploads = new ResourceUploadEndpoints(options.ResolveAsync, options.OnCompletedAsync, options.StoreName, options.MaxSize, pattern);
         RouteGroupBuilder group = endpoints.MapGroup(pattern);
         group.MapMethods("/", ["POST", "OPTIONS"], uploads.HandleCollectionAsync);
         group.MapMethods("/{token}", ["HEAD", "PATCH", "DELETE", "POST", "OPTIONS"], uploads.HandleUploadAsync);
@@ -105,21 +99,19 @@ public static partial class ResourcefullUploadsEndpointRouteBuilderExtensions
     /// </remarks>
     /// <param name="endpoints">The application's endpoints.</param>
     /// <param name="pattern">Where to map the endpoints, such as <c>/upload-links</c>.</param>
-    /// <param name="configure">
-    /// Sets <see cref="ResourceUploadLinkEndpointOptions.OnCompletedAsync"/>, <see cref="ResourceUploadLinkEndpointOptions.StoreName"/>
-    /// and <see cref="ResourceUploadLinkEndpointOptions.MaxSize"/>.
+    /// <param name="options">
+    /// The <see cref="ResourceUploadLinkEndpointOptions.OnCompletedAsync"/>, <see cref="ResourceUploadLinkEndpointOptions.StoreName"/>
+    /// and <see cref="ResourceUploadLinkEndpointOptions.MaxSize"/>; <see langword="null"/> for the defaults.
     /// </param>
     /// <returns>The group the endpoints are in, to add CORS or rate limits to.</returns>
     /// <exception cref="InvalidOperationException">The store's signed links aren't added with <see cref="ResourcefullLinksServiceCollectionExtensions.AddResourcefullLinks"/>.</exception>
     public static RouteGroupBuilder MapResourcefullUploadLinks(this IEndpointRouteBuilder endpoints, string pattern,
-        Action<ResourceUploadLinkEndpointOptions>? configure = null)
+        ResourceUploadLinkEndpointOptions? options = null)
     {
         ArgumentNullException.ThrowIfNull(endpoints);
         ArgumentNullException.ThrowIfNull(pattern);
-        var linkOptions = new ResourceUploadLinkEndpointOptions();
-        configure?.Invoke(linkOptions);
-        string? storeName = linkOptions.StoreName;
-        if (storeName is not null) ArgumentException.ThrowIfNullOrWhiteSpace(storeName, nameof(configure));
+        string? storeName = options?.StoreName;
+        if (storeName is not null) ArgumentException.ThrowIfNullOrWhiteSpace(storeName, nameof(options));
         IServiceProvider services = endpoints.ServiceProvider;
         bool? signs = storeName is null
             ? services.GetService<IServiceProviderIsService>()?.IsService(typeof(IResourceLinkSigner))
@@ -127,13 +119,7 @@ public static partial class ResourcefullUploadsEndpointRouteBuilderExtensions
         if (signs == false)
             throw new InvalidOperationException(ResourcefullLinksServiceCollectionExtensions.NoSignerMessage(nameof(MapResourcefullUploadLinks), storeName));
 
-        var options = new ResourceUploadEndpointOptions
-        {
-            StoreName = storeName,
-            OnCompletedAsync = linkOptions.OnCompletedAsync,
-            MaxSize = linkOptions.MaxSize
-        };
-        var uploads = new ResourceUploadEndpoints(options, pattern, throughLinks: true);
+        var uploads = new ResourceUploadEndpoints(null, options?.OnCompletedAsync, storeName, options?.MaxSize, pattern);
         RouteGroupBuilder group = endpoints.MapGroup(pattern);
         group.MapMethods("/{link}", ["POST", "OPTIONS"], uploads.HandleCollectionAsync);
         group.MapMethods("/{link}/{token}", ["HEAD", "PATCH", "DELETE", "POST", "OPTIONS"], uploads.HandleUploadAsync);
@@ -143,10 +129,11 @@ public static partial class ResourcefullUploadsEndpointRouteBuilderExtensions
 
 /// <summary>
 /// The tus endpoints <see cref="ResourcefullUploadsEndpointRouteBuilderExtensions.MapResourcefullUploads"/> maps, or,
-/// when <paramref name="throughLinks"/> is true, those <see cref="ResourcefullUploadsEndpointRouteBuilderExtensions.MapResourcefullUploadLinks"/>
+/// when <paramref name="resolve"/> is null, those <see cref="ResourcefullUploadsEndpointRouteBuilderExtensions.MapResourcefullUploadLinks"/>
 /// maps, where the route's upload link decides where an upload goes.
 /// </summary>
-internal sealed partial class ResourceUploadEndpoints(ResourceUploadEndpointOptions options, string pattern, bool throughLinks = false)
+internal sealed partial class ResourceUploadEndpoints(Func<HttpContext, ResourceUploadRequest, Task<ResourceUploadTarget?>>? resolve,
+    Func<ResourceUploadCompletedContext, Task>? onCompleted, string? storeName, ResourceSize? maxSize, string pattern)
 {
     private const string TusVersion = "1.0.0";
     private const string OffsetOctetStream = "application/offset+octet-stream";
@@ -154,6 +141,17 @@ internal sealed partial class ResourceUploadEndpoints(ResourceUploadEndpointOpti
     // Changing them would invalidate every upload URL handed out, as removing the Data Protection keys does.
     private const string Purpose = "Resourcefull.ResourceUploadSession.v1";
     private const string LinkPurpose = "Resourcefull.ResourceUploadLinkSession.v1";
+
+    // The client's metadata is sealed into the upload's URL for the completion callback, so this keeps the URL within what
+    // servers accept for ordinary text. Tus clients send a file's name and type, which take far less.
+    private const int MaxClientMetadataLength = 4096;
+
+    // The token is encrypted, so nothing in it needs JSON escaping, which would only make the URL longer.
+    private static readonly JsonSerializerOptions SessionJson = new()
+    {
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+    };
 
     private IDataProtector? _protector;
 
@@ -239,7 +237,7 @@ internal sealed partial class ResourceUploadEndpoints(ResourceUploadEndpointOpti
         HttpResponse response = httpContext.Response;
         response.Headers["Tus-Version"] = TusVersion;
         response.Headers["Tus-Extension"] = "creation,creation-with-upload,termination,expiration";
-        if (options.MaxSize is { } maxSize) response.Headers["Tus-Max-Size"] = maxSize.Bytes.ToString(CultureInfo.InvariantCulture);
+        if (maxSize is { } limit) response.Headers["Tus-Max-Size"] = limit.Bytes.ToString(CultureInfo.InvariantCulture);
         response.StatusCode = StatusCodes.Status204NoContent;
     }
 
@@ -260,10 +258,16 @@ internal sealed partial class ResourceUploadEndpoints(ResourceUploadEndpointOpti
             await RefuseAsync(httpContext, StatusCodes.Status400BadRequest, "Upload-Length must be a whole number of bytes.").ConfigureAwait(false);
             return;
         }
-        if (length > options.MaxSize?.Bytes)
+        if (length > maxSize?.Bytes)
         {
             await RefuseAsync(httpContext, StatusCodes.Status413PayloadTooLarge,
-                $"The upload is larger than the {options.MaxSize} these endpoints take.").ConfigureAwait(false);
+                $"The upload is larger than the {maxSize} these endpoints take.").ConfigureAwait(false);
+            return;
+        }
+        if (onCompleted is not null && request.Headers["Upload-Metadata"].ToString().Length > MaxClientMetadataLength)
+        {
+            await RefuseAsync(httpContext, StatusCodes.Status400BadRequest,
+                $"Upload-Metadata must be no longer than {MaxClientMetadataLength} characters.").ConfigureAwait(false);
             return;
         }
         if (!TryParseMetadata(request.Headers["Upload-Metadata"], out Dictionary<string, string>? metadata))
@@ -287,12 +291,12 @@ internal sealed partial class ResourceUploadEndpoints(ResourceUploadEndpointOpti
         }
 
         ResourceUploadTarget? target;
-        if (throughLinks)
+        if (resolve is null)
         {
             target = await LinkTargetAsync(httpContext, length, metadata).ConfigureAwait(false);
             if (target is null) return;
         }
-        else if ((target = await options.ResolveAsync!(httpContext, new ResourceUploadRequest
+        else if ((target = await resolve(httpContext, new ResourceUploadRequest
         {
             Length = length,
             Metadata = metadata
@@ -309,7 +313,7 @@ internal sealed partial class ResourceUploadEndpoints(ResourceUploadEndpointOpti
             if (target.Mode == ResourceWriteMode.Create
                 && await container.GetResourceInfoAsync(target.ResourceName, cancellationToken: cancellationToken).ConfigureAwait(false) is not null)
             {
-                await RefuseAsync(httpContext, StatusCodes.Status409Conflict, throughLinks
+                await RefuseAsync(httpContext, StatusCodes.Status409Conflict, ThroughLinks
                     ? SharedUploadHttpResult.NameTaken
                     : $"The resource {target.ResourceName} already exists in the container {target.ContainerName}.").ConfigureAwait(false);
                 return;
@@ -330,8 +334,11 @@ internal sealed partial class ResourceUploadEndpoints(ResourceUploadEndpointOpti
         }
 
         // The link is the permission, so an upload through one works for whoever has its URL, signed in or not.
+        // What the callback gets is sealed too: the request that completes the upload could name any other link.
         var session = new Session(target.ContainerName, target.ResourceName, upload.UploadId, length,
-            target.Mode == ResourceWriteMode.Replace, throughLinks ? null : UserOf(httpContext.User));
+            target.Mode == ResourceWriteMode.Replace, ThroughLinks ? null : UserOf(httpContext.User),
+            onCompleted is null || !ThroughLinks ? null : (string)request.RouteValues["link"]!,
+            onCompleted is null || metadata.Count == 0 ? null : metadata);
         response.Headers.Location = $"{request.PathBase}{request.Path.Value!.TrimEnd('/')}/{Seal(httpContext, session)}";
         long offset = 0;
         if (hasContent)
@@ -474,13 +481,13 @@ internal sealed partial class ResourceUploadEndpoints(ResourceUploadEndpointOpti
     }
 
     /// <summary>
-    /// Completes an upload that holds all its content, then calls <see cref="ResourceUploadEndpointOptions.OnCompletedAsync"/>.
+    /// Completes an upload that holds all its content, then calls the endpoints' <c>OnCompletedAsync</c>.
     /// A refused completion cancels the session, so a client that retries is told the upload is gone, rather than that
     /// it finished. One that fails otherwise keeps it, and answers 503 Service Unavailable, or, when
     /// <paramref name="resuming"/>, 423 Locked: a tus client that resumes and gets any other error starts the upload
     /// again from the beginning, while it retries a locked one. Completing isn't canceled with the request, so a client
     /// that gives up while a large upload is read and checked finds it completed when it resumes. When
-    /// <see cref="ResourceUploadEndpointOptions.OnCompletedAsync"/> throws, the version is stored, so a client that
+    /// <c>OnCompletedAsync</c> throws, the version is stored, so a client that
     /// resumes is told the upload finished, and one whose last request completed it gets 500 Internal Server Error.
     /// </summary>
     /// <returns>Whether the upload's version is stored and the response can go on; when not, it's answered.</returns>
@@ -523,11 +530,14 @@ internal sealed partial class ResourceUploadEndpoints(ResourceUploadEndpointOpti
             return false;
         }
 
-        if (options.OnCompletedAsync is { } onCompleted)
+        if (onCompleted is not null)
         {
             try
             {
-                await onCompleted(httpContext, version).ConfigureAwait(false);
+                SignedResourceUploadLink? link = session.LinkToken is { } token
+                    ? ResourcefullLinksServiceCollectionExtensions.SignerFor(httpContext, Resources(httpContext), Caller).CheckUpload(token).Link
+                    : null;
+                await onCompleted(new ResourceUploadCompletedContext(httpContext, version, link, session.ClientMetadata)).ConfigureAwait(false);
             }
             catch (Exception exception)
             {
@@ -588,12 +598,15 @@ internal sealed partial class ResourceUploadEndpoints(ResourceUploadEndpointOpti
     }
 
     /// <summary>The method that mapped the endpoints, for error messages.</summary>
-    private string Caller => throughLinks
+    private string Caller => ThroughLinks
         ? nameof(ResourcefullUploadsEndpointRouteBuilderExtensions.MapResourcefullUploadLinks)
         : nameof(ResourcefullUploadsEndpointRouteBuilderExtensions.MapResourcefullUploads);
 
+    /// <summary>Whether the route's upload link decides where an upload goes.</summary>
+    private bool ThroughLinks => resolve is null;
+
     private IResourceServiceClient Resources(HttpContext httpContext) =>
-        options.StoreName is not { } storeName
+        storeName is null
             ? httpContext.RequestServices.GetRequiredService<IResourceServiceClient>()
             : httpContext.RequestServices.GetKeyedService<IResourceServiceClient>(storeName)
                 ?? throw new InvalidOperationException(
@@ -606,7 +619,7 @@ internal sealed partial class ResourceUploadEndpoints(ResourceUploadEndpointOpti
     private void SetExpiry(HttpContext httpContext)
     {
         ResourcefullOptions settings = httpContext.RequestServices.GetRequiredService<IOptionsMonitor<ResourcefullOptions>>()
-            .Get(options.StoreName ?? Options.DefaultName);
+            .Get(storeName ?? Options.DefaultName);
         if (settings.AbandonedUploadsDeletedAfter is not { } after) return;
         DateTimeOffset now = (httpContext.RequestServices.GetService<TimeProvider>() ?? TimeProvider.System).GetUtcNow();
         httpContext.Response.Headers["Upload-Expires"] = (now + after).ToString("R", CultureInfo.InvariantCulture);
@@ -617,7 +630,7 @@ internal sealed partial class ResourceUploadEndpoints(ResourceUploadEndpointOpti
     {
         if (httpContext.Features.Get<IHttpActivityFeature>()?.Activity is not { } activity) return;
         activity.SetTag("resourcefull.tus", action);
-        if (options.StoreName is not null) activity.SetTag("resourcefull.store", options.StoreName);
+        if (storeName is not null) activity.SetTag("resourcefull.store", storeName);
     }
 
     /// <summary>Answers with <paramref name="status"/> and, except to <c>HEAD</c>, problem details titled <paramref name="title"/>.</summary>
@@ -641,7 +654,7 @@ internal sealed partial class ResourceUploadEndpoints(ResourceUploadEndpointOpti
     /// Answers with <paramref name="status"/> for what the store refused, titled with the exception's message or,
     /// through links, with one of <c>Results.SharedUpload</c>'s, which don't name the container or say how full it is.
     /// </summary>
-    private Task RefuseAsync(HttpContext httpContext, int status, Exception exception) => throughLinks
+    private Task RefuseAsync(HttpContext httpContext, int status, Exception exception) => ThroughLinks
         ? RefuseAsync(httpContext, status, SharedUploadHttpResult.RefusalTitle(exception) ?? exception switch
         {
             ResourceUploadOffsetException => "The upload holds a different number of bytes than the request says. Resume it to find out how many.",
@@ -706,7 +719,7 @@ internal sealed partial class ResourceUploadEndpoints(ResourceUploadEndpointOpti
     }
 
     private string Seal(HttpContext httpContext, Session session) =>
-        Base64Url.EncodeToString(Protector(httpContext).Protect(JsonSerializer.SerializeToUtf8Bytes(session)));
+        Base64Url.EncodeToString(Protector(httpContext).Protect(JsonSerializer.SerializeToUtf8Bytes(session, SessionJson)));
 
     /// <summary>The upload a token names, or <see langword="null"/> if it isn't one these endpoints sealed, or it's another user's.</summary>
     private Session? Open(HttpContext httpContext, string token) =>
@@ -722,10 +735,10 @@ internal sealed partial class ResourceUploadEndpoints(ResourceUploadEndpointOpti
         // The purpose adds the endpoints' pattern and, for a named store, its name, so an upload's URL works only with
         // endpoints mapped with the same pattern string for the same store, whose ResolveAsync and OnCompletedAsync are
         // those that chose its target and expect it. Uploads through links have a purpose of their own.
-        string purpose = throughLinks ? LinkPurpose : Purpose;
-        return _protector = options.StoreName is null
+        string purpose = ThroughLinks ? LinkPurpose : Purpose;
+        return _protector = storeName is null
             ? provider.CreateProtector(purpose, pattern)
-            : provider.CreateProtector(purpose, pattern, options.StoreName);
+            : provider.CreateProtector(purpose, pattern, storeName);
     }
 
     /// <summary>
@@ -824,5 +837,7 @@ internal sealed partial class ResourceUploadEndpoints(ResourceUploadEndpointOpti
         [property: JsonPropertyName("u")] string UploadId,
         [property: JsonPropertyName("l")] long Length,
         [property: JsonPropertyName("r")] bool Replace,
-        [property: JsonPropertyName("w")] string? User);
+        [property: JsonPropertyName("w")] string? User,
+        [property: JsonPropertyName("k")] string? LinkToken,
+        [property: JsonPropertyName("m")] Dictionary<string, string>? ClientMetadata);
 }

@@ -226,6 +226,7 @@ When an upload starts, people see:
 | has no `filename`, for a link with a prefix, or has a `filetype` that isn't a media type | **400 Bad Request** |
 | is larger than `MaxSize` | **413 Content Too Large** |
 | has a type the link doesn't allow, or none, for a link that limits types | **415 Unsupported Media Type** |
+| sends an `Upload-Metadata` longer than 4,096 characters, when `OnCompletedAsync` is set | **400 Bad Request** |
 | uses a `Create` link whose name already has a file | **409 Conflict** |
 
 After that, an upload through a link works as any resumable upload does: see
@@ -237,15 +238,50 @@ limits every upload through the endpoints, whatever the link. For a store added 
 `StoreName`, and add its signed links with `AddResourcefullLinks(storeName)`:
 
 ```csharp
-app.MapResourcefullUploadLinks("/upload-links", options =>
+app.MapResourcefullUploadLinks("/upload-links", new ResourceUploadLinkEndpointOptions
 {
-    options.OnCompletedAsync = (context, version) => claims.FileReceivedAsync(version.Name);
-    options.MaxSize = ResourceSize.Gigabytes(10);
+    OnCompletedAsync = completed => claims.FileReceivedAsync(completed.Version.Name),
+    MaxSize = ResourceSize.Gigabytes(10)
 });
 ```
 
 For a page on another origin, add CORS as for the other resumable upload endpoints: see
 [Pages on other origins](aspnet-core/resumable-uploads.md#pages-on-other-origins).
+
+## Pages on other origins
+
+When the page is on a different origin than your application, a browser sends an `OPTIONS` request to ask permission
+before each `fetch` `PUT`, and hides the `ETag` of the answer unless it's told not to. `WithResourcefullUploadHeaders`
+adds to a CORS policy what uploads need, and `RequireCors` applies the policy to the endpoint, so that `OPTIONS` request
+gets an answer:
+
+```csharp
+builder.Services.AddCors(cors => cors.AddPolicy("uploads", policy => policy
+    .WithOrigins("https://app.example.com")
+    .WithResourcefullUploadHeaders()));
+
+app.UseCors();
+app.MapMethods("/upload/{token}/{**name}", ["PUT", "POST"],
+    (string token, string? name, IResourceServiceClient resources) => Results.SharedUpload(resources, token, name))
+    .RequireCors("uploads");
+```
+
+A plain HTML form on another origin needs none of this, since a browser posts it without asking first. A page that sends
+a form with `fetch` and reads the answer does need the policy.
+
+## Running code once a file is stored
+
+To run code after each file a `PUT` or a form stores, pass a callback to `Results.SharedUpload`:
+
+```csharp
+app.MapMethods("/upload/{token}/{**name}", ["PUT", "POST"], (string token, string? name, IResourceServiceClient resources) =>
+    Results.SharedUpload(resources, token, stored => claims.FileReceivedAsync(stored.Link!.NamePrefix, stored.Version.Name), name));
+```
+
+It gets the same `ResourceUploadCompletedContext` as `OnCompletedAsync`: the request, the stored `Version`, the `Link`,
+and `ClientMetadata`, which for a form holds the file's name in the form, as `filename`, and for a body sent with `PUT` or
+`POST` is empty. It's called once for each file stored, so a form's refused file doesn't get a call. If it throws, the
+file stays stored, the exception propagates as it would from any endpoint, and a form's remaining files aren't stored.
 
 ## Checking a token yourself
 

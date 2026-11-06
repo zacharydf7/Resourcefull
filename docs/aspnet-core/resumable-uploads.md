@@ -32,10 +32,10 @@ builder.Services.AddDataProtection();               // seals the upload URLs
 
 var app = builder.Build();
 
-app.MapResourcefullUploads("/uploads", options =>
+app.MapResourcefullUploads("/uploads", new ResourceUploadEndpointOptions
 {
     // Decides where each upload goes. Return null to refuse it.
-    options.ResolveAsync = async (context, request) =>
+    ResolveAsync = async (context, request) =>
     {
         int claimId = int.Parse(request.Metadata.GetValueOrDefault("claimId", "0"));
         if (!await claims.MayUploadAsync(context.User, claimId)) return null;
@@ -45,11 +45,11 @@ app.MapResourcefullUploads("/uploads", options =>
             ContentType = request.Metadata.GetValueOrDefault("filetype"),
             Metadata = { ["original-name"] = request.Metadata.GetValueOrDefault("filename", "file") }
         };
-    };
+    },
 
     // Runs once a file is stored, to record it in the app's own database.
-    options.OnCompletedAsync = (context, version) =>
-        claims.AttachFileAsync(version.Name, version.Metadata["original-name"]);
+    OnCompletedAsync = completed =>
+        claims.AttachFileAsync(completed.Version.Name, completed.Version.Metadata["original-name"])
 }).RequireAuthorization();
 ```
 
@@ -120,6 +120,7 @@ can't complete just now, they answer 423, so the client tries again:
 | What happens | What the client is told |
 |---|---|
 | The upload starts with a name that already has a current version, and its mode is `Create` | 409 Conflict, before any of the file is sent |
+| The upload starts with an `Upload-Metadata` longer than 4,096 characters, and `OnCompletedAsync` is set | 400 Bad Request, before any of the file is sent |
 | The upload is larger than `MaxSize` or the container's size limit, or its type isn't allowed | 413 Content Too Large or 415 Unsupported Media Type, before any of it is sent |
 | Completing is refused: the name was taken meanwhile, the inspector refused the content, or a policy refused it | The refusal's status code. The upload is canceled, so it can't be completed later. tus-js-client retries a 409, finds the upload gone, and starts a new one, which is refused when it starts if the name is still taken |
 | Completing fails for another reason, such as a database that can't be reached | 503 Service Unavailable. The upload is kept. When the client resumes, the endpoints try to complete it again, and while that still fails they answer its `HEAD` with 423 Locked, which the client retries |
@@ -131,6 +132,12 @@ the upload is told it finished. Save to your database in a way that tolerates a 
 first and then saving your row, as [Files and your own data](../files-and-your-data.md#saving-a-new-file) shows.
 It can also run twice for one upload, when two requests complete it at once, such as a slow completion and the
 client's retry of it, so make it safe to call again for the same version.
+
+It gets a `ResourceUploadCompletedContext`: the request as `HttpContext`, the stored `Version`, the `Link` the upload came
+through, if any, and `ClientMetadata`, the `Upload-Metadata` of the request that started the upload. When
+`OnCompletedAsync` is set, that metadata travels inside the upload's URL, and a long one can make the URL too long for a
+server in front of the application. So the endpoints then refuse an `Upload-Metadata` longer than 4,096 characters with
+400 Bad Request. A file's name and type take far less.
 
 ## Deciding where uploads go
 
@@ -168,7 +175,8 @@ also keep each request short, which matters behind hosts and load balancers that
 
 When the page is served from a different origin than the endpoints, the browser needs CORS, and tus clients need to read
 headers that browsers hide by default, such as `Location` and `Upload-Offset`. `WithResourcefullUploadHeaders` adds
-what the endpoints use to a policy:
+to a policy what uploads need, whether they go through these endpoints, `MapResourcefullUploadLinks`, or a `fetch` `PUT`
+to [an upload link](../upload-links.md#pages-on-other-origins):
 
 ```csharp
 builder.Services.AddCors(cors => cors.AddPolicy("uploads", policy => policy
@@ -176,7 +184,7 @@ builder.Services.AddCors(cors => cors.AddPolicy("uploads", policy => policy
     .WithResourcefullUploadHeaders()));
 
 app.UseCors();
-app.MapResourcefullUploads("/uploads", ConfigureUploads).RequireCors("uploads").RequireAuthorization();
+app.MapResourcefullUploads("/uploads", uploadOptions).RequireCors("uploads").RequireAuthorization();
 ```
 
 A missing exposed header is the most common reason a tus client fails in the browser while working in tests.
@@ -221,10 +229,10 @@ For a store added with [`AddKeyedResourcefull`](../several-stores.md), set `Stor
 each store that takes uploads:
 
 ```csharp
-app.MapResourcefullUploads("/archive/uploads", options =>
+app.MapResourcefullUploads("/archive/uploads", new ResourceUploadEndpointOptions
 {
-    options.StoreName = "archive";
-    options.ResolveAsync = ResolveArchiveUpload;
+    StoreName = "archive",
+    ResolveAsync = ResolveArchiveUpload
 }).RequireAuthorization();
 ```
 

@@ -56,6 +56,27 @@ public static class ResourcefullResults
         /// <returns>The result, which checks the token and stores the body when it runs.</returns>
         public static IResult SharedUpload(IResourceServiceClient resources, string token, string? resourceName = null) =>
             new SharedUploadHttpResult(resources, token, resourceName);
+
+        /// <summary>
+        /// Stores the request's body through a signed upload link, as
+        /// <see cref="SharedUpload(IResourceServiceClient, string, string?)"/> does, and calls <paramref name="onStored"/>
+        /// once for each file stored. See <see cref="SharedUploadHttpResult"/>.
+        /// </summary>
+        /// <param name="resources">The client to store the upload through.</param>
+        /// <param name="token">The token from the link's URL.</param>
+        /// <param name="onStored">Called after each file is stored, before the answer is sent.</param>
+        /// <param name="resourceName">
+        /// The name the holder gave, from the URL, for a link with a prefix; <see langword="null"/> or empty for a link to
+        /// one name.
+        /// </param>
+        /// <returns>The result, which checks the token and stores the body when it runs.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="onStored"/> is null.</exception>
+        public static IResult SharedUpload(IResourceServiceClient resources, string token, Func<ResourceUploadCompletedContext, Task> onStored,
+            string? resourceName = null)
+        {
+            ArgumentNullException.ThrowIfNull(onStored);
+            return new SharedUploadHttpResult(resources, token, resourceName, onStored);
+        }
     }
 }
 
@@ -83,5 +104,13 @@ public static class ResourcefullTypedResults
         /// <inheritdoc cref="ResourcefullResults.SharedUpload(IResourceServiceClient, string, string?)"/>
         public static SharedUploadHttpResult SharedUpload(IResourceServiceClient resources, string token, string? resourceName = null) =>
             new(resources, token, resourceName);
+
+        /// <inheritdoc cref="ResourcefullResults.SharedUpload(IResourceServiceClient, string, Func{ResourceUploadCompletedContext, Task}, string?)"/>
+        public static SharedUploadHttpResult SharedUpload(IResourceServiceClient resources, string token, Func<ResourceUploadCompletedContext, Task> onStored,
+            string? resourceName = null)
+        {
+            ArgumentNullException.ThrowIfNull(onStored);
+            return new SharedUploadHttpResult(resources, token, resourceName, onStored);
+        }
     }
 }

@@ -1,9 +1,12 @@
 using System.Buffers.Text;
 using System.Net;
 using System.Net.Http.Headers;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
+using Moq;
 using Resourcefull.AspNetCore;
 using Resourcefull.Testing;
 
@@ -199,6 +202,95 @@ public class UploadLinkTests
         // Assert: changing a purpose would stop every link already handed out from working, so these are written out.
         Assert.NotEmpty(dataProtection.CreateProtector("Resourcefull.ResourceLink.v1").Unprotect(Base64Url.DecodeFromChars(download)));
         Assert.NotEmpty(dataProtection.CreateProtector("Resourcefull.ResourceUploadLink.v1").Unprotect(Base64Url.DecodeFromChars(upload)));
+    }
+
+    [Fact]
+    public async Task SharedUpload_ShouldCallOnStoredWithTheVersionAndTheLink_WhenABodyIsStored()
+    {
+        // Arrange
+        await using TestApp app = await TestApp.StartAsync();
+        string token = (await app.Links.CreateUploadTokenAsync(new ResourceUploadLink(TestApp.Container) { NamePrefix = "in/" }))!;
+
+        // Act
+        HttpResponseMessage response = await app.Client.PutAsync($"/upload-hooked/{token}/a.txt", Text("a"));
+
+        // Assert
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        ResourceUploadCompletedContext stored = Assert.Single(app.Stored);
+        Assert.Equal(("in/a.txt", "in/"), (stored.Version.Name, stored.Link!.NamePrefix));
+        Assert.Empty(stored.ClientMetadata);
+    }
+
+    [Fact]
+    public async Task SharedUpload_ShouldKeepTheFileAndAnswerServerError_WhenOnStoredThrows()
+    {
+        // Arrange
+        await using TestApp app = await TestApp.StartAsync();
+        string token = (await app.Links.CreateUploadTokenAsync(new ResourceUploadLink(TestApp.Container) { NamePrefix = "in/" }))!;
+
+        // Act
+        HttpResponseMessage response = await app.Client.PutAsync($"/upload-hooked/{token}/fail", Text("a"));
+
+        // Assert
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+        Assert.Equal("a", await ReadAsync(app, "in/fail"));
+    }
+
+    [Fact]
+    public async Task SharedUpload_ShouldAnswerThePreflightAndExposeTheETag_WhenSetUpAsTheDocsSayForAPageOnAnotherOrigin()
+    {
+        // Arrange: what docs/upload-links.md shows under "Pages on other origins".
+        WebApplicationBuilder builder = WebApplication.CreateSlimBuilder();
+        builder.WebHost.UseTestServer();
+        builder.Services.AddResourcefull(options => options.UseInMemory());
+        builder.Services.AddResourcefullLinks();
+        builder.Services.AddCors(cors => cors.AddPolicy("uploads", policy => policy
+            .WithOrigins("https://app.example.com")
+            .WithResourcefullUploadHeaders()));
+        await using WebApplication web = builder.Build();
+        web.UseCors();
+        web.MapMethods("/upload/{token}/{**name}", ["PUT", "POST"],
+            (string token, string? name, IResourceServiceClient resources) => Results.SharedUpload(resources, token, name))
+            .RequireCors("uploads");
+        await web.StartAsync();
+        using IServiceScope scope = web.Services.CreateScope();
+        await scope.ServiceProvider.GetRequiredService<IResourceServiceClient>().CreateContainerAsync("c");
+        string token = (await scope.ServiceProvider.GetRequiredService<IResourceLinkSigner>()
+            .CreateUploadTokenAsync(new ResourceUploadLink("c") { ResourceName = "a.txt" }))!;
+        HttpClient client = web.GetTestClient();
+        var preflight = new HttpRequestMessage(HttpMethod.Options, $"/upload/{token}");
+        preflight.Headers.Add("Origin", "https://app.example.com");
+        preflight.Headers.Add("Access-Control-Request-Method", "PUT");
+        var put = new HttpRequestMessage(HttpMethod.Put, $"/upload/{token}") { Content = Text("a") };
+        put.Headers.Add("Origin", "https://app.example.com");
+
+        // Act
+        HttpResponseMessage asked = await client.SendAsync(preflight);
+        HttpResponseMessage sent = await client.SendAsync(put);
+
+        // Assert
+        Assert.Equal(HttpStatusCode.NoContent, asked.StatusCode);
+        Assert.Contains("PUT", asked.Headers.GetValues("Access-Control-Allow-Methods").Single());
+        Assert.Equal(HttpStatusCode.Created, sent.StatusCode);
+        Assert.Contains("ETag", sent.Headers.GetValues("Access-Control-Expose-Headers").Single());
+        Assert.NotNull(sent.Headers.ETag);
+    }
+
+    [Fact]
+    public void SharedUpload_ShouldKeepTheCallback_WhenGivenOnStored()
+    {
+        // Arrange
+        Func<ResourceUploadCompletedContext, Task> onStored = _ => Task.CompletedTask;
+        IResourceServiceClient resources = new Mock<IResourceServiceClient>().Object;
+
+        // Act
+        var plain = (SharedUploadHttpResult)Results.SharedUpload(resources, "token", onStored, "a.txt");
+        SharedUploadHttpResult typed = TypedResults.SharedUpload(resources, "token", onStored, "a.txt");
+
+        // Assert
+        Assert.Same(onStored, plain.OnStored);
+        Assert.Same(onStored, typed.OnStored);
+        Assert.Null(TypedResults.SharedUpload(resources, "token", "a.txt").OnStored);
     }
 
     [Fact]

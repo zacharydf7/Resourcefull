@@ -304,6 +304,13 @@
 
 ### Changed
 
+- **Upload endpoints take options, and hooks get a context.** `MapResourcefullUploads` and `MapResourcefullUploadLinks` no
+  longer take an `Action`: the first takes a `ResourceUploadEndpointOptions` with a `required` `ResolveAsync`, and the
+  second an optional `ResourceUploadLinkEndpointOptions`, both with `init` properties. `OnCompletedAsync` takes a
+  `ResourceUploadCompletedContext`, with the `HttpContext`, the `Version`, the upload `Link` and the client's
+  `ClientMetadata`. Setting `OnCompletedAsync` also limits `Upload-Metadata` to 4,096 characters; a longer one gets 400 Bad
+  Request. A new overload of `Results.SharedUpload` and `TypedResults.SharedUpload` takes an `onStored` callback with the same context, called once
+  for each file stored. `WithResourcefullUploadHeaders` also allows `PUT` and exposes `ETag`, for upload links and forms.
 - **Download links are called download links.** `ResourceLink`, `SignedResourceLink` and `ResourceLinkCheck` are now
   `ResourceDownloadLink`, `SignedResourceDownloadLink` and `ResourceDownloadLinkCheck`, and `CreateTokenAsync`, `Check` and
   `Results.SharedResource` are now `CreateDownloadTokenAsync`, `CheckDownload` and `Results.SharedDownload`, matching upload

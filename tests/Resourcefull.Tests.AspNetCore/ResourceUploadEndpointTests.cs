@@ -563,7 +563,7 @@ public class ResourceUploadEndpointTests
     }
 
     [Fact]
-    public void MapResourcefullUploads_ShouldThrow_WhenResolveIsntSetOrDataProtectionIsMissing()
+    public void MapResourcefullUploads_ShouldThrow_WhenResolveIsNullOrDataProtectionIsMissing()
     {
         // Arrange
         WebApplicationBuilder builder = WebApplication.CreateSlimBuilder();
@@ -571,11 +571,14 @@ public class ResourceUploadEndpointTests
         using WebApplication app = builder.Build();
 
         // Act
-        void noResolve() => app.MapResourcefullUploads("/uploads", _ => { });
-        void noDataProtection() => app.MapResourcefullUploads("/uploads", o => o.ResolveAsync = (_, _) => Task.FromResult<ResourceUploadTarget?>(null));
+        void noResolve() => app.MapResourcefullUploads("/uploads", new ResourceUploadEndpointOptions { ResolveAsync = null! });
+        void noDataProtection() => app.MapResourcefullUploads("/uploads", new ResourceUploadEndpointOptions
+        {
+            ResolveAsync = (_, _) => Task.FromResult<ResourceUploadTarget?>(null)
+        });
 
         // Assert
-        Assert.Contains("ResolveAsync", Assert.Throws<InvalidOperationException>(noResolve).Message);
+        Assert.Equal("options", Assert.Throws<ArgumentNullException>(noResolve).ParamName);
         Assert.Contains("AddDataProtection", Assert.Throws<InvalidOperationException>(noDataProtection).Message);
     }
 
@@ -586,16 +589,70 @@ public class ResourceUploadEndpointTests
     }
 
     [Fact]
-    public void WithResourcefullUploadHeaders_ShouldAllowAndExposeWhatTusClientsUse_WhenCalled()
+    public void WithResourcefullUploadHeaders_ShouldAllowAndExposeWhatUploadClientsUse_WhenCalled()
     {
         // Act
         CorsPolicy policy = new CorsPolicyBuilder().WithOrigins("https://example.com").WithResourcefullUploadHeaders().Build();
 
         // Assert
-        Assert.Equal(["POST", "HEAD", "PATCH", "DELETE", "OPTIONS"], policy.Methods);
+        Assert.Equal(["POST", "PUT", "HEAD", "PATCH", "DELETE", "OPTIONS"], policy.Methods);
         Assert.Contains("Upload-Metadata", policy.Headers);
         Assert.Contains("X-HTTP-Method-Override", policy.Headers);
         Assert.Contains("Location", policy.ExposedHeaders);
         Assert.Contains("Upload-Offset", policy.ExposedHeaders);
+        Assert.Contains("ETag", policy.ExposedHeaders);
+    }
+
+    [Fact]
+    public void ResourceUploadTarget_ShouldHaveEveryUploadSessionOption_WhenCalled()
+    {
+        // Arrange: the endpoints take a session's headers from the target's ContentType and the upload's length.
+        string[] target = [.. typeof(ResourceUploadTarget).GetProperties().Select(p => p.Name)];
+        string[] headers = [.. typeof(ResourceHeaders).GetProperties().Select(p => p.Name)];
+
+        // Act
+        string[] missing = [.. typeof(ResourceUploadSessionOptions).GetProperties().Select(p => p.Name)
+            .Where(name => name != nameof(ResourceUploadSessionOptions.Headers) && !target.Contains(name))];
+
+        // Assert: an option added to sessions has to reach uploads through these endpoints too.
+        Assert.Empty(missing);
+        Assert.Equal([nameof(ResourceHeaders.ContentLength), nameof(ResourceHeaders.ContentType)], headers.Order());
+    }
+
+    [Fact]
+    public async Task OnCompletedAsync_ShouldGetTheVersionAndTheClientsMetadataWithNoLink_WhenAnUploadCompletes()
+    {
+        // Arrange: metadata sent when the upload starts.
+        await using UploadApp app = await UploadApp.StartAsync();
+        string url = await StartAsync(app, 3, "ファイル.bin", more: ("note", "from the client"));
+
+        // Act
+        await PatchAsync(app, url, 0, "abc"u8.ToArray());
+
+        // Assert
+        ResourceUploadCompletedContext completed = Assert.Single(app.CompletedContexts);
+        Assert.Equal("tus/ファイル.bin", completed.Version.Name);
+        Assert.Null(completed.Link);
+        Assert.Equal(("ファイル.bin", "from the client"), (completed.ClientMetadata["filename"], completed.ClientMetadata["note"]));
+        Assert.NotNull(completed.HttpContext);
+    }
+
+    [Fact]
+    public async Task Post_ShouldRefuseOnlyUploadMetadataOver4096Characters_WhenTheEndpointsHaveACallback()
+    {
+        // Arrange: 3,069 bytes take 4,092 characters of Base64, so a key and a space make 4,096 or 4,097.
+        await using UploadApp app = await UploadApp.StartAsync();
+        string atTheLimit = Metadata(("abc", new string('x', 3069)));
+        string overTheLimit = Metadata(("abcd", new string('x', 3069)));
+
+        // Act
+        HttpResponseMessage fits = await CreateAsync(app, 3, atTheLimit);
+        HttpResponseMessage tooLong = await CreateAsync(app, 3, overTheLimit);
+        HttpResponseMessage noCallback = await CreateAsync(app, 3, overTheLimit, "/other-uploads");
+
+        // Assert: endpoints with no callback keep no metadata in the URL, so they have no reason to refuse it.
+        Assert.Equal(HttpStatusCode.Created, fits.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, tooLong.StatusCode);
+        Assert.Equal(HttpStatusCode.Created, noCallback.StatusCode);
     }
 }

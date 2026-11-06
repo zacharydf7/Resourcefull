@@ -35,17 +35,23 @@ namespace Resourcefull.AspNetCore;
 /// That way the holder learns nothing the link didn't give them, such as the container's name or how full it is.
 /// Other exceptions propagate.
 /// </para>
+/// <para>
+/// An <see cref="OnStored"/> callback is called once for each file stored, after the file is stored and before the answer
+/// is sent. If it throws, the file stays stored, the exception propagates, and a form's remaining files aren't stored.
+/// </para>
 /// <para>Coming in 4.0.</para>
 /// </summary>
 public sealed class SharedUploadHttpResult : IResult, IActionResult
 {
-    internal SharedUploadHttpResult(IResourceServiceClient resources, string token, string? resourceName)
+    internal SharedUploadHttpResult(IResourceServiceClient resources, string token, string? resourceName,
+        Func<ResourceUploadCompletedContext, Task>? onStored = null)
     {
         ArgumentNullException.ThrowIfNull(resources);
         ArgumentNullException.ThrowIfNull(token);
         Resources = resources;
         Token = token;
         ResourceName = resourceName;
+        OnStored = onStored;
     }
 
     /// <summary>The client the upload is stored through.</summary>
@@ -56,6 +62,9 @@ public sealed class SharedUploadHttpResult : IResult, IActionResult
 
     /// <summary>The name the holder gave, for a link with a prefix.</summary>
     public string? ResourceName { get; }
+
+    /// <summary>Called once for each file stored; <see langword="null"/> for no callback.</summary>
+    public Func<ResourceUploadCompletedContext, Task>? OnStored { get; }
 
     /// <inheritdoc />
     public async Task ExecuteAsync(HttpContext httpContext)
@@ -117,6 +126,9 @@ public sealed class SharedUploadHttpResult : IResult, IActionResult
             return;
         }
 
+        if (OnStored is { } onStored)
+            await onStored(new ResourceUploadCompletedContext(httpContext, stored, link, null)).ConfigureAwait(false);
+
         response.GetTypedHeaders().ETag = Preconditions.EntityTagOf(stored);
         response.StatusCode = existed ? StatusCodes.Status200OK : StatusCodes.Status201Created;
     }
@@ -177,13 +189,13 @@ public sealed class SharedUploadHttpResult : IResult, IActionResult
 
             // A form doesn't say how long each file is, so a file is cut off at the link's limit, and refused.
             var content = new ResourceUploadEndpoints.BoundedStream(section.Body, link.MaxSize?.Bytes ?? long.MaxValue);
+            ResourceInfo version;
             try
             {
-                ResourceInfo version = await container.UploadAsync(link.ResourceName ?? link.NamePrefix + fileName, content,
+                version = await container.UploadAsync(link.ResourceName ?? link.NamePrefix + fileName, content,
                     new ResourceUploadOptions { Mode = link.Mode, Headers =
                         new ResourceHeaders { ContentType = section.ContentType } },
                     cancellationToken).ConfigureAwait(false);
-                stored.Add(new StoredFile(fileName, Preconditions.EntityTagOf(version)?.ToString()));
             }
             catch (Exception) when (content.Exceeded)
             {
@@ -201,6 +213,13 @@ public sealed class SharedUploadHttpResult : IResult, IActionResult
                 await RefuseFileAsync(httpContext, ResourcefullExceptionHandler.StatusCodeOf(exception)!.Value, title, fileName, stored)
                     .ConfigureAwait(false);
                 return;
+            }
+
+            stored.Add(new StoredFile(fileName, Preconditions.EntityTagOf(version)?.ToString()));
+            if (OnStored is { } onStored)
+            {
+                await onStored(new ResourceUploadCompletedContext(httpContext, version, link, new Dictionary<string, string> { ["filename"] = fileName }))
+                    .ConfigureAwait(false);
             }
         }
 

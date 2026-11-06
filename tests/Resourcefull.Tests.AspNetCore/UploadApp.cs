@@ -64,6 +64,9 @@ internal sealed class UploadApp : IAsyncDisposable
     /// <summary>The versions <see cref="ResourceUploadEndpointOptions.OnCompletedAsync"/> was called with.</summary>
     public ConcurrentQueue<ResourceInfo> Completed { get; } = new();
 
+    /// <summary>What <see cref="ResourceUploadEndpointOptions.OnCompletedAsync"/> was called with.</summary>
+    public ConcurrentQueue<ResourceUploadCompletedContext> CompletedContexts { get; } = new();
+
     /// <summary>How many more completions through <c>/flaky-uploads</c> fail.</summary>
     public int FailCompletions
     {
@@ -134,35 +137,21 @@ internal sealed class UploadApp : IAsyncDisposable
             if (metadata.ContainsKey("fail-callback")) target.Metadata["fail-callback"] = "";
             return Task.FromResult<ResourceUploadTarget?>(target);
         }
-        Task OnCompleted(HttpContext context, ResourceInfo version)
+        Task OnCompleted(ResourceUploadCompletedContext context)
         {
-            if (version.Metadata.ContainsKey("fail-callback")) throw new InvalidOperationException("The app's save failed.");
-            started!.Completed.Enqueue(version);
+            if (context.Version.Metadata.ContainsKey("fail-callback")) throw new InvalidOperationException("The app's save failed.");
+            started!.Completed.Enqueue(context.Version);
+            started.CompletedContexts.Enqueue(context);
             return Task.CompletedTask;
         }
-        app.MapResourcefullUploads("/uploads", options =>
+        app.MapResourcefullUploads("/uploads", new ResourceUploadEndpointOptions { ResolveAsync = Resolve, OnCompletedAsync = OnCompleted, MaxSize = maxSize });
+        app.MapResourcefullUploads("/other-uploads", new ResourceUploadEndpointOptions { ResolveAsync = Resolve });
+        app.MapResourcefullUploads("/archive-uploads", new ResourceUploadEndpointOptions { ResolveAsync = Resolve, StoreName = ArchiveStore });
+        app.MapResourcefullUploads("/flaky-uploads", new ResourceUploadEndpointOptions
         {
-            options.ResolveAsync = Resolve;
-            options.OnCompletedAsync = OnCompleted;
-            options.MaxSize = maxSize;
+            ResolveAsync = Resolve, OnCompletedAsync = OnCompleted, StoreName = FlakyStore
         });
-        app.MapResourcefullUploads("/other-uploads", options => options.ResolveAsync = Resolve);
-        app.MapResourcefullUploads("/archive-uploads", options =>
-        {
-            options.ResolveAsync = Resolve;
-            options.StoreName = ArchiveStore;
-        });
-        app.MapResourcefullUploads("/flaky-uploads", options =>
-        {
-            options.ResolveAsync = Resolve;
-            options.OnCompletedAsync = OnCompleted;
-            options.StoreName = FlakyStore;
-        });
-        app.MapResourcefullUploadLinks("/upload-links", options =>
-        {
-            options.OnCompletedAsync = OnCompleted;
-            options.MaxSize = maxSize;
-        });
+        app.MapResourcefullUploadLinks("/upload-links", new ResourceUploadLinkEndpointOptions { OnCompletedAsync = OnCompleted, MaxSize = maxSize });
         app.MapGroup("/links").MapResourcefullUploadLinks("/uploads");
 
         await app.StartAsync();
