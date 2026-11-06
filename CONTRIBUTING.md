@@ -185,5 +185,5 @@ Three rules keep the scripts generated and safe to run again:
 3. **After the release itself is published,** set `PackageValidationBaselineVersion` in `src/Directory.Build.props` to the version just
    released, so the next release is checked against it, and `<VersionPrefix>` to the next version.
 
-A release that adds a package ID needs it added to nuget.org's Trusted Publishing policy for this repository first, or
-pushed once by hand: until then nuget.org refuses the workflow's push of the new ID with 403 Forbidden.
+A release that adds a package ID needs no setup first: this repository's Trusted Publishing policy on nuget.org is set
+to "Push new packages and package versions", so the workflow's push creates the new ID.
