@@ -1,4 +1,9 @@
+using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
+using System.Security.AccessControl;
+using System.Security.Principal;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Win32.SafeHandles;
 using Resourcefull.FileSystem;
 using Resourcefull.ObjectStorage;
 using Resourcefull.Providers;
@@ -122,6 +127,96 @@ public class FileSystemIntegrationTests(FileSystemFixture fixture)
         // Assert: it waited for the handle, then deleted the file.
         Assert.True(waited);
         Assert.False(File.Exists(path));
+    }
+
+    /// <summary>
+    /// A store whose empty directory <c>a/b</c> is marked for deletion. Until the returned handle closes, the directory
+    /// stays and listing it is refused, as happens while another thread is deleting it.
+    /// </summary>
+    private async Task<(FileSystemObjectStore Store, SafeFileHandle Marked)> NewStoreWithDirectoryBeingDeletedAsync()
+    {
+        string root = fixture.NewRoot();
+        var store = new FileSystemObjectStore(root);
+        await store.UploadAsync("a/b/k", new MemoryStream("a"u8.ToArray()), CancellationToken.None);
+        string directory = Path.Combine(root, "a", "b");
+        File.Delete(Path.Combine(directory, "k"));
+        SafeFileHandle marked = CreateFile(directory, 0x00010000 /* DELETE */, FileShare.ReadWrite | FileShare.Delete, IntPtr.Zero,
+            FileMode.Open, 0x02000000 /* FILE_FLAG_BACKUP_SEMANTICS */, IntPtr.Zero);
+        Assert.False(marked.IsInvalid);
+        int deleteFile = 1;
+        Assert.True(SetFileInformationByHandle(marked, 4 /* FileDispositionInfo */, ref deleteFile, sizeof(int)));
+        Assert.Throws<UnauthorizedAccessException>(() => Directory.EnumerateFileSystemEntries(directory).ToList());
+        return (store, marked);
+    }
+
+    [Fact]
+    public async Task ListAsync_ShouldWaitAndFindNothing_WhenADirectoryIsBeingDeleted()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Only Windows refuses to list a directory that's being deleted.");
+
+        // Arrange
+        (FileSystemObjectStore store, SafeFileHandle marked) = await NewStoreWithDirectoryBeingDeletedAsync();
+
+        // Act
+        Task<List<ObjectListing>> listing = store.ListAsync("a/", null, CancellationToken.None).ToListAsync().AsTask();
+        await Task.Delay(200);
+        bool waited = !listing.IsCompleted;
+        marked.Dispose();
+
+        // Assert
+        Assert.True(waited);
+        Assert.Empty(await listing);
+    }
+
+    [Fact]
+    public async Task ListAsync_ShouldStopWaiting_WhenCanceledWhileADirectoryIsBeingDeleted()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Only Windows refuses to list a directory that's being deleted.");
+
+        // Arrange
+        (FileSystemObjectStore store, SafeFileHandle marked) = await NewStoreWithDirectoryBeingDeletedAsync();
+        using (marked)
+        using (var canceled = new CancellationTokenSource(TimeSpan.FromMilliseconds(100)))
+        {
+            // Act & Assert: the cancellation comes long before the listing would give up on the directory.
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => store.ListAsync("a/", null, canceled.Token).ToListAsync().AsTask());
+        }
+    }
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern SafeFileHandle CreateFile(string name, uint access, FileShare share, IntPtr security, FileMode mode,
+        uint flags, IntPtr template);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetFileInformationByHandle(SafeFileHandle file, int infoClass, ref int info, int size);
+
+    [Fact]
+    [SupportedOSPlatform("windows")]
+    public async Task ListAsync_ShouldThrow_WhenADirectoryIsRefusedToTheProcess()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "This test sets a Windows access rule.");
+
+        // Arrange: a directory that exists, which this process may not list.
+        string root = fixture.NewRoot();
+        var store = new FileSystemObjectStore(root);
+        await store.UploadAsync("a/b/k", new MemoryStream("a"u8.ToArray()), CancellationToken.None);
+        var directory = new DirectoryInfo(Path.Combine(root, "a", "b"));
+        DirectorySecurity security = directory.GetAccessControl();
+        var denied = new FileSystemAccessRule(WindowsIdentity.GetCurrent().User!, FileSystemRights.ListDirectory, AccessControlType.Deny);
+        security.AddAccessRule(denied);
+        directory.SetAccessControl(security);
+
+        try
+        {
+            // Act & Assert
+            await Assert.ThrowsAsync<UnauthorizedAccessException>(() => store.ListAsync("a/", null, CancellationToken.None).ToListAsync().AsTask());
+        }
+        finally
+        {
+            security.RemoveAccessRule(denied);
+            directory.SetAccessControl(security);
+        }
     }
 
     [Fact]

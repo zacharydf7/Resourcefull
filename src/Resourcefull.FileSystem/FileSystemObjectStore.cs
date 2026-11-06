@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using System.Text;
 using Resourcefull.ObjectStorage;
@@ -30,11 +31,20 @@ internal sealed class FileSystemObjectStore(string root) : IObjectStore
     /// <summary>How many lock files conditional writes share, chosen by a hash of the key.</summary>
     internal const int LockCount = 256;
 
-    /// <summary>How long a writer waits between tries for a lock, or to move or delete a file another process has open.</summary>
+    /// <summary>
+    /// How long to wait between tries for a lock, to move or delete a file another process has open, or to list a directory
+    /// being deleted.
+    /// </summary>
     private static readonly TimeSpan RetryWait = TimeSpan.FromMilliseconds(10);
 
     /// <summary>How long a writer keeps trying for a lock, or to move or delete a file, before it fails.</summary>
     private static readonly TimeSpan MaxWait = TimeSpan.FromSeconds(30);
+
+    /// <summary>
+    /// How long a listing keeps trying a directory Windows refuses before it concludes this process may not read it. A
+    /// directory being deleted is gone in moments, and a real refusal loses only this wait.
+    /// </summary>
+    private static readonly TimeSpan MaxListWait = TimeSpan.FromSeconds(2);
 
     /// <summary>
     /// The most UTF-8 bytes a path may have: macOS refuses one past 1,023, and Linux one past 4,095. Windows, given the
@@ -149,10 +159,8 @@ internal sealed class FileSystemObjectStore(string root) : IObjectStore
         return Task.FromResult<ObjectRead?>(new ObjectRead(new RangeStream(file, end - start), file));
     }
 
-    public IAsyncEnumerable<ObjectListing> ListAsync(string prefix, string? startAfter, CancellationToken cancellationToken) =>
-        ListFiles(prefix, startAfter, cancellationToken).ToAsyncEnumerable();
-
-    private IEnumerable<ObjectListing> ListFiles(string prefix, string? startAfter, CancellationToken cancellationToken)
+    public async IAsyncEnumerable<ObjectListing> ListAsync(string prefix, string? startAfter,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         int slash = prefix.LastIndexOf('/');
@@ -160,7 +168,8 @@ internal sealed class FileSystemObjectStore(string root) : IObjectStore
         string directory = DirectoryOf(directoryKey);
         if (!Fits(directory)) yield break;
         if (!Directory.Exists(directory)) ThrowIfRootMissing();
-        foreach (ObjectListing listing in List(directoryKey, prefix[(slash + 1)..], startAfter))
+        await foreach (ObjectListing listing in ListDirectoryAsync(directoryKey, prefix[(slash + 1)..], startAfter, cancellationToken)
+            .ConfigureAwait(false))
         {
             cancellationToken.ThrowIfCancellationRequested();
             yield return listing;
@@ -173,25 +182,11 @@ internal sealed class FileSystemObjectStore(string root) : IObjectStore
     /// <paramref name="startAfter"/>, in key order. A directory sorts as its segment and a <c>/</c>, as its files' keys
     /// do.
     /// </summary>
-    private IEnumerable<ObjectListing> List(string directoryKey, string start, string? startAfter)
+    private async IAsyncEnumerable<ObjectListing> ListDirectoryAsync(string directoryKey, string start, string? startAfter,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
     {
-        List<(string Key, FileSystemInfo Entry)> entries = [];
-        try
-        {
-            foreach (FileSystemInfo entry in new DirectoryInfo(DirectoryOf(directoryKey)).EnumerateFileSystemInfos())
-            {
-                if (Unescape(entry.Name) is not { } segment || !segment.StartsWith(start, StringComparison.Ordinal)) continue;
-                string key = directoryKey + segment + (entry is DirectoryInfo ? "/" : "");
-                // A directory whose keys all come before startAfter is skipped, and one that holds it is read.
-                bool after = startAfter is null || CodePointOrder.Compare(key, startAfter) > 0
-                    || (entry is DirectoryInfo && startAfter.StartsWith(key, StringComparison.Ordinal));
-                if (after) entries.Add((key, entry));
-            }
-        }
-        catch (DirectoryNotFoundException)
-        {
-            // Deleted since its parent was read, or never there.
-        }
+        List<(string Key, FileSystemInfo Entry)> entries = await ReadDirectoryAsync(directoryKey, start, startAfter, cancellationToken)
+            .ConfigureAwait(false);
         entries.Sort((x, y) => CodePointOrder.Compare(x.Key, y.Key));
         foreach ((string key, FileSystemInfo entry) in entries)
         {
@@ -204,7 +199,43 @@ internal sealed class FileSystemObjectStore(string root) : IObjectStore
             else
             {
                 string? within = startAfter is not null && startAfter.StartsWith(key, StringComparison.Ordinal) ? startAfter : null;
-                foreach (ObjectListing listing in List(key, "", within)) yield return listing;
+                await foreach (ObjectListing listing in ListDirectoryAsync(key, "", within, cancellationToken).ConfigureAwait(false))
+                    yield return listing;
+            }
+        }
+    }
+
+    /// <summary>What <see cref="ListDirectoryAsync"/> lists from one directory: nothing if it's gone.</summary>
+    private async Task<List<(string Key, FileSystemInfo Entry)>> ReadDirectoryAsync(string directoryKey, string start, string? startAfter,
+        CancellationToken cancellationToken)
+    {
+        long started = Stopwatch.GetTimestamp();
+        while (true)
+        {
+            try
+            {
+                List<(string Key, FileSystemInfo Entry)> entries = [];
+                foreach (FileSystemInfo entry in new DirectoryInfo(DirectoryOf(directoryKey)).EnumerateFileSystemInfos())
+                {
+                    if (Unescape(entry.Name) is not { } segment || !segment.StartsWith(start, StringComparison.Ordinal)) continue;
+                    string key = directoryKey + segment + (entry is DirectoryInfo ? "/" : "");
+                    // A directory whose keys all come before startAfter is skipped, and one that holds it is read.
+                    bool after = startAfter is null || CodePointOrder.Compare(key, startAfter) > 0
+                        || (entry is DirectoryInfo && startAfter.StartsWith(key, StringComparison.Ordinal));
+                    if (after) entries.Add((key, entry));
+                }
+                return entries;
+            }
+            catch (DirectoryNotFoundException)
+            {
+                // Deleted since its parent was read, or never there.
+                return [];
+            }
+            catch (UnauthorizedAccessException) when (OperatingSystem.IsWindows() && Stopwatch.GetElapsedTime(started) < MaxListWait)
+            {
+                // Windows refuses to list a directory that's being deleted just as it refuses one this process may not read,
+                // and says that both exist, so only waiting tells them apart.
+                await Task.Delay(RetryWait, cancellationToken).ConfigureAwait(false);
             }
         }
     }
