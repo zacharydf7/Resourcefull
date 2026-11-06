@@ -3,7 +3,6 @@ namespace Resourcefull.Providers;
 /// <summary>
 /// Checks and exceptions a provider uses in its writes and deletes, so that it refuses what the built-in providers
 /// refuse, with the same messages.
-/// <para>Coming in 4.0.</para>
 /// </summary>
 public static class ResourcefullProviderExtensions
 {

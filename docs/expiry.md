@@ -1,7 +1,5 @@
 # Expiring resources
 
-<div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 4.0</span></div>
-
 Uploads can delete themselves: exports, previews, temporary shares. Give an upload an expiry, and turn on the
 background service that deletes what has expired:
 
@@ -33,17 +31,16 @@ await container.UploadAsync("exports/report.zip", stream, new ResourceUploadOpti
 - **Read-only containers don't expire.** A [read-only](container-policies.md) container keeps its expired versions,
   unreported, until it's writable again, and its expiries can't be changed. Freezing a container keeps everything
   in it. Each sweep still goes past the expired versions it keeps, a seek on that index for each batch of 100.
-- **It also deletes what stopped uploads left behind**
-  <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>, a day after they last stored anything: an
+- **It also deletes what stopped uploads left behind**, a day after they last stored anything: an
   [upload session](uploading-in-parts.md) nothing was appended to, with any provider, and, with SQL Server, PostgreSQL
   and SQLite, the [staged content](providers/sql-server-operations.md#uploads-connections-and-the-log) of an upload
   whose process died partway.
-- **Retained and held versions wait** <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>. A version that's [retained or under a legal hold](deleting-safely.md)
+- **Retained and held versions wait**. A version that's [retained or under a legal hold](deleting-safely.md)
   is left until both its expiry and its retention date have passed, and its hold is lifted.
-- **Expired versions skip the bin** <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>. In a container with a [bin](deleting-safely.md#the-bin), an expired version
+- **Expired versions skip the bin**. In a container with a [bin](deleting-safely.md#the-bin), an expired version
   is still deleted for good, since an expiry is often set to erase data on time. A version already in the bin doesn't
   expire there.
-- **It also purges the bin** <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>: after deleting expired versions, each sweep purges, for good, the versions whose time in a
+- **It also purges the bin**: after deleting expired versions, each sweep purges, for good, the versions whose time in a
   [bin](deleting-safely.md#the-bin) is up. `KeepDeletedFor` needs `UseExpiry` for that reason.
 - **Without `UseExpiry`,** expiries are stored, and `IResourceServiceClient.DeleteExpiredAsync()` deletes what has
   expired, and what stopped uploads left behind, whenever you call it, such as from a scheduled job.
@@ -69,7 +66,7 @@ stay as they are. It returns `false` when the version is gone, as it is if the s
 
 To record every version Resourcefull deletes by itself, such as in an audit system, register a cleanup handler. It
 hears about expired versions, about older versions [pruned](versioning.md#keeping-a-limited-number) past
-`MaxVersions`, and <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> about versions the sweep purges from a [bin](deleting-safely.md#the-bin), with the reason
+`MaxVersions`, and about versions the sweep purges from a [bin](deleting-safely.md#the-bin), with the reason
 `Purged`, before each is deleted. In a container with a bin, a pruned version goes to the bin at once, and the handler
 hears about it then, with `Pruned`. Otherwise, with expiry on, pruning gives a version five minutes before the sweep deletes
 it, so the handler hears about it then, with the reason `Expired`, or with `Pruned` if, in a container that keeps one
@@ -98,7 +95,6 @@ builder.Services.AddResourcefull(options => options.UseSqlServer(connectionStrin
 - **It's a scoped service,** so it can use your other services.
 
 ## Seeing what expires
-<span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>
 
 To see what a container loses next, list the versions that expire soonest. To check that the sweep is keeping up,
 list the expired versions it hasn't deleted yet, in every container:

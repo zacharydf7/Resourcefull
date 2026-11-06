@@ -30,13 +30,9 @@ anywhere else.
   declared length doesn't match its content is rejected, and nothing is stored.
 - **Safe under concurrency:** each name always has exactly one current version, and create-only uploads can't
   overwrite each other.
-- **Your own storage:** implement `IResourceRepository` and register it with `UseProvider` (in 4.0, derive from
-  `ResourceRepository` instead).
+- **Your own storage:** derive from `ResourceRepository` and register it with `UseProvider`.
 - **Made for ASP.NET Core:** serve downloads with ETags and conditional requests, accept uploads with preconditions,
   and turn exceptions into the right status codes.
-
-Coming in 4.0, and documented on the site already:
-
 - **Container policies:** size limits, quotas, allowed file types and read-only containers, per container.
 - **Upload inspection:** scan uploads for malware, or check their type, before they're stored.
 - **Copy, move and rename,** within a container or between containers, keeping where each copy came from.

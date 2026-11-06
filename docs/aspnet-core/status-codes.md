@@ -11,17 +11,17 @@ app.UseExceptionHandler();
 | Exception | Status |
 |---|---|
 | `ResourceConflictException` | 409 Conflict |
-| `ResourceUploadOffsetException` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>, for an append to an [upload session](../uploading-in-parts.md) that doesn't start where its content ends | 409 Conflict |
-| `ResourceRetainedException` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>, for a delete of a version that's [retained or under a legal hold](../deleting-safely.md) | 409 Conflict |
-| `ResourceUploadInterruptedException` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>, for an upload whose version was deleted before it completed, as by a container delete at the same time | 409 Conflict |
-| `ResourceUploadLimitException` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>, for an append past what an [upload session](../uploading-in-parts.md) can hold with its provider, or an upload larger than its provider can store in one object | 413 Content Too Large |
+| `ResourceUploadOffsetException`, for an append to an [upload session](../uploading-in-parts.md) that doesn't start where its content ends | 409 Conflict |
+| `ResourceRetainedException`, for a delete of a version that's [retained or under a legal hold](../deleting-safely.md) | 409 Conflict |
+| `ResourceUploadInterruptedException`, for an upload whose version was deleted before it completed, as by a container delete at the same time | 409 Conflict |
+| `ResourceUploadLimitException`, for an append past what an [upload session](../uploading-in-parts.md) can hold with its provider, or an upload larger than its provider can store in one object | 413 Content Too Large |
 | `ResourceContainerNotFoundException` | 404 Not Found |
 | `ResourceContentLengthMismatchException` | 400 Bad Request |
 | `ResourceNameException`, for a name that breaks the [name rules](../names.md) | 400 Bad Request |
 | `ResourcePreconditionFailedException` | 412 Precondition Failed |
-| `ResourceRangeNotSatisfiableException` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>, for a download range that starts past the end | 416 Range Not Satisfiable, with `Content-Range: bytes */` and the content's length |
-| `ResourceContentRefusedException` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>, for an upload your [upload inspector](../upload-inspection.md) refused | 422 Unprocessable Content |
-| `ResourcePolicyViolationException` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>, for a write that breaks its [container's policy](../container-policies.md) | 413 Content Too Large for the size limits, 409 Conflict for `MaxResourceCount`, 403 Forbidden for `ReadOnly`, 415 Unsupported Media Type for `AllowedContentTypes` |
+| `ResourceRangeNotSatisfiableException`, for a download range that starts past the end | 416 Range Not Satisfiable, with `Content-Range: bytes */` and the content's length |
+| `ResourceContentRefusedException`, for an upload your [upload inspector](../upload-inspection.md) refused | 422 Unprocessable Content |
+| `ResourcePolicyViolationException`, for a write that breaks its [container's policy](../container-policies.md) | 413 Content Too Large for the size limits, 409 Conflict for `MaxResourceCount`, 403 Forbidden for `ReadOnly`, 415 Unsupported Media Type for `AllowedContentTypes` |
 
 The responses are [problem details](https://www.rfc-editor.org/rfc/rfc9457) whose title is the exception's message.
 Resourcefull's messages name the resource or container involved, and sometimes the argument or option, but nothing

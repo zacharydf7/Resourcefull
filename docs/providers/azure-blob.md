@@ -1,7 +1,5 @@
 # Azure Blob Storage
 
-<div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 4.0</span></div>
-
 `Resourcefull.AzureBlob` stores resources in a blob container of an Azure Storage account. Files stream in and out
 with flat memory use, and every name keeps its versions, content hashes and metadata, as with the database providers.
 It's tested against [Azurite](https://github.com/Azure/Azurite), Microsoft's local emulator for Azure
@@ -110,7 +108,7 @@ You don't need this to use the provider, but it explains its costs and what you'
   then deletes the old one once the head no longer names it; deleting a version deletes its entry with its content. An
   entry those deletes miss, such as one a failed write left, is dropped by a sweep that finds it due and over an hour
   old; a younger one may belong to a write still in progress.
-- **Each version in a [bin](../deleting-safely.md#the-bin)** <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> stays in its name's head, separately from the
+- **Each version in a [bin](../deleting-safely.md#the-bin)** stays in its name's head, separately from the
   name's versions, and its content stays where it was. It has two entries, written just before the head write that puts it in
   the bin: one under `{prefix}d/{id}/t/`, newest deletion first, whose key holds its content's length, for listings
   of the bin and the usage figures, and one under `{prefix}t/`, keyed by when it's purged, for the sweep. Both are

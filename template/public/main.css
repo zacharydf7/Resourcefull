@@ -260,7 +260,7 @@ article .alert {
 
 /* ---- Version labels ---- */
 
-/* "Coming in 4.0" marks what's on main but not yet released; at release it becomes "Added in 4.0" (rf-added). */
+/* "Coming in 4.1" marks what's on main but not yet released; at release it becomes "Added in 4.1" (rf-added). */
 .rf-version {
   margin: -0.5rem 0 1rem;
 }
@@ -291,29 +291,6 @@ article .alert {
   background: var(--rf-surface);
   color: var(--rf-muted);
   border: 1px solid var(--rf-line);
-}
-
-/* Sidebar entries for pages about unreleased features; remove these at release. */
-.toc a[href$="expiry.html"]::after,
-.toc a[href$="telemetry.html"]::after,
-.toc a[href$="health-checks.html"]::after,
-.toc a[href$="container-policies.html"]::after,
-.toc a[href$="sharing-links.html"]::after,
-.toc a[href$="sharing-links-in-production.html"]::after,
-.toc a[href$="backup-and-move.html"]::after,
-.toc a[href$="copying-and-moving.html"]::after,
-.toc a[href$="upload-inspection.html"]::after,
-.toc a[href$="thumbnails.html"]::after,
-.toc a[href$="upgrading-to-4.html"]::after,
-.toc a[href$="aspire.html"]::after {
-  content: "4.0";
-  margin-left: .45em;
-  padding: 0 .45em;
-  border-radius: 999px;
-  font-family: var(--rf-mono);
-  font-size: 11px;
-  background: var(--rf-tint);
-  color: var(--rf-link);
 }
 
 /* ---- Footer, page navigation and "In this article" ---- */

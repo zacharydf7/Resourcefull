@@ -4,7 +4,6 @@ namespace Resourcefull.Sqlite;
 
 /// <summary>
 /// How Resourcefull uses SQLite.
-/// <para>Coming in 4.0.</para>
 /// </summary>
 public sealed class ResourcefullSqliteOptions
 {

@@ -1,7 +1,5 @@
 # The dashboard
 
-<div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 4.0</span></div>
-
 `Resourcefull.AspNetCore` includes a small dashboard: a page in your application that shows what's stored. Map it
 with one line, much as you'd map Swagger UI, and open it in a browser while you build or support your application.
 By default it only reads. While you develop, you can also let it upload, delete and change files, as described in
@@ -249,7 +247,7 @@ Forbidden for a read-only container, and 404 Not Found when what they change doe
 | `POST api/v1/upload-link?container=` | With `UploadLinkPath`: creates an upload link for the body's `name` or its `namePrefix` (exactly one of them), that works for `expiresInMinutes` (an hour if it's left out, seven days at most), and lets uploads replace a file if `replace` is `true`. Answers with its `url` and `expiresAt`. |
 
 A container holds `name`, `metadata`, `usage` and `policy`. `usage` holds `storedSize` in bytes, `resourceCount` and
-`versionCount`, and <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> `deletedSize` in bytes and `deletedVersionCount`, what the container's
+`versionCount`, and `deletedSize` in bytes and `deletedVersionCount`, what the container's
 [bin](../deleting-safely.md#the-bin) holds. `policy` holds `maxResourceSize` and `maxContainerSize` in bytes, `maxResourceCount` and
 `allowedContentTypes`, each `null` when there's no limit, plus `readOnly` and `maxVersions`, the versions kept per
 name. A file or version holds `name`, `versionId`, `isLatest` (whether it's the current version), `contentType`,

@@ -1,7 +1,5 @@
 # Moving to another provider
 
-<div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 4.0</span></div>
-
 Your code talks to Resourcefull's clients, never to the storage behind them, so switching from SQL Server to the file
 system, or from a database to S3 or Azure Blob Storage, is a change of one line in your setup. What has to move is the
 content already stored. Resourcefull copies it for you, store to store, version by version, without a file in between,

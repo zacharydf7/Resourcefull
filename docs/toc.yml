@@ -122,15 +122,7 @@
   items:
   - name: Errors
     href: errors.md
-  - name: Upgrading
-    href: upgrading.md
-  - name: Upgrading to 4.0
-    href: upgrading-to-4.md
-  - name: Upgrading to 3.0
-    href: upgrading-to-3.md
   - name: Releases and roadmap
     href: releases.md
   - name: Changelog
     href: ../CHANGELOG.md
-  - name: Samples
-    href: ../samples/README.md

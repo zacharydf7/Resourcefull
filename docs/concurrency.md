@@ -9,18 +9,18 @@ the same guarantees:
 - **Uploads don't wait for each other's content.** Each upload streams its content on its own, and the name is locked
   only for the moment the new version is made current.
 - **Create-only uploads are decided by the write.** Of several concurrent uploads of a new name with
-  `ResourceWriteMode.Create`, the default <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>, exactly one succeeds and the rest throw
+  `ResourceWriteMode.Create`, the default, exactly one succeeds and the rest throw
   `ResourceConflictException`.
   There's no window between a check and the write.
 - **Creating a container is decided by the write too.** Of several concurrent `CreateContainerAsync` calls for
   one name, exactly one succeeds. `CreateContainerIfNotExistsAsync` returns a client to every caller.
 - **An upload never succeeds into a missing container.** A container deleted while an upload into it runs makes the
   upload throw `ResourceContainerNotFoundException`, not report success. With SQL Server, PostgreSQL and SQLite, the
-  upload can throw `ResourceUploadInterruptedException` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>
+  upload can throw `ResourceUploadInterruptedException`
   instead, when the delete reaches the upload's version before it removes the container. Either way, nothing was
   stored.
 - **Pruning never leaves more than `MaxVersions`**, even with concurrent uploads, because each prune works from the
-  versions as they stand after its own write. (With [expiry](expiry.md) on <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>, the extra versions expire
+  versions as they stand after its own write. (With [expiry](expiry.md) on, the extra versions expire
   five minutes later instead of being deleted at once.) A prune that fails leaves the extra versions until a later upload of the
   name prunes them (see [Versioning](versioning.md#keeping-a-limited-number)).
 - **A download reads the version it resolved.** If another upload makes a newer version current while you read, you
@@ -28,7 +28,7 @@ the same guarantees:
   it: without versioning, a replacing upload deletes the name's only version, and with versioning, one past the
   limit prunes the oldest. With SQL Server, a download of a version deleted partway through throws
   `IOException`, so a client downloading a file that's often replaced should be ready to download it again. Turning on
-  [expiry](expiry.md) <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> avoids this: a replaced or pruned version then stays five minutes more, so
+  [expiry](expiry.md) avoids this: a replaced or pruned version then stays five minutes more, so
   downloads already reading it finish.
 - **Readers don't block writers.** With SQL Server, reads use row versions
   ([`READ_COMMITTED_SNAPSHOT`](providers/sql-server.md#read_committed_snapshot)) instead of shared locks, and
@@ -65,7 +65,7 @@ They can read again, reapply their change and retry.
 - **Set both** and both must hold.
 - **A name with no current version meets no condition.** For "only if it doesn't exist yet", use `ResourceWriteMode.Create`; it
   can't be combined with conditions.
-- **A conditional upload replaces the version it matched**, so it needs `ResourceWriteMode.Replace` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>.
+- **A conditional upload replaces the version it matched**, so it needs `ResourceWriteMode.Replace`.
 - **Deletes take conditions too**, with
   `DeleteResourceIfExistsAsync(name, versionId, conditions, cancellationToken)`. The conditions apply to the name's
   current version, and a name that doesn't exist throws rather than returning `false`.

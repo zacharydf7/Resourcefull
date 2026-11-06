@@ -4,7 +4,6 @@ namespace Resourcefull.S3;
 
 /// <summary>
 /// How Resourcefull reaches an S3-compatible store.
-/// <para>Coming in 4.0.</para>
 /// </summary>
 public sealed class ResourcefullS3Options
 {

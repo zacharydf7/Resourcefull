@@ -21,7 +21,6 @@ namespace Resourcefull.AspNetCore;
 /// <summary>
 /// Maps endpoints for resumable uploads that speak tus 1.0, the open protocol for them, over Resourcefull's upload
 /// sessions, so browsers and apps can resume large uploads with tus clients such as tus-js-client and Uppy.
-/// <para>Coming in 4.0.</para>
 /// </summary>
 public static partial class ResourcefullUploadsEndpointRouteBuilderExtensions
 {

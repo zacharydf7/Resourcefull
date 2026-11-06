@@ -22,7 +22,6 @@ public sealed class ResourceConditions
     /// <summary>
     /// Whether neither condition is set. Empty conditions are no conditions: every write meets them, so a provider can
     /// skip reading the current version to check them.
-    /// <para>Coming in 4.0.</para>
     /// </summary>
     public bool IsEmpty => IfMatchVersionId is null && IfMatchContentHash is null;
 }

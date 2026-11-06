@@ -1,7 +1,5 @@
 # Uploading in parts
 
-<div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 4.0</span></div>
-
 A large file over a slow or unreliable connection is hard to send in one go: when the connection drops two
 gigabytes in, an ordinary upload has to start again from the beginning. An upload session sends the file in parts
 instead. What has arrived stays stored, so after a dropped connection, or even a restart of the server, the client

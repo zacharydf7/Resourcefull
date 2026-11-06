@@ -3,7 +3,6 @@ namespace Resourcefull.Providers;
 /// <summary>
 /// One page of a container's bin, as <see cref="ResourceRepository.GetDeletedPageAsync"/> returns it: the versions
 /// found, newest deletion first, and where the next page starts.
-/// <para>Coming in 4.0.</para>
 /// </summary>
 public sealed record DeletedVersionPage
 {

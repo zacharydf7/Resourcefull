@@ -70,7 +70,7 @@ the same container, or fill it with names your application doesn't expect.
 - **Or check the name** against what the user may write: a prefix of their own (`drafts/{userId}/`), or a fixed set
   of names.
 - **Leave uploads [create-only](../uploading.md#replacing-a-file)** when they should never replace an existing file.
-  That's the default for `UploadAsync` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>; for `UploadFromRequestAsync`, require `If-None-Match: *`.
+  That's the default for `UploadAsync`; for `UploadFromRequestAsync`, require `If-None-Match: *`.
 
 ## 4. Limit what can be uploaded
 
@@ -80,10 +80,10 @@ the same container, or fill it with names your application doesn't expect.
 - **File types.** [`AllowedContentTypes`](../container-policies.md) checks the type the uploader *declares*, not
   what the file really is: someone can upload a web page and call it `image/png`. Treat the declared type as a hint,
   list exact types rather than `image/*` (which includes SVG images, which can run scripts), and if it matters, check
-  the file's first bytes or scan it with an [upload inspector](../upload-inspection.md) <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>.
+  the file's first bytes or scan it with an [upload inspector](../upload-inspection.md).
 - **Showing files in the browser.** Downloads are offered as files to save, not shown, unless you set `Inline`. Even
   with `Inline`, only types that are safe to show are displayed: common image formats, PDF, audio, video and plain
-  text <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>. A web page or SVG image shown as part of
+  text. A web page or SVG image shown as part of
   your site could run scripts as if it were one of your pages, which is why the rest are downloaded.
 - **Forms.** An upload form is a target for other sites: a page elsewhere can make a signed-in user's browser submit
   it. Keep ASP.NET Core's antiforgery protection on, as [Accepting uploads](accepting-uploads.md#from-an-html-form)

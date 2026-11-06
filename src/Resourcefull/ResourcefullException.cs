@@ -21,14 +21,12 @@ public class ResourcefullException : Exception
     /// <summary>
     /// The container the error is about: for a copy or move, the destination when that's where the problem is, and
     /// for a <see cref="ResourcePolicyViolationException"/>, the container whose policy refused the write.
-    /// <para>Coming in 4.0.</para>
     /// </summary>
     public string? ContainerName { get => _containerName; init => _containerName = value; }
 
     /// <summary>
     /// The resource the error is about, or <see langword="null"/> when it's about a container, as a
     /// <see cref="ResourceConflictException"/> for a container that exists is.
-    /// <para>Coming in 4.0.</para>
     /// </summary>
     public string? ResourceName { get => _resourceName; init => _resourceName = value; }
 
@@ -79,7 +77,6 @@ public sealed class ResourceNameException : ArgumentException
     /// <param name="message">The message that describes the error.</param>
     /// <param name="paramName">The name of the argument that holds the name.</param>
     /// <param name="name">The name that broke the rules.</param>
-    /// <remarks>Coming in 4.0.</remarks>
     public ResourceNameException(string message, string? paramName, string? name) : base(message, paramName)
     {
         Name = name;
@@ -87,7 +84,6 @@ public sealed class ResourceNameException : ArgumentException
 
     /// <summary>
     /// The name that broke the rules, or <see langword="null"/> when whoever threw the exception didn't say.
-    /// <para>Coming in 4.0.</para>
     /// </summary>
     public string? Name { get; }
 }
@@ -95,7 +91,6 @@ public sealed class ResourceNameException : ArgumentException
 /// <summary>
 /// Thrown when a range download starts past the end of the content. Nothing is read. Maps naturally to an HTTP 416,
 /// with <see cref="ContentLength"/> in its <c>Content-Range</c> header.
-/// <para>Coming in 4.0.</para>
 /// </summary>
 public sealed class ResourceRangeNotSatisfiableException : ResourcefullException
 {
@@ -139,7 +134,6 @@ public sealed class ResourcePreconditionFailedException : ResourcefullException
 /// Thrown when an append to an upload session doesn't start where the stored content ends, as when an earlier append's
 /// content was stored but its answer was lost. Nothing is stored. Resume from <see cref="CurrentOffset"/>. Maps
 /// naturally to an HTTP 409.
-/// <para>Coming in 4.0.</para>
 /// </summary>
 public sealed class ResourceUploadOffsetException : ResourcefullException
 {
@@ -160,7 +154,6 @@ public sealed class ResourceUploadOffsetException : ResourcefullException
 /// S3 and Azure Blob providers' limit on the pieces they join. What the session stored before the limit stays stored,
 /// but it takes no more content: start a new session, and append in larger parts. It's also thrown for an upload larger
 /// than the provider can store in one object; such an upload stores nothing. Maps naturally to an HTTP 413.
-/// <para>Coming in 4.0.</para>
 /// </summary>
 public sealed class ResourceUploadLimitException : ResourcefullException
 {
@@ -182,7 +175,6 @@ public sealed class ResourceContentLengthMismatchException : ResourcefullExcepti
     /// <summary>Creates the exception with a message and the exception that caused it.</summary>
     /// <param name="message">The message that describes the error.</param>
     /// <param name="innerException">The exception that caused this one.</param>
-    /// <remarks>Coming in 4.0.</remarks>
     public ResourceContentLengthMismatchException(string message, Exception innerException)
         : base(message, innerException) { }
 }
@@ -190,7 +182,6 @@ public sealed class ResourceContentLengthMismatchException : ResourcefullExcepti
 /// <summary>
 /// Thrown when the <see cref="IResourceUploadInspector"/> refuses an upload's content. Nothing is stored. Maps naturally
 /// to an HTTP 422.
-/// <para>Coming in 4.0.</para>
 /// </summary>
 public sealed class ResourceContentRefusedException : ResourcefullException
 {
@@ -231,7 +222,6 @@ public sealed class ResourceContainerNotFoundException : ResourcefullException
 /// Thrown when a write breaks its container's <see cref="ContainerPolicy"/>. Nothing is changed. Maps naturally
 /// to an HTTP 413 for content too large for the limits, 409 for a container that holds as many resources as it may,
 /// 403 for a read-only container, and 415 for a content type that isn't allowed.
-/// <para>Coming in 4.0.</para>
 /// </summary>
 public sealed class ResourcePolicyViolationException : ResourcefullException
 {
@@ -261,7 +251,6 @@ public sealed class ResourcePolicyViolationException : ResourcefullException
 /// hasn't passed, or it's under a <see cref="ResourceInfo.LegalHold"/>. A delete that's refused deletes nothing, with one
 /// exception: if a hold or a later date lands on a version while a batched delete of a name or container is under way,
 /// the versions that delete reached first stay deleted. Maps naturally to an HTTP 409.
-/// <para>Coming in 4.0.</para>
 /// </summary>
 public sealed class ResourceRetainedException : ResourcefullException
 {
@@ -293,7 +282,6 @@ public sealed class ResourceRetainedException : ResourcefullException
 /// time or by the sweep of abandoned uploads, which deletes an upload that has stored nothing for a day. Nothing was
 /// stored, and the upload can be tried again; if the container was deleted, the next try throws
 /// <see cref="ResourceContainerNotFoundException"/>. Maps naturally to an HTTP 409.
-/// <para>Coming in 4.0.</para>
 /// </summary>
 public sealed class ResourceUploadInterruptedException : ResourcefullException
 {
@@ -308,7 +296,6 @@ public sealed class ResourceUploadInterruptedException : ResourcefullException
 /// <see cref="StoreCopyFailures.Stop"/>. <see cref="Exception.InnerException"/> says why, and <see cref="Result"/> holds
 /// what the copy did before it stopped, with the container that failed. What was copied stays copied, so running the copy
 /// again goes on from there.
-/// <para>Coming in 4.0.</para>
 /// </summary>
 public sealed class StoreCopyException : ResourcefullException
 {

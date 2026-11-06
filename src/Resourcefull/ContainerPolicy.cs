@@ -6,7 +6,6 @@ namespace Resourcefull;
 /// any container its own; a property left <see langword="null"/> there falls back to the default. A write that breaks
 /// a rule throws <see cref="ResourcePolicyViolationException"/> and stores nothing. Pruning older versions is never
 /// refused, and lowering a limit below what a container holds only refuses new writes.
-/// <para>Coming in 4.0.</para>
 /// </summary>
 public sealed class ContainerPolicy
 {
@@ -67,7 +66,6 @@ public sealed class ContainerPolicy
     /// How long each new version can't be deleted for, counted from when its write starts: its
     /// <see cref="ResourceInfo.RetainUntil"/>, unless the write sets one itself. Uploads, copies and restores get it;
     /// versions already stored keep theirs. <see cref="TimeSpan.Zero"/> gives none.
-    /// <para>Coming in 4.0.</para>
     /// </summary>
     /// <exception cref="ArgumentOutOfRangeException">It's set to less than zero.</exception>
     public TimeSpan? RetainFor
@@ -87,7 +85,6 @@ public sealed class ContainerPolicy
     /// expired versions and container deletes skip it. The bin doesn't count toward <see cref="MaxContainerSize"/> or
     /// <see cref="MaxResourceCount"/>. A version's purge time is fixed when it's deleted, so a change applies to later
     /// deletes. <see cref="TimeSpan.Zero"/> makes deletes permanent, as they are without a bin.
-    /// <para>Coming in 4.0.</para>
     /// </summary>
     /// <exception cref="ArgumentOutOfRangeException">It's set to less than zero.</exception>
     public TimeSpan? KeepDeletedFor
@@ -116,7 +113,6 @@ public sealed class ContainerPolicy
 /// service, so it can depend on the application's own. Its answer for a container is cached for the time
 /// <see cref="ResourcefullOptionsBuilder.UseContainerPolicies"/> sets, so a change applies within that time on every
 /// instance.
-/// <para>Coming in 4.0.</para>
 /// </summary>
 public interface IResourcePolicyProvider
 {
@@ -132,7 +128,6 @@ public interface IResourcePolicyProvider
 
 /// <summary>
 /// The rule of a <see cref="ContainerPolicy"/> that a write broke.
-/// <para>Coming in 4.0.</para>
 /// </summary>
 public enum ResourcePolicyRule
 {
@@ -154,7 +149,6 @@ public enum ResourcePolicyRule
 
 /// <summary>
 /// What a container holds.
-/// <para>Coming in 4.0.</para>
 /// </summary>
 public sealed record ContainerUsage
 {

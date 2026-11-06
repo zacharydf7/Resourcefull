@@ -1,7 +1,5 @@
 # SQLite
 
-<div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 4.0</span></div>
-
 `Resourcefull.Sqlite` stores resources in a SQLite database: a single file, with no database server to run. Content is
 split into chunks, so files of any size stream in and out with flat memory use, and every name keeps its versions,
 content hashes and metadata, as with the other providers. It suits desktop and edge applications, a single server, and

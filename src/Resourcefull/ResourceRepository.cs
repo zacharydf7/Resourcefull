@@ -11,7 +11,6 @@ namespace Resourcefull.Providers;
 /// The abstract members are what every provider must do; the virtual ones have defaults that work, more slowly than a
 /// provider could, or throw <see cref="NotSupportedException"/> so the feature that needs them reports that it isn't
 /// supported. This class follows semantic versioning: it changes incompatibly only in a major release.
-/// <para>Coming in 4.0.</para>
 /// </summary>
 /// <remarks>
 /// <para>
@@ -44,7 +43,6 @@ public abstract class ResourceRepository
     /// Creates a provider that indexes <paramref name="searchableMetadataKeys"/>, the keys in its store's
     /// <see cref="ResourcefullOptions.SearchableMetadataKeys"/>. Read them from the store's options in the factory
     /// that makes the provider, the one given to <c>UseProvider</c>.
-    /// <para>Coming in 4.0.</para>
     /// </summary>
     /// <param name="searchableMetadataKeys">The keys listings can search for; <see langword="null"/> for none.</param>
     protected ResourceRepository(IReadOnlySet<string>? searchableMetadataKeys) =>
@@ -118,7 +116,6 @@ public abstract class ResourceRepository
     /// The metadata keys a listing can search for, from <see cref="ResourcefullOptionsBuilder.UseMetadataSearch"/>, as
     /// given to the constructor; empty when there are none. A provider that keeps an index for
     /// <see cref="FindResourcePageAsync"/> indexes these keys of each current version, and only these.
-    /// <para>Coming in 4.0.</para>
     /// </summary>
     public virtual IReadOnlySet<string> SearchableMetadataKeys { get; }
 
@@ -128,7 +125,6 @@ public abstract class ResourceRepository
     /// The default implementation reads <see cref="GetResourcePageAsync"/>'s pages and keeps the matches, which works for
     /// any provider but reads every name; a provider can keep an index of <see cref="SearchableMetadataKeys"/> to read
     /// only the matches.
-    /// <para>Coming in 4.0.</para>
     /// </summary>
     /// <param name="containerName">The container to list.</param>
     /// <param name="prefix">Only names that start with this, ordinally; <see langword="null"/> for every name.</param>
@@ -155,7 +151,6 @@ public abstract class ResourceRepository
     /// <summary>
     /// Indexes <see cref="SearchableMetadataKeys"/> for every current version in the container, such as after a key was
     /// added to them, a batch at a time. The default implementation does nothing, for a provider that keeps no index.
-    /// <para>Coming in 4.0.</para>
     /// </summary>
     /// <param name="containerName">The container.</param>
     /// <param name="cancellationToken">Cancels the indexing; what's indexed by then stays indexed.</param>
@@ -323,7 +318,6 @@ public abstract class ResourceRepository
     /// in ordinal order (<see cref="StringComparer.Ordinal"/>). As with <see cref="GetResourcePageAsync"/>, a provider
     /// may use its storage's binary order instead, as long as its ordering and its <paramref name="afterName"/>
     /// comparison agree, and should answer without reading every container.
-    /// <para>Coming in 4.0.</para>
     /// </summary>
     /// <param name="prefix">Only names that start with this, ordinally; <see langword="null"/> for every name.</param>
     /// <param name="afterName">Only names after this one, in the listing's order; <see langword="null"/> to start from the first.</param>
@@ -439,7 +433,6 @@ public abstract class ResourceRepository
     /// <see langword="false"/> by default. While it's <see langword="false"/>, the clients refuse every write that would
     /// give a version a <see cref="ResourceInfo.ExpiresAt"/>, so none is stored with an expiry that never happens, and
     /// <see cref="ResourcefullOptionsBuilder.UseExpiry"/> fails when the application starts.
-    /// <para>Coming in 4.0.</para>
     /// </summary>
     /// <remarks>
     /// A provider that returns <see langword="true"/> must store <see cref="NewResourceVersion.ExpiresAt"/> with each
@@ -506,7 +499,6 @@ public abstract class ResourceRepository
     /// <summary>
     /// Stages <paramref name="version"/>, with no content, so content can be appended to it. It keeps the version's
     /// content type, metadata, expiry and declared length, for <see cref="GetStagedVersionAsync"/> to return.
-    /// <para>Coming in 4.0.</para>
     /// </summary>
     /// <param name="version">The version to stage.</param>
     /// <param name="cancellationToken">Cancels the start; a canceled start stages nothing.</param>
@@ -517,7 +509,6 @@ public abstract class ResourceRepository
 
     /// <summary>
     /// A staged version as it stands: the version as it was staged, and how many bytes have been appended to it.
-    /// <para>Coming in 4.0.</para>
     /// </summary>
     /// <param name="resource">The name the version is staged under.</param>
     /// <param name="versionId">The staged version's ID.</param>
@@ -533,7 +524,6 @@ public abstract class ResourceRepository
     /// at <paramref name="offset"/>. Content may be stored as it arrives, so an append that fails partway keeps what it
     /// stored, and the caller resumes from the new length. Each part stored moves the version's stamp forward, so
     /// <see cref="DeleteAbandonedUploadsAsync"/> leaves a session alone while content still arrives.
-    /// <para>Coming in 4.0.</para>
     /// </summary>
     /// <param name="resource">The name the version is staged under.</param>
     /// <param name="versionId">The staged version's ID.</param>
@@ -553,7 +543,6 @@ public abstract class ResourceRepository
     /// <summary>
     /// Reads a staged version's content from the start, for the clients to measure, hash and inspect it before it's
     /// completed. The caller owns and disposes the stream.
-    /// <para>Coming in 4.0.</para>
     /// </summary>
     /// <param name="resource">The name the version is staged under.</param>
     /// <param name="versionId">The staged version's ID.</param>
@@ -568,7 +557,6 @@ public abstract class ResourceRepository
     /// Makes a staged version its name's current version, with the length and hash the clients measured, as
     /// <see cref="AddResourceAsync"/> makes an upload current: deciding <paramref name="condition"/> in the same step,
     /// and stamping the version with the time it becomes current.
-    /// <para>Coming in 4.0.</para>
     /// </summary>
     /// <param name="resource">The name the version is staged under.</param>
     /// <param name="versionId">The staged version's ID.</param>
@@ -592,7 +580,6 @@ public abstract class ResourceRepository
 
     /// <summary>
     /// Deletes a staged version and its content.
-    /// <para>Coming in 4.0.</para>
     /// </summary>
     /// <param name="resource">The name the version is staged under.</param>
     /// <param name="versionId">The staged version's ID.</param>
@@ -677,7 +664,6 @@ public abstract class ResourceRepository
     /// Whether the provider keeps versions from being deleted while they're retained or held: <see langword="false"/>
     /// by default, and the clients then refuse every write that would give a version a
     /// <see cref="ResourceInfo.RetainUntil"/> or a <see cref="ResourceInfo.LegalHold"/>, so none is stored unprotected.
-    /// <para>Coming in 4.0.</para>
     /// </summary>
     /// <remarks>
     /// A provider that returns <see langword="true"/> must store <see cref="NewResourceVersion.RetainUntil"/> and
@@ -700,7 +686,6 @@ public abstract class ResourceRepository
     /// Moves one version's <see cref="ResourceInfo.RetainUntil"/> to <paramref name="retainUntil"/>, or the current
     /// version's when <paramref name="versionId"/> is <see langword="null"/>. A date can only move later: it's refused
     /// if it's before the version's own, decided by the change itself.
-    /// <para>Coming in 4.0.</para>
     /// </summary>
     /// <param name="resource">The resource.</param>
     /// <param name="versionId">The version, or <see langword="null"/> for the current one.</param>
@@ -718,7 +703,6 @@ public abstract class ResourceRepository
     /// <summary>
     /// Sets or lifts one version's <see cref="ResourceInfo.LegalHold"/>, or the current version's when
     /// <paramref name="versionId"/> is <see langword="null"/>, changing nothing else about it.
-    /// <para>Coming in 4.0.</para>
     /// </summary>
     /// <param name="resource">The resource.</param>
     /// <param name="versionId">The version, or <see langword="null"/> for the current one.</param>
@@ -736,7 +720,6 @@ public abstract class ResourceRepository
     /// Whether the provider can keep deleted versions in a bin: <see langword="false"/> by default, and the clients then
     /// refuse every delete in a container with a <see cref="ContainerPolicy.KeepDeletedFor"/>, so nothing meant
     /// to be kept is deleted for good.
-    /// <para>Coming in 4.0.</para>
     /// </summary>
     /// <remarks>
     /// A provider that returns <see langword="true"/> must override every member in this section, and support expiry
@@ -753,7 +736,6 @@ public abstract class ResourceRepository
     /// the versions in the container's bin, each with <see cref="ResourceInfo.DeletedAt"/> set to now and
     /// <see cref="ResourceInfo.PurgeAt"/> to <paramref name="purgeAt"/>. Their content stays, so a download already
     /// reading one can finish.
-    /// <para>Coming in 4.0.</para>
     /// </summary>
     /// <param name="resource">The resource.</param>
     /// <param name="versionId">The version to delete, or <see langword="null"/> for every version.</param>
@@ -776,7 +758,6 @@ public abstract class ResourceRepository
     /// <see cref="ResourceInfo.IsLatest"/> unset. When <paramref name="prefix"/> leaves versions out, it may look at more
     /// than <paramref name="pageSize"/> to fill the page, but a provider should bound how many, and return a short page
     /// rather than read the whole bin.
-    /// <para>Coming in 4.0.</para>
     /// </summary>
     /// <param name="containerName">The container.</param>
     /// <param name="prefix">Only versions of names that start with this, ordinally; <see langword="null"/> for all.</param>
@@ -793,7 +774,6 @@ public abstract class ResourceRepository
 
     /// <summary>
     /// Lists one name's versions in the bin, in the order <see cref="GetDeletedPageAsync"/> lists them.
-    /// <para>Coming in 4.0.</para>
     /// </summary>
     /// <param name="resource">The resource.</param>
     /// <param name="cancellationToken">Cancels the listing.</param>
@@ -806,7 +786,6 @@ public abstract class ResourceRepository
     /// Takes one version, or with no <paramref name="versionId"/> every version of the name, out of the bin. Each comes
     /// back as an older version, placed among the older versions in the order they were first stored, so the current
     /// version stays current; if the name has no current version, the most recently stored of them becomes current.
-    /// <para>Coming in 4.0.</para>
     /// </summary>
     /// <param name="resource">The resource.</param>
     /// <param name="versionId">The version, or <see langword="null"/> for every version of the name in the bin.</param>
@@ -820,7 +799,6 @@ public abstract class ResourceRepository
     /// Deletes one version in the bin for good, or with no <paramref name="versionId"/> every version of the name in the
     /// bin; with <paramref name="dueBy"/>, only those whose <see cref="ResourceInfo.PurgeAt"/> is at or before it,
     /// decided by the purge itself, since an undelete may have taken a version out of the bin since it was listed.
-    /// <para>Coming in 4.0.</para>
     /// </summary>
     /// <param name="resource">The resource.</param>
     /// <param name="versionId">The version, or <see langword="null"/> for every version of the name in the bin.</param>
@@ -837,7 +815,6 @@ public abstract class ResourceRepository
     /// <see cref="ResourceInfo.PurgeAt"/> is at or before <paramref name="now"/>, in <see cref="ResourceVersionKey"/> order,
     /// with <see cref="ResourceInfo.PurgeAt"/> as its time. The sweep calls it every interval, so a provider should answer
     /// it from an index, as it answers <see cref="GetExpiredAsync"/>.
-    /// <para>Coming in 4.0.</para>
     /// </summary>
     /// <param name="now">The time to compare purge times with.</param>
     /// <param name="maxVersions">The most versions to return.</param>

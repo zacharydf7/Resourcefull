@@ -2,7 +2,6 @@ namespace Resourcefull;
 
 /// <summary>
 /// Which versions <see cref="IResourceContainerClient.GetTopVersionsAsync"/> lists first.
-/// <para>Coming in 4.0.</para>
 /// </summary>
 public enum ResourceVersionOrder
 {

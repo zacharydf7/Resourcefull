@@ -4,7 +4,6 @@ namespace Resourcefull.AzureBlob;
 
 /// <summary>
 /// How Resourcefull reaches Azure Blob Storage.
-/// <para>Coming in 4.0.</para>
 /// </summary>
 public sealed class ResourcefullAzureBlobOptions
 {

@@ -73,8 +73,6 @@ decrypt them after downloading. Resourcefull then stores only encrypted bytes, w
 
 ## Uploads, connections and the log
 
-<div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 4.0</span></div>
-
 An upload holds no transaction, lock or connection while its content arrives, however slowly the client sends it:
 
 1. **It starts** by storing the new version, marked as staged, which hides it from every read, listing and usage
@@ -99,8 +97,6 @@ What that means for slow clients:
   as its content arrives, so the sweep leaves it alone as long as content keeps arriving. Without `UseExpiry`, call
   `DeleteExpiredAsync` on a schedule, or such batches stay until you do. `resourcefull.sqlserver.abandoned_uploads`
   counts what the sweep deletes.
-
-Before 4.0, an upload was one transaction, holding a connection and the log for as long as the client took.
 
 ## Timeouts
 
@@ -133,10 +129,7 @@ see [Timeouts](#timeouts).
 
 **After a deployment, requests fail with error 207, "Invalid column name …", and the health check is Unhealthy.** The
 application was deployed before the database was upgraded. Run the upgrade
-([Upgrading the database](sql-server-upgrades.md)); the readiness check keeps traffic away until then. If the column
-is `Uri` and the instance runs 3.x, it's the other way around: the database was upgraded to 4.0 <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>, which 3.x
-can't run against. Stop the instance and deploy 4.0, or restore the backup taken before the upgrade (see
-[Upgrading to 4.0](../upgrading-to-4.md#upgrading-the-database)).
+([Upgrading the database](sql-server-upgrades.md)); the readiness check keeps traffic away until then.
 
 **The health check reports Degraded after a deployment.** The database was upgraded by a newer release than this
 instance; that's expected while a rolling deployment finishes. If it lasts, an old instance is still running.

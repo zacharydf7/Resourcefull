@@ -74,35 +74,30 @@ public sealed record ResourceInfo
     /// <summary>
     /// The version this one was copied or restored from; <see langword="null"/> for a version that was uploaded, or
     /// stored by a provider that doesn't record it.
-    /// <para>Coming in 4.0.</para>
     /// </summary>
     public ResourceOrigin? CopiedFrom { get; init; }
 
     /// <summary>
     /// When the version expires and is deleted, within one interval, by <see cref="ResourcefullOptionsBuilder.UseExpiry"/>;
     /// <see langword="null"/> for a version that doesn't expire.
-    /// <para>Coming in 4.0.</para>
     /// </summary>
     public DateTimeOffset? ExpiresAt { get; init; }
 
     /// <summary>
     /// Until when the version can't be deleted, by anyone or anything, expiry and pruning included;
     /// <see langword="null"/> for a version without one. See <see cref="IResourceContainerClient.SetRetentionAsync"/>.
-    /// <para>Coming in 4.0.</para>
     /// </summary>
     public DateTimeOffset? RetainUntil { get; init; }
 
     /// <summary>
     /// Whether the version is under a legal hold, which keeps it from being deleted until the hold is lifted, whatever
     /// its <see cref="RetainUntil"/>. See <see cref="IResourceContainerClient.SetLegalHoldAsync"/>.
-    /// <para>Coming in 4.0.</para>
     /// </summary>
     public bool LegalHold { get; init; }
 
     /// <summary>
     /// Whether the version may be deleted at <paramref name="now"/>: it's under no legal hold, and its
     /// <see cref="RetainUntil"/> is unset or has passed.
-    /// <para>Coming in 4.0.</para>
     /// </summary>
     /// <param name="now">The time to judge by.</param>
     public bool IsDeletableAt(DateTimeOffset now) => !LegalHold && !(RetainUntil > now);
@@ -110,7 +105,6 @@ public sealed record ResourceInfo
     /// <summary>
     /// When the version was deleted into the bin, for a version that
     /// <see cref="IResourceContainerClient.ListDeletedAsync"/> lists; <see langword="null"/> for every other version.
-    /// <para>Coming in 4.0.</para>
     /// </summary>
     public DateTimeOffset? DeletedAt { get; init; }
 
@@ -119,7 +113,6 @@ public sealed record ResourceInfo
     /// <see cref="ResourcefullOptionsBuilder.UseExpiry"/>: its <see cref="DeletedAt"/> plus the
     /// <see cref="ContainerPolicy.KeepDeletedFor"/> in force when it was deleted. <see langword="null"/> for a
     /// version that isn't in the bin.
-    /// <para>Coming in 4.0.</para>
     /// </summary>
     public DateTimeOffset? PurgeAt { get; init; }
 }

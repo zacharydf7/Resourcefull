@@ -14,12 +14,9 @@ await container.UploadAsync("contract.docx", file, new ResourceUploadOptions { M
 ```
 
 Without versioning, a container keeps one version of each name, so a replacing upload deletes the version it
-replaced. A [container policy](container-policies.md) <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> can give a container a limit of its own with
+replaced. A [container policy](container-policies.md) can give a container a limit of its own with
 `MaxVersions`, such as keeping the history of contracts but not of thumbnails; `UseVersioning` is the default for
 containers whose policy doesn't set one.
-
-<span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> In 3.1, versioning is store-wide: with it, every upload of a name adds a version; without it, an upload
-with `Overwrite` replaces the name's only version.
 
 ## Current and older versions
 
@@ -52,7 +49,7 @@ upload of the name prunes them. Until then they're ordinary versions you can lis
 logged as a warning, with its exception, under the `Resourcefull.ResourceContainerClient` category, when your
 application has logging set up, so one that keeps failing doesn't go unnoticed.
 
-To prune a whole container at once <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>, such as after fixing what made prunes fail, or after an
+To prune a whole container at once, such as after fixing what made prunes fail, or after an
 [import](backup-and-move.md), which keeps every version it's given, call the container client's `PruneAsync`. It
 prunes every name as an upload would, and returns how many versions were past the limit:
 
@@ -60,7 +57,7 @@ prunes every name as an upload would, and returns how many versions were past th
 long pruned = await resources.GetContainerClient("contracts").PruneAsync();
 ```
 
-With [expiry](expiry.md) turned on <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>, pruning doesn't delete a version at once: it sets it to expire five
+With [expiry](expiry.md) turned on, pruning doesn't delete a version at once: it sets it to expire five
 minutes later, and the expiry sweep deletes it then. A download already reading it can finish, rather than fail
 partway. Until it's deleted, it's listed, readable and counted toward [container policies](container-policies.md)
 like any version, with its `ExpiresAt` showing when it goes. A version that already expires sooner keeps its expiry.
@@ -69,15 +66,15 @@ that are still waiting too, so replaced content doesn't come back; if deleting t
 failed prune and they stay until they expire. In a container that keeps more, deleting the current version makes the
 previous one current, as always, and that can be one waiting to be deleted.
 
-In a container with a [bin](deleting-safely.md#the-bin) <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>, a pruned version goes to the bin at once, without
+In a container with a [bin](deleting-safely.md#the-bin), a pruned version goes to the bin at once, without
 the five minutes, since its content stays readable there; it can be brought back until the bin's time is up.
 
-A version that's [retained or under a legal hold](deleting-safely.md) <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> isn't pruned: it stays past the limit,
+A version that's [retained or under a legal hold](deleting-safely.md) isn't pruned: it stays past the limit,
 and once it's no longer protected, the next prune removes it. So an upload that replaces a retained version always succeeds,
 and the retained version stays on as an older one, even in a container that keeps one version.
 
 To record the versions that pruning deletes, such as for an audit, register a
-[cleanup handler](expiry.md#auditing-whats-deleted) <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>.
+[cleanup handler](expiry.md#auditing-whats-deleted).
 
 ## Changing the setting
 
@@ -91,7 +88,7 @@ files. Every application that writes to the same store applies its own limit to 
 
 So give every application that shares a store, workers and scheduled jobs included, the same `UseVersioning` setting
 and policies. To turn versioning off for good, expect each name's history to go at its next upload; a
-[cleanup handler](expiry.md#auditing-whats-deleted) <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> hears about every version deleted that way.
+[cleanup handler](expiry.md#auditing-whats-deleted) hears about every version deleted that way.
 
 ## Restoring
 
@@ -104,15 +101,14 @@ if (restored is null) { /* no such name or version */ }
 ```
 
 The restored version is measured like any upload: it gets its own `VersionId`, `ContentLength`, `ContentHash` and
-`LastModified`, and the older version's content type and metadata. From 4.0 <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>, a restore is a copy within the store,
+`LastModified`, and the older version's content type and metadata. A restore is a copy within the store,
 as [copying](copying-and-moving.md) is: with SQL Server, the content doesn't pass through your application, and a
 transient failure is retried rather than ending the restore. (A version stored before 3.0 is still read through the
 application, and can't be retried once its content has started, until the [hash backfill](providers/sql-server-upgrades.md#recording-hashes-for-older-versions)
-records its hash.) Its `CopiedFrom` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> names the version it restored, so
-a history view can show it. A restore works in any container that still has the version <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>. In a
+records its hash.) Its `CopiedFrom` names the version it restored, so
+a history view can show it. A restore works in any container that still has the version. In a
 container that keeps a single version, an older version exists only with expiry on, for the five minutes after it's
-replaced. (In 3.1,
-`RestoreVersionAsync` throws `InvalidOperationException` when versioning is off.)
+replaced.
 
 ## Deleting
 
@@ -123,7 +119,7 @@ replaced. (In 3.1,
 | `DeleteContainerIfExistsAsync(container)` | the container and everything in it |
 
 Each returns `true` if it deleted anything. A delete that would remove a version that's
-[retained or under a legal hold](deleting-safely.md) <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> throws `ResourceRetainedException` and deletes nothing, unless
+[retained or under a legal hold](deleting-safely.md) throws `ResourceRetainedException` and deletes nothing, unless
 the version was protected while a batched delete was already under way; see
 [Deleting safely](deleting-safely.md#what-happens-to-a-protected-version).
 

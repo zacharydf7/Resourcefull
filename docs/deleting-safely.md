@@ -1,7 +1,5 @@
 # Deleting safely
 
-<div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 4.0</span></div>
-
 Some files mustn't be deleted yet: invoices a business has to keep for seven years, contracts until they end, or
 whatever a lawsuit needs. Resourcefull can protect a version in two ways:
 

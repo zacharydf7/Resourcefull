@@ -4,14 +4,13 @@ namespace Resourcefull.SqlServer;
 
 /// <summary>
 /// How Resourcefull uses SQL Server.
-/// <para>Coming in 4.0.</para>
 /// </summary>
 public sealed class ResourcefullSqlServerOptions
 {
     /// <summary>
     /// The schema that holds Resourcefull's tables, such as <c>resourcefull</c>, so they don't mix with an application's
     /// own tables in <c>dbo</c>. Resourcefull's migration history is then kept in <c>__EFMigrationsHistory</c> in that
-    /// schema too. <see langword="null"/>, the default, leaves the tables' names unqualified, as in 3.x, so they're in
+    /// schema too. <see langword="null"/>, the default, leaves the tables' names unqualified, so they're in
     /// the database user's default schema, normally <c>dbo</c>. It must be a regular identifier of up to 128 characters:
     /// a letter or underscore, then letters, digits or underscores.
     /// </summary>

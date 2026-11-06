@@ -16,7 +16,7 @@ unless you pass a `versionId`.
 The stream from `DownloadStreamingAsync` reads from storage as you read it, so memory use stays flat whatever the
 size. It's read-only and forward-only: `Length` is the content's length and `Position` counts the bytes read, but it
 can't seek. Dispose it when you're done, which releases what the provider keeps for it (with SQL Server, a database
-context). From 4.0 <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>, disposing the download disposes its stream, so
+context). Disposing the download disposes its stream, so
 `await using ResourceDownloadResult? download = await container.DownloadStreamingAsync(...)` does it too.
 
 ```csharp
@@ -33,12 +33,10 @@ The stream and the `ResourceInfo` describe the same version, even if another upl
 while you read. With SQL Server, if the version itself is deleted while you're reading it, the stream throws
 `IOException` rather than ending early. That includes an upload that replaces it: without versioning, each replacing
 upload deletes the version before it, so a download of a file that's replaced often can fail partway and needs a retry. With
-[expiry](expiry.md) turned on <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>, a replaced version stays five minutes more, so a download that takes less
+[expiry](expiry.md) turned on, a replaced version stays five minutes more, so a download that takes less
 than that finishes.
 
 ## Downloading part of a resource
-
-<div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 4.0</span></div>
 
 Pass a `ResourceRange` to download only some of the bytes, such as to resume an interrupted download or to seek in a
 video. It's an offset and a length, or an offset alone to read to the end:

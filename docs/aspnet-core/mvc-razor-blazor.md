@@ -7,9 +7,7 @@ few differences this page covers. Everything here leaves out authorization to st
 ## MVC controllers
 
 Controller actions can return the same results as minimal APIs, `Results.Resource` and `UploadFromRequestAsync`'s,
-because MVC runs any `IResult` an action returns. The `Results.Resource(container, name)` form, which answers range
-requests, is new in 4.0 <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>; with 3.1, download first and pass the
-download, as in [Serving downloads](serving-downloads.md):
+because MVC runs any `IResult` an action returns:
 
 ```csharp
 using Microsoft.AspNetCore.Mvc;
@@ -32,16 +30,14 @@ public class FilesController(IResourceServiceClient resources) : ControllerBase
 }
 ```
 
-`ResourceUploadHttpResult` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> is new in 4.0; with 3.1, `Put` returns `Task<IResult>`.
-
 For a form upload in an MVC view, take an `IFormFile` and keep `[ValidateAntiForgeryToken]` on the action, as
 [Accepting uploads](accepting-uploads.md#from-an-html-form) explains for minimal APIs.
 
 ## Razor Pages
 
 A Razor page's handler can't return an `IResult`: ASP.NET Core refuses it at run time, with "Unsupported handler method
-return type". From 4.0 <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>, `TypedResults.Resource`, `TypedResults.SharedDownload`, `TypedResults.SharedUpload` and `UploadFromRequestAsync` return results that
-are action results too, so a handler can return them. The download results work as `File(...)` does, conditional requests
+return type". `TypedResults.Resource`, `TypedResults.SharedDownload`, `TypedResults.SharedUpload` and
+`UploadFromRequestAsync` return results that are action results too, so a handler can return them. The download results work as `File(...)` does, conditional requests
 included, and ranges when the result looks the resource up, as here:
 
 ```csharp
@@ -50,21 +46,6 @@ public IActionResult OnGet(string name) =>
 ```
 
 Use `TypedResults`, not `Results`: `Results.Resource` is declared to return `IResult`, which a handler can't return.
-
-With 3.1, serve files from a minimal API endpoint next to your pages, as in [Serving downloads](serving-downloads.md),
-and link to it from the page, or run the result yourself in the handler and return an empty result, so the page doesn't
-render after it:
-
-```csharp
-public async Task<IActionResult> OnGetAsync(string name, CancellationToken cancellationToken)
-{
-    ResourceDownloadResult? download = await _resources.GetContainerClient("files")
-        .DownloadStreamingAsync(name, cancellationToken: cancellationToken);
-    if (download is null) return NotFound();
-    await Results.Resource(download).ExecuteAsync(HttpContext);
-    return new EmptyResult();
-}
-```
 
 ## Blazor
 
@@ -99,8 +80,6 @@ as any other code does. (A statically rendered component has no `InputFile` even
   ```razor
   <a href="@($"files/{string.Join('/', name.Split('/').Select(Uri.EscapeDataString))}")">Download</a>
   ```
-
-The [Blazor sample](../../samples/README.md) works this way.
 
 ### Blazor WebAssembly
 

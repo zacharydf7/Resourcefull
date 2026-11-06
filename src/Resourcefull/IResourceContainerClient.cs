@@ -19,14 +19,12 @@ public interface IResourceContainerClient
 {
     /// <summary>
     /// The name of the container this client targets.
-    /// <para>Coming in 4.0.</para>
     /// </summary>
     public string Name { get; }
 
     /// <summary>
     /// Reads the container's attributes as they're stored now: its name, its metadata, and the URI from the URI
     /// provider.
-    /// <para>Coming in 4.0.</para>
     /// </summary>
     /// <param name="cancellationToken">Cancels the lookup.</param>
     /// <returns>The container's attributes, or <see langword="null"/> if it doesn't exist.</returns>
@@ -116,7 +114,7 @@ public interface IResourceContainerClient
     /// </param>
     /// <param name="range">
     /// The bytes to download, or <see langword="null"/> for all of them. A range that runs past the end of the content
-    /// is cut at the end. Coming in 4.0.
+    /// is cut at the end.
     /// </param>
     /// <param name="cancellationToken">Cancels locating the resource. Pass a token to the returned stream's read methods to cancel the download itself.</param>
     /// <returns>
@@ -280,7 +278,6 @@ public interface IResourceContainerClient
     /// The copy has a new version ID and <see cref="ResourceInfo.LastModified"/>, the source's content, hash, type and
     /// metadata, and <see cref="ResourceInfo.CopiedFrom"/> naming the version copied. It's stored and pruned like an
     /// upload, and checked against the destination container's policy.
-    /// <para>Coming in 4.0.</para>
     /// </summary>
     /// <param name="resourceName">The resource to copy.</param>
     /// <param name="destinationContainerName">The container to copy it to: this container's name to copy within it.</param>
@@ -310,7 +307,6 @@ public interface IResourceContainerClient
     /// Moves a resource, every version of it, to a name in this or another container, all at once; renaming is a move
     /// within the container. Each version keeps its ID, <see cref="ResourceInfo.LastModified"/>, content and
     /// attributes, and the old name is gone afterwards. It's checked against both containers' policies.
-    /// <para>Coming in 4.0.</para>
     /// </summary>
     /// <param name="resourceName">The resource to move.</param>
     /// <param name="destinationContainerName">The container to move it to: this container's name to rename it.</param>
@@ -340,7 +336,6 @@ public interface IResourceContainerClient
     /// Renames a resource, every version of it, within this container: a
     /// <see cref="MoveResourceAsync(string, string, string, ResourceMoveOptions?, CancellationToken)"/> to
     /// <paramref name="newName"/> in this container, with the same results and exceptions.
-    /// <para>Coming in 4.0.</para>
     /// </summary>
     /// <param name="resourceName">The resource to rename.</param>
     /// <param name="newName">Its new name, which must not exist.</param>
@@ -356,7 +351,6 @@ public interface IResourceContainerClient
     /// <summary>
     /// Sets when a version expires, or with <see langword="null"/> makes it permanent, such as to extend a share. Only
     /// the expiry changes: the version's content, <see cref="ResourceInfo.LastModified"/> and ETag stay as they are.
-    /// <para>Coming in 4.0.</para>
     /// </summary>
     /// <param name="resourceName">The resource.</param>
     /// <param name="versionId">The version, or <see langword="null"/> for the current one.</param>
@@ -375,7 +369,6 @@ public interface IResourceContainerClient
     /// <summary>
     /// Replaces a version's metadata, without uploading it again. Only the metadata changes: the version keeps its ID,
     /// content, content type, <see cref="ResourceInfo.LastModified"/> and ETag, and no new version is made.
-    /// <para>Coming in 4.0.</para>
     /// </summary>
     /// <remarks>
     /// The whole dictionary is replaced. To add or change one entry, read the version's metadata, change it and set it:
@@ -403,7 +396,6 @@ public interface IResourceContainerClient
     /// <see cref="ResourceInfo.LastModified"/> and ETag, and no new version is made. The type is checked against the
     /// container's <see cref="ContainerPolicy.AllowedContentTypes"/>, as an upload's is, but an
     /// <see cref="IResourceUploadInspector"/> doesn't see the change.
-    /// <para>Coming in 4.0.</para>
     /// </summary>
     /// <remarks>
     /// Browsers and caches that already hold the version keep the old type: its ETag and
@@ -431,7 +423,6 @@ public interface IResourceContainerClient
     /// <see cref="ContainerPolicy.MaxVersions"/> until then. Use it for records that must be kept for a
     /// period, such as invoices. The date can only move later, never earlier, and can't be cleared, so a retained
     /// version is safe from a mistaken or malicious change too. Who may set it is up to the application.
-    /// <para>Coming in 4.0.</para>
     /// </summary>
     /// <remarks>
     /// The version's content and hash never change; its metadata and content type still can. A move takes the date
@@ -459,7 +450,6 @@ public interface IResourceContainerClient
     /// its <see cref="ResourceInfo.RetainUntil"/>: a delete of it, of its name or of its container is refused with
     /// <see cref="ResourceRetainedException"/>, and expiry and pruning leave it. Use it to keep what a lawsuit or an
     /// investigation needs. Who may set or lift it is up to the application.
-    /// <para>Coming in 4.0.</para>
     /// </summary>
     /// <param name="resourceName">The resource.</param>
     /// <param name="versionId">The version; <see langword="null"/> for the current one.</param>
@@ -479,7 +469,6 @@ public interface IResourceContainerClient
     /// Lists the versions in the container's bin, newest deletion first, fetching a page at a time as you enumerate.
     /// In a container with a <see cref="ContainerPolicy.KeepDeletedFor"/>, a deleted or pruned version goes to
     /// the bin, where <see cref="UndeleteAsync"/> can bring it back until its <see cref="ResourceInfo.PurgeAt"/>.
-    /// <para>Coming in 4.0.</para>
     /// </summary>
     /// <param name="options">
     /// The prefix and page size; <see langword="null"/> lists everything, 1,000 at a time. A metadata match isn't
@@ -516,7 +505,6 @@ public interface IResourceContainerClient
     /// continuation token to its own callers. With a prefix, a page can hold fewer versions than
     /// <see cref="ResourceListOptions.PageSize"/>, or none, while more follow: only the continuation token says when the
     /// listing is done.
-    /// <para>Coming in 4.0.</para>
     /// </summary>
     /// <param name="options">
     /// The prefix and page size; <see langword="null"/> lists everything, 1,000 at a time. A metadata match isn't
@@ -547,7 +535,6 @@ public interface IResourceContainerClient
     /// name there. Each comes back as an older version, so the name's current version stays current; if the name has
     /// none, the most recently stored version that came back becomes current. To make one of them current, restore it with
     /// <see cref="RestoreVersionAsync"/>, as for any older version.
-    /// <para>Coming in 4.0.</para>
     /// </summary>
     /// <param name="resourceName">The resource.</param>
     /// <param name="versionId">The version, or <see langword="null"/> for every version of the name in the bin.</param>
@@ -568,7 +555,6 @@ public interface IResourceContainerClient
     /// Deletes a version in the container's bin for good, or with no <paramref name="versionId"/> every version of the
     /// name there, before its <see cref="ResourceInfo.PurgeAt"/>: for example, to erase personal data straight away.
     /// The <see cref="IResourceCleanupHandler"/> isn't told, as it isn't told about the application's own deletes.
-    /// <para>Coming in 4.0.</para>
     /// </summary>
     /// <param name="resourceName">The resource.</param>
     /// <param name="versionId">The version, or <see langword="null"/> for every version of the name in the bin.</param>
@@ -585,7 +571,6 @@ public interface IResourceContainerClient
     /// <summary>
     /// Gets what the container holds: the size of every version, and how many resources and versions there are. Use it
     /// to show a user their storage, or against <see cref="ContainerPolicy.MaxContainerSize"/>.
-    /// <para>Coming in 4.0.</para>
     /// </summary>
     /// <param name="cancellationToken">Cancels the lookup.</param>
     /// <returns>The container's usage; nothing stored when the container doesn't exist.</returns>
@@ -599,7 +584,6 @@ public interface IResourceContainerClient
     /// in force: the policy's, then the defaults', then <see cref="ResourcefullOptionsBuilder.UseVersioning"/>'s, then 1.
     /// With <see cref="GetUsageAsync"/>, use it to show a user their limits,
     /// such as "4.2 GB of 5 GB". It's cached, and stands in for the provider while it fails, as for writes.
-    /// <para>Coming in 4.0.</para>
     /// </summary>
     /// <param name="cancellationToken">Cancels the lookup.</param>
     /// <returns>The container's policy; without container policies, one that sets only the version limit.</returns>
@@ -611,7 +595,6 @@ public interface IResourceContainerClient
     /// dictionary is replaced, including the <c>resourcefull.import</c> entry that marks an unfinished import; to change
     /// one entry, read the metadata with <see cref="GetInfoAsync"/>, change it and set it. An import running at the same
     /// time replaces the metadata again when it finishes.
-    /// <para>Coming in 4.0.</para>
     /// </summary>
     /// <param name="metadata">The container's new metadata, which is copied.</param>
     /// <param name="cancellationToken">Cancels the change.</param>
@@ -628,7 +611,6 @@ public interface IResourceContainerClient
     /// an import, which keeps every version it was given, or after a prune failed and its name hasn't been written since.
     /// With <see cref="ResourcefullOptionsBuilder.UseExpiry"/>, the versions past the limit are set to expire five
     /// minutes later rather than deleted at once, as a prune does.
-    /// <para>Coming in 4.0.</para>
     /// </summary>
     /// <param name="cancellationToken">Stops the pruning; the versions already pruned stay pruned.</param>
     /// <returns>How many versions were past the limit. A container that doesn't exist has nothing to prune.</returns>
@@ -646,7 +628,6 @@ public interface IResourceContainerClient
     /// the container, so a listing by <see cref="ResourceListOptions.MetadataMatch"/> finds versions stored before a key was
     /// added. New writes are indexed as they're stored, so run it once after adding a key, for each container that
     /// holds versions from before. With a provider that keeps no index, it does nothing, since searches read every name.
-    /// <para>Coming in 4.0.</para>
     /// </summary>
     /// <param name="cancellationToken">Stops the indexing; what's indexed by then stays indexed, and running it again finishes.</param>
     /// <returns>How many versions were indexed. A container that doesn't exist has nothing to index.</returns>
@@ -659,7 +640,6 @@ public interface IResourceContainerClient
     /// <see cref="ContainerPolicy.MaxContainerSize"/>, which counts every version, or what expiry deletes next.
     /// It's meant for an administrator looking now and then: the store may read all of the container's versions to
     /// answer it.
-    /// <para>Coming in 4.0.</para>
     /// </summary>
     /// <param name="order">Which versions come first; <see cref="ResourceVersionOrder"/> says how ties are ordered.</param>
     /// <param name="count">The most versions to return, from 1 to 1,000.</param>
@@ -678,7 +658,6 @@ public interface IResourceContainerClient
     /// when <see cref="CompleteUploadAsync"/> is called. Nothing shows the version until then. A session nothing is
     /// appended to for 24 hours is deleted by the expiry sweep, so turn on
     /// <see cref="ResourcefullOptionsBuilder.UseExpiry"/>, or cancel a session you abandon.
-    /// <para>Coming in 4.0.</para>
     /// </summary>
     /// <param name="resourceName">The name the version will be stored under.</param>
     /// <param name="options">The version's content type, expected length, metadata and expiry.</param>
@@ -701,7 +680,6 @@ public interface IResourceContainerClient
     /// <summary>
     /// Gets an upload session as it stands, to find where to resume: its <see cref="ResourceUploadSession.Offset"/> is how
     /// many bytes are stored.
-    /// <para>Coming in 4.0.</para>
     /// </summary>
     /// <param name="resourceName">The name the session's version will be stored under.</param>
     /// <param name="uploadId">The session's ID.</param>
@@ -718,7 +696,6 @@ public interface IResourceContainerClient
     /// Appends <paramref name="content"/> to an upload session, reading it to its end. An append that fails partway may
     /// keep part of what it sent, depending on the provider: get the session to find where its content now ends, and
     /// resume from there.
-    /// <para>Coming in 4.0.</para>
     /// </summary>
     /// <param name="resourceName">The name the session's version will be stored under.</param>
     /// <param name="uploadId">The session's ID.</param>
@@ -751,7 +728,6 @@ public interface IResourceContainerClient
     /// Completes an upload session, making its version the name's current one, as an upload with the same mode and
     /// conditions would. It reads the stored content once, to measure and hash it and to pass it to the upload
     /// inspector, so it takes about as long as reading the content back. Older versions are pruned as after an upload.
-    /// <para>Coming in 4.0.</para>
     /// </summary>
     /// <param name="resourceName">The name the session's version will be stored under.</param>
     /// <param name="uploadId">The session's ID.</param>
@@ -788,7 +764,6 @@ public interface IResourceContainerClient
 
     /// <summary>
     /// Cancels an upload session, deleting what it stored.
-    /// <para>Coming in 4.0.</para>
     /// </summary>
     /// <param name="resourceName">The name the session's version would have been stored under.</param>
     /// <param name="uploadId">The session's ID.</param>

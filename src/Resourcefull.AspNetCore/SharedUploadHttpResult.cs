@@ -39,7 +39,6 @@ namespace Resourcefull.AspNetCore;
 /// An <see cref="OnStored"/> callback is called once for each file stored, after the file is stored and before the answer
 /// is sent. If it throws, the file stays stored, the exception propagates, and a form's remaining files aren't stored.
 /// </para>
-/// <para>Coming in 4.0.</para>
 /// </summary>
 public sealed class SharedUploadHttpResult : IResult, IActionResult
 {

@@ -8,7 +8,6 @@ namespace Resourcefull;
 
 /// <summary>
 /// What <see cref="IResourceServiceClient.ExportContainerAsync"/> wrote.
-/// <para>Coming in 4.0.</para>
 /// </summary>
 public sealed record ContainerExportResult
 {
@@ -27,7 +26,6 @@ public sealed record ContainerExportResult
 /// <summary>
 /// What an import stored: <see cref="IResourceServiceClient.ImportContainerAsync(string, Stream, CancellationToken)"/>, or
 /// another import of versions.
-/// <para>Coming in 4.0.</para>
 /// </summary>
 public sealed record ContainerImportResult
 {

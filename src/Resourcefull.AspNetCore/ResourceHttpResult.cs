@@ -124,7 +124,6 @@ public sealed class ResourceHttpResult : IResult, IActionResult
     /// <summary>
     /// Runs the result as an MVC action result, so a Razor Pages handler, which can't return an <see cref="IResult"/>,
     /// can return it.
-    /// <para>Coming in 4.0.</para>
     /// </summary>
     Task IActionResult.ExecuteResultAsync(ActionContext context) => ExecuteAsync(context.HttpContext);
 }

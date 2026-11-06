@@ -7,7 +7,6 @@ namespace Resourcefull;
 
 /// <summary>
 /// Adds Resourcefull's SQLite health check.
-/// <para>Coming in 4.0.</para>
 /// </summary>
 public static class ResourcefullSqliteHealthChecksBuilderExtensions
 {

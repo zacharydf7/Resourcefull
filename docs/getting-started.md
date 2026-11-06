@@ -55,8 +55,6 @@ directory, bucket or blob container the same setting.
 
 ### Settings from configuration
 
-<div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 4.0</span></div>
-
 `UseConfiguration` reads Resourcefull's settings from a section of your configuration, such as appsettings.json, so
 they can differ between environments without a rebuild:
 
@@ -189,10 +187,6 @@ app.MapGet("/files/{**name}", (string name, IResourceServiceClient resources) =>
 app.Run();
 ```
 
-The download endpoint's `Results.Resource(container, name)`, which also answers range requests, is new in 4.0
-<span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>. With 3.1, download first and pass the result, as [Serving downloads](aspnet-core/serving-downloads.md)
-shows.
-
 Run it with `dotnet run`, then send it a file and read it back, using the address `dotnet run` prints:
 
 ```shell
@@ -238,5 +232,3 @@ using (IServiceScope scope = host.Services.CreateScope())
 - [Uploads and downloads](uploading.md) for streams, lengths, hashes and cancellation.
 - [ASP.NET Core](aspnet-core/index.md) for serving files from an API with the right status codes and
   headers.
-- The [samples](../samples/README.md): a file service shaped like a production deployment, a minimal API and a
-  Blazor app, which all run out of the box.

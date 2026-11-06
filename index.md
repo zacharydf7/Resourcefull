@@ -36,7 +36,7 @@ app.MapPut("/files/{container}/{**name}",
         files.GetContainerClient(container)
              .UploadFromRequestAsync(name, request));
 
-// Sends the file with ETags and range requests (4.0).
+// Sends the file with ETags and range requests.
 app.MapGet("/files/{container}/{**name}",
     (string container, string name,
      IResourceServiceClient files) =&gt;
@@ -73,31 +73,31 @@ without locks of your own.</p>
 </a>
 <a class="rf-card" href="docs/aspnet-core/index.md">
 <h3><i class="bi bi-globe2"></i>Made for ASP.NET Core</h3>
-<p>Serve downloads with ETags, 304s and range requests <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>, accept uploads with
+<p>Serve downloads with ETags, 304s and range requests, accept uploads with
 preconditions, and turn errors into the right status codes.</p>
 </a>
 <a class="rf-card" href="docs/container-policies.md">
-<h3><i class="bi bi-sliders"></i>Quotas and rules <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span></h3>
+<h3><i class="bi bi-sliders"></i>Quotas and rules</h3>
 <p>Limit each container's file sizes, total size and file count, allow only certain file types, or make a
 container read-only.</p>
 </a>
 <a class="rf-card" href="docs/sharing-links.md">
-<h3><i class="bi bi-link-45deg"></i>Links that expire <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span></h3>
+<h3><i class="bi bi-link-45deg"></i>Links that expire</h3>
 <p>Let someone without an account download one file, until a time you choose, with a signed link your
 application creates.</p>
 </a>
 <a class="rf-card" href="docs/expiry.md">
-<h3><i class="bi bi-hourglass-split"></i>Files that clean up after themselves <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span></h3>
+<h3><i class="bi bi-hourglass-split"></i>Files that clean up after themselves</h3>
 <p>Give uploads an expiry and they're deleted when it passes, with a hook that lets you record every deletion
 for auditing.</p>
 </a>
 <a class="rf-card" href="docs/backup-and-move.md">
-<h3><i class="bi bi-archive"></i>Backups in one call <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span></h3>
+<h3><i class="bi bi-archive"></i>Backups in one call</h3>
 <p>Export a whole container, every version, to a zip file, and import it into another store with its IDs and
 history intact.</p>
 </a>
 <a class="rf-card" href="docs/telemetry.md">
-<h3><i class="bi bi-activity"></i>Observable from day one <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span></h3>
+<h3><i class="bi bi-activity"></i>Observable from day one</h3>
 <p>OpenTelemetry spans and metrics for every operation, and health checks that tell your orchestrator when
 storage is down.</p>
 </a>
@@ -161,7 +161,6 @@ storage is down.</p>
 <li><a href="api/index.md">API reference</a></li>
 <li><a href="docs/errors.md">Errors</a> and <a href="CHANGELOG.md">changelog</a></li>
 <li><a href="docs/releases.md">Releases and roadmap</a></li>
-<li><a href="docs/upgrading.md">Upgrading and versions</a></li>
 </ul>
 </div>
 </div>

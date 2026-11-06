@@ -21,7 +21,6 @@ public sealed class ResourceListOptions
     /// Only resources whose current version has this metadata entry, such as <c>new("customer", "42")</c>; the key
     /// must be one <see cref="ResourcefullOptionsBuilder.UseMetadataSearch"/> named. <see langword="null"/> lists
     /// resources whatever their metadata.
-    /// <para>Coming in 4.0.</para>
     /// </summary>
     public ResourceMetadataMatch? MetadataMatch { get; init; }
 
@@ -30,7 +29,6 @@ public sealed class ResourceListOptions
 
 /// <summary>
 /// A metadata entry a listing looks for: a key and its value, both compared exactly, ordinally (case-sensitive).
-/// <para>Coming in 4.0.</para>
 /// </summary>
 /// <param name="Key">The metadata key, one that <see cref="ResourcefullOptionsBuilder.UseMetadataSearch"/> named.</param>
 /// <param name="Value">The value the key must have, at most <see cref="MaxValueLength"/> characters.</param>

@@ -6,7 +6,6 @@ namespace Resourcefull.Providers;
 /// <see cref="ResourcefullDatabaseExtensions.GenerateResourcefullScript(IServiceProvider)"/> provision. A provider that
 /// keeps one registers it as a singleton under the store's name, <see cref="ResourcefullOptionsBuilder.StoreName"/>. A
 /// provider with nothing to provision, such as the in-memory one, registers none.
-/// <para>Coming in 4.0.</para>
 /// </summary>
 public abstract class ResourceDatabase
 {

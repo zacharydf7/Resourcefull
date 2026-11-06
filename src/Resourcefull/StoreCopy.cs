@@ -3,7 +3,6 @@ namespace Resourcefull;
 /// <summary>
 /// A version to import, as <see cref="IResourceServiceClient.ImportContainerAsync(string, IAsyncEnumerable{ImportedVersion}, IReadOnlyDictionary{string, string}?, CancellationToken)"/>
 /// takes it: the version as it was, and a way to open its content.
-/// <para>Coming in 4.0.</para>
 /// </summary>
 public sealed record ImportedVersion
 {
@@ -25,7 +24,6 @@ public sealed record ImportedVersion
 
 /// <summary>
 /// How <see cref="IResourceServiceClient.CopyContainerToAsync"/> copies.
-/// <para>Coming in 4.0.</para>
 /// </summary>
 public sealed class ContainerCopyOptions
 {
@@ -38,7 +36,6 @@ public sealed class ContainerCopyOptions
 
 /// <summary>
 /// What <see cref="IResourceServiceClient.CopyContainerToAsync"/> did.
-/// <para>Coming in 4.0.</para>
 /// </summary>
 public sealed record ContainerCopyResult
 {
@@ -72,7 +69,6 @@ public sealed record ContainerCopyResult
 
 /// <summary>
 /// What a copy does with a container the destination already has.
-/// <para>Coming in 4.0.</para>
 /// </summary>
 public enum ExistingContainers
 {
@@ -96,7 +92,6 @@ public enum ExistingContainers
 
 /// <summary>
 /// What <see cref="IResourceServiceClient.CopyStoreToAsync"/> does when a container fails.
-/// <para>Coming in 4.0.</para>
 /// </summary>
 public enum StoreCopyFailures
 {
@@ -109,7 +104,6 @@ public enum StoreCopyFailures
 
 /// <summary>
 /// How <see cref="IResourceServiceClient.CopyStoreToAsync"/> copies.
-/// <para>Coming in 4.0.</para>
 /// </summary>
 public sealed class StoreCopyOptions
 {
@@ -132,7 +126,6 @@ public sealed class StoreCopyOptions
 /// <summary>
 /// One container <see cref="IResourceServiceClient.CopyStoreToAsync"/> is done with, for its
 /// <see cref="StoreCopyOptions.Progress"/>.
-/// <para>Coming in 4.0.</para>
 /// </summary>
 public sealed record ContainerCopied
 {
@@ -145,7 +138,6 @@ public sealed record ContainerCopied
 
 /// <summary>
 /// What a copy did with one container.
-/// <para>Coming in 4.0.</para>
 /// </summary>
 public enum ContainerCopyOutcome
 {
@@ -164,7 +156,6 @@ public enum ContainerCopyOutcome
 
 /// <summary>
 /// What <see cref="ExistingContainers.Update"/> changed in one container.
-/// <para>Coming in 4.0.</para>
 /// </summary>
 public sealed record ContainerUpdateResult
 {
@@ -183,7 +174,6 @@ public sealed record ContainerUpdateResult
 
 /// <summary>
 /// A container <see cref="IResourceServiceClient.CopyStoreToAsync"/> couldn't copy, and why.
-/// <para>Coming in 4.0.</para>
 /// </summary>
 public sealed record ContainerCopyFailure
 {
@@ -196,7 +186,6 @@ public sealed record ContainerCopyFailure
 
 /// <summary>
 /// What <see cref="IResourceServiceClient.CopyStoreToAsync"/> did, container by container.
-/// <para>Coming in 4.0.</para>
 /// </summary>
 public sealed record StoreCopyResult
 {

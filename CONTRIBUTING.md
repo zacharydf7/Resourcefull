@@ -131,7 +131,7 @@ match.
    `Resourcefull.sql` covers every migration, and each script under `Migrations/` covers one migration, from the one
    before it. When a script is out of date, the failing test prints the exact command that regenerates it.
 
-3. Explain anything the migration needs from users in [docs/upgrading.md](docs/upgrading.md).
+3. In the `Unreleased` section of `CHANGELOG.md`, explain anything the migration needs from users.
 
 Name every new migration with `Resourcefull_` first (`dotnet ef migrations add Resourcefull_AddThing`): the history
 table can be shared with an application's own migrations, and the health check counts only migrations whose name
@@ -162,21 +162,20 @@ Three rules keep the scripts generated and safe to run again:
 - **Each change** is one commit, with tests, and updates the docs and `CHANGELOG.md` when behavior changes.
 - **Unreleased features are labeled.** The docs site is published from `main`, so a page or section about something
   not yet on nuget.org says so, under its heading (not in it, so its link doesn't change):
-  `<div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 4.0</span></div>`. In tables and sentences,
-  use `<span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>`. A page that's entirely new also gets a
-  sidebar marker in `template/public/main.css`, and new public types and members get `<para>Coming in 4.0.</para>`
-  in their XML docs, on a line of its own: on the same line as other text, the API reference shows it as code.
+  `<div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 4.1</span></div>`. In tables and sentences,
+  use `<span class="rf-badge rf-upcoming" title="Coming in 4.1">4.1</span>`. New public types and members get
+  `<para>Coming in 4.1.</para>` in their XML docs, on a line of its own: on the same line as other text, the API
+  reference shows it as code. Nothing is labeled in 4.0, the first release the docs cover.
 
 ## Releasing
 
 1. **Before tagging,** check `<VersionPrefix>` in `src/Directory.Build.props` is the release's version (every build
    but the release tag's adds `-ci.<run>` or `-dev` to it). Turn the release's labels from upcoming to added: in
-   `docs/`, `index.md` and `src/`, replace `Coming in 4.0` with `Added in 4.0` and `rf-upcoming` with `rf-added`,
-   remove the sidebar markers from `template/public/main.css`, and move the README's "Coming in" list into its
-   features. In `CHANGELOG.md`, turn `Unreleased` into `4.0.0 - <date>`, and start a new `Unreleased` section. In
-   `docs/releases.md`, turn the "Coming in" section into the release's
-   own, and update "What's next".
-2. **Merge to `main`, then push the tag** (`v4.0.0`). The publish workflow runs every test, checks that the tag
+   `docs/`, `index.md` and `src/`, replace `Coming in 4.1` with `Added in 4.1` and `rf-upcoming` with `rf-added`, and
+   move any "Coming in" list in the README into its features. (4.0 has no labels, so it skips this.) In `CHANGELOG.md`,
+   turn `Unreleased` into `<version> - <date>`, and start a new `Unreleased` section. In `docs/releases.md`, turn any
+   "Coming in" section into the release's own, and update "What's next".
+2. **Merge to `main`, then push the tag** (`v<version>`). The publish workflow runs every test, checks that the tag
    matches the version, publishes the packages it tested to nuget.org, and creates a GitHub Release from the
    version's changelog section.
 3. **After it's published,** set `PackageValidationBaselineVersion` in `src/Directory.Build.props` to the version just

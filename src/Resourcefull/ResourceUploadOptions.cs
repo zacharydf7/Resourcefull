@@ -8,7 +8,6 @@ public sealed class ResourceUploadOptions
     /// <summary>
     /// What the upload does when the name already has a current version: <see cref="ResourceWriteMode.Create"/>, the
     /// default, refuses it, and <see cref="ResourceWriteMode.Replace"/> stores the upload as the new current version.
-    /// <para>Coming in 4.0.</para>
     /// </summary>
     public ResourceWriteMode Mode { get; init; }
 
@@ -32,7 +31,6 @@ public sealed class ResourceUploadOptions
     /// When the uploaded version expires: after it, <see cref="ResourcefullOptionsBuilder.UseExpiry"/> deletes it within
     /// one interval, as a delete of that version would. Any time works, a past one included; <see langword="null"/>
     /// never expires.
-    /// <para>Coming in 4.0.</para>
     /// </summary>
     public DateTimeOffset? ExpiresAt { get; init; }
 
@@ -40,14 +38,12 @@ public sealed class ResourceUploadOptions
     /// Until when the uploaded version can't be deleted, by anyone or anything, expiry and pruning included; see
     /// <see cref="IResourceContainerClient.SetRetentionAsync"/>. <see langword="null"/> takes the container's
     /// <see cref="ContainerPolicy.RetainFor"/>, if it has one.
-    /// <para>Coming in 4.0.</para>
     /// </summary>
     public DateTimeOffset? RetainUntil { get; init; }
 
     /// <summary>
     /// Whether the uploaded version is stored under a legal hold, which keeps it from being deleted until the hold is
     /// lifted; see <see cref="IResourceContainerClient.SetLegalHoldAsync"/>.
-    /// <para>Coming in 4.0.</para>
     /// </summary>
     public bool LegalHold { get; init; }
 }

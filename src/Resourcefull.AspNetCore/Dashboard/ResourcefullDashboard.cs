@@ -13,7 +13,6 @@ namespace Resourcefull.AspNetCore;
 
 /// <summary>
 /// What <see cref="ResourcefullDashboardEndpointRouteBuilderExtensions.MapResourcefullDashboard"/> shows.
-/// <para>Coming in 4.0.</para>
 /// </summary>
 public sealed class ResourcefullDashboardOptions
 {
@@ -63,7 +62,6 @@ public sealed class ResourcefullDashboardOptions
 /// Maps the Resourcefull dashboard: a page showing the store's health and expiry backlog, and each container's usage
 /// against its limits, its largest versions, the versions that expire soonest, and its files and their versions, with
 /// the JSON endpoints it reads.
-/// <para>Coming in 4.0.</para>
 /// </summary>
 public static partial class ResourcefullDashboardEndpointRouteBuilderExtensions
 {

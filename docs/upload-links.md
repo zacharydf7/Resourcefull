@@ -1,7 +1,5 @@
 # Receiving files through links
 
-<div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 4.0</span></div>
-
 Sometimes you need files from someone who can't sign in to your application: a customer sending photos for an
 insurance claim, a new hire sending their documents, a supplier sending an invoice. A **signed upload link** is a URL
 that lets whoever has it upload files, without signing in, until a time you choose. You decide where the files go,

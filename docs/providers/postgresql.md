@@ -1,7 +1,5 @@
 # PostgreSQL
 
-<div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 4.0</span></div>
-
 `Resourcefull.PostgreSql` stores resources in a PostgreSQL database, splitting content into chunks so files of any
 size stream in and out with flat memory use. It's tested against PostgreSQL 16 and 17.
 

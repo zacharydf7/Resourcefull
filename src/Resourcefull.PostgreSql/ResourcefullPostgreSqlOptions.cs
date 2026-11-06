@@ -4,7 +4,6 @@ namespace Resourcefull.PostgreSql;
 
 /// <summary>
 /// How Resourcefull uses PostgreSQL.
-/// <para>Coming in 4.0.</para>
 /// </summary>
 public sealed class ResourcefullPostgreSqlOptions
 {

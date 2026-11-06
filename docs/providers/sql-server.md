@@ -28,8 +28,6 @@ Keep the connection string out of source control, in user secrets, environment v
 
 ## Choosing a schema
 
-<div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 4.0</span></div>
-
 Without a schema, Resourcefull's tables go in the database user's default schema, normally `dbo`. In your
 application's database that puts them beside your own tables. To keep them apart, give `UseSqlServer` a schema:
 
@@ -103,10 +101,10 @@ sqlcmd -S <server> -d <database> -b -I -i Resourcefull.sql
 The scripts run against the database you connect to and never create or switch databases. `-b` stops at the first
 error, and `-I` turns on `QUOTED_IDENTIFIER`, which the filtered indexes need. `Resourcefull.sql` brings an empty or
 older database to the current schema and is safe to run again. The scripts aren't added to projects that reference
-the package; they're also in the repository under `src/Resourcefull.SqlServer/Scripts/`.
+the package.
 
 The packaged scripts are for tables without a [schema](#choosing-a-schema). With a schema, have the application, configured
-with that schema, write the script <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> and run it the same way:
+with that schema, write the script and run it the same way:
 
 ```csharp
 File.WriteAllText("Resourcefull.sql", app.Services.GenerateResourcefullScript());
@@ -145,7 +143,7 @@ its resource name, so writers of a name take turns, and SQL Server can end that 
 out if you've set a lock timeout. It stops once the operation's cancellation token is canceled. Each retry is
 counted in the `resourcefull.sqlserver.retries` metric, with the error number; see [Telemetry](../telemetry.md).
 
-To change these or other connection settings <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>, set `ConfigureSqlServer`, which gets EF Core's SQL Server
+To change these or other connection settings, set `ConfigureSqlServer`, which gets EF Core's SQL Server
 options after Resourcefull has set its own. For example, to give slow statements, such as copying a large file, longer
 than the default 30 seconds:
 
@@ -159,10 +157,9 @@ counts retries in `resourcefull.sqlserver.retries`. Give it error 50001 to retry
 `sql.EnableRetryOnFailure(5, TimeSpan.FromSeconds(10), [50001])`, or a write that loses a deadlock over its name's lock
 fails instead of being retried.
 
-An upload <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> is retried a step at a time: its content goes in about a MiB at a time, and a batch that fails is sent
-again from what it holds, so even a stream that can't seek, such as an HTTP request body, carries on. Before 4.0 an
-upload was retried as a whole, which a stream that can't seek couldn't be.
-Copies, restores and imports <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> are retried too: copies and restores run within the database, and an import
+An upload is retried a step at a time: its content goes in about a MiB at a time, and a batch that fails is sent
+again from what it holds, so even a stream that can't seek, such as an HTTP request body, carries on.
+Copies, restores and imports are retried too: copies and restores run within the database, and an import
 reads the version's file from the export again. The exception is copying or restoring a version stored before 3.0
 that has no hash yet, which reads it through the application; [record the hashes](sql-server-upgrades.md#recording-hashes-for-older-versions) to retry those too.
 

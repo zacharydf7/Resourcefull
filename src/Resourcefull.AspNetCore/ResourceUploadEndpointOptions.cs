@@ -7,7 +7,6 @@ namespace Resourcefull.AspNetCore;
 /// <summary>
 /// How the resumable upload endpoints that <see cref="ResourcefullUploadsEndpointRouteBuilderExtensions.MapResourcefullUploads"/>
 /// maps decide where uploads go, and what they do once one is stored.
-/// <para>Coming in 4.0.</para>
 /// </summary>
 public sealed class ResourceUploadEndpointOptions
 {
@@ -54,7 +53,6 @@ public sealed class ResourceUploadEndpointOptions
 /// How the resumable upload endpoints that <see cref="ResourcefullUploadsEndpointRouteBuilderExtensions.MapResourcefullUploadLinks"/>
 /// maps for signed upload links find their store, how large an upload they take, and what they do once an upload is
 /// stored. Each link decides where its uploads go.
-/// <para>Coming in 4.0.</para>
 /// </summary>
 public sealed class ResourceUploadLinkEndpointOptions
 {
@@ -88,7 +86,6 @@ public sealed class ResourceUploadLinkEndpointOptions
 /// A file that has just been stored, given to <see cref="ResourceUploadEndpointOptions.OnCompletedAsync"/>,
 /// <see cref="ResourceUploadLinkEndpointOptions.OnCompletedAsync"/> and the <c>onStored</c> callback of
 /// <c>Results.SharedUpload</c>.
-/// <para>Coming in 4.0.</para>
 /// </summary>
 public sealed class ResourceUploadCompletedContext
 {
@@ -125,7 +122,6 @@ public sealed class ResourceUploadCompletedContext
 
 /// <summary>
 /// What a client asks to upload, given to <see cref="ResourceUploadEndpointOptions.ResolveAsync"/>.
-/// <para>Coming in 4.0.</para>
 /// </summary>
 public sealed record ResourceUploadRequest
 {
@@ -142,7 +138,6 @@ public sealed record ResourceUploadRequest
 /// <summary>
 /// Where an upload goes, and what its version is stored with, returned by
 /// <see cref="ResourceUploadEndpointOptions.ResolveAsync"/>.
-/// <para>Coming in 4.0.</para>
 /// </summary>
 /// <param name="ContainerName">The container to store the upload in.</param>
 /// <param name="ResourceName">The name to store it under.</param>
@@ -176,7 +171,6 @@ public sealed record ResourceUploadTarget(string ContainerName, string ResourceN
 
 /// <summary>
 /// Adds what uploads need to a CORS policy, for a page on another origin.
-/// <para>Coming in 4.0.</para>
 /// </summary>
 public static class ResourcefullUploadsCorsPolicyBuilderExtensions
 {

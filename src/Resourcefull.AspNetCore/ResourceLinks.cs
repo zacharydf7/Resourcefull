@@ -13,7 +13,6 @@ namespace Resourcefull.AspNetCore;
 /// <summary>
 /// What a signed link to a resource lets its holder download, and for how long. Pass it to
 /// <see cref="IResourceLinkSigner.CreateDownloadTokenAsync"/>.
-/// <para>Coming in 4.0.</para>
 /// </summary>
 /// <param name="ContainerName">The container the resource is in.</param>
 /// <param name="ResourceName">The resource to share.</param>
@@ -44,7 +43,6 @@ public sealed record ResourceDownloadLink(string ContainerName, string ResourceN
 
 /// <summary>
 /// What a valid download token lets its holder download.
-/// <para>Coming in 4.0.</para>
 /// </summary>
 public sealed record SignedResourceDownloadLink
 {
@@ -66,7 +64,6 @@ public sealed record SignedResourceDownloadLink
 
 /// <summary>
 /// Whether a token is a link that still works.
-/// <para>Coming in 4.0.</para>
 /// </summary>
 public enum ResourceLinkStatus
 {
@@ -84,7 +81,6 @@ public enum ResourceLinkStatus
 
 /// <summary>
 /// The result of checking a download token.
-/// <para>Coming in 4.0.</para>
 /// </summary>
 public sealed record ResourceDownloadLinkCheck
 {
@@ -101,7 +97,6 @@ public sealed record ResourceDownloadLinkCheck
 /// Tokens are signed and encrypted with ASP.NET Core Data Protection, so they can't be changed, read or made up, and
 /// they work on every instance that shares the application's Data Protection keys. Each store has a signer of its own,
 /// and a token made by one store's signer doesn't work with another store.
-/// <para>Coming in 4.0.</para>
 /// </summary>
 public interface IResourceLinkSigner
 {
@@ -280,7 +275,6 @@ internal static class ResourceLinkTelemetry
 
 /// <summary>
 /// Registers signed links.
-/// <para>Coming in 4.0.</para>
 /// </summary>
 public static class ResourcefullLinksServiceCollectionExtensions
 {

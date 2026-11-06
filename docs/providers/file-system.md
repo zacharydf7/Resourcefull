@@ -1,7 +1,5 @@
 # File system
 
-<div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 4.0</span></div>
-
 `Resourcefull.FileSystem` stores resources as files in a directory, on a local disk or a network share. No database or
 storage service is needed: give it a directory, and every name keeps its versions, content hashes and metadata, as with
 the other providers. It suits a single server, a small deployment, a development machine, or anywhere the files must
@@ -78,7 +76,7 @@ for each `/` in a key:
   naming it.
 - **Each version that expires has an entry** under `x/`, keyed by when it expires, so the [expiry](../expiry.md) sweep
   reads only what's due.
-- **Each version in a [bin](../deleting-safely.md#the-bin)** <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> stays in its name's head, separately from the
+- **Each version in a [bin](../deleting-safely.md#the-bin)** stays in its name's head, separately from the
   name's versions, and its content stays where it was. It has two entries, written just before the head write that puts it in
   the bin: one under `d/{id}/t/`, newest deletion first, whose key holds its content's length, for listings
   of the bin and the usage figures, and one under `t/`, keyed by when it's purged, for the sweep. Both are

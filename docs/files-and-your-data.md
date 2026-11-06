@@ -16,7 +16,7 @@ This page shows the order of steps that makes sure only the second can happen, a
 
 ## Name each file once
 
-Give each file a name of its own, such as one built from your row's ID, and upload it create-only, the default <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>,
+Give each file a name of its own, such as one built from your row's ID, and upload it create-only, the default,
 so no other upload can replace it:
 
 ```csharp

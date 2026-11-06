@@ -1,7 +1,5 @@
 # Shared links in production
 
-<div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 4.0</span></div>
-
 Before you rely on [signed links](sharing-links.md), make sure they keep working when you run more than one
 server or restart one, and decide how you'll stop links you no longer want to work. This page covers both, and the
 habits that keep shared files safe.

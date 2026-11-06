@@ -25,7 +25,7 @@
   "build": {
     "content": [
       { "files": [ "index.md", "toc.yml", "CHANGELOG.md" ] },
-      { "files": [ "docs/**.md", "docs/toc.yml", "samples/README.md" ] },
+      { "files": [ "docs/**.md", "docs/toc.yml" ] },
       { "files": [ "api/**.yml", "api/index.md" ] }
     ],
     "resource": [

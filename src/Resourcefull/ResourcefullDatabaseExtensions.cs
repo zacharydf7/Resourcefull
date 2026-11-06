@@ -30,7 +30,6 @@ public static class ResourcefullDatabaseExtensions
     /// Brings the database of the store named <paramref name="storeName"/> up to date, as
     /// <see cref="MigrateResourcefullDatabaseAsync(IServiceProvider, CancellationToken)"/> does for the store without a
     /// name. Migrate every store that keeps a database, including stores that share one with a schema of their own.
-    /// <para>Coming in 4.0.</para>
     /// </summary>
     /// <param name="services">The application's services, with the store added.</param>
     /// <param name="storeName">The name the store was added with, by <c>AddKeyedResourcefull</c>.</param>
@@ -54,7 +53,6 @@ public static class ResourcefullDatabaseExtensions
     /// <see cref="ResourcefullServiceCollectionExtensions.AddResourcefull"/> up to date, so a database administrator can run what
     /// <see cref="MigrateResourcefullDatabaseAsync(IServiceProvider, CancellationToken)"/> would. It applies only what the
     /// database is missing, so running it again does nothing. Generating it doesn't connect to the database.
-    /// <para>Coming in 4.0.</para>
     /// </summary>
     /// <param name="services">The application's services, with Resourcefull added.</param>
     /// <returns>The script, in the form the provider's database tools run, such as batches separated by <c>GO</c> for SQL Server.</returns>
@@ -65,7 +63,6 @@ public static class ResourcefullDatabaseExtensions
     /// <summary>
     /// Returns the script for the database of the store named <paramref name="storeName"/>, as
     /// <see cref="GenerateResourcefullScript(IServiceProvider)"/> does for the store without a name.
-    /// <para>Coming in 4.0.</para>
     /// </summary>
     /// <param name="services">The application's services, with the store added.</param>
     /// <param name="storeName">The name the store was added with, by <c>AddKeyedResourcefull</c>.</param>

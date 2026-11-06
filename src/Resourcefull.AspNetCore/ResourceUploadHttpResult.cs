@@ -10,7 +10,6 @@ namespace Resourcefull.AspNetCore;
 /// don't hold. The response's <c>ETag</c> is already set when you get this result: the stored version's, or on a 412,
 /// the current version's if it's known. Return it from a minimal API endpoint, a controller action or a Razor Pages
 /// handler.
-/// <para>Coming in 4.0.</para>
 /// </summary>
 public sealed class ResourceUploadHttpResult : IResult, IActionResult, IStatusCodeHttpResult
 {

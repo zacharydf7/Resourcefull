@@ -1,7 +1,5 @@
 # Resumable uploads from browsers and apps
 
-<div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 4.0</span></div>
-
 A 2 GB video sent from a phone in a basement, or over hotel Wi-Fi, rarely arrives in one go. With an ordinary upload,
 a connection that drops at 80% means starting again from zero. A resumable upload keeps what has arrived, so the
 client asks how much is stored and sends only the rest: after a dropped connection, after the browser was closed, or

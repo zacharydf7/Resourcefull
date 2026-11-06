@@ -18,7 +18,6 @@ public interface IResourceServiceClient
     /// <see cref="ResourcefullServiceCollectionExtensions.AddKeyedResourcefull"/>, or <see langword="null"/> for the store
     /// <see cref="ResourcefullServiceCollectionExtensions.AddResourcefull"/> adds. A class that wraps a client returns
     /// the wrapped client's name, because signed links are checked with the signer of the store this names.
-    /// <para>Coming in 4.0.</para>
     /// </summary>
     public string? StoreName { get; }
 
@@ -60,7 +59,6 @@ public interface IResourceServiceClient
     /// Lists every container, or those whose names start with <see cref="ContainerListOptions.Prefix"/>, ordered by
     /// name, fetching a page at a time as you enumerate. A container that exists for the whole listing appears exactly
     /// once; one created or deleted during it may or may not.
-    /// <para>Coming in 4.0.</para>
     /// </summary>
     /// <param name="options">The prefix and page size; <see langword="null"/> lists everything, 1,000 at a time.</param>
     /// <param name="cancellationToken">Cancels the listing.</param>
@@ -87,7 +85,6 @@ public interface IResourceServiceClient
     /// Gets one page of the containers, ordered by name, for an API that hands the continuation token to its own
     /// callers. Each page is a query of its own, so there's no snapshot: a container that exists for the whole listing
     /// appears exactly once, and one created or deleted during it may or may not.
-    /// <para>Coming in 4.0.</para>
     /// </summary>
     /// <param name="options">The prefix and page size; <see langword="null"/> lists everything, 1,000 at a time.</param>
     /// <param name="continuationToken">
@@ -134,7 +131,6 @@ public interface IResourceServiceClient
     /// <c>manifest.json</c>, which describes the container and every version of every resource, and each distinct
     /// content once, under <c>content/</c>. It reads one version at a time, and can write to a stream that can't seek,
     /// such as an HTTP response.
-    /// <para>Coming in 4.0.</para>
     /// </summary>
     /// <param name="containerName">The container to export.</param>
     /// <param name="destination">Where to write the zip; it's left open.</param>
@@ -152,7 +148,6 @@ public interface IResourceServiceClient
     /// created, each content is checked against its hash as it's stored, and the container's policy applies. If
     /// anything fails, the container is deleted again, so nothing is left half-imported. The hashes catch damage in
     /// storage or transfer, not deliberate edits, so import only exports you trust.
-    /// <para>Coming in 4.0.</para>
     /// </summary>
     /// <param name="containerName">The container to create, which mustn't exist.</param>
     /// <param name="source">The zip, in a stream that can seek, such as a file; it's left open.</param>
@@ -186,7 +181,6 @@ public interface IResourceServiceClient
     /// <c>resourcefull.import</c> set to <c>in-progress</c>, and the time in <c>resourcefull.import_at</c> is written again
     /// every five minutes, so a copy can tell an import still running from one that stopped. If anything fails, the
     /// container is deleted again. <see cref="CopyContainerToAsync"/> imports through it.
-    /// <para>Coming in 4.0.</para>
     /// </summary>
     /// <param name="containerName">The container to create, which mustn't exist.</param>
     /// <param name="versions">The versions to store, each name's oldest first.</param>
@@ -214,7 +208,6 @@ public interface IResourceServiceClient
     /// stores them: in the order given, each as its name's newest. A copy with
     /// <see cref="ExistingContainers.Update"/> brings a container up to date through it. Unlike an import into a new
     /// container, the versions stored before a failure stay.
-    /// <para>Coming in 4.0.</para>
     /// </summary>
     /// <param name="containerName">The container, which must exist.</param>
     /// <param name="versions">The versions to store, each name's oldest first.</param>
@@ -247,7 +240,6 @@ public interface IResourceServiceClient
     /// whether the copy fails, checks that it matches version for version, or brings it up to date in place, which deletes
     /// the versions the source no longer has but never the container. The copy fails if the destination's container is
     /// still being filled by another copy or import, whatever <see cref="ContainerCopyOptions.Existing"/> says.
-    /// <para>Coming in 4.0.</para>
     /// </summary>
     /// <param name="containerName">The container to copy.</param>
     /// <param name="destination">The store to copy it to, which may be this one, for a copy under another name.</param>
@@ -278,7 +270,6 @@ public interface IResourceServiceClient
     /// for version, or is brought up to date in place. A destination container still being filled by another copy or
     /// import fails, whatever <see cref="StoreCopyOptions.Existing"/> says; one whose copy stopped partway can be
     /// finished with <see cref="ExistingContainers.Update"/>. Run it again after it stops to go on from there.
-    /// <para>Coming in 4.0.</para>
     /// </summary>
     /// <param name="destination">The store to copy to.</param>
     /// <param name="options">The prefix, what to do with existing containers and failures, and progress; <see langword="null"/> for the defaults.</param>
@@ -299,7 +290,6 @@ public interface IResourceServiceClient
     /// passed, as a delete of that version would, a batch at a time, telling the <see cref="IResourceCleanupHandler"/>
     /// about each one first. A read-only container keeps its expired versions until it's writable again.
     /// <see cref="ResourcefullOptionsBuilder.UseExpiry"/> calls it every interval; call it yourself to run expiry another way.
-    /// <para>Coming in 4.0.</para>
     /// </summary>
     /// <param name="cancellationToken">Stops the cleanup; the versions already deleted stay deleted.</param>
     /// <returns>How many versions were deleted.</returns>
@@ -322,7 +312,6 @@ public interface IResourceServiceClient
     /// read-only, telling the <see cref="IResourceCleanupHandler"/> about each one first. A read-only container keeps
     /// its bin until it's writable again. <see cref="ResourcefullOptionsBuilder.UseExpiry"/> calls it every interval,
     /// after <see cref="DeleteExpiredAsync"/>; call it yourself to purge another way.
-    /// <para>Coming in 4.0.</para>
     /// </summary>
     /// <param name="cancellationToken">Stops the purge; the versions already purged stay purged.</param>
     /// <returns>How many versions were purged; 0 when the provider has no bin.</returns>
@@ -343,7 +332,6 @@ public interface IResourceServiceClient
     /// expired first come first, and those that expired at the same time are in version ID order. Use it to see whether
     /// the expiry sweep is keeping up. A read-only container's expired versions are listed too, since the sweep keeps
     /// them until the container is writable again.
-    /// <para>Coming in 4.0.</para>
     /// </summary>
     /// <param name="count">The most versions to return, from 1 to 1,000.</param>
     /// <param name="cancellationToken">Cancels the listing.</param>

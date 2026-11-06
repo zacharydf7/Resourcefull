@@ -6,7 +6,6 @@ namespace Resourcefull;
 /// the container's <see cref="ContainerPolicy.MaxVersions"/>, and versions it purges from a bin. Use it to record them in an audit system. The application's own
 /// deletes aren't included. Register one with <see cref="ResourcefullOptionsBuilder.UseCleanupHandler{THandler}"/>;
 /// it's a scoped service, so it can depend on the application's own.
-/// <para>Coming in 4.0.</para>
 /// </summary>
 /// <remarks>
 /// A report means the version is about to be deleted, and it's deleted only after the handler returns. If the handler
@@ -26,7 +25,6 @@ public interface IResourceCleanupHandler
 
 /// <summary>
 /// A version Resourcefull is about to delete by itself.
-/// <para>Coming in 4.0.</para>
 /// </summary>
 public sealed record ResourceCleanup
 {
@@ -42,7 +40,6 @@ public sealed record ResourceCleanup
 
 /// <summary>
 /// Why Resourcefull is deleting a version by itself.
-/// <para>Coming in 4.0.</para>
 /// </summary>
 public enum ResourceCleanupReason
 {
@@ -63,7 +60,6 @@ public enum ResourceCleanupReason
     /// Its <see cref="ResourceInfo.PurgeAt"/> has passed, and the sweep of <see cref="ResourcefullOptionsBuilder.UseExpiry"/>
     /// is purging it from the bin for good. If it was pruned into the bin, it was reported then too, as
     /// <see cref="Pruned"/>; if the application deleted it, this is the first report.
-    /// <para>Coming in 4.0.</para>
     /// </summary>
     Purged
 }

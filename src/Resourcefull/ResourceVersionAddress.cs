@@ -2,7 +2,6 @@ namespace Resourcefull.Providers;
 
 /// <summary>
 /// One version of a resource, as <see cref="ResourceRepository.DeleteExpiredVersionsAsync"/> takes and returns them.
-/// <para>Coming in 4.0.</para>
 /// </summary>
 /// <param name="Resource">The version's container and name.</param>
 /// <param name="VersionId">The version's ID.</param>

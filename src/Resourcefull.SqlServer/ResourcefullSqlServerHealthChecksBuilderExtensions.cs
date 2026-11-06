@@ -7,7 +7,6 @@ namespace Resourcefull;
 
 /// <summary>
 /// Adds Resourcefull's SQL Server health check.
-/// <para>Coming in 4.0.</para>
 /// </summary>
 public static class ResourcefullSqlServerHealthChecksBuilderExtensions
 {

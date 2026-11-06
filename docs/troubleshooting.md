@@ -10,9 +10,9 @@ two throws `Provider has already been configured.`
 
 ## `ResourceConflictException` on upload
 
-The name already exists and the upload is create-only, which is the default <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>. Set
+The name already exists and the upload is create-only, which is the default. Set
 `Mode = ResourceWriteMode.Replace` to replace the resource, and turn on [versioning](versioning.md) to keep the
-version it replaces too. (In 3.1, an upload is create-only when versioning is off and `Overwrite` isn't set, or when `CreateOnly` is set.)
+version it replaces too.
 
 ## `ResourceContainerNotFoundException` on upload
 
@@ -33,17 +33,6 @@ rewind it first. Otherwise the upload stores an empty version, which with `Repla
 
 Names can't start or end with whitespace, and are limited to 128 characters for a container and 256 for a resource. A
 name read from a file or a form often carries a trailing newline or space. See [Names](names.md).
-
-## A resource "disappeared" after upgrading
-
-Names are case-sensitive since 3.0. Look it up in the case it was stored in; `ListResourcesAsync` lists the stored
-names.
-
-## `InvalidOperationException`: "…its content can't be read again to retry"
-
-Before 4.0, a transient SQL Server failure interrupted an upload whose stream can't seek, such as an HTTP request
-body, so it couldn't be retried. Nothing was stored; upload again. From 4.0 <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>, such an upload sends the batch that
-failed again and carries on, so this doesn't happen.
 
 ## `IOException` while reading a download
 

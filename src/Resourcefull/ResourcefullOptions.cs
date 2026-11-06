@@ -23,7 +23,6 @@ public sealed class ResourcefullOptions
     /// <summary>
     /// Gets the metadata keys a listing can search for, ordinally. Set through
     /// <see cref="ResourcefullOptionsBuilder.UseMetadataSearch"/>; empty without it.
-    /// <para>Coming in 4.0.</para>
     /// </summary>
     public IReadOnlySet<string> SearchableMetadataKeys => _searchableMetadataKeys;
 
@@ -49,7 +48,6 @@ public sealed class ResourcefullOptions
     /// Gets how long the expiry sweep keeps an upload session that nothing is appended to before deleting it: 24 hours
     /// with <see cref="ResourcefullOptionsBuilder.UseExpiry"/>, and <see langword="null"/> without it, since nothing then
     /// deletes such sessions.
-    /// <para>Coming in 4.0.</para>
     /// </summary>
     public TimeSpan? AbandonedUploadsDeletedAfter { get; internal set; }
 

@@ -1,7 +1,5 @@
 # Inspecting uploads
 
-<div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 4.0</span></div>
-
 Files that come from users can be harmful: a document that carries malware, or a web page that calls itself a
 picture. An upload inspector looks at each upload's content before it's stored, and refuses what it mustn't keep. A
 refused upload stores nothing, and the caller gets a `ResourceContentRefusedException` that says why.

@@ -6,7 +6,6 @@ namespace Resourcefull.Providers;
 /// A version for a <see cref="ResourceRepository"/> to store: where it goes, what its writer declared, and where it
 /// came from. What the write measures as it stores the content (its length and hash) comes back in
 /// <see cref="WrittenContent"/>, with the time the version became current.
-/// <para>Coming in 4.0.</para>
 /// </summary>
 /// <param name="Resource">The container and name the version is stored under.</param>
 /// <param name="VersionId">The version's ID, which the clients choose.</param>

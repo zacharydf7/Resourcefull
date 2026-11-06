@@ -8,7 +8,6 @@ namespace Resourcefull;
 
 /// <summary>
 /// Configures Resourcefull to store resources in SQLite.
-/// <para>Coming in 4.0.</para>
 /// </summary>
 public static class ResourcefullSqliteOptionsExtensions
 {

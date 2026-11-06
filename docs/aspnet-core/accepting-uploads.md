@@ -36,12 +36,12 @@ exactly one succeeds (see [Updating only if unchanged](../concurrency.md#updatin
 | `If-Unmodified-Since` | the current version hasn't changed since then |
 
 `If-Match` compares tags strongly, so a weak tag (`W/"…"`) never matches. Pass `ResourceUploadOptions` for metadata,
-other headers to store, or `Conditions`, and from 4.0 <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> for an expiry, a retention date or a legal hold; when the
-request has preconditions, they replace the options' `Conditions`.
-The options' `Mode` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> is ignored: a `PUT` replaces, unless the client sends `If-None-Match: *`. An endpoint
+an expiry, a retention date, a legal hold, other headers to store, or `Conditions`; when the request has preconditions,
+they replace the options' `Conditions`.
+The options' `Mode` is ignored: a `PUT` replaces, unless the client sends `If-None-Match: *`. An endpoint
 that must only create files can require that header, answering 428 Precondition Required without it.
 
-To do more with the stored version before answering, await the call. The `ResourceUploadHttpResult` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> it
+To do more with the stored version before answering, await the call. The `ResourceUploadHttpResult` it
 returns has the `StatusCode` and the stored `Resource`, which is `null` on 412, and returning it sends the answer:
 
 ```csharp
@@ -50,7 +50,7 @@ if (result.Resource is { } stored) await documents.RecordFileAsync(stored.Name, 
 return result;
 ```
 
-With SQL Server <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>, a transient failure partway through an upload is retried, even though a request body can't
+With SQL Server, a transient failure partway through an upload is retried, even though a request body can't
 be read twice: the content goes in about a MiB at a time, and a batch that fails is sent again from what it holds.
 
 ## From an HTML form

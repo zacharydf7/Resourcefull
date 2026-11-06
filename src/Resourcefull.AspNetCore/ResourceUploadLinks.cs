@@ -4,7 +4,6 @@ namespace Resourcefull.AspNetCore;
 /// What a signed upload link lets its holder upload, and for how long. Set either <see cref="ResourceName"/>, for a
 /// link that uploads one file, or <see cref="NamePrefix"/>, for one that uploads any number of files under names the
 /// holder picks. Pass it to <see cref="IResourceLinkSigner.CreateUploadTokenAsync"/>.
-/// <para>Coming in 4.0.</para>
 /// </summary>
 /// <param name="ContainerName">The container uploads go into.</param>
 public sealed record ResourceUploadLink(string ContainerName)
@@ -48,7 +47,6 @@ public sealed record ResourceUploadLink(string ContainerName)
 
 /// <summary>
 /// What a valid upload token lets its holder upload.
-/// <para>Coming in 4.0.</para>
 /// </summary>
 public sealed record SignedResourceUploadLink
 {
@@ -88,7 +86,6 @@ public sealed record SignedResourceUploadLink
 
 /// <summary>
 /// The result of checking an upload token.
-/// <para>Coming in 4.0.</para>
 /// </summary>
 public sealed record ResourceUploadLinkCheck
 {

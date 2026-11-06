@@ -22,12 +22,12 @@ ResourceInfo stored = await container.UploadAsync("report.pdf", stream, new Reso
   read, the `ContentHash`, `LastModified` (when the version became current) and `IsLatest = true`.
 - **A name that exists is refused** unless the upload asks to replace it; see [Replacing a file](#replacing-a-file).
 - **Content type and metadata** are stored as given and returned on every read. Resourcefull doesn't check the type
-  against the content, but an [upload inspector](upload-inspection.md) <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> can, and can scan the file for
+  against the content, but an [upload inspector](upload-inspection.md) can, and can scan the file for
   malware before it's stored.
 
 ## Replacing a file
 
-`ResourceUploadOptions.Mode` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> says what an upload does when its name already has a current version:
+`ResourceUploadOptions.Mode` says what an upload does when its name already has a current version:
 
 - **`ResourceWriteMode.Create`, the default,** stores the upload only if the name doesn't exist yet, and otherwise
   throws `ResourceConflictException` and stores nothing. The check is part of the write, so of several uploads of a
@@ -39,12 +39,7 @@ ResourceInfo stored = await container.UploadAsync("report.pdf", stream, new Reso
 [Conditions](concurrency.md#updating-only-if-unchanged) replace a version only if it's still the one you read, so
 they go with `Replace`; with `Create`, an upload that sets them throws `ArgumentException`.
 
-<span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> In 3.1, `Overwrite` and `CreateOnly` do this instead: without versioning, an upload to an existing name
-is refused unless `Overwrite` is set; with versioning, every upload adds a version unless `CreateOnly` is set.
-
 ## Changing metadata and content type
-
-<div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 4.0</span></div>
 
 A version's metadata and content type can change after it's stored, without uploading it again:
 

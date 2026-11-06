@@ -1,7 +1,5 @@
 # Backing up and moving containers
 
-<div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 4.0</span></div>
-
 You can write a whole container, every file and every version, to a single zip file, and turn that file back into a
 container later, in the same store or another one. Use it to:
 
@@ -111,12 +109,12 @@ app.MapPost("/admin/containers/{name}/import", async (string name, HttpRequest r
   import deletes the container again. Fix the cause and import again. If the delete fails too, as it can when the
   database is unreachable or out of space, you get an `AggregateException` holding both errors, and should delete the
   container yourself before trying again; the same goes if the application stops partway through an import.
-- **Retention dates and legal holds go on last** <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>, once every version is stored, so a failed
+- **Retention dates and legal holds go on last**, once every version is stored, so a failed
   import can still delete what it stored. Only a failure while it sets them leaves versions that
   [can't be deleted](deleting-safely.md) yet: lift their holds, and the container can be deleted once their dates pass.
 - **An unfinished import is marked.** While an import fills its container, the container's metadata has
   `resourcefull.import` set to `in-progress`, and the import removes it once every version is stored. The import also
-  writes the time to `resourcefull.import_at` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> as it starts, and again every five minutes, so a mark more than half
+  writes the time to `resourcefull.import_at` as it starts, and again every five minutes, so a mark more than half
   an hour old belongs to an import that stopped. A container that still has the mark after the import has stopped
   didn't finish; delete it and import again. (The mark is set just after the
   container is created, so an import stopped in that moment leaves an empty container without it. With a

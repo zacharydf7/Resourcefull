@@ -1,15 +1,12 @@
 # Releases and roadmap
 
-What each release brought, in a few lines, and what's planned next. For every change, including the small ones, see
-the [changelog](../CHANGELOG.md).
+What each release brought, in a few lines, how versions and support work, and what's planned next. For each release's
+full notes, see the [changelog](../CHANGELOG.md).
 
-## Coming in 4.0
+## 4.0
 
-<div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 4.0</span></div>
-
-The biggest release so far, documented here already:
-
-- **[Five new places to store files](providers/features.md):** [PostgreSQL](providers/postgresql.md),
+- **[Six places to store files](providers/features.md):** [SQL Server](providers/sql-server.md),
+  [PostgreSQL](providers/postgresql.md),
   [SQLite](providers/sqlite.md), [a directory on a disk or file share](providers/file-system.md),
   [Amazon S3 or another S3-compatible store](providers/s3.md) and [Azure Blob Storage](providers/azure-blob.md), each
   with every feature, so moving from your own servers to the cloud takes changing one line.
@@ -17,7 +14,13 @@ The biggest release so far, documented here already:
   survives a dropped connection or a restart.
 - **[Upload links](upload-links.md)** that let someone without an account send you files, until they expire.
 - **[A dashboard](aspnet-core/dashboard.md)** for browsing containers, usage and limits while you develop.
-- **[Stricter names](upgrading-to-4.md#names-are-stricter)**, the same with every provider.
+- **[Versions](versioning.md), [files of any size](large-files.md) and [conditional writes](concurrency.md),** with
+  exactly one current version for each name.
+- **[ASP.NET Core support](aspnet-core/index.md):** serve downloads with the right headers, accept uploads with
+  preconditions, and turn errors into status codes.
+- **[Finding files by metadata](listing.md#finding-resources-by-metadata)**, and a [bin, retention dates and legal
+  holds](deleting-safely.md) for files that mustn't be lost.
+- **[The same name rules](names.md)** with every provider.
 - **[Copy, move and rename](copying-and-moving.md)** files, within a container or between containers. Each copy
   remembers where it came from.
 - **[Container policies](container-policies.md):** per-container limits on file size, total size and file count,
@@ -34,44 +37,28 @@ The biggest release so far, documented here already:
   Server, an upload's content goes in about a MiB at a time, each batch committed on its own, so a slow client ties up
   no lock or connection while it sends.
 - **[Health checks](health-checks.md) and [telemetry](telemetry.md)** for every operation, through OpenTelemetry.
-- **Safer downloads by default:** files aren't kept by shared caches, and only safe types display in the browser.
-- **Fixes:** with expiry turned on, a download in progress finishes even when the file is replaced; creating or deleting
-  a container on SQL Server no longer reports failure after succeeding.
+- **Safe downloads by default:** files aren't kept by shared caches, and only safe types display in the browser.
 
-4.0 also changes the API, which is why it's a major release: [Upgrading to 4.0](upgrading-to-4.md) lists what's
-changed so far, and [What's next](#whats-next) what's still to come.
+## Versions and support
 
-## 3.1, October 2026
-
-- **[ASP.NET Core support](aspnet-core/index.md)**, a new package: serve downloads with the right headers, accept
-  uploads with preconditions, and turn errors into status codes.
-- **[Conditional writes](concurrency.md#updating-only-if-unchanged):** upload or delete only if the file hasn't changed
-  since you read it, so two editors can't overwrite each other.
-- **[Listing a page at a time](listing.md)**, and by name prefix, for containers of any size.
-- **Fix:** with SQL Server, a delete that succeeded no longer reported that nothing was deleted when a transient error
-  hid its success.
-
-See the [3.1 changelog](../CHANGELOG.md#310---2026-10-29).
-
-## 3.0, October 2026
-
-The first release for general use:
-
-- **[Files of any size](large-files.md)** stream in and out with flat memory use.
-- **[Every version is measured and hashed](uploading.md)** as it's written, so what you read back is what was stored.
-- **[Create-only uploads](concurrency.md)**, decided by the write itself, so of several at once exactly one succeeds.
-- **[Your own storage](providers/writing-a-provider.md):** the provider interface is public, with a documented
-  contract and tests to check yours against.
-- **[Cancellation](cancellation.md)** for every call that contacts storage.
-- **Fixes:** concurrent uploads of one name always leave exactly one current version, and large containers delete in
-  bounded batches that can resume.
-
-Coming from 1.x or 2.x? See [Upgrading to 3.0](upgrading-to-3.md). See the
-[3.0 changelog](../CHANGELOG.md#300---2026-10-29).
+- **Version numbers** follow [semantic versioning](https://semver.org), for all the packages together: a patch release
+  fixes bugs, a minor release adds features without breaking code written for earlier releases of the same major
+  version, and a major release may make breaking changes, each listed in the [changelog](../CHANGELOG.md).
+- **Custom providers** are covered too: the provider API changes incompatibly only in a major release, and members
+  added in a minor release come with default implementations. So do members added to `IResourceContainerClient` and
+  `IResourceServiceClient`. See [Writing a provider](providers/writing-a-provider.md).
+- **The database** within one major version only gains columns and indexes an older release ignores, so any release
+  works against a database of the same major version at least as new as itself. See
+  [Upgrading the database](providers/sql-server-upgrades.md).
+- **Deprecation:** an API that's going away is first marked `[Obsolete]`, with a message naming what to use instead, and
+  keeps working for at least one more minor release and at least six months. It's removed only in a major release, listed
+  in the changelog. The compiler's warning is the notice, so build with warnings visible when you upgrade.
+- **Security fixes** go into the latest minor release of the current major version.
+- **What it runs on:** .NET 10, and SQL Server as described in
+  [Running SQL Server](providers/sql-server-operations.md#choosing-a-sql-server).
 
 ## What's next
 
 These are plans, not promises: the order can change, and nothing has a date.
 
-- **Managing files:** finding files by metadata; soft delete, retention and legal holds; and storing identical content
-  once.
+- **Managing files:** storing identical content once.

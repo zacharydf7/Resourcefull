@@ -1,7 +1,5 @@
 # Container policies
 
-<div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 4.0</span></div>
-
 Container policies limit what can be written to a container: how large a file can be, how much a container can hold,
 how many files it can have, which types of file it accepts, and whether it can change at all. They also set how many
 versions of each file it keeps. Set defaults for every
@@ -28,8 +26,8 @@ Without `UseContainerPolicies` or `UsePolicyProvider`, nothing is checked and no
 | `MaxResourceSize` | upload, restore, copy and move in | is refused before any content is read, if its declared length is over the limit; otherwise it stops as soon as its content passes the limit |
 | `MaxContainerSize` | upload, restore, copy and move in | is refused before any content is read, if its declared length won't fit in what's left; otherwise it stops as soon as its content passes what's left |
 | `MaxResourceCount` | upload, copy or move in of a new name | is refused when the container already holds that many resources; a new version of an existing name never is |
-| `AllowedContentTypes` | upload, copy and move in, changing a content type <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | is refused before any content is read when its type isn't in the list, declares no type, or isn't a single valid type (such as `image/png, text/html`). `image/*` includes SVG images, which can run scripts when shown, so list exact types for files you display |
-| `ReadOnly` | upload, restore, copy and move in or out, delete, deleting the container, changing an expiry, metadata <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> or content type <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>, changing the container's metadata <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>, bringing back or purging a version from the [bin](deleting-safely.md#the-bin) <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | is refused before anything changes; and [expiry](expiry.md) leaves its expired versions, and its bin, until it's writable again |
+| `AllowedContentTypes` | upload, copy and move in, changing a content type | is refused before any content is read when its type isn't in the list, declares no type, or isn't a single valid type (such as `image/png, text/html`). `image/*` includes SVG images, which can run scripts when shown, so list exact types for files you display |
+| `ReadOnly` | upload, restore, copy and move in or out, delete, deleting the container, changing an expiry, metadata or content type, changing the container's metadata, bringing back or purging a version from the [bin](deleting-safely.md#the-bin) | is refused before anything changes; and [expiry](expiry.md) leaves its expired versions, and its bin, until it's writable again |
 
 A refused write throws `ResourcePolicyViolationException`, whose `Rule` says which rule it broke, and stores nothing.
 A restore, copy or move is checked for every version it brings, by its stored length (measured from its content,
@@ -48,10 +46,10 @@ reports those.
 - **`MaxVersions`** isn't a rule a write can break: it's how many versions of each name this container keeps, in
   place of the store-wide [`UseVersioning`](versioning.md) setting. Lowering it deletes each
   name's extra versions at the name's next upload, or at once with the container client's `PruneAsync`.
-- **`RetainFor`** <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> isn't one either: it's how long each new version in the container can't be deleted, counted
+- **`RetainFor`** isn't one either: it's how long each new version in the container can't be deleted, counted
   from when its write starts, unless the write gives its own `RetainUntil`. Versions already stored keep their dates.
   See [Deleting safely](deleting-safely.md).
-- **`KeepDeletedFor`** <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> isn't one either: it's how long a deleted or pruned version stays in the container's
+- **`KeepDeletedFor`** isn't one either: it's how long a deleted or pruned version stays in the container's
   [bin](deleting-safely.md#the-bin), where it can be brought back, before the expiry sweep purges it. It needs
   [`UseExpiry`](expiry.md). The bin doesn't count toward `MaxContainerSize` or `MaxResourceCount`, so deleting makes
   room, and bringing versions back is checked against both.
@@ -84,7 +82,7 @@ bool nearlyFull = usage.StoredSize >= ResourceSize.Gigabytes(4);
 
 ## Defaults from configuration
 
-`UseConfiguration` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> reads the defaults, and how
+`UseConfiguration` reads the defaults, and how
 long policies are cached, from a section of your configuration, with sizes written as text:
 
 ```json
@@ -151,7 +149,7 @@ public sealed class PlanPolicyProvider(AppDbContext db) : IResourcePolicyProvide
 ## Usage and limits
 
 `GetUsageAsync` reports what a container holds, and `GetPolicyAsync`
-<span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> the limits its writes are checked against, so
+the limits its writes are checked against, so
 you can show users their storage against their plan:
 
 ```csharp
@@ -173,7 +171,7 @@ limits read it once per write they check, so for containers with very many versi
 cost that query too.
 
 When a container nears its `MaxContainerSize`, `GetTopVersionsAsync`
-<span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> shows what's filling it: its largest versions,
+shows what's filling it: its largest versions,
 current and older alike, since the stored size counts every version.
 
 ```csharp

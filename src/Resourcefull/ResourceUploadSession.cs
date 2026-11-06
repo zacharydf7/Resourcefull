@@ -3,7 +3,6 @@ namespace Resourcefull;
 /// <summary>
 /// An upload session: a version whose content arrives over several appends, possibly from different processes, and
 /// becomes current only when the session is completed.
-/// <para>Coming in 4.0.</para>
 /// </summary>
 public sealed record ResourceUploadSession
 {
@@ -27,7 +26,6 @@ public sealed record ResourceUploadSession
 
 /// <summary>
 /// What completing an upload session does when the name already has a current version.
-/// <para>Coming in 4.0.</para>
 /// </summary>
 public sealed class ResourceCompleteUploadOptions
 {
@@ -49,7 +47,6 @@ public sealed class ResourceCompleteUploadOptions
 /// <summary>
 /// What an upload session stores its version with: the content type, declared length, metadata and expiry, given once
 /// when the session starts.
-/// <para>Coming in 4.0.</para>
 /// </summary>
 public sealed class ResourceUploadSessionOptions
 {
@@ -72,14 +69,12 @@ public sealed class ResourceUploadSessionOptions
     /// Until when the version can't be deleted, once the session completes: as for
     /// <see cref="ResourceUploadOptions.RetainUntil"/>, counting <see cref="ContainerPolicy.RetainFor"/> from
     /// when the session starts.
-    /// <para>Coming in 4.0.</para>
     /// </summary>
     public DateTimeOffset? RetainUntil { get; init; }
 
     /// <summary>
     /// Whether the version is stored under a legal hold, once the session completes: as for
     /// <see cref="ResourceUploadOptions.LegalHold"/>.
-    /// <para>Coming in 4.0.</para>
     /// </summary>
     public bool LegalHold { get; init; }
 }

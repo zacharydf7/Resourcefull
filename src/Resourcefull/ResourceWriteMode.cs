@@ -2,7 +2,6 @@ namespace Resourcefull;
 
 /// <summary>
 /// What an upload or copy does when its name already has a current version.
-/// <para>Coming in 4.0.</para>
 /// </summary>
 public enum ResourceWriteMode
 {

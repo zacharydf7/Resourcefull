@@ -11,8 +11,6 @@ await foreach (ResourceInfo invoice in invoices.ListResourcesAsync(new ResourceL
 ```
 
 For a small container, `await invoices.ListResourcesAsync().ToListAsync()` gives you them all in one list.
-<span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> In 3.1, `GetResourcesAsync` does that; 4.0 removes it, because it reads the whole container into memory
-at once.
 
 An API that pages for its own callers fetches one page per request and hands back the continuation token:
 
@@ -44,8 +42,6 @@ return Results.Ok(new { page.Resources, page.ContinuationToken });
   same wherever it is in the container.
 
 ## Finding resources by metadata
-
-<div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 4.0</span></div>
 
 A listing can also find the resources whose current version has a metadata value, such as every invoice of one customer.
 Name the keys you'll search by when you add Resourcefull, then search with `ResourceListOptions.MetadataMatch`:

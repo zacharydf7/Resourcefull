@@ -1,7 +1,5 @@
 # Several stores
 
-<div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 4.0</span></div>
-
 Most applications need one store: one place their files live, set up with `AddResourcefull`. Some need more than one:
 
 - **Hot and archive storage.** Recent files in a fast database, and older ones in a cheaper one.

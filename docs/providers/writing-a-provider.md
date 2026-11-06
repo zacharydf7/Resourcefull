@@ -4,9 +4,7 @@ To store resources somewhere else, such as a file system, object storage or anot
 `ResourceRepository` (in the `Resourcefull.Providers` namespace) and register it with `UseProvider`. The clients handle
 names, versioning, pruning, URIs and cancellation plumbing; a provider stores and retrieves.
 
-<span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> This page describes 4.0, where providers derive
-from the `ResourceRepository` base class. In 3.1, a provider implements the `IResourceRepository` interface instead; see
-[Upgrading to 4.0](../upgrading-to-4.md#custom-providers) for moving a provider across.
+Registering it takes a small extension method:
 
 ```csharp
 public static class ResourcefullFileSystemOptionsExtensions
@@ -53,14 +51,14 @@ The XML documentation on each member states its contract in full. In short, a pr
 - **Treat a name with no current version as meeting no condition,** and empty conditions as none. A write that fails
   its conditions throws `ResourcePreconditionFailedException` with the current version's ID and content hash, and
   changes nothing. `conditions.ThrowIfNotMet(resource, currentVersionId, currentContentHash)`
-  <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> does exactly this check, so call it with the
+  does exactly this check, so call it with the
   current version the write reads; `IsEmpty` tells you when there's nothing to check. It's an extension method in
   `Resourcefull.Providers`, as are the other helpers for providers.
 - **Measure what it stores.** Read the content through a `HashingStream`, store the length it measured, and return
   `HashingStream.Complete(declaredLength, lastModified)`, which also rejects a wrong declared length. Call it as the
   write makes the version current but before it commits, so a wrong length stores nothing.
 - **Read the content to its end before the version becomes current,** until a read returns nothing, and store
-  nothing if that read throws. That last read waits for an [upload inspector](../upload-inspection.md) <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> to
+  nothing if that read throws. That last read waits for an [upload inspector](../upload-inspection.md) to
   answer, and throws if it refuses the content, so the version mustn't be current yet. An inspected upload's stream
   can't seek, so a provider can't retry it by reading the content again.
 - **Stamp the time a version becomes current.** Pass `Complete` the time the write makes the version current, not the
@@ -68,7 +66,7 @@ The XML documentation on each member states its contract in full. In short, a pr
   the constructor, so an application or a test can set the clock.
 - **Store the content hash** from `WrittenContent` with the version, and return it as `ResourceInfo.ContentHash` on
   every read.
-- **Store `ExpiresAt` and `CopiedFrom`** <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> from the `NewResourceVersion` that `AddResourceAsync` and
+- **Store `ExpiresAt` and `CopiedFrom`** from the `NewResourceVersion` that `AddResourceAsync` and
   `CopyResourceAsync` are given, and return them on every read. A version only has an `ExpiresAt` if your provider's
   `SupportsExpiry` is `true`; see [Expiry](#expiry).
 - **Return content as a read-only, forward-only stream:** `CanSeek` and `CanWrite` are `false`, `Length` is the
@@ -221,7 +219,7 @@ that answers it in a single query.
 
 ## Expiry
 
-`SupportsExpiry` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> is `false` by default, for a provider that leaves
+`SupportsExpiry` is `false` by default, for a provider that leaves
 [expiry](../expiry.md) out. While it's `false`, every write that sets an expiry throws `NotSupportedException`, so
 nothing is stored with an expiry that never happens, and `UseExpiry` fails at startup with
 `InvalidOperationException`. `GetExpiredAsync`, `DeleteExpiredVersionAsync` and `SetExpiryAsync` default to throwing
@@ -250,8 +248,6 @@ To support expiry, override `SupportsExpiry` to return `true`, store `NewResourc
   so a provider that leaves anything behind should support expiry, or its leftovers stay.
 
 ## Upload sessions
-
-<div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 4.0</span></div>
 
 [Upload sessions](../uploading-in-parts.md) store a version's content over several appends, which may come from
 different processes, and make it current when the session completes. A provider supports them by overriding six
@@ -299,8 +295,6 @@ The container client's `SetMetadataAsync` calls the provider's `SetContainerMeta
 
 ## Retention and legal holds
 
-<div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 4.0</span></div>
-
 [Retention dates and legal holds](../deleting-safely.md) keep versions from being deleted. `SupportsRetention` is
 `false` by default, and the clients then refuse every write that would protect a version, with
 `NotSupportedException`, so nothing is stored unprotected. To support them, return `true` and:
@@ -325,8 +319,6 @@ The container client's `SetMetadataAsync` calls the provider's `SetContainerMeta
 
 ## The bin
 
-<div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 4.0</span></div>
-
 The [bin](../deleting-safely.md#the-bin) keeps deleted versions for a while. `SupportsSoftDelete` is `false` by
 default, and the clients then refuse every delete in a container whose policy keeps deleted versions, with
 `NotSupportedException`, so nothing meant to be kept is deleted for good. To support it, support
@@ -349,8 +341,6 @@ default, and the clients then refuse every delete in a container whose policy ke
   answer it from an index, as `GetExpiredAsync` is, and order it the same way, with `PurgeAt` in place of `ExpiresAt`.
 
 ## Metadata search
-
-<div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 4.0</span></div>
 
 [Searching by metadata](../listing.md#finding-resources-by-metadata) works with every provider:
 `FindResourcePageAsync`'s default reads `GetResourcePageAsync`'s pages and keeps the matches. That reads every name, so
@@ -394,7 +384,7 @@ store can add up a container's versions in one query, override it. Count every v
 `VersionCount`, and each name once in `ResourceCount`, leaving out the [bin](#the-bin), which goes in `DeletedSize` and
 `DeletedVersionCount`.
 
-`GetTopVersionsAsync` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> lists a container's
+`GetTopVersionsAsync` lists a container's
 largest versions, or those that expire soonest, for the [dashboard](../aspnet-core/dashboard.md) and an
 administrator's own tools. Its default reads every version through `GetVersionPageAsync` and keeps the top ones, so it
 works with any provider. If your store can sort a container's versions by length or expiry, override it with one
@@ -403,8 +393,6 @@ query. For `LargestFirst`, order by `ContentLength` descending, with versions th
 ID, ordinally.
 
 ## A database to provision
-
-<div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 4.0</span></div>
 
 If your provider keeps a database whose tables it creates and upgrades, derive a class from `ResourceDatabase`, in
 `Resourcefull.Providers`, and register it for the store. `MigrateResourcefullDatabaseAsync` and
@@ -420,8 +408,6 @@ with nothing to provision registers none; for its stores, `MigrateResourcefullDa
 `GenerateResourcefullScript` throws `NotSupportedException`.
 
 ## Several stores
-
-<div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 4.0</span></div>
 
 An application can add [several stores](../several-stores.md), each configured with its own options builder. A
 provider that needs services of its own, such as its settings or a connection, registers them under the store's name,
@@ -443,8 +429,6 @@ same code works for named and unnamed stores. A provider that indexes metadata f
 search keys, as in [Metadata search](#metadata-search).
 
 ## Testing a provider
-
-<div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 4.0</span></div>
 
 The `Resourcefull.Testing` package holds the contract tests: about 200 tests of what every provider must do, from
 round-tripping content and keeping versions to conditional writes, listings, policies and names. Every built-in

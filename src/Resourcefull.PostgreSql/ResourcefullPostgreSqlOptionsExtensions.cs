@@ -11,7 +11,6 @@ namespace Resourcefull;
 
 /// <summary>
 /// Configures Resourcefull to store resources in PostgreSQL.
-/// <para>Coming in 4.0.</para>
 /// </summary>
 public static partial class ResourcefullPostgreSqlOptionsExtensions
 {

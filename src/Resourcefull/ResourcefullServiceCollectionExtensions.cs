@@ -28,7 +28,6 @@ public static class ResourcefullServiceCollectionExtensions
     /// Adds a store named <paramref name="storeName"/>, with its own provider and settings, beside any others: for example,
     /// hot and archive storage, or a database for each tenant. Resolve its <see cref="IResourceServiceClient"/> as a
     /// keyed service, such as with <c>[FromKeyedServices("archive")]</c>.
-    /// <para>Coming in 4.0.</para>
     /// </summary>
     /// <param name="services">The application's service collection.</param>
     /// <param name="storeName">The store's name, its service key.</param>

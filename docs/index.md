@@ -38,11 +38,11 @@ ResourceDownloadResult? download = await invoices.DownloadStreamingAsync("2026/1
 |---|---|
 | `Resourcefull` | The client API every application uses. |
 | `Resourcefull.SqlServer` | Stores files in a SQL Server database. Use it in production. |
-| `Resourcefull.PostgreSql` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | Stores files in a PostgreSQL database. Use it in production. |
-| `Resourcefull.Sqlite` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | Stores files in a SQLite database file, with no server to run. |
-| `Resourcefull.FileSystem` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | Stores files in a directory, on a local disk or a network share. Use it in production. |
-| `Resourcefull.S3` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | Stores files in Amazon S3 or another S3-compatible object store. Use it in production. |
-| `Resourcefull.AzureBlob` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | Stores files in Azure Blob Storage. Use it in production. |
+| `Resourcefull.PostgreSql` | Stores files in a PostgreSQL database. Use it in production. |
+| `Resourcefull.Sqlite` | Stores files in a SQLite database file, with no server to run. |
+| `Resourcefull.FileSystem` | Stores files in a directory, on a local disk or a network share. Use it in production. |
+| `Resourcefull.S3` | Stores files in Amazon S3 or another S3-compatible object store. Use it in production. |
+| `Resourcefull.AzureBlob` | Stores files in Azure Blob Storage. Use it in production. |
 | `Resourcefull.InMemory` | Keeps files in process memory, for tests and local development. |
 | `Resourcefull.AspNetCore` | Serves and accepts files over HTTP with the right status codes and headers, and creates signed links for sharing them. |
 

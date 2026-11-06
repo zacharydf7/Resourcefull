@@ -1,7 +1,5 @@
 # Health checks
 
-<div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 4.0</span></div>
-
 Resourcefull adds checks to .NET's [health checks](https://learn.microsoft.com/aspnet/core/host-and-deploy/health-checks),
 so a load balancer, an orchestrator or your monitoring can tell whether an instance can serve files.
 
@@ -25,7 +23,7 @@ app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = check 
 ```
 
 Both take the usual parameters: `name` (`"resourcefull"` by default), `failureStatus`, `tags` and `timeout`. They also
-take `storeName` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>, to check a [named store](several-stores.md) rather than the one `AddResourcefull` adds.
+take `storeName`, to check a [named store](several-stores.md) rather than the one `AddResourcefull` adds.
 
 ## What they report
 
@@ -42,7 +40,7 @@ take `storeName` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</s
 |---|---|
 | Healthy | the database has every migration this release needs |
 | Unhealthy, or your `failureStatus` | the database can't be reached, or it's missing migrations, which the report names: this release's queries would fail against the older schema |
-| Degraded | the database has migrations of Resourcefull's that this release doesn't know (your own EF Core migrations in the same database are ignored): a newer release upgraded it first, which is a [supported rollout](upgrading.md#upgrading-a-running-application) |
+| Degraded | the database has migrations of Resourcefull's that this release doesn't know (your own EF Core migrations in the same database are ignored): a newer release upgraded it first, which is a [supported rollout](providers/sql-server-upgrades.md#upgrading-a-running-application) |
 
 A report that the check completed includes the provider in its data, and for SQL Server the `pendingMigrations` and
 `unknownMigrations`. When the check fails or times out, the report carries the exception instead.

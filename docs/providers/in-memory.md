@@ -13,7 +13,7 @@ builder.Services.AddResourcefull(options => options.UseInMemory());
 - **The whole content is held in memory.** Each version's bytes are kept in full, so large files cost their full size.
 - **It behaves like SQL Server where code could notice.** Names follow the same rules, versions are ordered and pruned
   the same way, conflicts and missing containers raise the same exceptions, and download streams can't seek either.
-  The repository checks this by running one shared test suite against every provider. One difference: a download that
+  One shared test suite runs against every provider to check this. One difference: a download that
   has started reads its version to the end even if the version is deleted meanwhile, where SQL Server throws
   `IOException`. [Provider features](features.md) compares it with the others.
 

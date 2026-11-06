@@ -28,22 +28,21 @@ app.MapMethods("/files/{container}/{**name}", ["GET", "HEAD"], async (string con
 - **a strong `ETag`** from the content hash, and **`Last-Modified`**;
 - **`Content-Disposition: attachment`**, with the part of the name after its last `/` as the file name, encoded
   correctly whatever characters it contains. Control characters and the characters that change text direction are
-  left out of it and of a `FileName` you give <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>, so a
+  left out of it and of a `FileName` you give, so a
   right-to-left override can't make `report.exe` look like a document, and a line break can't break the header. Pass
   `new ResourceResultOptions { Inline = true }` to let browsers display the file, and `FileName` to offer another
-  name. Only types that are safe to display are shown inline
-  <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>: common image formats (PNG, JPEG, GIF, WebP,
+  name. Only types that are safe to display are shown inline: common image formats (PNG, JPEG, GIF, WebP,
   AVIF and BMP; not SVG), PDF, audio, video and plain text (`ResourceResultOptions.DefaultInlineContentTypes`). Anything else
   is still offered as a download, because a file uploaded as `text/html` or `image/svg+xml` and shown inline would run
   as a page of your site. `InlineContentTypes` changes the list;
-- **`Cache-Control: private, no-cache`** <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>: the
+- **`Cache-Control: private, no-cache`**: the
   user's browser may keep a copy, but checks with your application before reusing it, which the `ETag` makes cheap,
   and shared caches such as CDNs and proxies don't keep it, so one user's file is never served to another. For public
   files whose URL names a version, so their content never changes, set `CacheControl` to something like
   `public, max-age=31536000, immutable`. Either way, a copy a browser already holds keeps its old type if you later
-  [change the content type](../uploading.md#changing-metadata-and-content-type) <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>, since the ETag doesn't
+  [change the content type](../uploading.md#changing-metadata-and-content-type), since the ETag doesn't
   change;
-- **`X-Content-Type-Options: nosniff`** <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>, so
+- **`X-Content-Type-Options: nosniff`**, so
   browsers take the type as given rather than guessing from the content.
 
 It answers **conditional requests** without reading the content:
@@ -61,8 +60,6 @@ rather than 206), because the download is already open; to answer them, see belo
 doesn't exist. The catch-all `{**name}` takes names with `/` in them, such as `2026/10/report.pdf`.
 
 ## Range requests
-
-<div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 4.0</span></div>
 
 Video players seek, and download managers resume, by asking for a range of bytes. To answer them, pass the container
 and the name instead of a download, and the result looks the resource up itself:

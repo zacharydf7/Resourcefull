@@ -2,7 +2,6 @@ namespace Resourcefull.Providers;
 
 /// <summary>
 /// A version an upload session is storing, as <see cref="ResourceRepository.GetStagedVersionAsync"/> reports it.
-/// <para>Coming in 4.0.</para>
 /// </summary>
 public sealed record StagedVersion
 {

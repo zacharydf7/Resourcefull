@@ -38,13 +38,11 @@ public sealed class ResourceDownloadResult(ResourceInfo resourceInfo, Stream str
 
     /// <summary>
     /// Disposes <see cref="Stream"/>.
-    /// <para>Coming in 4.0.</para>
     /// </summary>
     public void Dispose() => Stream.Dispose();
 
     /// <summary>
     /// Disposes <see cref="Stream"/>.
-    /// <para>Coming in 4.0.</para>
     /// </summary>
     public ValueTask DisposeAsync() => Stream.DisposeAsync();
 }

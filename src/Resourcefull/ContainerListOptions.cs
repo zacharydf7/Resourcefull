@@ -2,7 +2,6 @@ namespace Resourcefull;
 
 /// <summary>
 /// Which containers a listing returns, and how many per page.
-/// <para>Coming in 4.0.</para>
 /// </summary>
 public sealed class ContainerListOptions
 {
@@ -23,7 +22,6 @@ public sealed class ContainerListOptions
 
 /// <summary>
 /// One page of a container listing: containers ordered by name, and where to continue.
-/// <para>Coming in 4.0.</para>
 /// </summary>
 /// <param name="containers">The page's containers.</param>
 /// <param name="continuationToken">Where the next page starts, or <see langword="null"/> when this is the last page.</param>

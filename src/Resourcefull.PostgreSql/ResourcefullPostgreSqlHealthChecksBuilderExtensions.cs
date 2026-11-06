@@ -7,7 +7,6 @@ namespace Resourcefull;
 
 /// <summary>
 /// Adds Resourcefull's PostgreSQL health check.
-/// <para>Coming in 4.0.</para>
 /// </summary>
 public static class ResourcefullPostgreSqlHealthChecksBuilderExtensions
 {

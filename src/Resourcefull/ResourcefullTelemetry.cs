@@ -10,7 +10,6 @@ namespace Resourcefull;
 /// The names Resourcefull's traces and metrics are published under, for subscribing to them, for example with
 /// OpenTelemetry's <c>AddSource(ResourcefullTelemetry.ActivitySourceName)</c> and
 /// <c>AddMeter(ResourcefullTelemetry.MeterName)</c>. Nothing is measured while nothing subscribes.
-/// <para>Coming in 4.0.</para>
 /// </summary>
 public static class ResourcefullTelemetry
 {
@@ -24,7 +23,6 @@ public static class ResourcefullTelemetry
 /// <summary>
 /// What Resourcefull's telemetry records, as configured through
 /// <see cref="ResourcefullOptionsBuilder.UseTelemetry(Action{ResourcefullTelemetryOptions})"/>.
-/// <para>Coming in 4.0.</para>
 /// </summary>
 public sealed class ResourcefullTelemetryOptions
 {
