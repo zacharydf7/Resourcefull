@@ -1,16 +1,21 @@
 # Proposes updates for NuGet dependencies and the actions the workflows use, so security fixes in them aren't missed.
+# Monthly, with the actions, NuGet's routine updates and its major updates each grouped, since each pull request runs CI.
+# Dependabot's alerts still report a vulnerability when it's published.
 version: 2
 updates:
   - package-ecosystem: nuget
     directory: /
     schedule:
-      interval: weekly
+      interval: monthly
     groups:
       nuget:
         patterns: [ "*" ]
         update-types: [ "minor", "patch" ]
+      nuget-major:
+        patterns: [ "*" ]
+        update-types: [ "major" ]
     # A new major version of .NET's packages would raise what every application using Resourcefull must reference,
-    # so moving to one is a deliberate change, not a weekly update.
+    # so moving to one is a deliberate change, not a routine update.
     ignore:
       - dependency-name: "Microsoft.*"
         update-types: [ "version-update:semver-major" ]
@@ -21,7 +26,7 @@ updates:
   - package-ecosystem: dotnet-sdk
     directory: /
     schedule:
-      interval: weekly
+      interval: monthly
     ignore:
       - dependency-name: "*"
         update-types: [ "version-update:semver-major" ]
@@ -29,11 +34,11 @@ updates:
   - package-ecosystem: npm
     directory: /tests/Resourcefull.Tests.AspNetCore/TusClient
     schedule:
-      interval: weekly
+      interval: monthly
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: weekly
+      interval: monthly
     groups:
       actions:
         patterns: [ "*" ]

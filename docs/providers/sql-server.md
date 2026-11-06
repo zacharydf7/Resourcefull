@@ -1,7 +1,7 @@
 # SQL Server
 
 `Resourcefull.SqlServer` stores resources in a SQL Server database, splitting content into chunks so files of any size
-stream in and out with flat memory use. It's tested against SQL Server 2019 and 2022 on every change, and LocalDB in
+stream in and out with flat memory use. It's tested against SQL Server 2019 and 2022, and LocalDB in
 development. It supports every feature; [Provider features](features.md) compares the providers.
 
 ```csharp

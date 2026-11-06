@@ -26,8 +26,19 @@ The unit tests need nothing else. The integration tests need SQL Server and crea
 
   `RESOURCEFULL_TEST_SQL_READY_TIMEOUT_SECONDS` (default 90) sets how long they wait for a container to start.
 
-Without either, the integration tests are skipped, not failed. CI runs both suites, against SQL Server in Docker, on
-every push and pull request.
+Without either, the integration tests are skipped, not failed. CI runs both suites, against SQL Server in Docker, when
+something they cover changes.
+
+### What CI runs
+
+A push or pull request tests what it changed. `build.yml` runs a provider's suite only when that provider, the code it
+shares with other providers or the core package changes, and then only on Linux against the newest version of its
+database. A full run tests everything: SQL Server 2019 and 2022, PostgreSQL 16 and 17, the file-system provider on Linux,
+Windows and macOS, and the performance tests.
+
+A full run happens weekly, on demand (`gh workflow run build.yml`) and when a release tag is pushed, before anything is
+published. Start one yourself before tagging a release if `main` has changed since the last full run, and after a change that
+could behave differently on another operating system.
 
 ### Performance tests
 
@@ -41,8 +52,8 @@ garbage doesn't count), and how long it takes. It needs SQL Server like the inte
 dotnet test tests/Resourcefull.Tests.Performance -c Release --logger "console;verbosity=detailed"
 ```
 
-CI runs it on every push and pull request against `baseline.json` in that project, on a pinned SQL Server image, and
-fails when a scenario gets worse than its baseline allows:
+A full CI run checks it against `baseline.json` in that project, on a pinned SQL Server image, and fails when a
+scenario gets worse than its baseline allows:
 
 | Measurement | Fails when |
 |---|---|
@@ -56,11 +67,12 @@ Time is reported but never fails the build: CI's shared runners vary too much fr
 performance job to a newer SQL Server image is a deliberate change that comes with a new baseline.
 
 Locally the comparison is only reported, since your machine and SQL Server differ from CI's; set
-`RESOURCEFULL_PERF_ENFORCE=true` to fail as CI does. Every CI run uploads its measurements as the
-`performance-results` artifact. When a change makes a scenario cheaper, or costs more on purpose, copy that artifact's
-`performance-results.json` over `baseline.json` in the same pull request and say why in the commit, so the new numbers
-are what later changes are held to. Once `baseline.json` has entries, a new scenario fails its first CI run for lack
-of one; copy its entry from that run's artifact into `baseline.json`.
+`RESOURCEFULL_PERF_ENFORCE=true` to fail as CI does. Every full CI run uploads its measurements as the
+`performance-results` artifact. When a change makes a scenario cheaper, or costs more on purpose, start a full run on
+your branch (`gh workflow run build.yml --ref <branch>`), then copy that artifact's `performance-results.json` over
+`baseline.json` in the same change and say why in the commit, so the new numbers are what later changes are held to.
+Once `baseline.json` has entries, a new scenario fails its first full CI run for lack of one; copy its entry from that
+run's artifact into `baseline.json`.
 
 ### Scale tests
 

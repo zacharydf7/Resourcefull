@@ -6,7 +6,7 @@ and [How SQL Server stores files](sql-server-storage.md) the details of storage.
 
 ## Choosing a SQL Server
 
-- **Versions.** Resourcefull is tested with SQL Server 2019 and 2022 on every change, and with LocalDB in development.
+- **Versions.** Resourcefull is tested with SQL Server 2019 and 2022, and with LocalDB in development.
   It uses only standard features (row versioning, application locks, filtered indexes), so SQL Server 2016 and later,
   Azure SQL Database and Azure SQL Managed Instance are expected to work, but aren't tested yet; reports either way
   are welcome.

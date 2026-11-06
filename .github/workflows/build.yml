@@ -15,7 +15,96 @@ permissions:
   contents: read
 
 jobs:
+  # Decides what this run tests, to keep CI's cost down. A push or pull request tests what it changed. A weekly run, a
+  # manual run or a release (publish.yml runs this workflow from the tag) tests everything, on every version and operating
+  # system.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      full: ${{ steps.scope.outputs.full }}
+      code: ${{ steps.filter.outputs.code }}
+      aspnetcore: ${{ steps.filter.outputs.aspnetcore }}
+      sqlserver: ${{ steps.filter.outputs.sqlserver }}
+      postgresql: ${{ steps.filter.outputs.postgresql }}
+      s3: ${{ steps.filter.outputs.s3 }}
+      azureblob: ${{ steps.filter.outputs.azureblob }}
+      filesystem: ${{ steps.filter.outputs.filesystem }}
+    steps:
+    - name: Decide whether to test everything
+      id: scope
+      run: echo "full=${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.ref_type == 'tag' }}" >> "$GITHUB_OUTPUT"
+    - uses: actions/checkout@v7
+      if: steps.scope.outputs.full == 'false'
+    - name: See what changed
+      id: filter
+      if: steps.scope.outputs.full == 'false'
+      uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+      with:
+        # With no token it compares through git, not the API. The API needs pull-requests: read, and a called workflow
+        # can't have more than its caller grants, so asking for it here would break publish.yml, even though this step
+        # doesn't run on a tag.
+        token: ""
+        # The anchors are what a provider's code and tests also depend on.
+        filters: |
+          everything: &everything
+            - ".github/workflows/build.yml"
+            - "Directory.Build.props"
+            - "src/Directory.Build.props"
+            - "global.json"
+            - "src/Resourcefull/**"
+            - "src/Resourcefull.Testing/**"
+          entity-framework: &entity-framework
+            - "src/Shared/EntityFramework/**"
+          object-storage: &object-storage
+            - "src/Shared/ObjectStorage/**"
+          code:
+            - *everything
+            - "src/**"
+            - "tests/**"
+            - "samples/**"
+            - "Resourcefull.sln"
+            - "README.md"
+            - "LICENSE"
+            - "assets/**"
+          aspnetcore:
+            - *everything
+            - "src/Resourcefull.AspNetCore/**"
+            - "src/Resourcefull.InMemory/**"
+            - "tests/Resourcefull.Tests.AspNetCore/**"
+          sqlserver:
+            - *everything
+            - *entity-framework
+            - "src/Resourcefull.SqlServer/**"
+            - "tests/Resourcefull.Tests.Integration/**"
+          postgresql:
+            - *everything
+            - *entity-framework
+            - "src/Resourcefull.PostgreSql/**"
+            - "tests/Resourcefull.Tests.PostgreSql/**"
+          s3:
+            - *everything
+            - *object-storage
+            - "tests/Shared/**"
+            - "src/Resourcefull.S3/**"
+            - "tests/Resourcefull.Tests.S3/**"
+          azureblob:
+            - *everything
+            - *object-storage
+            - "tests/Shared/**"
+            - "src/Resourcefull.AzureBlob/**"
+            - "tests/Resourcefull.Tests.AzureBlob/**"
+          filesystem:
+            - *everything
+            - *object-storage
+            - "src/Resourcefull.FileSystem/**"
+            - "tests/Resourcefull.Tests.FileSystem/**"
+
+  # Jobs that restore the whole solution share a NuGet cache. One that restores less stays out of it: the first job to
+  # finish fills the cache for all of them, so if that were the smaller job, the rest would download what it left out on
+  # every run.
   unit-tests:
+    needs: changes
+    if: needs.changes.outputs.full == 'true' || needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v7
@@ -23,19 +112,24 @@ jobs:
       uses: actions/setup-dotnet@v6
       with:
         global-json-file: global.json
+        cache: true
+        cache-dependency-path: "**/*.csproj"
     - name: Restore dependencies
       run: dotnet restore
     - name: Build
       run: dotnet build --no-restore --configuration Release
-    - name: Install tus-js-client, for the resumable upload tests
-      run: npm ci --prefix tests/Resourcefull.Tests.AspNetCore/TusClient
     - name: Test
-      env:
-        RESOURCEFULL_TEST_TUS_CLIENT: "1"
       run: |
         dotnet test tests/Resourcefull.Tests.Unit --no-build --configuration Release
-        dotnet test tests/Resourcefull.Tests.AspNetCore --no-build --configuration Release
         dotnet test tests/Resourcefull.Tests.Sqlite --no-build --configuration Release
+    - name: Install tus-js-client, for the resumable upload tests
+      if: needs.changes.outputs.full == 'true' || needs.changes.outputs.aspnetcore == 'true'
+      run: npm ci --prefix tests/Resourcefull.Tests.AspNetCore/TusClient
+    - name: Test ASP.NET Core
+      if: needs.changes.outputs.full == 'true' || needs.changes.outputs.aspnetcore == 'true'
+      env:
+        RESOURCEFULL_TEST_TUS_CLIENT: "1"
+      run: dotnet test tests/Resourcefull.Tests.AspNetCore --no-build --configuration Release
     - name: Create NuGet packages
       run: |
         dotnet pack src/Resourcefull --no-build -c Release --output ./nupkg
@@ -56,7 +150,10 @@ jobs:
           ./nupkg/*.nupkg
           ./nupkg/*.snupkg
 
+  # On main, docs.yml builds the site as it publishes it, so this is for pull requests and full runs.
   docs:
+    needs: changes
+    if: github.event_name == 'pull_request' || needs.changes.outputs.full == 'true'
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v7
@@ -76,12 +173,14 @@ jobs:
         path: _site
 
   integration-tests:
+    needs: changes
+    if: needs.changes.outputs.full == 'true' || needs.changes.outputs.sqlserver == 'true'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        # The SQL Server versions the integration tests cover.
-        sqlserver: [ "2019-latest", "2022-latest" ]
+        # The SQL Server versions the integration tests cover: the older one only in a full run.
+        sqlserver: ${{ fromJson(needs.changes.outputs.full == 'true' && '["2019-latest", "2022-latest"]' || '["2022-latest"]') }}
     services:
       sqlserver:
         image: mcr.microsoft.com/mssql/server:${{ matrix.sqlserver }}
@@ -100,6 +199,8 @@ jobs:
       uses: actions/setup-dotnet@v6
       with:
         global-json-file: global.json
+        cache: true
+        cache-dependency-path: "**/*.csproj"
     - name: Restore dependencies
       run: dotnet restore
     - name: Build
@@ -108,12 +209,14 @@ jobs:
       run: dotnet test tests/Resourcefull.Tests.Integration --no-build --configuration Release
 
   postgresql-tests:
+    needs: changes
+    if: needs.changes.outputs.full == 'true' || needs.changes.outputs.postgresql == 'true'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        # The PostgreSQL versions the provider's tests cover.
-        postgres: [ "16", "17" ]
+        # The PostgreSQL versions the provider's tests cover: the older one only in a full run.
+        postgres: ${{ fromJson(needs.changes.outputs.full == 'true' && '["16", "17"]' || '["17"]') }}
     services:
       postgres:
         image: postgres:${{ matrix.postgres }}
@@ -129,6 +232,8 @@ jobs:
       uses: actions/setup-dotnet@v6
       with:
         global-json-file: global.json
+        cache: true
+        cache-dependency-path: "**/*.csproj"
     - name: Restore dependencies
       run: dotnet restore
     - name: Build
@@ -137,6 +242,8 @@ jobs:
       run: dotnet test tests/Resourcefull.Tests.PostgreSql --no-build --configuration Release
 
   s3-tests:
+    needs: changes
+    if: needs.changes.outputs.full == 'true' || needs.changes.outputs.s3 == 'true'
     runs-on: ubuntu-latest
     env:
       RESOURCEFULL_TEST_S3: "http://127.0.0.1:8333"
@@ -150,6 +257,8 @@ jobs:
       uses: actions/setup-dotnet@v6
       with:
         global-json-file: global.json
+        cache: true
+        cache-dependency-path: "**/*.csproj"
     - name: Restore dependencies
       run: dotnet restore
     - name: Build
@@ -158,6 +267,8 @@ jobs:
       run: dotnet test tests/Resourcefull.Tests.S3 --no-build --configuration Release
 
   azureblob-tests:
+    needs: changes
+    if: needs.changes.outputs.full == 'true' || needs.changes.outputs.azureblob == 'true'
     runs-on: ubuntu-latest
     env:
       RESOURCEFULL_TEST_AZUREBLOB: "UseDevelopmentStorage=true"
@@ -171,6 +282,8 @@ jobs:
       uses: actions/setup-dotnet@v6
       with:
         global-json-file: global.json
+        cache: true
+        cache-dependency-path: "**/*.csproj"
     - name: Restore dependencies
       run: dotnet restore
     - name: Build
@@ -179,12 +292,15 @@ jobs:
       run: dotnet test tests/Resourcefull.Tests.AzureBlob --no-build --configuration Release
 
   filesystem-tests:
+    needs: changes
+    if: needs.changes.outputs.full == 'true' || needs.changes.outputs.filesystem == 'true'
     # Filesystems differ in what they take in a name, whether they ignore case or Unicode normalization, and how they
-    # lock files, so the provider is tested on each.
+    # lock files, so a full run tests the provider on each. Other runs stay on Linux, since Windows and macOS minutes cost
+    # the most.
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: ${{ fromJson(needs.changes.outputs.full == 'true' && '["ubuntu-latest", "windows-latest", "macos-latest"]' || '["ubuntu-latest"]') }}
     runs-on: ${{ matrix.os }}
     steps:
     - uses: actions/checkout@v7
@@ -197,7 +313,10 @@ jobs:
     - name: Test
       run: dotnet test tests/Resourcefull.Tests.FileSystem --no-build --configuration Release
 
+  # Only in a full run, since it's one of the longest jobs.
   performance:
+    needs: changes
+    if: needs.changes.outputs.full == 'true'
     runs-on: ubuntu-latest
     services:
       sqlserver:
@@ -221,6 +340,8 @@ jobs:
       uses: actions/setup-dotnet@v6
       with:
         global-json-file: global.json
+        cache: true
+        cache-dependency-path: "**/*.csproj"
     - name: Restore dependencies
       run: dotnet restore
     - name: Build

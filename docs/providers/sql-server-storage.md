@@ -38,6 +38,6 @@ download reads a few chunks at a time as its stream is read, so memory use stays
 - **Concurrent writers don't wait for each other's content.** Uploads to different names run fully in parallel, and
   uploads to the same name wait for each other only while making their versions current.
 
-These figures come from the performance tests the project runs on every change, which fail the build when an operation
+These figures come from the performance tests the project runs before every release, which fail the build when an operation
 gets more expensive.
 There's nothing to tune: the chunk and page sizes are fixed.

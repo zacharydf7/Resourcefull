@@ -1,7 +1,7 @@
 name: Publish the docs site
 
-# Builds the docs site from main and publishes it to GitHub Pages. build.yml builds it too, on every push and pull
-# request, to catch broken links before they reach main.
+# Builds the docs site from main and publishes it to GitHub Pages. build.yml builds it for pull requests, to catch broken
+# links before they reach main.
 on:
   push:
     branches: [ "main" ]

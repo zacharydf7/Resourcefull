@@ -5,7 +5,7 @@
 `Resourcefull.FileSystem` stores resources as files in a directory, on a local disk or a network share. No database or
 storage service is needed: give it a directory, and every name keeps its versions, content hashes and metadata, as with
 the other providers. It suits a single server, a small deployment, a development machine, or anywhere the files must
-stay on your own disks. It's tested on every change on Linux, Windows and macOS.
+stay on your own disks. It's tested on Linux, Windows and macOS.
 
 ```shell
 dotnet add package Resourcefull.FileSystem

@@ -4,7 +4,7 @@
 
 `Resourcefull.AzureBlob` stores resources in a blob container of an Azure Storage account. Files stream in and out
 with flat memory use, and every name keeps its versions, content hashes and metadata, as with the database providers.
-It's tested on every change against [Azurite](https://github.com/Azure/Azurite), Microsoft's local emulator for Azure
+It's tested against [Azurite](https://github.com/Azure/Azurite), Microsoft's local emulator for Azure
 Storage.
 
 ```shell
