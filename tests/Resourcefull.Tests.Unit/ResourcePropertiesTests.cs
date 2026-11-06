@@ -9,19 +9,16 @@ namespace Resourcefull.Tests.Unit;
 public class ResourcePropertiesTests
 {
     [Fact]
-    public async Task PropertyMembers_ShouldThrowNotSupported_WhenTheProviderOrClientDoesNotImplementThem()
+    public async Task PropertyMembers_ShouldThrowNotSupported_WhenTheProviderDoesNotImplementThem()
     {
         // Arrange
         ResourceRepository repository = new Mock<ResourceRepository> { CallBase = true }.Object;
-        IResourceContainerClient container = new Mock<IResourceContainerClient> { CallBase = true }.Object;
         var location = new ResourceAddress("c", "a");
         var metadata = new Dictionary<string, string>();
 
         // Act & Assert
         await Assert.ThrowsAsync<NotSupportedException>(() => repository.SetResourceMetadataAsync(location, null, metadata));
         await Assert.ThrowsAsync<NotSupportedException>(() => repository.SetContentTypeAsync(location, null, "text/plain"));
-        await Assert.ThrowsAsync<NotSupportedException>(() => container.SetResourceMetadataAsync("a", null, metadata));
-        await Assert.ThrowsAsync<NotSupportedException>(() => container.SetContentTypeAsync("a", null, "text/plain"));
     }
 
     [Fact]

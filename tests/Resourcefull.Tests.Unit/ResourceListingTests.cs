@@ -59,19 +59,6 @@ public class ResourceListingTests
     }
 
     [Fact]
-    public async Task GetResourcePageAsync_ShouldThrowNotSupported_WhenAClientWrittenFor30IsAskedForAPage()
-    {
-        // Arrange
-        IResourceContainerClient client = new Mock<IResourceContainerClient> { CallBase = true }.Object;
-
-        // Act
-        Task act() => client.GetResourcePageAsync();
-
-        // Assert
-        await Assert.ThrowsAsync<NotSupportedException>(act);
-    }
-
-    [Fact]
     public async Task ListResourcesAsync_ShouldFollowTheContinuationTokens_WhenTheListingHasSeveralPages()
     {
         // Arrange: an implementation that only provides pages gets the enumeration from the default implementation.

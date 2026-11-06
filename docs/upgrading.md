@@ -66,7 +66,8 @@ is the exception: see [Upgrading to 4.0](upgrading-to-4.md#upgrading-the-databas
   release fixes bugs, a minor release adds features without breaking code written for earlier releases of the same
   major version, and a major release may make breaking changes, each listed in its upgrade guide.
 - **Custom providers** are covered too: the provider API changes incompatibly only in a major release, and members
-  added in a minor release come with default implementations. See [Writing a provider](providers/writing-a-provider.md).
+  added in a minor release come with default implementations. So do members added to `IResourceContainerClient` and
+  `IResourceServiceClient`. See [Writing a provider](providers/writing-a-provider.md).
 - **The database** within one major version only gains what the table above lists, so any 3.x application works
   against any 3.x database at least as new as itself. A 3.x application doesn't work against a 4.0 database <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>;
   see [Upgrading to 4.0](upgrading-to-4.md#upgrading-the-database).

@@ -235,7 +235,7 @@
   its source in the new `ResourceInfo.CopiedFrom`. Providers get `CopyResourceAsync`, with a default implementation,
   and `MoveResourceAsync`, which throws `NotSupportedException` until implemented. The `AddCopiedFrom` migration adds
   three nullable columns. `RenameResourceAsync` renames within the container, and `IResourceContainerClient.Name`
-  gives the container's name; both have default implementations. `RestoreVersionAsync` restores through
+  gives the container's name. `RestoreVersionAsync` restores through
   `CopyResourceAsync`, so with SQL Server a restore
   runs within the database and is retried after a transient failure (for a version stored before 3.0, once the hash
   backfill has recorded its hash). See [Copying and moving](docs/copying-and-moving.md).
@@ -303,6 +303,11 @@
 
 ### Changed
 
+- **Client interfaces have no defaults that only throw.** A class that implements `IResourceContainerClient` or
+  `IResourceServiceClient` must now implement every member that used to throw by default, so forgetting one is a compile
+  error rather than a `NotSupportedException` at run time. Only `ListResourcesAsync`, `ListDeletedAsync`,
+  `ListContainersAsync` and `RenameResourceAsync` keep defaults, which work through the other members. A member added
+  after 4.0 gets a default.
 - **Sweeps have clearer names, and can't skip a version.** The service client's `PurgeDeletedAsync()` is now
   `PurgeDueAsync()`, which pairs with `DeleteExpiredAsync`. It purges only versions whose `PurgeAt` has passed, while the
   container client's `PurgeDeletedAsync(name, versionId)` purges right away. `GetExpiredAsync`, `GetPurgeableAsync`,

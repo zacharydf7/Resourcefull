@@ -396,16 +396,6 @@ public class ContainerPolicyTests
         repository.Verify(r => r.GetResourcePageAsync("c", null, last, It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
-    [Fact]
-    public async Task GetUsageAsync_ShouldThrowNotSupported_WhenAClientWrittenFor31IsAsked()
-    {
-        // Arrange
-        IResourceContainerClient client = new Mock<IResourceContainerClient> { CallBase = true }.Object;
-
-        // Act & Assert
-        await Assert.ThrowsAsync<NotSupportedException>(() => client.GetUsageAsync());
-    }
-
     private static ResourceInfo Version(string id, long length) => new() { ContainerName = "c", Name = "a", VersionId = id, ContentLength = length };
 
     /// <summary>A versioned client of container <c>c</c> whose policies come from <paramref name="settings"/>.</summary>

@@ -296,8 +296,10 @@ public class DashboardTests
     [Fact]
     public async Task Expired_ShouldSayExpiryIsNotSupportedAndAskOnlyOnce_WhenTheProviderDoesNotSupportIt()
     {
-        // Arrange: a service client whose expiry members keep their defaults, which refuse.
-        var resources = new Mock<IResourceServiceClient> { CallBase = true };
+        // Arrange: a service client over a provider that doesn't support expiry.
+        var resources = new Mock<IResourceServiceClient>();
+        resources.Setup(r => r.GetExpiredVersionsAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new NotSupportedException("No expiry."));
         (WebApplication app, HttpClient client) = await StartAsync(dashboard => dashboard.AllowAnonymous(),
             configureServices: services => services.AddScoped(_ => resources.Object));
         await using WebApplication _ = app;

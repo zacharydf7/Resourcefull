@@ -203,12 +203,8 @@ public interface IResourceContainerClient
     /// </exception>
     /// <exception cref="ArgumentOutOfRangeException"><see cref="ResourceListOptions.PageSize"/> is outside 1 to <see cref="ResourceListOptions.MaxPageSize"/>.</exception>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
-    /// <exception cref="NotSupportedException">
-    /// This default implementation doesn't list by page.
-    /// </exception>
     public Task<ResourcePage> GetResourcePageAsync(ResourceListOptions? options = null, string? continuationToken = null,
-        CancellationToken cancellationToken = default)
-        => throw new NotSupportedException($"{GetType().Name} doesn't list resources by page.");
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Lists every stored version of a resource: the current version first, with
@@ -305,12 +301,10 @@ public interface IResourceContainerClient
     /// </exception>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
     /// <exception cref="NotSupportedException">
-    /// This default implementation doesn't copy, or <see cref="ResourceCopyOptions.ExpiresAt"/> is set and the provider
-    /// doesn't support expiry; nothing was stored.
+    /// <see cref="ResourceCopyOptions.ExpiresAt"/> is set and the provider doesn't support expiry; nothing was stored.
     /// </exception>
     public Task<ResourceInfo?> CopyResourceAsync(string resourceName, string destinationContainer, string destinationName,
-        ResourceCopyOptions? options = null, CancellationToken cancellationToken = default)
-        => throw new NotSupportedException($"{GetType().Name} doesn't copy resources.");
+        ResourceCopyOptions? options = null, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Moves a resource, every version of it, to a name in this or another container, all at once; renaming is a move
@@ -337,11 +331,10 @@ public interface IResourceContainerClient
     /// </exception>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
     /// <exception cref="NotSupportedException">
-    /// The provider doesn't move resources, or this is the default implementation.
+    /// The provider doesn't move resources.
     /// </exception>
     public Task<ResourceInfo?> MoveResourceAsync(string resourceName, string destinationContainer, string destinationName,
-        ResourceMoveOptions? options = null, CancellationToken cancellationToken = default)
-        => throw new NotSupportedException($"{GetType().Name} doesn't move resources.");
+        ResourceMoveOptions? options = null, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Renames a resource, every version of it, within this container: a
@@ -374,11 +367,10 @@ public interface IResourceContainerClient
     /// <exception cref="ArgumentException"><paramref name="resourceName"/> breaks the name rules.</exception>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
     /// <exception cref="NotSupportedException">
-    /// The provider doesn't support expiry, or this is the default implementation.
+    /// The provider doesn't support expiry.
     /// </exception>
     public Task<bool> SetExpiryAsync(string resourceName, string? versionId, DateTimeOffset? expiresAt,
-        CancellationToken cancellationToken = default)
-        => throw new NotSupportedException($"{GetType().Name} doesn't support expiry.");
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Replaces a version's metadata, without uploading it again. Only the metadata changes: the version keeps its ID,
@@ -400,11 +392,10 @@ public interface IResourceContainerClient
     /// <exception cref="ArgumentException"><paramref name="resourceName"/> breaks the name rules.</exception>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
     /// <exception cref="NotSupportedException">
-    /// The provider doesn't change a version's metadata, or this is the default implementation.
+    /// The provider doesn't change a version's metadata.
     /// </exception>
     public Task<bool> SetResourceMetadataAsync(string resourceName, string? versionId, IDictionary<string, string> metadata,
-        CancellationToken cancellationToken = default)
-        => throw new NotSupportedException($"{GetType().Name} doesn't change a version's metadata.");
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Changes the content type a version is stored and served with, without uploading it again, such as to correct one
@@ -428,11 +419,10 @@ public interface IResourceContainerClient
     /// <exception cref="ArgumentException"><paramref name="resourceName"/> breaks the name rules.</exception>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
     /// <exception cref="NotSupportedException">
-    /// The provider doesn't change a version's content type, or this is the default implementation.
+    /// The provider doesn't change a version's content type.
     /// </exception>
     public Task<bool> SetContentTypeAsync(string resourceName, string? versionId, string? contentType,
-        CancellationToken cancellationToken = default)
-        => throw new NotSupportedException($"{GetType().Name} doesn't change a version's content type.");
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Keeps a version from being deleted until <paramref name="retainUntil"/>, by anyone or anything: a delete of it,
@@ -459,11 +449,10 @@ public interface IResourceContainerClient
     /// <exception cref="ArgumentException"><paramref name="resourceName"/> breaks the name rules.</exception>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
     /// <exception cref="NotSupportedException">
-    /// The provider doesn't support retention, or this is the default implementation.
+    /// The provider doesn't support retention.
     /// </exception>
     public Task<bool> SetRetentionAsync(string resourceName, string? versionId, DateTimeOffset retainUntil,
-        CancellationToken cancellationToken = default)
-        => throw new NotSupportedException($"{GetType().Name} doesn't support retention.");
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Sets or lifts a legal hold on a version. While it's held, it can't be deleted, by anyone or anything, whatever
@@ -481,11 +470,10 @@ public interface IResourceContainerClient
     /// <exception cref="ArgumentException"><paramref name="resourceName"/> breaks the name rules.</exception>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
     /// <exception cref="NotSupportedException">
-    /// The provider doesn't support retention, or this is the default implementation.
+    /// The provider doesn't support retention.
     /// </exception>
     public Task<bool> SetLegalHoldAsync(string resourceName, string? versionId, bool hold,
-        CancellationToken cancellationToken = default)
-        => throw new NotSupportedException($"{GetType().Name} doesn't support retention.");
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Lists the versions in the container's bin, newest deletion first, fetching a page at a time as you enumerate.
@@ -505,7 +493,7 @@ public interface IResourceContainerClient
     /// </exception>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
     /// <exception cref="NotSupportedException">
-    /// The provider has no bin, or this is the default implementation.
+    /// The provider has no bin.
     /// </exception>
     /// <remarks>
     /// The default implementation fetches the pages through <see cref="GetDeletedPageAsync"/>.
@@ -549,11 +537,10 @@ public interface IResourceContainerClient
     /// </exception>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
     /// <exception cref="NotSupportedException">
-    /// The provider has no bin, or this is the default implementation.
+    /// The provider has no bin.
     /// </exception>
     public Task<ResourcePage> GetDeletedPageAsync(ResourceListOptions? options = null, string? continuationToken = null,
-        CancellationToken cancellationToken = default)
-        => throw new NotSupportedException($"{GetType().Name} doesn't keep deleted versions.");
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Brings a version back from the container's bin, or with no <paramref name="versionId"/> every version of the
@@ -573,10 +560,9 @@ public interface IResourceContainerClient
     /// <exception cref="ArgumentException"><paramref name="resourceName"/> breaks the name rules.</exception>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
     /// <exception cref="NotSupportedException">
-    /// The provider has no bin, or this is the default implementation.
+    /// The provider has no bin.
     /// </exception>
-    public Task<bool> UndeleteAsync(string resourceName, string? versionId = null, CancellationToken cancellationToken = default)
-        => throw new NotSupportedException($"{GetType().Name} doesn't keep deleted versions.");
+    public Task<bool> UndeleteAsync(string resourceName, string? versionId = null, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Deletes a version in the container's bin for good, or with no <paramref name="versionId"/> every version of the
@@ -592,10 +578,9 @@ public interface IResourceContainerClient
     /// <exception cref="ArgumentException"><paramref name="resourceName"/> breaks the name rules.</exception>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
     /// <exception cref="NotSupportedException">
-    /// The provider has no bin, or this is the default implementation.
+    /// The provider has no bin.
     /// </exception>
-    public Task<bool> PurgeDeletedAsync(string resourceName, string? versionId = null, CancellationToken cancellationToken = default)
-        => throw new NotSupportedException($"{GetType().Name} doesn't keep deleted versions.");
+    public Task<bool> PurgeDeletedAsync(string resourceName, string? versionId = null, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Gets what the container holds: the size of every version, and how many resources and versions there are. Use it
@@ -605,11 +590,7 @@ public interface IResourceContainerClient
     /// <param name="cancellationToken">Cancels the lookup.</param>
     /// <returns>The container's usage; nothing stored when the container doesn't exist.</returns>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
-    /// <exception cref="NotSupportedException">
-    /// This default implementation doesn't report usage.
-    /// </exception>
-    public Task<ResourceContainerUsage> GetUsageAsync(CancellationToken cancellationToken = default)
-        => throw new NotSupportedException($"{GetType().Name} doesn't report usage.");
+    public Task<ResourceContainerUsage> GetUsageAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Gets the policy this container's writes are checked against: the defaults from
@@ -623,11 +604,7 @@ public interface IResourceContainerClient
     /// <param name="cancellationToken">Cancels the lookup.</param>
     /// <returns>The container's policy; without container policies, one that sets only the version limit.</returns>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
-    /// <exception cref="NotSupportedException">
-    /// This default implementation doesn't report the policy.
-    /// </exception>
-    public Task<ResourceContainerPolicy> GetPolicyAsync(CancellationToken cancellationToken = default)
-        => throw new NotSupportedException($"{GetType().Name} doesn't report its policy.");
+    public Task<ResourceContainerPolicy> GetPolicyAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Replaces the container's metadata, which otherwise is set only when the container is created. The whole
@@ -692,12 +669,8 @@ public interface IResourceContainerClient
     /// <paramref name="order"/> isn't one of the values defined, or <paramref name="count"/> is outside 1 to 1,000.
     /// </exception>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
-    /// <exception cref="NotSupportedException">
-    /// This default implementation doesn't list versions by size or expiry.
-    /// </exception>
     public Task<IReadOnlyList<ResourceInfo>> GetTopVersionsAsync(ResourceVersionOrder order, int count = 20,
-        CancellationToken cancellationToken = default)
-        => throw new NotSupportedException($"{GetType().Name} doesn't list versions by size or expiry.");
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Starts an upload session: a version of <paramref name="resourceName"/> whose content arrives over several
@@ -719,12 +692,11 @@ public interface IResourceContainerClient
     /// </exception>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
     /// <exception cref="NotSupportedException">
-    /// The provider doesn't support upload sessions, or this is the default implementation; or
-    /// <see cref="ResourceUploadSessionOptions.ExpiresAt"/> is set and the provider doesn't support expiry.
+    /// The provider doesn't support upload sessions, or <see cref="ResourceUploadSessionOptions.ExpiresAt"/> is set and it
+    /// doesn't support expiry.
     /// </exception>
     public Task<ResourceUpload> StartUploadAsync(string resourceName, ResourceUploadSessionOptions? options = null,
-        CancellationToken cancellationToken = default)
-        => throw new NotSupportedException($"{GetType().Name} doesn't support upload sessions.");
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Gets an upload session as it stands, to find where to resume: its <see cref="ResourceUpload.Offset"/> is how
@@ -738,10 +710,9 @@ public interface IResourceContainerClient
     /// <exception cref="ArgumentException"><paramref name="resourceName"/> breaks the name rules, or <paramref name="uploadId"/> is empty.</exception>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
     /// <exception cref="NotSupportedException">
-    /// The provider doesn't support upload sessions, or this is the default implementation.
+    /// The provider doesn't support upload sessions.
     /// </exception>
-    public Task<ResourceUpload?> GetUploadAsync(string resourceName, string uploadId, CancellationToken cancellationToken = default)
-        => throw new NotSupportedException($"{GetType().Name} doesn't support upload sessions.");
+    public Task<ResourceUpload?> GetUploadAsync(string resourceName, string uploadId, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Appends <paramref name="content"/> to an upload session, reading it to its end. An append that fails partway may
@@ -771,11 +742,10 @@ public interface IResourceContainerClient
     /// </exception>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
     /// <exception cref="NotSupportedException">
-    /// The provider doesn't support upload sessions, or this is the default implementation.
+    /// The provider doesn't support upload sessions.
     /// </exception>
     public Task<ResourceUpload?> AppendUploadAsync(string resourceName, string uploadId, long offset, Stream content,
-        CancellationToken cancellationToken = default)
-        => throw new NotSupportedException($"{GetType().Name} doesn't support upload sessions.");
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Completes an upload session, making its version the name's current one, as an upload with the same mode and
@@ -818,12 +788,11 @@ public interface IResourceContainerClient
     /// <exception cref="ResourcePolicyViolationException">The container's policy refuses the version. The session stays.</exception>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
     /// <exception cref="NotSupportedException">
-    /// The provider doesn't support upload sessions, or this is the default implementation.
+    /// The provider doesn't support upload sessions.
     /// </exception>
     public Task<ResourceInfo?> CompleteUploadAsync(string resourceName, string uploadId,
         ResourceWriteMode mode = ResourceWriteMode.Create, ResourceConditions? conditions = null,
-        CancellationToken cancellationToken = default)
-        => throw new NotSupportedException($"{GetType().Name} doesn't support upload sessions.");
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Cancels an upload session, deleting what it stored.
@@ -836,8 +805,7 @@ public interface IResourceContainerClient
     /// <exception cref="ArgumentException"><paramref name="resourceName"/> breaks the name rules, or <paramref name="uploadId"/> is empty.</exception>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
     /// <exception cref="NotSupportedException">
-    /// The provider doesn't support upload sessions, or this is the default implementation.
+    /// The provider doesn't support upload sessions.
     /// </exception>
-    public Task<bool> CancelUploadAsync(string resourceName, string uploadId, CancellationToken cancellationToken = default)
-        => throw new NotSupportedException($"{GetType().Name} doesn't support upload sessions.");
+    public Task<bool> CancelUploadAsync(string resourceName, string uploadId, CancellationToken cancellationToken = default);
 }

@@ -143,12 +143,8 @@ public interface IResourceServiceClient
     /// <exception cref="ResourceContainerNotFoundException">The container doesn't exist.</exception>
     /// <exception cref="InvalidDataException">A version's stored content doesn't match its recorded hash.</exception>
     /// <exception cref="ArgumentException"><paramref name="resourceContainerName"/> breaks the name rules, or <paramref name="destination"/> is null.</exception>
-    /// <exception cref="NotSupportedException">
-    /// This default implementation, kept so implementations written for 3.1 still compile, doesn't export.
-    /// </exception>
     public Task<ResourceExportResult> ExportContainerAsync(string resourceContainerName, Stream destination,
-        CancellationToken cancellationToken = default)
-        => throw new NotSupportedException($"{GetType().Name} doesn't export containers.");
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Creates a container from an export that <see cref="ExportContainerAsync"/> wrote, with every version as it was:
@@ -177,12 +173,10 @@ public interface IResourceServiceClient
     /// </exception>
     /// <exception cref="NotSupportedException">
     /// The provider doesn't import versions, or the export has a version that expires and the provider doesn't support
-    /// expiry, or a retained or held version and the provider doesn't support retention, or this is the default
-    /// implementation, kept so implementations written for 3.1 still compile.
+    /// expiry, or a retained or held version and the provider doesn't support retention.
     /// </exception>
     public Task<ResourceImportResult> ImportContainerAsync(string resourceContainerName, Stream source,
-        CancellationToken cancellationToken = default)
-        => throw new NotSupportedException($"{GetType().Name} doesn't import containers.");
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Creates a container from versions another store holds, each as it was: its ID,
@@ -209,11 +203,10 @@ public interface IResourceServiceClient
     /// <exception cref="ArgumentException"><paramref name="resourceContainerName"/> breaks the name rules, or <paramref name="versions"/> is null.</exception>
     /// <exception cref="NotSupportedException">
     /// The provider doesn't import versions, or a version expires and the provider doesn't support expiry, or a version
-    /// is retained or held and the provider doesn't support retention, or this is the default implementation.
+    /// is retained or held and the provider doesn't support retention.
     /// </exception>
     public Task<ResourceImportResult> ImportContainerAsync(string resourceContainerName, IAsyncEnumerable<ImportedVersion> versions,
-        IReadOnlyDictionary<string, string>? metadata = null, CancellationToken cancellationToken = default)
-        => throw new NotSupportedException($"{GetType().Name} doesn't import containers.");
+        IReadOnlyDictionary<string, string>? metadata = null, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Adds versions another store holds to a container that exists, each as it was, as
@@ -234,11 +227,10 @@ public interface IResourceServiceClient
     /// <exception cref="ArgumentException"><paramref name="resourceContainerName"/> breaks the name rules, or <paramref name="versions"/> is null.</exception>
     /// <exception cref="NotSupportedException">
     /// The provider doesn't import versions, or a version expires and the provider doesn't support expiry, or a version
-    /// is retained or held and the provider doesn't support retention, or this is the default implementation.
+    /// is retained or held and the provider doesn't support retention.
     /// </exception>
     public Task<ResourceImportResult> ImportVersionsAsync(string resourceContainerName, IAsyncEnumerable<ImportedVersion> versions,
-        CancellationToken cancellationToken = default)
-        => throw new NotSupportedException($"{GetType().Name} doesn't import versions.");
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Copies a container to another store, such as one with another provider, every version of every resource as it
@@ -262,11 +254,10 @@ public interface IResourceServiceClient
     /// <exception cref="ResourceConflictException">The destination already has a container with that name.</exception>
     /// <exception cref="ArgumentException">A name breaks the name rules, or <paramref name="destination"/> is null.</exception>
     /// <exception cref="NotSupportedException">
-    /// The destination can't import versions, or this is the default implementation.
+    /// The destination can't import versions.
     /// </exception>
     public Task<ContainerCopyResult> CopyContainerToAsync(string resourceContainerName, IResourceServiceClient destination,
-        string? destinationContainerName = null, CancellationToken cancellationToken = default)
-        => throw new NotSupportedException($"{GetType().Name} doesn't copy containers.");
+        string? destinationContainerName = null, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Copies every container, or those whose names start with <see cref="StoreCopyOptions.Prefix"/>, to another store,
@@ -288,10 +279,8 @@ public interface IResourceServiceClient
     /// <paramref name="destination"/> is null, or <paramref name="options"/> has a value that isn't defined.
     /// </exception>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
-    /// <exception cref="NotSupportedException">This is the default implementation.</exception>
     public Task<StoreCopyResult> CopyStoreToAsync(IResourceServiceClient destination, StoreCopyOptions? options = null,
-        CancellationToken cancellationToken = default)
-        => throw new NotSupportedException($"{GetType().Name} doesn't copy stores.");
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Deletes every version, in every container that isn't read-only, whose <see cref="ResourceInfo.ExpiresAt"/> has
@@ -312,11 +301,9 @@ public interface IResourceServiceClient
     /// </exception>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
     /// <exception cref="NotSupportedException">
-    /// The provider doesn't support expiry, or this is the default implementation, kept so implementations written for
-    /// 3.1 still compile.
+    /// The provider doesn't support expiry.
     /// </exception>
-    public Task<long> DeleteExpiredAsync(CancellationToken cancellationToken = default)
-        => throw new NotSupportedException($"{GetType().Name} doesn't support expiry.");
+    public Task<long> DeleteExpiredAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Purges every version whose <see cref="ResourceInfo.PurgeAt"/> has passed from the bin of each container that isn't
@@ -336,9 +323,7 @@ public interface IResourceServiceClient
     /// without a purge time.
     /// </exception>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
-    /// <exception cref="NotSupportedException">This is the default implementation.</exception>
-    public Task<long> PurgeDueAsync(CancellationToken cancellationToken = default)
-        => throw new NotSupportedException($"{GetType().Name} doesn't keep deleted versions.");
+    public Task<long> PurgeDueAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Lists versions, in every container, whose <see cref="ResourceInfo.ExpiresAt"/> has passed but that
@@ -354,8 +339,7 @@ public interface IResourceServiceClient
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="maxVersions"/> is outside 1 to 1,000.</exception>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
     /// <exception cref="NotSupportedException">
-    /// The provider doesn't support expiry, or this is the default implementation.
+    /// The provider doesn't support expiry.
     /// </exception>
-    public Task<IReadOnlyList<ResourceInfo>> GetExpiredVersionsAsync(int maxVersions = 100, CancellationToken cancellationToken = default)
-        => throw new NotSupportedException($"{GetType().Name} doesn't support expiry.");
+    public Task<IReadOnlyList<ResourceInfo>> GetExpiredVersionsAsync(int maxVersions = 100, CancellationToken cancellationToken = default);
 }

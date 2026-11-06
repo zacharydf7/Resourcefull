@@ -440,20 +440,16 @@ public class ExpiryTests
     }
 
     [Fact]
-    public async Task ExpiryMembers_ShouldThrowNotSupported_WhenTheProviderOrClientDoesNotImplementThem()
+    public async Task ExpiryMembers_ShouldThrowNotSupported_WhenTheProviderDoesNotImplementThem()
     {
         // Arrange
         ResourceRepository repository = new Mock<ResourceRepository> { CallBase = true }.Object;
-        IResourceContainerClient container = new Mock<IResourceContainerClient> { CallBase = true }.Object;
-        IResourceServiceClient service = new Mock<IResourceServiceClient> { CallBase = true }.Object;
         var location = new ResourceAddress("c", "a");
 
         // Act & Assert
         await Assert.ThrowsAsync<NotSupportedException>(() => repository.GetExpiredAsync(DateTimeOffset.UtcNow, 10));
         await Assert.ThrowsAsync<NotSupportedException>(() => repository.DeleteExpiredVersionAsync(location, "v", DateTimeOffset.UtcNow));
         await Assert.ThrowsAsync<NotSupportedException>(() => repository.SetExpiryAsync(location, "v", null));
-        await Assert.ThrowsAsync<NotSupportedException>(() => container.SetExpiryAsync("a", "v", null));
-        await Assert.ThrowsAsync<NotSupportedException>(() => service.DeleteExpiredAsync());
     }
 
     [Fact]

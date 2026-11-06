@@ -3,7 +3,7 @@ using Resourcefull.Providers;
 
 namespace Resourcefull.Tests.Unit;
 
-/// <summary>Copies and moves through providers and clients written before they existed.</summary>
+/// <summary>Copies and moves through providers written before they existed.</summary>
 public class ResourceCopyTests
 {
     private static readonly WrittenContent Written = new(5, "sha256:written", new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero));
@@ -81,27 +81,13 @@ public class ResourceCopyTests
     }
 
     [Fact]
-    public async Task ExportImportMembers_ShouldThrowNotSupported_WhenTheProviderOrClientDoesNotImplementThem()
+    public async Task ImportVersionAsync_ShouldThrowNotSupported_WhenTheProviderDoesNotImplementIt()
     {
         // Arrange
         ResourceRepository repository = new Mock<ResourceRepository> { CallBase = true }.Object;
-        IResourceServiceClient service = new Mock<IResourceServiceClient> { CallBase = true }.Object;
 
         // Act & Assert
         await Assert.ThrowsAsync<NotSupportedException>(() =>
             repository.ImportVersionAsync(new NewResourceVersion(new ResourceAddress("c", "a"), "v1"), new MemoryStream()));
-        await Assert.ThrowsAsync<NotSupportedException>(() => service.ExportContainerAsync("c", new MemoryStream()));
-        await Assert.ThrowsAsync<NotSupportedException>(() => service.ImportContainerAsync("c", new MemoryStream()));
-    }
-
-    [Fact]
-    public async Task CopyAndMove_ShouldThrowNotSupported_WhenAClientWrittenFor31IsAsked()
-    {
-        // Arrange
-        IResourceContainerClient client = new Mock<IResourceContainerClient> { CallBase = true }.Object;
-
-        // Act & Assert
-        await Assert.ThrowsAsync<NotSupportedException>(() => client.CopyResourceAsync("a", "c", "b"));
-        await Assert.ThrowsAsync<NotSupportedException>(() => client.MoveResourceAsync("a", "c", "b"));
     }
 }

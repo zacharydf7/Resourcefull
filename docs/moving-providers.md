@@ -170,8 +170,8 @@ reads each file's list of versions on both sides, and no content.
 
 A provider of your own can be either side. As the old store, it needs nothing more than reads. As the new store, it
 needs the provider method `ImportVersionAsync`, as [imports](backup-and-move.md#custom-providers) do. More generally,
-the destination can be any `IResourceServiceClient` that implements `ImportContainerAsync` from a stream of versions,
-plus the client method `ImportVersionsAsync` for `Update`.
+the destination can be any `IResourceServiceClient` whose `ImportContainerAsync` accepts a stream of versions, and whose
+`ImportVersionsAsync` works for `Update`.
 
 ## Telemetry
 
