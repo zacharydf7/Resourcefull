@@ -7,7 +7,7 @@ namespace Resourcefull.Tests.Unit.InMemory;
 
 /// <summary>
 /// The contract run against a provider that implements only the abstract members, as a new provider starts out: every
-/// optional feature is switched off, so its tests check that the feature is refused.
+/// optional feature is off, by its flag or by a switch here, so its tests check that the feature is refused.
 /// </summary>
 public class MinimalProviderContractTests : ResourcefullContractTests
 {
@@ -29,10 +29,7 @@ public class MinimalProviderContractTests : ResourcefullContractTests
     protected override bool SupportsVersionChanges => false;
     protected override bool SupportsMove => false;
     protected override bool SupportsImport => false;
-    protected override bool SupportsExpiry => false;
     protected override bool SupportsUploadSessions => false;
-    protected override bool SupportsRetention => false;
-    protected override bool SupportsSoftDelete => false;
 
     /// <summary>Passes on only the members every provider must implement, leaving the rest to their defaults.</summary>
     private sealed class MinimalRepository(ResourceRepository inner) : ResourceRepository

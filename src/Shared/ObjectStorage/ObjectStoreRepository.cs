@@ -456,6 +456,8 @@ internal sealed partial class ObjectStoreRepository(IObjectStore store, string k
     // entry whose version no longer records its token is stale. Changing the expiry or deleting the version deletes the
     // old entry; one those deletes miss is dropped when a listing finds it over an hour old.
 
+    public override bool SupportsExpiry => true;
+
     public override async Task<IReadOnlyList<ResourceInfo>> GetExpiredAsync(DateTimeOffset now, int maxVersions,
         (DateTimeOffset ExpiresAt, string VersionId)? after = null, CancellationToken cancellationToken = default)
     {

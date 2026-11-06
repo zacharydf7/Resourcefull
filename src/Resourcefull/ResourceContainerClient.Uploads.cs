@@ -26,7 +26,7 @@ internal partial class ResourceContainerClient
             ContentType = options.Headers?.ContentType,
             DeclaredLength = options.Headers?.ContentLength,
             Metadata = new Dictionary<string, string>(options.Metadata),
-            ExpiresAt = options.ExpiresAt,
+            ExpiresAt = ExpiryToStore(options.ExpiresAt),
             RetainUntil = RetainUntil(check.RetainFor, options.RetainUntil, options.LegalHold),
             LegalHold = options.LegalHold
         };

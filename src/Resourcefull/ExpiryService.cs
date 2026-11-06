@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Resourcefull.Providers;
 
 namespace Resourcefull;
 
@@ -9,11 +10,29 @@ internal sealed record ExpirySettings(TimeSpan Interval);
 
 /// <summary>
 /// Deletes expired versions, then purges what's due to leave the bin, when the application starts and every interval
-/// after, each time in a scope of its own, as <see cref="ResourcefullOptionsBuilder.UseExpiry"/> registers it.
+/// after, each time in a scope of its own, as <see cref="ResourcefullOptionsBuilder.UseExpiry"/> registers it. It stops
+/// the application from starting on a provider that doesn't support expiry, which could never delete or purge anything.
 /// </summary>
 internal sealed partial class ExpiryService(IServiceScopeFactory scopes, ExpirySettings settings, string? storeName,
     ILogger<ExpiryService> logger) : BackgroundService
 {
+    public override async Task StartAsync(CancellationToken cancellationToken)
+    {
+        AsyncServiceScope services = scopes.CreateAsyncScope();
+        await using (services.ConfigureAwait(false))
+        {
+            ResourceRepository repository = services.ServiceProvider.GetRequiredStoreService<ResourceRepository>(storeName);
+            if (!repository.SupportsExpiry)
+            {
+                throw new InvalidOperationException($"{nameof(ResourcefullOptionsBuilder.UseExpiry)} is turned on, but " +
+                    $"{repository.GetType().Name} doesn't support expiry ({nameof(ResourceRepository.SupportsExpiry)} is " +
+                    "false), so nothing would delete expired versions or purge deleted ones. Remove " +
+                    $"{nameof(ResourcefullOptionsBuilder.UseExpiry)} or use a provider that supports expiry.");
+            }
+        }
+        await base.StartAsync(cancellationToken).ConfigureAwait(false);
+    }
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         // So the logs say which store's sweep they're about.
@@ -32,7 +51,7 @@ internal sealed partial class ExpiryService(IServiceScopeFactory scopes, ExpiryS
                     {
                         await client.DeleteExpiredAsync(stoppingToken).ConfigureAwait(false);
                     }
-                    catch (Exception exception) when (exception is not NotSupportedException && !stoppingToken.IsCancellationRequested)
+                    catch (Exception exception) when (!stoppingToken.IsCancellationRequested)
                     {
                         // The next interval tries again: the versions this one didn't reach are still expired. The purge
                         // still runs, so a failing expiry doesn't keep what's due to leave the bin.
@@ -42,15 +61,10 @@ internal sealed partial class ExpiryService(IServiceScopeFactory scopes, ExpiryS
                     {
                         await client.PurgeDeletedAsync(stoppingToken).ConfigureAwait(false);
                     }
-                    catch (Exception exception) when (exception is not NotSupportedException && !stoppingToken.IsCancellationRequested)
+                    catch (Exception exception) when (!stoppingToken.IsCancellationRequested)
                     {
                         LogPurgeFailed(logger, exception);
                     }
-                }
-                catch (NotSupportedException exception)
-                {
-                    LogNotSupported(logger, exception);
-                    return;
                 }
                 catch (Exception exception) when (!stoppingToken.IsCancellationRequested)
                 {
@@ -64,9 +78,6 @@ internal sealed partial class ExpiryService(IServiceScopeFactory scopes, ExpiryS
             // The application is stopping.
         }
     }
-
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Expiry is turned on, but the storage provider doesn't support it, so expired versions aren't deleted.")]
-    private static partial void LogNotSupported(ILogger logger, Exception exception);
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Deleting expired versions failed; the next interval tries again.")]
     private static partial void LogFailed(ILogger logger, Exception exception);

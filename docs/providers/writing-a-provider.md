@@ -67,8 +67,8 @@ The XML documentation on each member states its contract in full. In short, a pr
 - **Store the content hash** from `WrittenContent` with the version, and return it as `ResourceInfo.ContentHash` on
   every read.
 - **Store `ExpiresAt` and `CopiedFrom`** <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> from the `NewResourceVersion` that `AddResourceAsync` and
-  `CopyResourceAsync` are given, and return them on every read. Nothing checks that a provider does: one that ignores
-  them still accepts uploads with an expiry, and those versions never expire. See [Expiry](#expiry).
+  `CopyResourceAsync` are given, and return them on every read. A version only has an `ExpiresAt` if your provider's
+  `SupportsExpiry` is `true`; see [Expiry](#expiry).
 - **Return content as a read-only, forward-only stream:** `CanSeek` and `CanWrite` are `false`, `Length` is the
   content's full length, `Position` counts the bytes read, and seeking, setting `Position`, writing and `SetLength`
   throw `NotSupportedException`.
@@ -219,15 +219,14 @@ that answers it in a single query.
 
 ## Expiry
 
-`GetExpiredAsync`, `DeleteExpiredVersionAsync` and `SetExpiryAsync` default to throwing `NotSupportedException`, so
-[expiry](../expiry.md) logs a warning and stops. `AddResourceAsync` and `CopyResourceAsync` should store
-`NewResourceVersion.ExpiresAt` with the version and return it as `ResourceInfo.ExpiresAt` on every read.
+`SupportsExpiry` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> is `false` by default, for a provider that leaves
+[expiry](../expiry.md) out. While it's `false`, every write that sets an expiry throws `NotSupportedException`, so
+nothing is stored with an expiry that never happens, and `UseExpiry` fails at startup with
+`InvalidOperationException`. `GetExpiredAsync`, `DeleteExpiredVersionAsync` and `SetExpiryAsync` default to throwing
+`NotSupportedException`.
 
-A provider that doesn't support expiry doesn't refuse one, though: if `AddResourceAsync` stores the upload and drops
-`ExpiresAt`, the clients can't tell, so the upload's result reports an expiry that will never happen. The same goes
-for `CopiedFrom` on copies and restores, which is lost. Store both before anyone uses expiry with your provider.
-
-To support it:
+To support expiry, override `SupportsExpiry` to return `true`, store `NewResourceVersion.ExpiresAt` with the version in
+`AddResourceAsync` and `CopyResourceAsync`, and return it as `ResourceInfo.ExpiresAt` on every read. Then:
 
 - **List expired versions from an index, a batch at a time.** Expiry calls `GetExpiredAsync` every interval on every
   instance, so it should cost little when nothing has expired. Order them by `ExpiresAt`, then ordinally by version
@@ -244,7 +243,8 @@ To support it:
 - **Delete what stopped uploads left**, if your provider stores content before the version is visible, as SQL
   Server's does. The sweep calls `DeleteAbandonedUploadsAsync(staleBefore)` first, every time, so make it cheap when
   there's nothing to delete. Delete only what an upload last added to before `staleBefore`, and return how many uploads'
-  leftovers you deleted. Its default does nothing, for a provider that leaves nothing behind.
+  leftovers you deleted. Its default does nothing, for a provider that leaves nothing behind. Only the sweep calls it,
+  so a provider that leaves anything behind should support expiry, or its leftovers stay.
 
 ## Upload sessions
 
@@ -275,9 +275,10 @@ while its content arrives.
 - **`DeleteStagedVersionAsync`** deletes a staged version and its content.
 
 Each append should move the version's stamp forward, so `DeleteAbandonedUploadsAsync` deletes a session only once
-nothing has been appended to it for a day. For a session that doesn't exist, `DeleteStagedVersionAsync` returns
-`false`, and the others, except `StartStagedVersionAsync`, return `null`. The defaults throw
-`NotSupportedException`, so with a provider that doesn't override them, the clients' session methods throw it too.
+nothing has been appended to it for a day. Only the [expiry](#expiry) sweep calls `DeleteAbandonedUploadsAsync`, so with
+a provider that doesn't support expiry, an abandoned session stays until the application cancels it. For a session that
+doesn't exist, `DeleteStagedVersionAsync` returns `false`, and the others, except `StartStagedVersionAsync`, return
+`null`. The defaults throw `NotSupportedException`, so with a provider that doesn't override them, the clients' session methods throw it too.
 
 ## Changing metadata and content type
 
@@ -486,9 +487,16 @@ can skip its tests when none is available: call `Assert.SkipUnless` in `BuildSer
 
 ### Features your provider leaves out
 
-If your provider doesn't override one of the optional members described above, turn off that feature's switch in your
-test class, and the suite skips its tests. In their place, a test checks that the clients refuse the feature
-with `NotSupportedException`, changing nothing, rather than seem to succeed:
+When your provider leaves out an optional feature, the suite skips that feature's tests. In their place, a test checks
+that the clients refuse the feature with `NotSupportedException`, changing nothing, rather than seem to succeed.
+
+For expiry, [retention](#retention-and-legal-holds) and [the bin](#the-bin), the suite reads your provider's own
+`SupportsExpiry`, `SupportsRetention` and `SupportsSoftDelete`, so there's nothing to set in your test class. It gets
+them from the unnamed store's `ResourceRepository`, so register your provider there, as above. A test also checks that
+a provider with a bin supports expiry.
+
+The other features have no such flag, so turn off a feature's switch in your test class when your provider leaves it
+out:
 
 | Switch | Turn it off when the provider doesn't override |
 |---|---|
@@ -496,19 +504,19 @@ with `NotSupportedException`, changing nothing, rather than seem to succeed:
 | `SupportsVersionChanges` | `SetResourceMetadataAsync` and `SetContentTypeAsync` |
 | `SupportsMove` | `MoveResourceAsync` |
 | `SupportsImport` | `ImportVersionAsync` |
-| `SupportsExpiry` | `GetExpiredAsync`, `DeleteExpiredVersionAsync` and `SetExpiryAsync` |
 | `SupportsUploadSessions` | the six [upload session](#upload-sessions) members |
-| `SupportsRetention` | `SupportsRetention`, `SetRetentionAsync` and `SetLegalHoldAsync` ([retention and legal holds](#retention-and-legal-holds)) |
-| `SupportsSoftDelete` | `SupportsSoftDelete` and the six other members of [the bin](#the-bin) |
 
 ```csharp
 public class FileSystemContractTests : ResourcefullContractTests
 {
-    protected override bool SupportsExpiry => false;
+    protected override bool SupportsMove => false;
 
     // BuildServiceProvider as above.
 }
 ```
+
+A switch added after 4.0 is off by default, so that a new release's tests don't fail a provider written before the
+feature existed. Turn it on once your provider supports the feature.
 
 The members with a default that works, such as `CopyResourceAsync` and `GetContainerUsageAsync`, need no switch: the
 suite tests them either way.

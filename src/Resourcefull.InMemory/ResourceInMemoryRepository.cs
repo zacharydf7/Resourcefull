@@ -163,6 +163,8 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : R
         });
     }
 
+    public override bool SupportsExpiry => true;
+
     public override Task<IReadOnlyList<ResourceInfo>> GetExpiredAsync(DateTimeOffset now, int maxVersions,
         (DateTimeOffset ExpiresAt, string VersionId)? after = null, CancellationToken cancellationToken = default) =>
         UnderLockAsync<IReadOnlyList<ResourceInfo>>(() =>

@@ -98,10 +98,11 @@
   [Writing a provider](docs/providers/writing-a-provider.md#the-contract).
 - **The contract tests as a package.** `Resourcefull.Testing` holds the tests every provider must pass, as an
   abstract xUnit v3 class (`xunit.v3` 4.0.2 or later): derive from `ResourcefullContractTests`, register your
-  provider, and the suite runs against it. For each optional feature a provider leaves out (container metadata,
-  changing a version's metadata and content type, moves, imports or expiry), its test class turns off the `Supports…`
-  switch; that feature's tests are then skipped, and other tests check that the clients refuse it with
-  `NotSupportedException`. `TimePrecision` and `NameOrder` describe a
+  provider, and the suite runs against it. A provider can leave out optional features: the suite skips those features'
+  tests, and other tests check that the clients refuse them with `NotSupportedException`. For expiry, retention and the
+  bin, the suite reads the provider's own flags. For container metadata, changing a version's metadata and content type,
+  moves, imports and upload sessions, the provider's test class turns off a `Supports…` switch. A switch added after 4.0
+  is off by default. `TimePrecision` and `NameOrder` describe a
   store that keeps times less precisely or orders names differently. See
   [Testing a provider](docs/providers/writing-a-provider.md#testing-a-provider).
 - **Several stores in one application.** `AddKeyedResourcefull("archive", …)` adds a store under a name, beside the one
@@ -184,11 +185,12 @@
   `IResourceCleanupHandler` hears about every version Resourcefull deletes by itself,
   expired or pruned, before it's deleted, for auditing. With expiry on, pruning sets a version to expire five minutes
   later instead of deleting it, so a download already reading it finishes. The `AddExpiresAt` migration adds a
-  nullable column and an index. Providers get three members whose defaults throw `NotSupportedException`, and
-  `DeleteExpiredVersionsAsync`, which a sweep deletes each page of up to 100 expired versions through: with SQL
-  Server, one transaction for the page (more when its versions hold over 256 chunks, about 10 MB, so no transaction
-  logs a page of large files): 16 expired 1 MiB files take 14 round trips, where one version at a time took 98. Its
-  default deletes them one at a time. See [Expiring resources](docs/expiry.md).
+  nullable column and an index. Providers get `SupportsExpiry`. When it's `false`, a write that sets an expiry throws
+  `NotSupportedException` and `UseExpiry` fails when the application starts. Providers also get three members whose
+  defaults throw `NotSupportedException`, and `DeleteExpiredVersionsAsync`, which a sweep deletes each page of up to 100
+  expired versions through: with SQL Server, one transaction for the page (more when its versions hold over 256 chunks,
+  about 10 MB, so no transaction logs a page of large files): 16 expired 1 MiB files take 14 round trips, where one
+  version at a time took 98. Its default deletes them one at a time. See [Expiring resources](docs/expiry.md).
 - **Retention dates and legal holds.** `ResourceUploadOptions.RetainUntil` keeps a version from being deleted until a
   date, and `LegalHold` until the hold is lifted; `SetRetentionAsync` moves a version's date later (never earlier), and
   `SetLegalHoldAsync` sets or lifts its hold. `ResourceContainerPolicy.RetainFor` gives every new version in a

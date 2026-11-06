@@ -176,8 +176,9 @@ public interface IResourceServiceClient
     /// <paramref name="resourceContainerName"/> breaks the name rules, or <paramref name="source"/> is null or can't seek.
     /// </exception>
     /// <exception cref="NotSupportedException">
-    /// The provider doesn't import versions, or this is the default implementation, kept so implementations written for
-    /// 3.1 still compile.
+    /// The provider doesn't import versions, or the export has a version that expires and the provider doesn't support
+    /// expiry, or a retained or held version and the provider doesn't support retention, or this is the default
+    /// implementation, kept so implementations written for 3.1 still compile.
     /// </exception>
     public Task<ResourceImportResult> ImportContainerAsync(string resourceContainerName, Stream source,
         CancellationToken cancellationToken = default)
@@ -207,8 +208,8 @@ public interface IResourceServiceClient
     /// <exception cref="ResourcePolicyViolationException">The container's policy refuses a version.</exception>
     /// <exception cref="ArgumentException"><paramref name="resourceContainerName"/> breaks the name rules, or <paramref name="versions"/> is null.</exception>
     /// <exception cref="NotSupportedException">
-    /// The provider doesn't import versions, or a version is retained or held and the provider doesn't support
-    /// retention, or this is the default implementation.
+    /// The provider doesn't import versions, or a version expires and the provider doesn't support expiry, or a version
+    /// is retained or held and the provider doesn't support retention, or this is the default implementation.
     /// </exception>
     public Task<ResourceImportResult> ImportContainerAsync(string resourceContainerName, IAsyncEnumerable<ImportedVersion> versions,
         IReadOnlyDictionary<string, string>? metadata = null, CancellationToken cancellationToken = default)
@@ -232,8 +233,8 @@ public interface IResourceServiceClient
     /// <exception cref="ResourcePolicyViolationException">The container's policy refuses a version.</exception>
     /// <exception cref="ArgumentException"><paramref name="resourceContainerName"/> breaks the name rules, or <paramref name="versions"/> is null.</exception>
     /// <exception cref="NotSupportedException">
-    /// The provider doesn't import versions, or a version is retained or held and the provider doesn't support
-    /// retention, or this is the default implementation.
+    /// The provider doesn't import versions, or a version expires and the provider doesn't support expiry, or a version
+    /// is retained or held and the provider doesn't support retention, or this is the default implementation.
     /// </exception>
     public Task<ResourceImportResult> ImportVersionsAsync(string resourceContainerName, IAsyncEnumerable<ImportedVersion> versions,
         CancellationToken cancellationToken = default)

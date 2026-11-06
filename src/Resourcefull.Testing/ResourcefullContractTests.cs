@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using Microsoft.Extensions.DependencyInjection;
+using Resourcefull.Providers;
 
 [assembly: InternalsVisibleTo("Resourcefull.Tests.Unit")]
 [assembly: InternalsVisibleTo("Resourcefull.Tests.AspNetCore")]
@@ -39,8 +40,24 @@ public abstract partial class ResourcefullContractTests
     /// </summary>
     protected virtual IComparer<string> NameOrder => StringComparer.Ordinal;
 
-    // Switches for the features ResourceRepository leaves optional; the refusal tests are in
-    // ResourcefullContractTests.Optional.cs.
+    // The features ResourceRepository has a flag for, read from the provider itself so the tests can't disagree with what
+    // the clients do. The refusal tests are in ResourcefullContractTests.Optional.cs.
+
+    private bool SupportsExpiry => ProviderSays(repository => repository.SupportsExpiry);
+
+    private bool SupportsRetention => ProviderSays(repository => repository.SupportsRetention);
+
+    private bool SupportsSoftDelete => ProviderSays(repository => repository.SupportsSoftDelete);
+
+    private bool ProviderSays(Func<ResourceRepository, bool> flag)
+    {
+        using ServiceProvider provider = BuildServiceProvider();
+        using IServiceScope scope = provider.CreateScope();
+        return flag(scope.ServiceProvider.GetRequiredService<ResourceRepository>());
+    }
+
+    // Switches for the other features ResourceRepository leaves optional, which have no flag. One added after 4.0 is off
+    // by default, so a provider written before it isn't tested on a feature it can't know about.
 
     /// <summary>Whether the provider replaces a container's metadata, with <c>SetContainerMetadataAsync</c>.</summary>
     /// <remarks>
@@ -74,16 +91,6 @@ public abstract partial class ResourcefullContractTests
     protected virtual bool SupportsImport => true;
 
     /// <summary>
-    /// Whether the provider supports expiry, with <c>GetExpiredAsync</c>, <c>DeleteExpiredVersionAsync</c> and
-    /// <c>SetExpiryAsync</c>.
-    /// </summary>
-    /// <remarks>
-    /// Override it to return <see langword="false"/> when the provider doesn't override those members: the feature's
-    /// tests are then skipped, and a test checks that the clients refuse it.
-    /// </remarks>
-    protected virtual bool SupportsExpiry => true;
-
-    /// <summary>
     /// Whether the provider supports upload sessions, with <c>StartStagedVersionAsync</c>, <c>GetStagedVersionAsync</c>,
     /// <c>AppendStagedContentAsync</c>, <c>GetStagedStreamAsync</c>, <c>CompleteStagedVersionAsync</c> and
     /// <c>DeleteStagedVersionAsync</c>.
@@ -93,27 +100,6 @@ public abstract partial class ResourcefullContractTests
     /// tests are then skipped, and a test checks that the clients refuse it.
     /// </remarks>
     protected virtual bool SupportsUploadSessions => true;
-
-    /// <summary>
-    /// Whether the provider keeps retained and held versions from being deleted, with <c>SupportsRetention</c>,
-    /// <c>SetRetentionAsync</c> and <c>SetLegalHoldAsync</c>.
-    /// </summary>
-    /// <remarks>
-    /// Override it to return <see langword="false"/> when the provider doesn't override those members: the feature's
-    /// tests are then skipped, and a test checks that the clients refuse it.
-    /// </remarks>
-    protected virtual bool SupportsRetention => true;
-
-    /// <summary>
-    /// Whether the provider keeps deleted versions in a bin, with <c>SupportsSoftDelete</c>,
-    /// <c>SoftDeleteResourceAsync</c>, <c>GetDeletedPageAsync</c>, <c>GetDeletedVersionsAsync</c>, <c>UndeleteAsync</c>,
-    /// <c>PurgeDeletedAsync</c> and <c>GetPurgeableAsync</c>.
-    /// </summary>
-    /// <remarks>
-    /// Override it to return <see langword="false"/> when the provider doesn't override those members: the feature's
-    /// tests are then skipped, and a test checks that the clients refuse it.
-    /// </remarks>
-    protected virtual bool SupportsSoftDelete => true;
 
     /// <summary>Skips the calling test unless the provider supports <paramref name="feature"/>.</summary>
     private static void Requires(bool supported, string feature) =>

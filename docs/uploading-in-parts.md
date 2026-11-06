@@ -112,7 +112,8 @@ content, the session is deleted, since that content is never to be stored.
   `ResourceUpload.DeclaredLength` returns this length, so a client that resumes knows when it's done.
 - **A session nothing is appended to for 24 hours is deleted** by the [expiry](expiry.md) sweep, along with what it
   stored. Without `UseExpiry`, nothing sweeps sessions: call `DeleteExpiredAsync` on a schedule, or cancel the
-  sessions you abandon, or they stay.
+  sessions you abandon, or they stay. With a provider of your own that doesn't support expiry, cancel them: there's no
+  sweep to run.
 - **A session isn't moved or copied** with its name: moving or renaming the resource leaves a session for the old
   name where it is.
 - **With the file system, completing copies the session's content** into the version's file, through your application,

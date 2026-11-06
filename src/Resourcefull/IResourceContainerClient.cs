@@ -70,7 +70,8 @@ public interface IResourceContainerClient
     /// nothing was stored.
     /// </exception>
     /// <exception cref="NotSupportedException">
-    /// <see cref="ResourceUploadOptions.Conditions"/> is set and the storage provider doesn't support conditional uploads.
+    /// <see cref="ResourceUploadOptions.Conditions"/> is set and the storage provider doesn't support conditional uploads,
+    /// or <see cref="ResourceUploadOptions.ExpiresAt"/> is set and it doesn't support expiry; nothing was stored.
     /// </exception>
     /// <exception cref="ResourcePolicyViolationException">The container's policy refuses the upload; nothing was stored.</exception>
     /// <exception cref="ResourceUploadLimitException">
@@ -304,7 +305,8 @@ public interface IResourceContainerClient
     /// </exception>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
     /// <exception cref="NotSupportedException">
-    /// This default implementation doesn't copy.
+    /// This default implementation doesn't copy, or <see cref="ResourceCopyOptions.ExpiresAt"/> is set and the provider
+    /// doesn't support expiry; nothing was stored.
     /// </exception>
     public Task<ResourceInfo?> CopyResourceAsync(string resourceName, string destinationContainer, string destinationName,
         ResourceCopyOptions? options = null, CancellationToken cancellationToken = default)
@@ -717,7 +719,8 @@ public interface IResourceContainerClient
     /// </exception>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
     /// <exception cref="NotSupportedException">
-    /// The provider doesn't support upload sessions, or this is the default implementation.
+    /// The provider doesn't support upload sessions, or this is the default implementation; or
+    /// <see cref="ResourceUploadSessionOptions.ExpiresAt"/> is set and the provider doesn't support expiry.
     /// </exception>
     public Task<ResourceUpload> StartUploadAsync(string resourceName, ResourceUploadSessionOptions? options = null,
         CancellationToken cancellationToken = default)

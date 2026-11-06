@@ -5,6 +5,14 @@ namespace Resourcefull.Testing;
 
 public abstract partial class ResourcefullContractTests
 {
+    [Fact]
+    public void SupportsExpiry_ShouldBeTrue_WhenTheProviderHasABin()
+    {
+        Requires(SupportsSoftDelete, "a bin");
+
+        Assert.True(SupportsExpiry, "The expiry sweep purges the bin, so a provider with a bin must support expiry.");
+    }
+
     private static readonly TimeSpan KeptFor = TimeSpan.FromDays(30);
 
     /// <summary>A provider whose containers keep deleted versions for <see cref="KeptFor"/>, on a clock the test moves.</summary>

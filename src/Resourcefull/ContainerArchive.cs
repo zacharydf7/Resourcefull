@@ -192,11 +192,14 @@ internal static class ContainerArchive
     }
 
     /// <summary>
-    /// Throws before anything is stored if the export holds what the provider can't keep: a retained or held version
-    /// without retention, or a value it can't index for search.
+    /// Throws before anything is stored if the export holds what the provider can't keep: an expiring version when it
+    /// doesn't support expiry, a retained or held version when it doesn't support retention, or a value it can't index
+    /// for search.
     /// </summary>
     public static void ThrowIfUnimportable(Manifest manifest, ResourceRepository repository, ResourcefullOptions options)
     {
+        if (!repository.SupportsExpiry && manifest.Resources.SelectMany(r => r.Versions).Any(v => v.ExpiresAt is not null))
+            throw new NotSupportedException($"{repository.GetType().Name} doesn't support expiry, which the export's versions have.");
         if (!repository.SupportsRetention && manifest.Resources.SelectMany(r => r.Versions).Any(v => v.RetainUntil is not null || v.LegalHold))
             throw new NotSupportedException($"{repository.GetType().Name} doesn't support retention, which the export's versions have.");
         foreach (ManifestVersion version in manifest.Resources.SelectMany(r => r.Versions))
@@ -256,6 +259,8 @@ internal static class ContainerArchive
         await foreach (ImportedVersion imported in versions.WithCancellation(cancellationToken).ConfigureAwait(false))
         {
             ResourceInfo version = imported.Version;
+            if (version.ExpiresAt is not null && !repository.SupportsExpiry)
+                throw new NotSupportedException($"{repository.GetType().Name} doesn't support expiry, which {source}'s versions have.");
             bool protects = version.RetainUntil is not null || version.LegalHold;
             if (protects && !repository.SupportsRetention)
                 throw new NotSupportedException($"{repository.GetType().Name} doesn't support retention, which {source}'s versions have.");

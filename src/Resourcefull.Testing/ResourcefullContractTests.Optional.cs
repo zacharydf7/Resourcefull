@@ -5,7 +5,7 @@ namespace Resourcefull.Testing;
 public abstract partial class ResourcefullContractTests
 {
     // What the clients do when the provider leaves out an optional feature: refuse it, changing nothing, rather than
-    // seem to succeed. Each test runs only when its Supports switch is off.
+    // seem to succeed. Each test runs only when the feature's flag or switch is off.
 
     [Fact]
     public async Task SetMetadataAsync_ShouldThrowNotSupportedException_WhenTheProviderDoesNotSupportIt()
@@ -137,7 +137,7 @@ public abstract partial class ResourcefullContractTests
     }
 
     [Fact]
-    public async Task SetExpiryAndDeleteExpiredAsync_ShouldThrowNotSupportedException_WhenTheProviderDoesNotSupportExpiry()
+    public async Task Expiry_ShouldThrowNotSupportedExceptionAndStoreNothing_WhenTheProviderDoesNotSupportIt()
     {
         Assert.SkipWhen(SupportsExpiry, "The provider supports expiry.");
 
@@ -145,11 +145,19 @@ public abstract partial class ResourcefullContractTests
         using ServiceProvider provider = BuildServiceProvider();
         IResourceContainerClient container = await NewContainerAsync(provider);
         await container.UploadAsync("a", BinaryData.FromString("a"));
+        DateTimeOffset expiresAt = DateTimeOffset.UtcNow.AddDays(1);
 
-        // Act & Assert
-        await Assert.ThrowsAsync<NotSupportedException>(() => container.SetExpiryAsync("a", null, DateTimeOffset.UtcNow));
+        // Act & Assert: a version with an expiry that would never happen isn't stored.
+        await Assert.ThrowsAsync<NotSupportedException>(() => container.SetExpiryAsync("a", null, expiresAt));
+        await Assert.ThrowsAsync<NotSupportedException>(() =>
+            container.UploadAsync("b", BinaryData.FromString("b"), new ResourceUploadOptions { ExpiresAt = expiresAt }));
+        await Assert.ThrowsAsync<NotSupportedException>(() =>
+            container.CopyResourceAsync("a", container.Name, "c", new ResourceCopyOptions { ExpiresAt = expiresAt }));
+        await Assert.ThrowsAsync<NotSupportedException>(() =>
+            container.StartUploadAsync("d", new ResourceUploadSessionOptions { ExpiresAt = expiresAt }));
         await Assert.ThrowsAsync<NotSupportedException>(() => ServiceOf(provider).DeleteExpiredAsync());
         await Assert.ThrowsAsync<NotSupportedException>(() => ServiceOf(provider).GetExpiredVersionsAsync());
+        Assert.Equal(["a"], (await container.ListResourcesAsync().ToListAsync()).Select(r => r.Name));
         Assert.Null((await container.GetResourceInfoAsync("a"))!.ExpiresAt);
     }
 }

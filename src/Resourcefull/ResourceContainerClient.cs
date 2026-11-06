@@ -47,7 +47,7 @@ internal partial class ResourceContainerClient(ResourceRepository resourceReposi
             ContentType = uploadOptions.Headers?.ContentType,
             DeclaredLength = uploadOptions.Headers?.ContentLength,
             Metadata = new Dictionary<string, string>(uploadOptions.Metadata),
-            ExpiresAt = uploadOptions.ExpiresAt,
+            ExpiresAt = ExpiryToStore(uploadOptions.ExpiresAt),
             RetainUntil = RetainUntil(check.RetainFor, uploadOptions.RetainUntil, uploadOptions.LegalHold),
             LegalHold = uploadOptions.LegalHold
         };
@@ -243,9 +243,11 @@ internal partial class ResourceContainerClient(ResourceRepository resourceReposi
             // With expiry on, a version past the limit stays a few minutes more, so a download reading it can finish; the
             // sweep deletes it, telling the cleanup handler then. A provider without expiry deletes it now. With a bin,
             // it goes there at once instead, since its content stays readable there.
-            if (purgeAt is null && expiry is not null
-                && await TryExpireAsync(containerName, version, now + PruneGracePeriod, cancellationToken).ConfigureAwait(false))
+            if (purgeAt is null && expiry is not null && resourceRepository.SupportsExpiry)
+            {
+                await ExpireByAsync(containerName, version, now + PruneGracePeriod, cancellationToken).ConfigureAwait(false);
                 continue;
+            }
 
             await DeletePrunedAsync(version, now, cancellationToken).ConfigureAwait(false);
         }
@@ -405,6 +407,18 @@ internal partial class ResourceContainerClient(ResourceRepository resourceReposi
     }
 
     /// <summary>
+    /// The <see cref="NewResourceVersion.ExpiresAt"/> of a new version. A provider that can't act on one is refused, so
+    /// nothing is stored with an expiry that never happens.
+    /// </summary>
+    /// <exception cref="NotSupportedException">The version would expire, and the provider doesn't support expiry.</exception>
+    private DateTimeOffset? ExpiryToStore(DateTimeOffset? expiresAt)
+    {
+        if (expiresAt is not null && !resourceRepository.SupportsExpiry)
+            throw new NotSupportedException($"{resourceRepository.GetType().Name} doesn't support expiry.");
+        return expiresAt;
+    }
+
+    /// <summary>
     /// Whether a write in <paramref name="mode"/> is create-only. Throws for an undefined mode, or for conditions with
     /// <see cref="ResourceWriteMode.Create"/>: a name that meets them has a current version, which a create-only write
     /// refuses.
@@ -427,21 +441,12 @@ internal partial class ResourceContainerClient(ResourceRepository resourceReposi
     internal static readonly TimeSpan PruneGracePeriod = TimeSpan.FromMinutes(5);
 
     /// <summary>Sets a pruned version to expire at <paramref name="expiresAt"/>, unless it already expires sooner.</summary>
-    /// <returns><see langword="false"/> if the provider doesn't support expiry, so the version is deleted now.</returns>
-    private async Task<bool> TryExpireAsync(string containerName, ResourceInfo version, DateTimeOffset expiresAt,
+    private async Task ExpireByAsync(string containerName, ResourceInfo version, DateTimeOffset expiresAt,
         CancellationToken cancellationToken)
     {
-        if (version.ExpiresAt <= expiresAt) return true;
-        try
-        {
-            await resourceRepository.SetExpiryAsync(new ResourceAddress(containerName, version.Name), version.VersionId, expiresAt,
-                cancellationToken).ConfigureAwait(false);
-            return true;
-        }
-        catch (NotSupportedException)
-        {
-            return false;
-        }
+        if (version.ExpiresAt <= expiresAt) return;
+        await resourceRepository.SetExpiryAsync(new ResourceAddress(containerName, version.Name), version.VersionId, expiresAt,
+            cancellationToken).ConfigureAwait(false);
     }
 
     public Task<ResourceDownloadResult?> DownloadStreamingAsync(string resourceName, string? versionId = null, ResourceRange? range = null,
@@ -628,7 +633,7 @@ internal partial class ResourceContainerClient(ResourceRepository resourceReposi
             ContentType = source.ContentType,
             Metadata = source.Metadata,
             CopiedFrom = new ResourceOrigin(ContainerName, resourceName, source.VersionId),
-            ExpiresAt = copyOptions.ExpiresAt,
+            ExpiresAt = ExpiryToStore(copyOptions.ExpiresAt),
             RetainUntil = RetainUntil(check.RetainFor, copyOptions.RetainUntil, copyOptions.LegalHold),
             LegalHold = copyOptions.LegalHold
         };
@@ -756,6 +761,8 @@ internal partial class ResourceContainerClient(ResourceRepository resourceReposi
         {
             ResourceNames.ThrowIfInvalidResourceName(resourceName);
             if (policies is not null) await policies.ThrowIfReadOnlyAsync(ContainerName, _telemetry, cancellationToken).ConfigureAwait(false);
+            if (!resourceRepository.SupportsExpiry)
+                throw new NotSupportedException($"{resourceRepository.GetType().Name} doesn't support expiry.");
             return await resourceRepository.SetExpiryAsync(new ResourceAddress(ContainerName, resourceName), versionId, expiresAt, cancellationToken).ConfigureAwait(false);
         });
 

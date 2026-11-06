@@ -292,6 +292,7 @@ public abstract partial class ResourcefullContractTests
     public async Task DeleteExpiredAsync_ShouldSweepASession_WhenNothingWasAppendedForADay()
     {
         Requires(SupportsUploadSessions, "upload sessions");
+        Requires(SupportsExpiry, "expiry");
 
         // Arrange: two sessions, one appended to again after 20 hours.
         var clock = new ManualTimeProvider { Now = DateTimeOffset.UtcNow };

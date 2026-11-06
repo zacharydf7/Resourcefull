@@ -216,7 +216,8 @@ public class ResourcefullOptionsBuilder
     /// <see cref="IResourceServiceClient.DeleteExpiredAsync"/> when the application starts and every
     /// <paramref name="interval"/> after, so a version is gone within one interval of its
     /// <see cref="ResourceInfo.ExpiresAt"/>. Every instance of the application can run it. With a provider that doesn't
-    /// support expiry, it logs a warning and stops. It also changes pruning: a version past
+    /// support expiry (<see cref="ResourceRepository.SupportsExpiry"/>), the service throws
+    /// <see cref="InvalidOperationException"/> when the application starts. It also changes pruning: a version past
     /// the container's <see cref="ResourceContainerPolicy.MaxVersions"/> is set to expire five minutes later
     /// instead of being deleted at once, so a download already reading it can finish.
     /// <para>Coming in 4.0.</para>

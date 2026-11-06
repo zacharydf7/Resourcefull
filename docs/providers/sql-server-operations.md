@@ -148,5 +148,4 @@ retries: the database is down, failing over, or unreachable. Its inner exception
 is connected to a read-only replica or a database set read-only. Point it at the primary.
 
 **Expired files aren't being deleted.** Check the logs for `Resourcefull.ExpiryService`: an error repeats each interval
-while sweeps fail, and a warning at startup means the provider doesn't support expiry. See
-[Expiring resources](../expiry.md).
+while sweeps fail. See [Expiring resources](../expiry.md).

@@ -26,7 +26,10 @@ public sealed record NewResourceVersion(ResourceAddress Resource, string Version
     /// <summary>The version's metadata.</summary>
     public IReadOnlyDictionary<string, string> Metadata { get; init; } = ReadOnlyDictionary<string, string>.Empty;
 
-    /// <summary>When the version expires; <see langword="null"/> for a version that doesn't.</summary>
+    /// <summary>
+    /// When the version expires; <see langword="null"/> for a version that doesn't. The clients set it only for a provider
+    /// whose <see cref="ResourceRepository.SupportsExpiry"/> is true.
+    /// </summary>
     public DateTimeOffset? ExpiresAt { get; init; }
 
     /// <summary>The version a copy or restore was made from; <see langword="null"/> for an upload.</summary>

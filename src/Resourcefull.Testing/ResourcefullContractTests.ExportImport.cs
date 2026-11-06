@@ -77,7 +77,7 @@ public abstract partial class ResourcefullContractTests
         {
             Headers = new ResourceHeaders("application/pdf", null),
             Metadata = new Dictionary<string, string> { ["author"] = "ada" },
-            ExpiresAt = Future
+            ExpiresAt = SupportsExpiry ? Future : null
         });
         await source.UploadAsync("report.pdf", BinaryData.FromString("second"), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace });
         await source.CopyResourceAsync("report.pdf", sourceName, "copy.pdf", new ResourceCopyOptions
@@ -475,6 +475,7 @@ public abstract partial class ResourcefullContractTests
     public async Task PruneAsync_ShouldPruneTheVersionsAnImportKeptPastTheLimit_WhenCalled()
     {
         Requires(SupportsImport, "importing");
+        Requires(SupportsExpiry, "expiry");
 
         // Arrange: the export's notes.txt has two versions; this store keeps one.
         using ServiceProvider provider = BuildServiceProvider(o => o.UseVersioning(1));
@@ -498,6 +499,7 @@ public abstract partial class ResourcefullContractTests
     public async Task ImportContainerAsync_ShouldReadAFormat1ExportAndExportItAgainUnchanged_WhenGivenOneAs32WroteIt()
     {
         Requires(SupportsImport, "importing");
+        Requires(SupportsExpiry, "expiry");
 
         // Arrange
         using ServiceProvider provider = BuildServiceProvider(o => o.UseVersioning());

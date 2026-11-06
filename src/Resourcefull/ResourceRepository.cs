@@ -435,6 +435,20 @@ public abstract class ResourceRepository
         => throw new NotSupportedException($"{GetType().Name} doesn't import versions.");
 
     /// <summary>
+    /// Whether the provider keeps each version's expiry and can list and delete expired versions;
+    /// <see langword="false"/> by default. While it's <see langword="false"/>, the clients refuse every write that would
+    /// give a version a <see cref="ResourceInfo.ExpiresAt"/>, so none is stored with an expiry that never happens, and
+    /// <see cref="ResourcefullOptionsBuilder.UseExpiry"/> fails when the application starts.
+    /// <para>Coming in 4.0.</para>
+    /// </summary>
+    /// <remarks>
+    /// A provider that returns <see langword="true"/> must store <see cref="NewResourceVersion.ExpiresAt"/> with each
+    /// version it adds, return it on every read, and override <see cref="GetExpiredAsync"/>,
+    /// <see cref="DeleteExpiredVersionAsync"/> and <see cref="SetExpiryAsync"/>.
+    /// </remarks>
+    public virtual bool SupportsExpiry => false;
+
+    /// <summary>
     /// Lists the versions, in every container, whose <see cref="ResourceInfo.ExpiresAt"/> is at or before
     /// <paramref name="now"/>, ordered by <see cref="ResourceInfo.ExpiresAt"/> and then by version ID (ordinally), each
     /// with <see cref="ResourceInfo.IsLatest"/> set. Expiry calls it every interval, so a provider should answer it from
@@ -725,9 +739,9 @@ public abstract class ResourceRepository
     /// <para>Coming in 4.0.</para>
     /// </summary>
     /// <remarks>
-    /// A provider that returns <see langword="true"/> must override every member in this section, and support expiry,
-    /// whose sweep purges the bin. A version in the bin is left out of every other member: reads, listings, version
-    /// lists, usage figures but for <see cref="ResourceContainerUsage.DeletedSize"/> and
+    /// A provider that returns <see langword="true"/> must override every member in this section, and support expiry
+    /// (<see cref="SupportsExpiry"/>), whose sweep purges the bin. A version in the bin is left out of every other
+    /// member: reads, listings, version lists, usage figures but for <see cref="ResourceContainerUsage.DeletedSize"/> and
     /// <see cref="ResourceContainerUsage.DeletedVersionCount"/>, searches, expiry and moves. A name whose versions are all
     /// in the bin is free, so a create-only write succeeds, but each version ID in the bin stays taken: a write with one
     /// is refused as for any version the name has. Deleting a container deletes its bin too.

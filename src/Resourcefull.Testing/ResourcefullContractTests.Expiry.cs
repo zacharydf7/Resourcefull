@@ -184,6 +184,8 @@ public abstract partial class ResourcefullContractTests
     [Fact]
     public async Task CopyMoveAndRestore_ShouldSetTheExpiryOnlyWhenAsked_WhenTheSourceExpires()
     {
+        Requires(SupportsExpiry, "expiry");
+
         // Arrange
         using ServiceProvider provider = BuildServiceProvider(o => o.UseVersioning());
         IResourceContainerClient container = await NewContainerAsync(provider);
@@ -263,6 +265,8 @@ public abstract partial class ResourcefullContractTests
     [Fact]
     public async Task UploadAsync_ShouldKeepAPrunedVersionsSoonerExpiry_WhenExpiryIsOn()
     {
+        Requires(SupportsExpiry, "expiry");
+
         // Arrange
         var clock = new ManualTimeProvider { Now = DateTimeOffset.UtcNow };
         using ServiceProvider provider = BuildServiceProvider(o =>

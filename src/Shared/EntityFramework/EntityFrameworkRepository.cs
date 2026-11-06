@@ -1419,6 +1419,8 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
         return deleted;
     }
 
+    public override bool SupportsExpiry => true;
+
     public override async Task<IReadOnlyList<ResourceInfo>> GetExpiredAsync(DateTimeOffset now, int maxVersions,
         (DateTimeOffset ExpiresAt, string VersionId)? after = null, CancellationToken cancellationToken = default)
     {

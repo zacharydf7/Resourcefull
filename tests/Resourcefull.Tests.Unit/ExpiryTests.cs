@@ -6,19 +6,30 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Moq;
 using Resourcefull.InMemory;
+using Resourcefull.PostgreSql;
 using Resourcefull.Providers;
+using Resourcefull.Sqlite;
+using Resourcefull.SqlServer;
 
 namespace Resourcefull.Tests.Unit;
 
 public class ExpiryTests
 {
+    private static ResourceRepository RepositoryWithExpiry()
+    {
+        var repository = new Mock<ResourceRepository>();
+        repository.SetupGet(r => r.SupportsExpiry).Returns(true);
+        return repository.Object;
+    }
+
     /// <summary>The expiry service, over a service client that answers each sweep with <paramref name="sweep"/>.</summary>
     private static (ExpiryService Service, Mock<IResourceServiceClient> Client) NewService(Func<int, Task<int>> sweep, TimeSpan interval)
     {
         var client = new Mock<IResourceServiceClient>();
         int calls = 0;
         client.Setup(c => c.DeleteExpiredAsync(It.IsAny<CancellationToken>())).Returns(() => sweep(++calls));
-        ServiceProvider services = new ServiceCollection().AddScoped(_ => client.Object).BuildServiceProvider();
+        ServiceProvider services = new ServiceCollection().AddScoped(_ => client.Object).AddScoped(_ => RepositoryWithExpiry())
+            .BuildServiceProvider();
         return (new ExpiryService(services.GetRequiredService<IServiceScopeFactory>(), new ExpirySettings(interval), null,
             NullLogger<ExpiryService>.Instance), client);
     }
@@ -36,7 +47,8 @@ public class ExpiryTests
             return Task.FromResult(0);
         });
         ServiceProvider services = new ServiceCollection().AddScoped(_ => unnamed.Object)
-            .AddKeyedScoped("archive", (_, _) => archive.Object).BuildServiceProvider();
+            .AddKeyedScoped("archive", (_, _) => archive.Object).AddKeyedScoped("archive", (_, _) => RepositoryWithExpiry())
+            .BuildServiceProvider();
         var service = new ExpiryService(services.GetRequiredService<IServiceScopeFactory>(), new ExpirySettings(TimeSpan.FromHours(1)),
             "archive", NullLogger<ExpiryService>.Instance);
 
@@ -100,18 +112,181 @@ public class ExpiryTests
     }
 
     [Fact]
-    public async Task ExpiryService_ShouldStop_WhenTheProviderDoesNotSupportExpiry()
+    public async Task ExpiryService_ShouldKeepSweepingAndPurging_WhenAProviderThatClaimsExpiryThrowsNotSupported()
     {
-        // Arrange
+        // Arrange: the first two sweeps fail, each followed by a purge. Later ones succeed, so the test can't stop the
+        // service during a failing sweep.
         (ExpiryService service, Mock<IResourceServiceClient> client) = NewService(
-            _ => throw new NotSupportedException("No expiry."), TimeSpan.FromMilliseconds(20));
+            call => call <= 2 ? throw new NotSupportedException("No expiry after all.") : Task.FromResult(0),
+            TimeSpan.FromMilliseconds(20));
+        var secondPurge = new TaskCompletionSource();
+        int purges = 0;
+        client.Setup(c => c.PurgeDeletedAsync(It.IsAny<CancellationToken>())).Returns(() =>
+        {
+            if (++purges == 2) secondPurge.TrySetResult();
+            return Task.FromResult(0);
+        });
 
         // Act
         await service.StartAsync(CancellationToken.None);
-        await service.ExecuteTask!.WaitAsync(TimeSpan.FromSeconds(10));
+        Task reached = await Task.WhenAny(secondPurge.Task, Task.Delay(TimeSpan.FromSeconds(10)));
+        await service.StopAsync(CancellationToken.None);
 
         // Assert
-        client.Verify(c => c.DeleteExpiredAsync(It.IsAny<CancellationToken>()), Times.Once);
+        Assert.Same(secondPurge.Task, reached);
+        Assert.True(service.ExecuteTask!.IsCompletedSuccessfully);
+    }
+
+    [Fact]
+    public async Task ExpiryService_ShouldFailToStart_WhenTheProviderDoesNotSupportExpiry()
+    {
+        // Arrange
+        var repository = new Mock<ResourceRepository>();
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddResourcefull(o => o.UseProvider(_ => repository.Object).UseExpiry());
+        await using ServiceProvider provider = services.BuildServiceProvider();
+        IHostedService sweep = Assert.Single(provider.GetServices<IHostedService>());
+
+        // Act
+        var thrown = await Assert.ThrowsAsync<InvalidOperationException>(() => sweep.StartAsync(CancellationToken.None));
+
+        // Assert
+        Assert.Contains(nameof(ResourcefullOptionsBuilder.UseExpiry), thrown.Message);
+        Assert.Contains(repository.Object.GetType().Name, thrown.Message);
+        repository.Verify(r => r.GetExpiredAsync(It.IsAny<DateTimeOffset>(), It.IsAny<int>(),
+            It.IsAny<(DateTimeOffset, string)?>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    /// <summary>A client over a provider that takes every write, but whose <c>SupportsExpiry</c> is false.</summary>
+    private static (Mock<ResourceRepository> Repository, ResourceContainerClient Client) WithoutExpiry()
+    {
+        var repository = new Mock<ResourceRepository>();
+        repository.Setup(r => r.SetExpiryAsync(It.IsAny<ResourceAddress>(), It.IsAny<string?>(), It.IsAny<DateTimeOffset?>(),
+            It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        repository.Setup(r => r.GetResourceInfoAsync(new ResourceAddress("c", "a"), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ResourceInfo { ContainerName = "c", Name = "a", VersionId = "v" });
+        return (repository, new ResourceContainerClient(repository.Object, null, new ResourcefullOptions(), "c", null));
+    }
+
+    [Fact]
+    public async Task UploadAsync_ShouldStoreNothing_WhenItSetsAnExpiryAndTheProviderDoesNotSupportIt()
+    {
+        // Arrange
+        (Mock<ResourceRepository> repository, ResourceContainerClient client) = WithoutExpiry();
+
+        // Act & Assert
+        await Assert.ThrowsAsync<NotSupportedException>(() => client.UploadAsync("a", BinaryData.FromString("x"),
+            new ResourceUploadOptions { ExpiresAt = DateTimeOffset.UtcNow }));
+        repository.Verify(r => r.AddResourceAsync(It.IsAny<NewResourceVersion>(), It.IsAny<Stream>(),
+            It.IsAny<ResourceWriteCondition?>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task CopyResourceAsync_ShouldStoreNothing_WhenItSetsAnExpiryAndTheProviderDoesNotSupportIt()
+    {
+        // Arrange
+        (Mock<ResourceRepository> repository, ResourceContainerClient client) = WithoutExpiry();
+
+        // Act & Assert
+        await Assert.ThrowsAsync<NotSupportedException>(() => client.CopyResourceAsync("a", "c", "b",
+            new ResourceCopyOptions { ExpiresAt = DateTimeOffset.UtcNow }));
+        repository.Verify(r => r.CopyResourceAsync(It.IsAny<ResourceAddress>(), It.IsAny<string>(), It.IsAny<NewResourceVersion>(),
+            It.IsAny<ResourceWriteCondition?>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task StartUploadAsync_ShouldStageNothing_WhenItSetsAnExpiryAndTheProviderDoesNotSupportIt()
+    {
+        // Arrange
+        (Mock<ResourceRepository> repository, ResourceContainerClient client) = WithoutExpiry();
+
+        // Act & Assert
+        await Assert.ThrowsAsync<NotSupportedException>(() => client.StartUploadAsync("a",
+            new ResourceUploadSessionOptions { ExpiresAt = DateTimeOffset.UtcNow }));
+        repository.Verify(r => r.StartStagedVersionAsync(It.IsAny<NewResourceVersion>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task SetExpiryAsync_ShouldNotCallTheProvider_WhenItsSupportsExpiryIsFalse()
+    {
+        // Arrange
+        (Mock<ResourceRepository> repository, ResourceContainerClient client) = WithoutExpiry();
+
+        // Act & Assert
+        await Assert.ThrowsAsync<NotSupportedException>(() => client.SetExpiryAsync("a", null, DateTimeOffset.UtcNow));
+        repository.Verify(r => r.SetExpiryAsync(It.IsAny<ResourceAddress>(), It.IsAny<string?>(), It.IsAny<DateTimeOffset?>(),
+            It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ImportContainerAsync_ShouldStoreNothing_WhenTheExportHasAnExpiryAndTheProviderDoesNotSupportIt()
+    {
+        // Arrange: an export with an expiry, from a store that has expiry.
+        using ServiceProvider source = new ServiceCollection().AddResourcefull(o => o.UseInMemory()).BuildServiceProvider();
+        IResourceServiceClient sourceService = source.GetRequiredService<IResourceServiceClient>();
+        IResourceContainerClient container = await sourceService.CreateContainerAsync("c");
+        await container.UploadAsync("a", BinaryData.FromString("x"), new ResourceUploadOptions { ExpiresAt = DateTimeOffset.UtcNow.AddDays(1) });
+        using var export = new MemoryStream();
+        await sourceService.ExportContainerAsync("c", export);
+        export.Position = 0;
+        var repository = new Mock<ResourceRepository>();
+        var service = new ResourceServiceClient(repository.Object, Options.Create(new ResourcefullOptions()));
+
+        // Act & Assert
+        await Assert.ThrowsAsync<NotSupportedException>(() => service.ImportContainerAsync("restored", export));
+        repository.Verify(r => r.AddContainerAsync(It.IsAny<string>(), It.IsAny<IReadOnlyDictionary<string, string>>(),
+            It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ImportVersionsAsync_ShouldStoreNothing_WhenAVersionHasAnExpiryAndTheProviderDoesNotSupportIt()
+    {
+        // Arrange
+        var repository = new Mock<ResourceRepository>();
+        repository.Setup(r => r.GetContainerInfoAsync("c", It.IsAny<CancellationToken>())).ReturnsAsync(new ContainerInfo { Name = "c" });
+        var service = new ResourceServiceClient(repository.Object, Options.Create(new ResourcefullOptions()));
+        var version = new ResourceInfo { ContainerName = "c", Name = "a", VersionId = "v", ExpiresAt = DateTimeOffset.UtcNow };
+
+        async IAsyncEnumerable<ImportedVersion> Versions()
+        {
+            await Task.Yield();
+            yield return new ImportedVersion(version, _ => Task.FromResult<Stream?>(new MemoryStream()));
+        }
+
+        // Act & Assert
+        await Assert.ThrowsAsync<NotSupportedException>(() => service.ImportVersionsAsync("c", Versions()));
+        repository.Verify(r => r.ImportVersionAsync(It.IsAny<NewResourceVersion>(), It.IsAny<Stream>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Theory]
+    [InlineData("InMemory")]
+    [InlineData("SqlServer")]
+    [InlineData("PostgreSql")]
+    [InlineData("Sqlite")]
+    public void OptionalFeatureFlags_ShouldBeTrue_WhenGivenABuiltInProvider(string provider)
+    {
+        // A flag left false would turn the contract tests of that feature into skips, without failing anything. The file
+        // system, S3 and Azure Blob share their flags: FileSystemContractTests checks them.
+        var services = new ServiceCollection();
+        services.AddResourcefull(options =>
+        {
+            _ = provider switch
+            {
+                "InMemory" => options.UseInMemory(),
+                "SqlServer" => options.UseSqlServer("Server=unused"),
+                "PostgreSql" => options.UsePostgreSql("Host=unused"),
+                _ => options.UseSqlite("Data Source=unused")
+            };
+        });
+        using ServiceProvider built = services.BuildServiceProvider();
+        using IServiceScope scope = built.CreateScope();
+
+        ResourceRepository repository = scope.ServiceProvider.GetRequiredService<ResourceRepository>();
+
+        Assert.True(repository.SupportsExpiry);
+        Assert.True(repository.SupportsRetention);
+        Assert.True(repository.SupportsSoftDelete);
     }
 
     [Fact]

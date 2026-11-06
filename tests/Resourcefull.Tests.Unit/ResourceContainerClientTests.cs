@@ -1007,6 +1007,7 @@ public class ResourceContainerClientTests
         // Arrange
         using var cts = new CancellationTokenSource();
         var repository = NewRepository();
+        repository.SetupGet(r => r.SupportsExpiry).Returns(true);
         var client = NewClient(repository.Object);
 
         // Act

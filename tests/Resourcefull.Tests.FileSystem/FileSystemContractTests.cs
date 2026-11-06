@@ -1,5 +1,6 @@
 using System.Text;
 using Microsoft.Extensions.DependencyInjection;
+using Resourcefull.Providers;
 using Resourcefull.Testing;
 
 namespace Resourcefull.Tests.FileSystem;
@@ -11,6 +12,20 @@ public class FileSystemContractTests(FileSystemFixture fixture) : ResourcefullCo
         fixture.BuildServiceProvider(configure);
 
     protected override IComparer<string> NameOrder => CodePointOrder.Instance;
+
+    [Fact]
+    public void OptionalFeatureFlags_ShouldBeTrue_WhenGivenTheFileSystemProvider()
+    {
+        // A flag left false would turn the contract tests of that feature into skips, without failing anything.
+        using ServiceProvider provider = fixture.BuildServiceProvider(null);
+        using IServiceScope scope = provider.CreateScope();
+
+        ResourceRepository repository = scope.ServiceProvider.GetRequiredService<ResourceRepository>();
+
+        Assert.True(repository.SupportsExpiry);
+        Assert.True(repository.SupportsRetention);
+        Assert.True(repository.SupportsSoftDelete);
+    }
 }
 
 /// <summary>The order keys list in: their UTF-8 bytes, which is Unicode code point order.</summary>
