@@ -22,7 +22,7 @@ version, whether or not the container keeps versions. It answers:
 - **201 Created** when the name had no current version, and **200 OK** when it replaced one, either way with the
   stored `ResourceInfo` as JSON, its `ETag`, and its URI as `Location` when a [URI provider](../uri-providers.md) gives
   one;
-- **412 Precondition Failed**, with the current version's `ETag`, when the request's preconditions don't hold.
+- **412 Precondition Failed**, with the current version's `ETag` if it's known, when the request's preconditions don't hold.
 
 The **preconditions** are decided by the write itself, so of clients that read the same version and upload changes,
 exactly one succeeds (see [Updating only if unchanged](../concurrency.md#updating-only-if-unchanged)):
@@ -36,9 +36,19 @@ exactly one succeeds (see [Updating only if unchanged](../concurrency.md#updatin
 | `If-Unmodified-Since` | the current version hasn't changed since then |
 
 `If-Match` compares tags strongly, so a weak tag (`W/"…"`) never matches. Pass `ResourceUploadOptions` for metadata,
-other headers to store, or `Conditions`; when the request has preconditions, they replace the options' `Conditions`.
+other headers to store, or `Conditions`, and from 4.0 <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> for an expiry, a retention date or a legal hold; when the
+request has preconditions, they replace the options' `Conditions`.
 The options' `Mode` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> is ignored: a `PUT` replaces, unless the client sends `If-None-Match: *`. An endpoint
 that must only create files can require that header, answering 428 Precondition Required without it.
+
+To do more with the stored version before answering, await the call. The `ResourceUploadHttpResult` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> it
+returns has the `StatusCode` and the stored `Resource`, which is `null` on 412, and returning it sends the answer:
+
+```csharp
+ResourceUploadHttpResult result = await container.UploadFromRequestAsync(name, request, null, cancellationToken);
+if (result.Resource is { } stored) await documents.RecordFileAsync(stored.Name, stored.VersionId, cancellationToken);
+return result;
+```
 
 With SQL Server <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>, a transient failure partway through an upload is retried, even though a request body can't
 be read twice: the content goes in about a MiB at a time, and a batch that fails is sent again from what it holds.

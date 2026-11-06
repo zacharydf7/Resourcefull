@@ -60,6 +60,23 @@ public class ActionResultTests
     }
 
     [Fact]
+    public async Task ResourceUploadHttpResult_ShouldSendTheStoredVersion_WhenRunAsAnActionResult()
+    {
+        // Arrange
+        await using TestApp app = await TestApp.StartAsync();
+        var upload = new DefaultHttpContext();
+        upload.Request.Body = new MemoryStream("hello"u8.ToArray());
+
+        // Act
+        ResourceUploadHttpResult result = await app.Files.UploadFromRequestAsync("report.txt", upload.Request);
+        (HttpResponse response, string body) = await ExecuteAsync(app, result);
+
+        // Assert
+        Assert.Equal(StatusCodes.Status201Created, response.StatusCode);
+        Assert.Contains("report.txt", body);
+    }
+
+    [Fact]
     public async Task SharedDownloadHttpResult_ShouldSendTheLinkedResource_WhenRunAsAnActionResult()
     {
         // Arrange

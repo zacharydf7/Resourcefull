@@ -304,6 +304,10 @@
 
 ### Changed
 
+- **`UploadFromRequestAsync` returns a typed result, and passes retention on.** It returns a `ResourceUploadHttpResult` in
+  place of an `IResult` that had to be downcast. The new result has the `StatusCode` and the stored `Resource`, which is
+  `null` on 412, and a Razor Pages handler can return it. `RetainUntil` and `LegalHold` in its options now reach the stored version;
+  before, they were silently dropped.
 - **Upload endpoints take options, and hooks get a context.** `MapResourcefullUploads` and `MapResourcefullUploadLinks` no
   longer take an `Action`: the first takes a `ResourceUploadEndpointOptions` with a `required` `ResolveAsync`, and the
   second an optional `ResourceUploadLinkEndpointOptions`, both with `init` properties. `OnCompletedAsync` takes a

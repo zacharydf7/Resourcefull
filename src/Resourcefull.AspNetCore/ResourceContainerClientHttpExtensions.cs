@@ -21,18 +21,23 @@ public static class ResourceContainerClientHttpExtensions
     /// <param name="resourceName">The resource's name.</param>
     /// <param name="request">The request whose body, headers and preconditions to use.</param>
     /// <param name="options">
-    /// Metadata, the headers to store instead of the request's, and <see cref="ResourceUploadOptions.Conditions"/> for a
-    /// request without preconditions. <see cref="ResourceUploadOptions.Mode"/> is ignored. The options aren't changed.
+    /// <see cref="ResourceUploadOptions.Metadata"/>, <see cref="ResourceUploadOptions.ExpiresAt"/>,
+    /// <see cref="ResourceUploadOptions.RetainUntil"/> and <see cref="ResourceUploadOptions.LegalHold"/> are stored with
+    /// the version; <see cref="ResourceUploadOptions.Headers"/> are stored instead of the request's; and
+    /// <see cref="ResourceUploadOptions.Conditions"/> apply to a request without preconditions.
+    /// <see cref="ResourceUploadOptions.Mode"/> is ignored. The options aren't changed.
     /// </param>
     /// <param name="cancellationToken">Cancels the upload; pass the request's.</param>
     /// <returns>
-    /// 201 Created when the name had no current version, otherwise 200 OK, either with the stored version's
+    /// A result to return from the endpoint. Its <see cref="ResourceUploadHttpResult.Resource"/> is the stored version,
+    /// or <see langword="null"/> on 412. It answers 201 Created when the name had no current version, otherwise 200 OK,
+    /// either with the stored version's
     /// <see cref="ResourceInfo"/>, its <c>ETag</c>, and its URI as <c>Location</c> when a URI provider gives one; or
-    /// 412 Precondition Failed, with the current version's <c>ETag</c>, when the preconditions don't hold.
+    /// 412 Precondition Failed, with the current version's <c>ETag</c> if it's known, when the preconditions don't hold.
     /// Resourcefull's other exceptions propagate; register
     /// <see cref="ResourcefullExceptionHandlerExtensions.AddResourcefullExceptionHandler"/> to turn them into status codes.
     /// </returns>
-    public static async Task<IResult> UploadFromRequestAsync(this IResourceContainerClient container, string resourceName,
+    public static async Task<ResourceUploadHttpResult> UploadFromRequestAsync(this IResourceContainerClient container, string resourceName,
         HttpRequest request, ResourceUploadOptions? options = null, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(container);
@@ -83,7 +88,9 @@ public static class ResourceContainerClientHttpExtensions
                 ContentLength = request.ContentLength
             },
             Metadata = options?.Metadata ?? new Dictionary<string, string>(),
-            ExpiresAt = options?.ExpiresAt
+            ExpiresAt = options?.ExpiresAt,
+            RetainUntil = options?.RetainUntil,
+            LegalHold = options?.LegalHold ?? false
         };
         ResourceInfo stored;
         try
@@ -103,13 +110,16 @@ public static class ResourceContainerClientHttpExtensions
 
         if (hasPreconditions) Preconditions.Record(request.HttpContext, "met");
         request.HttpContext.Response.GetTypedHeaders().ETag = Preconditions.EntityTagOf(stored);
-        return existed ? TypedResults.Ok(stored) : TypedResults.Created(stored.Uri, stored);
+        return existed
+            ? new ResourceUploadHttpResult(StatusCodes.Status200OK, stored, TypedResults.Ok(stored))
+            : new ResourceUploadHttpResult(StatusCodes.Status201Created, stored, TypedResults.Created(stored.Uri, stored));
     }
 
-    private static IResult PreconditionFailed(HttpRequest request, string? currentContentHash, string message)
+    private static ResourceUploadHttpResult PreconditionFailed(HttpRequest request, string? currentContentHash, string message)
     {
         Preconditions.Record(request.HttpContext, "failed");
         request.HttpContext.Response.GetTypedHeaders().ETag = Preconditions.EntityTagOf(currentContentHash);
-        return TypedResults.Problem(statusCode: StatusCodes.Status412PreconditionFailed, title: message);
+        return new ResourceUploadHttpResult(StatusCodes.Status412PreconditionFailed, null,
+            TypedResults.Problem(statusCode: StatusCodes.Status412PreconditionFailed, title: message));
     }
 }

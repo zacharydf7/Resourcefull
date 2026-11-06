@@ -2,7 +2,6 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Http.HttpResults;
 using Moq;
 using Resourcefull.AspNetCore;
 
@@ -36,6 +35,30 @@ public class UploadFromRequestTests
         Assert.Equal("text/plain", stored.ContentType);
         Assert.Equal(5, stored.ContentLength);
         Assert.Equal("hello", (await app.Files.DownloadContentAsync("report.txt"))!.Content.ToString());
+    }
+
+    [Fact]
+    public async Task UploadFromRequestAsync_ShouldReturnTheStatusAndTheStoredVersion_WhenItStores()
+    {
+        // Arrange: the same upload twice, creating the name and then replacing it.
+        await using TestApp app = await TestApp.StartAsync();
+        DefaultHttpContext Request()
+        {
+            var context = new DefaultHttpContext();
+            context.Request.Body = new MemoryStream("hello"u8.ToArray());
+            return context;
+        }
+
+        // Act
+        ResourceUploadHttpResult created = await app.Files.UploadFromRequestAsync("report.txt", Request().Request);
+        ResourceUploadHttpResult replaced = await app.Files.UploadFromRequestAsync("report.txt", Request().Request);
+
+        // Assert
+        ResourceInfo current = (await app.Files.GetResourceInfoAsync("report.txt"))!;
+        Assert.Equal(StatusCodes.Status201Created, created.StatusCode);
+        Assert.Equal("report.txt", created.Resource!.Name);
+        Assert.Equal((StatusCodes.Status200OK, current.VersionId), (replaced.StatusCode, replaced.Resource!.VersionId));
+        Assert.Equal(StatusCodes.Status200OK, ((IStatusCodeHttpResult)replaced).StatusCode);
     }
 
     [Fact]
@@ -113,7 +136,9 @@ public class UploadFromRequestTests
         {
             Headers = new ResourceHeaders { ContentType = "application/x-report" },
             Metadata = new Dictionary<string, string> { ["owner"] = "ops" },
-            ExpiresAt = new DateTimeOffset(2099, 1, 1, 0, 0, 0, TimeSpan.Zero)
+            ExpiresAt = new DateTimeOffset(2099, 1, 1, 0, 0, 0, TimeSpan.Zero),
+            RetainUntil = new DateTimeOffset(2098, 1, 1, 0, 0, 0, TimeSpan.Zero),
+            LegalHold = true
         };
 
         // Act
@@ -124,6 +149,7 @@ public class UploadFromRequestTests
         Assert.Equal("application/x-report", stored.ContentType);
         Assert.Equal("ops", stored.Metadata["owner"]);
         Assert.Equal(options.ExpiresAt, stored.ExpiresAt);
+        Assert.Equal((options.RetainUntil, true), (stored.RetainUntil, stored.LegalHold));
         Assert.Equal(ResourceWriteMode.Create, options.Mode);
         Assert.Null(options.Conditions);
     }
@@ -141,10 +167,11 @@ public class UploadFromRequestTests
         context.Request.Headers.IfNoneMatch = "\"sha256:other\"";
 
         // Act
-        IResult result = await container.Object.UploadFromRequestAsync("report.txt", context.Request);
+        ResourceUploadHttpResult result = await container.Object.UploadFromRequestAsync("report.txt", context.Request);
 
         // Assert
-        Assert.Equal(StatusCodes.Status412PreconditionFailed, Assert.IsType<ProblemHttpResult>(result).StatusCode);
+        Assert.Equal(StatusCodes.Status412PreconditionFailed, result.StatusCode);
+        Assert.Null(result.Resource);
         container.Verify(c => c.GetResourceInfoAsync("report.txt", null, It.IsAny<CancellationToken>()), Times.Once);
     }
 

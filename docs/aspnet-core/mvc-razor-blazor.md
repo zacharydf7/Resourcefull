@@ -27,10 +27,12 @@ public class FilesController(IResourceServiceClient resources) : ControllerBase
     // Uploads the request body as it arrives, of any size up to the limit below.
     [HttpPut("{**name}")]
     [RequestSizeLimit(1L * 1024 * 1024 * 1024)]
-    public Task<IResult> Put(string name, CancellationToken cancellationToken) =>
+    public Task<ResourceUploadHttpResult> Put(string name, CancellationToken cancellationToken) =>
         resources.GetContainerClient("files").UploadFromRequestAsync(name, Request, null, cancellationToken);
 }
 ```
+
+`ResourceUploadHttpResult` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> is new in 4.0; with 3.1, `Put` returns `Task<IResult>`.
 
 For a form upload in an MVC view, take an `IFormFile` and keep `[ValidateAntiForgeryToken]` on the action, as
 [Accepting uploads](accepting-uploads.md#from-an-html-form) explains for minimal APIs.
@@ -38,8 +40,8 @@ For a form upload in an MVC view, take an `IFormFile` and keep `[ValidateAntiFor
 ## Razor Pages
 
 A Razor page's handler can't return an `IResult`: ASP.NET Core refuses it at run time, with "Unsupported handler method
-return type". From 4.0 <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>, the results `TypedResults.Resource`, `TypedResults.SharedDownload` and `TypedResults.SharedUpload` return are
-action results too, so a handler can return them. The download results work as `File(...)` does, conditional requests
+return type". From 4.0 <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>, `TypedResults.Resource`, `TypedResults.SharedDownload`, `TypedResults.SharedUpload` and `UploadFromRequestAsync` return results that
+are action results too, so a handler can return them. The download results work as `File(...)` does, conditional requests
 included, and ranges when the result looks the resource up, as here:
 
 ```csharp
