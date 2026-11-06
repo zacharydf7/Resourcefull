@@ -234,6 +234,8 @@ app.MapResourcefullUploads("/archive/uploads", new ResourceUploadEndpointOptions
 }).RequireAuthorization();
 ```
 
+If no store has that `StoreName`, mapping the endpoints throws when the application starts.
+
 An upload's URL works only with endpoints mapped with the same pattern for the store it was started in. Changing
 the pattern the endpoints are mapped at makes the URLs of unfinished uploads stop working, as changing the Data
 Protection keys does.

@@ -1,7 +1,8 @@
 name: Publish NuGet Packages
 
 # Pushing a v* tag publishes the packages built and tested from that commit, then creates a GitHub Release from the
-# version's CHANGELOG.md section. The tag must match <VersionPrefix> in src/Directory.Build.props.
+# version's CHANGELOG.md section. A release candidate's tag, such as v4.0.0-rc.1, creates a prerelease from the
+# Unreleased section instead. The tag's version before any dash must match <VersionPrefix> in src/Directory.Build.props.
 on:
   push:
     tags: [ "v*" ]
@@ -21,11 +22,16 @@ jobs:
       # Before publishing, which can't be undone, so a tag pushed before the changelog was finished stops here.
       run: |
         version="${GITHUB_REF_NAME#v}"
-        # From the version's heading up to the next release's.
-        awk -v heading="## $version - " 'index($0, heading) == 1 { found = 1; next } found && /^## / { exit } found' \
+        # From the version's heading up to the next release's. A release candidate has no section of its own: its notes
+        # are what's unreleased.
+        case "$version" in
+          *-*) heading="## Unreleased" ;;
+          *) heading="## $version - " ;;
+        esac
+        awk -v heading="$heading" 'index($0, heading) == 1 { found = 1; next } found && /^## / { exit } found' \
           CHANGELOG.md > notes.md
-        if [ ! -s notes.md ]; then
-          echo "::error::CHANGELOG.md has no section headed \"## $version - <date>\"."
+        if ! grep -q '[^[:space:]]' notes.md; then
+          echo "::error::CHANGELOG.md has no notes under a heading that starts with \"$heading\"."
           exit 1
         fi
         # The changelog's links are relative to the repository; a release's notes aren't in it.
@@ -80,4 +86,7 @@ jobs:
     - name: Create the GitHub Release
       env:
         GH_TOKEN: ${{ github.token }}
-      run: gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --verify-tag --title "${GITHUB_REF_NAME#v}" --notes-file notes.md
+      run: |
+        prerelease=""
+        case "$GITHUB_REF_NAME" in *-*) prerelease="--prerelease" ;; esac
+        gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --verify-tag --title "${GITHUB_REF_NAME#v}" --notes-file notes.md $prerelease

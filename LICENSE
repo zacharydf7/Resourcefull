@@ -2,14 +2,14 @@ Resourcefull License
 
 Copyright (c) 2024-2026 Zachary Fry. All rights reserved, except as granted below.
 
-1. Use. You may use this version of the Resourcefull packages (every package whose name starts with "Resourcefull",
-   together the "Software") free of charge, for any purpose, including in commercial projects. You may copy and distribute
-   it as part of software or services you build with it, and keep unmodified copies in private package feeds, caches and
-   build systems. Extending the Software through its public API, such as with a storage provider, an upload inspector or a
+1. Use. You may use this version of the Resourcefull packages (the packages published by Zachary Fry whose names start
+   with "Resourcefull", together the "Software") free of charge, for any purpose, including in commercial projects. You
+   may copy and distribute it as part of software or services you build with it, and keep unmodified copies in private
+   package feeds, caches and build systems. Extending the Software through its public API, such as with a storage provider, an upload inspector or a
    policy provider, and testing those with Resourcefull.Testing, is use.
 
 2. Documentation. You may copy code from the Software's documentation into your own software, and use it there under
-   whatever terms you choose.
+   whatever terms you choose. The disclaimer below applies to that code as it does to the Software.
 
 3. Restrictions. Apart from what sections 1 and 2 allow, you may not sell, sublicense or redistribute the Software, and
    you may not modify, decompile, disassemble or otherwise reverse engineer it, except where applicable law allows this

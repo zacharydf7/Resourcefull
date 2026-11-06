@@ -109,7 +109,7 @@ public static partial class ResourcefullDashboardEndpointRouteBuilderExtensions
         ThrowIfBadLinkPath(options.DownloadLinkPath, nameof(options.DownloadLinkPath));
         ThrowIfBadLinkPath(options.UploadLinkPath, nameof(options.UploadLinkPath));
         if (options.StoreName is not null) ArgumentException.ThrowIfNullOrWhiteSpace(options.StoreName, nameof(options));
-        ThrowIfNoStore(endpoints, options.StoreName);
+        ResourceUploadEndpoints.ThrowIfNoStore(endpoints.ServiceProvider, options.StoreName, nameof(MapResourcefullDashboard));
         ThrowIfLinksCantBeSigned(endpoints, options);
         IReadOnlyCollection<string> healthChecks = options.HealthChecks ?? (options.StoreName is null ? ["resourcefull"] : []);
         // A provider that doesn't support expiry won't start supporting it while the app runs, so after the first
@@ -280,16 +280,6 @@ public static partial class ResourcefullDashboardEndpointRouteBuilderExtensions
             when (exception is ResourceNameException || exception.ParamName == "continuationToken")
         {
             return Results.Problem(statusCode: StatusCodes.Status400BadRequest, title: exception.Message);
-        }
-    }
-
-    /// <summary>Throws now, when the dashboard is mapped, if no store has the name it's told to show.</summary>
-    private static void ThrowIfNoStore(IEndpointRouteBuilder endpoints, string? storeName)
-    {
-        if (storeName is not null
-            && endpoints.ServiceProvider.GetService<IServiceProviderIsKeyedService>()?.IsKeyedService(typeof(IResourceServiceClient), storeName) == false)
-        {
-            throw new InvalidOperationException(ResourceUploadEndpoints.NoStoreMessage(nameof(MapResourcefullDashboard), storeName));
         }
     }
 

@@ -170,7 +170,7 @@ Three rules keep the scripts generated and safe to run again:
 ## Releasing
 
 1. **Before tagging,** check `<VersionPrefix>` in `src/Directory.Build.props` is the release's version (every build
-   but the release tag's adds `-ci.<run>` or `-dev` to it). Turn the release's labels from upcoming to added: in
+   but a tag's adds `-ci.<run>` or `-dev` to it). Turn the release's labels from upcoming to added: in
    `docs/`, `index.md` and `src/`, replace `Coming in 4.1` with `Added in 4.1` and `rf-upcoming` with `rf-added`, and
    move any "Coming in" list in the README into its features. (4.0 has no labels, so it skips this.) In `CHANGELOG.md`,
    turn `Unreleased` into `<version> - <date>`, and start a new `Unreleased` section. In `docs/releases.md`, turn any
@@ -178,7 +178,11 @@ Three rules keep the scripts generated and safe to run again:
 2. **Merge to `main`, then push the tag** (`v<version>`). The publish workflow runs every test, checks that the tag
    matches the version, publishes the packages it tested to nuget.org, and creates a GitHub Release from the
    version's changelog section.
-3. **After it's published,** set `PackageValidationBaselineVersion` in `src/Directory.Build.props` to the version just
+   To try a release first, push a release candidate's tag from `main`, such as `v4.0.0-rc.1`, before making step 1's
+   changelog change, with `<VersionPrefix>` already the release's version. The workflow runs the same way, with the
+   `Unreleased` section as its notes, and nuget.org lists the packages as a prerelease. They can be unlisted afterward,
+   but not deleted. Step 3 waits for the release itself.
+3. **After the release itself is published,** set `PackageValidationBaselineVersion` in `src/Directory.Build.props` to the version just
    released, so the next release is checked against it, and `<VersionPrefix>` to the next version.
 
 A release that adds a package ID needs it added to nuget.org's Trusted Publishing policy for this repository first, or

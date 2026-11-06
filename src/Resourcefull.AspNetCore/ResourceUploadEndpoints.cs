@@ -51,7 +51,7 @@ public static partial class ResourcefullUploadsEndpointRouteBuilderExtensions
     /// <param name="options">The <see cref="ResourceUploadEndpointOptions.ResolveAsync"/> that decides where uploads go, and any other options.</param>
     /// <returns>The group the endpoints are in, to require authorization on, and to add CORS or rate limits to.</returns>
     /// <exception cref="ArgumentException"><see cref="ResourceUploadEndpointOptions.ResolveAsync"/> is null, or a store name is empty or white space.</exception>
-    /// <exception cref="InvalidOperationException">ASP.NET Core Data Protection isn't added.</exception>
+    /// <exception cref="InvalidOperationException">ASP.NET Core Data Protection isn't added, or no store has the name <see cref="ResourceUploadEndpointOptions.StoreName"/>.</exception>
     public static RouteGroupBuilder MapResourcefullUploads(this IEndpointRouteBuilder endpoints, string pattern,
         ResourceUploadEndpointOptions options)
     {
@@ -60,6 +60,7 @@ public static partial class ResourcefullUploadsEndpointRouteBuilderExtensions
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(options.ResolveAsync, nameof(options));
         if (options.StoreName is not null) ArgumentException.ThrowIfNullOrWhiteSpace(options.StoreName, nameof(options));
+        ResourceUploadEndpoints.ThrowIfNoStore(endpoints.ServiceProvider, options.StoreName, nameof(MapResourcefullUploads));
         if (endpoints.ServiceProvider.GetService<IServiceProviderIsService>()?.IsService(typeof(IDataProtectionProvider)) == false)
         {
             throw new InvalidOperationException(
@@ -103,7 +104,9 @@ public static partial class ResourcefullUploadsEndpointRouteBuilderExtensions
     /// and <see cref="ResourceUploadLinkEndpointOptions.MaxSize"/>; <see langword="null"/> for the defaults.
     /// </param>
     /// <returns>The group the endpoints are in, to add CORS or rate limits to.</returns>
-    /// <exception cref="InvalidOperationException">The store's signed links aren't added with <see cref="ResourcefullLinksServiceCollectionExtensions.AddResourcefullLinks"/>.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// No store has the name <see cref="ResourceUploadLinkEndpointOptions.StoreName"/>, or the store's signed links aren't added with <see cref="ResourcefullLinksServiceCollectionExtensions.AddResourcefullLinks"/>.
+    /// </exception>
     public static RouteGroupBuilder MapResourcefullUploadLinks(this IEndpointRouteBuilder endpoints, string pattern,
         ResourceUploadLinkEndpointOptions? options = null)
     {
@@ -111,6 +114,7 @@ public static partial class ResourcefullUploadsEndpointRouteBuilderExtensions
         ArgumentNullException.ThrowIfNull(pattern);
         string? storeName = options?.StoreName;
         if (storeName is not null) ArgumentException.ThrowIfNullOrWhiteSpace(storeName, nameof(options));
+        ResourceUploadEndpoints.ThrowIfNoStore(endpoints.ServiceProvider, storeName, nameof(MapResourcefullUploadLinks));
         ResourcefullLinksServiceCollectionExtensions.ThrowIfNoSigner(endpoints.ServiceProvider, storeName, nameof(MapResourcefullUploadLinks));
 
         var uploads = new ResourceUploadEndpoints(null, options?.OnCompletedAsync, storeName, options?.MaxSize, pattern);
@@ -608,6 +612,17 @@ internal sealed partial class ResourceUploadEndpoints(Func<HttpContext, Resource
             ? httpContext.RequestServices.GetRequiredService<IResourceServiceClient>()
             : httpContext.RequestServices.GetKeyedService<IResourceServiceClient>(storeName)
                 ?? throw new InvalidOperationException(NoStoreMessage(caller, storeName));
+
+    /// <summary>
+    /// Throws if no store is named <paramref name="storeName"/>, so a wrong name fails when the endpoints are mapped, not on
+    /// the first request.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">No store has that name; <paramref name="caller"/> names the API in the error.</exception>
+    internal static void ThrowIfNoStore(IServiceProvider services, string? storeName, string caller)
+    {
+        if (storeName is not null && services.GetService<IServiceProviderIsKeyedService>()?.IsKeyedService(typeof(IResourceServiceClient), storeName) == false)
+            throw new InvalidOperationException(NoStoreMessage(caller, storeName));
+    }
 
     /// <summary>Says that <paramref name="caller"/> needs a store named <paramref name="storeName"/>.</summary>
     internal static string NoStoreMessage(string caller, string storeName) =>

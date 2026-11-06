@@ -582,6 +582,27 @@ public class ResourceUploadEndpointTests
         Assert.Contains("AddDataProtection", Assert.Throws<InvalidOperationException>(noDataProtection).Message);
     }
 
+    [Fact]
+    public void MapEndpoints_ShouldSayWhichStoreIsMissing_WhenNoStoreHasTheName()
+    {
+        // Arrange
+        WebApplicationBuilder builder = WebApplication.CreateSlimBuilder();
+        builder.Services.AddResourcefull(options => options.UseInMemory());
+        builder.Services.AddResourcefullLinks();
+        using WebApplication app = builder.Build();
+
+        // Act
+        void uploads() => app.MapResourcefullUploads("/uploads", new ResourceUploadEndpointOptions
+        {
+            ResolveAsync = (_, _) => Task.FromResult<ResourceUploadTarget?>(null), StoreName = "missing"
+        });
+        void links() => app.MapResourcefullUploadLinks("/links", new ResourceUploadLinkEndpointOptions { StoreName = "missing" });
+
+        // Assert
+        Assert.Contains("a store named 'missing' added with AddKeyedResourcefull", Assert.Throws<InvalidOperationException>(uploads).Message, StringComparison.Ordinal);
+        Assert.Contains("a store named 'missing' added with AddKeyedResourcefull", Assert.Throws<InvalidOperationException>(links).Message, StringComparison.Ordinal);
+    }
+
     /// <summary>A stream whose length can't be known in advance, so a request sends it without a Content-Length.</summary>
     private sealed class UnknownLengthStream(byte[] content) : MemoryStream(content)
     {
