@@ -695,11 +695,11 @@ public interface IResourceContainerClient
     /// The provider doesn't support upload sessions, or <see cref="ResourceUploadSessionOptions.ExpiresAt"/> is set and it
     /// doesn't support expiry.
     /// </exception>
-    public Task<ResourceUpload> StartUploadAsync(string resourceName, ResourceUploadSessionOptions? options = null,
+    public Task<ResourceUploadSession> StartUploadAsync(string resourceName, ResourceUploadSessionOptions? options = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Gets an upload session as it stands, to find where to resume: its <see cref="ResourceUpload.Offset"/> is how
+    /// Gets an upload session as it stands, to find where to resume: its <see cref="ResourceUploadSession.Offset"/> is how
     /// many bytes are stored.
     /// <para>Coming in 4.0.</para>
     /// </summary>
@@ -712,7 +712,7 @@ public interface IResourceContainerClient
     /// <exception cref="NotSupportedException">
     /// The provider doesn't support upload sessions.
     /// </exception>
-    public Task<ResourceUpload?> GetUploadAsync(string resourceName, string uploadId, CancellationToken cancellationToken = default);
+    public Task<ResourceUploadSession?> GetUploadAsync(string resourceName, string uploadId, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Appends <paramref name="content"/> to an upload session, reading it to its end. An append that fails partway may
@@ -722,7 +722,7 @@ public interface IResourceContainerClient
     /// </summary>
     /// <param name="resourceName">The name the session's version will be stored under.</param>
     /// <param name="uploadId">The session's ID.</param>
-    /// <param name="offset">Where the content starts: the session's <see cref="ResourceUpload.Offset"/>.</param>
+    /// <param name="offset">Where the content starts: the session's <see cref="ResourceUploadSession.Offset"/>.</param>
     /// <param name="content">The content to append.</param>
     /// <param name="cancellationToken">Cancels the append; what's already stored stays stored.</param>
     /// <returns>The session after the append, or <see langword="null"/> if there's no such session.</returns>
@@ -744,7 +744,7 @@ public interface IResourceContainerClient
     /// <exception cref="NotSupportedException">
     /// The provider doesn't support upload sessions.
     /// </exception>
-    public Task<ResourceUpload?> AppendUploadAsync(string resourceName, string uploadId, long offset, Stream content,
+    public Task<ResourceUploadSession?> AppendUploadAsync(string resourceName, string uploadId, long offset, Stream content,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -755,26 +755,19 @@ public interface IResourceContainerClient
     /// </summary>
     /// <param name="resourceName">The name the session's version will be stored under.</param>
     /// <param name="uploadId">The session's ID.</param>
-    /// <param name="mode">
-    /// What to do when the name already has a current version: <see cref="ResourceWriteMode.Create"/>, the default,
-    /// refuses, and <see cref="ResourceWriteMode.Replace"/> replaces it.
-    /// </param>
-    /// <param name="conditions">
-    /// What the name's current version must be, decided as the version becomes current; they need
-    /// <see cref="ResourceWriteMode.Replace"/>.
-    /// </param>
+    /// <param name="options">The write's mode and conditions; a create-only write when <see langword="null"/>.</param>
     /// <param name="cancellationToken">Cancels the completion; a canceled completion leaves the session as it was.</param>
     /// <returns>The version as stored, or <see langword="null"/> if there's no such session.</returns>
     /// <exception cref="ArgumentException">
     /// <paramref name="resourceName"/> breaks the name rules, <paramref name="uploadId"/> is empty, or
-    /// <paramref name="conditions"/> are given with <see cref="ResourceWriteMode.Create"/>.
+    /// <see cref="ResourceCompleteUploadOptions.Conditions"/> are given with <see cref="ResourceWriteMode.Create"/>.
     /// </exception>
     /// <exception cref="ResourceConflictException">
-    /// <paramref name="mode"/> is <see cref="ResourceWriteMode.Create"/> and the name has a current version. The session
-    /// stays, so it can be completed with <see cref="ResourceWriteMode.Replace"/>.
+    /// <see cref="ResourceCompleteUploadOptions.Mode"/> is <see cref="ResourceWriteMode.Create"/> and the name has a current
+    /// version. The session stays, so it can be completed with <see cref="ResourceWriteMode.Replace"/>.
     /// </exception>
     /// <exception cref="ResourcePreconditionFailedException">
-    /// The name's current version doesn't meet <paramref name="conditions"/>. The session stays.
+    /// The name's current version doesn't meet <see cref="ResourceCompleteUploadOptions.Conditions"/>. The session stays.
     /// </exception>
     /// <exception cref="ResourceContentRefusedException">
     /// The upload inspector refused the content. The session is deleted.
@@ -790,8 +783,7 @@ public interface IResourceContainerClient
     /// <exception cref="NotSupportedException">
     /// The provider doesn't support upload sessions.
     /// </exception>
-    public Task<ResourceInfo?> CompleteUploadAsync(string resourceName, string uploadId,
-        ResourceWriteMode mode = ResourceWriteMode.Create, ResourceConditions? conditions = null,
+    public Task<ResourceInfo?> CompleteUploadAsync(string resourceName, string uploadId, ResourceCompleteUploadOptions? options = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>

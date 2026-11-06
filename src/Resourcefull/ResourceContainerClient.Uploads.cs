@@ -7,12 +7,12 @@ namespace Resourcefull;
 // and hashes the stored content, inspects it, and makes the version current as an upload would.
 internal partial class ResourceContainerClient
 {
-    public Task<ResourceUpload> StartUploadAsync(string resourceName, ResourceUploadSessionOptions? options = null,
+    public Task<ResourceUploadSession> StartUploadAsync(string resourceName, ResourceUploadSessionOptions? options = null,
         CancellationToken cancellationToken = default)
         => _telemetry.RunAsync("upload_start", ContainerName, resourceName, () => StartUploadCoreAsync(resourceName, options,
             cancellationToken));
 
-    private async Task<ResourceUpload> StartUploadCoreAsync(string resourceName, ResourceUploadSessionOptions? options,
+    private async Task<ResourceUploadSession> StartUploadCoreAsync(string resourceName, ResourceUploadSessionOptions? options,
         CancellationToken cancellationToken)
     {
         ResourceNames.ThrowIfInvalidNewResourceName(resourceName);
@@ -31,10 +31,10 @@ internal partial class ResourceContainerClient
             LegalHold = options.LegalHold
         };
         await resourceRepository.StartStagedVersionAsync(version, cancellationToken).ConfigureAwait(false);
-        return new ResourceUpload(ContainerName, resourceName, version.VersionId, 0, version.DeclaredLength);
+        return new ResourceUploadSession(ContainerName, resourceName, version.VersionId, 0, version.DeclaredLength);
     }
 
-    public Task<ResourceUpload?> GetUploadAsync(string resourceName, string uploadId, CancellationToken cancellationToken = default)
+    public Task<ResourceUploadSession?> GetUploadAsync(string resourceName, string uploadId, CancellationToken cancellationToken = default)
         => _telemetry.RunAsync("upload_get", ContainerName, resourceName, async () =>
         {
             ThrowIfInvalidUpload(resourceName, uploadId);
@@ -43,7 +43,7 @@ internal partial class ResourceContainerClient
             return staged is null ? null : Describe(staged);
         });
 
-    public Task<ResourceUpload?> AppendUploadAsync(string resourceName, string uploadId, long offset, Stream content,
+    public Task<ResourceUploadSession?> AppendUploadAsync(string resourceName, string uploadId, long offset, Stream content,
         CancellationToken cancellationToken = default)
         => _telemetry.RunAsync("upload_append", ContainerName, resourceName, async activity =>
         {
@@ -101,25 +101,25 @@ internal partial class ResourceContainerClient
         }
     }
 
-    private ResourceUpload Describe(StagedVersion staged) =>
+    private ResourceUploadSession Describe(StagedVersion staged) =>
         new(ContainerName, staged.Version.Resource.ResourceName, staged.Version.VersionId, staged.StoredLength,
             staged.Version.DeclaredLength);
 
-    public Task<ResourceInfo?> CompleteUploadAsync(string resourceName, string uploadId,
-        ResourceWriteMode mode = ResourceWriteMode.Create, ResourceConditions? conditions = null,
+    public Task<ResourceInfo?> CompleteUploadAsync(string resourceName, string uploadId, ResourceCompleteUploadOptions? options = null,
         CancellationToken cancellationToken = default)
         => _telemetry.RunAsync("upload_complete", ContainerName, resourceName, activity =>
         {
-            activity?.SetTag("resourcefull.write_mode", WriteModeTag(mode));
-            return CompleteUploadCoreAsync(resourceName, uploadId, mode, conditions, cancellationToken);
-        }, "resourcefull.conditional", conditions is { IsEmpty: false });
+            activity?.SetTag("resourcefull.write_mode", WriteModeTag(options?.Mode ?? ResourceWriteMode.Create));
+            return CompleteUploadCoreAsync(resourceName, uploadId, options, cancellationToken);
+        }, "resourcefull.conditional", options?.Conditions is { IsEmpty: false });
 
-    private async Task<ResourceInfo?> CompleteUploadCoreAsync(string resourceName, string uploadId, ResourceWriteMode mode,
-        ResourceConditions? conditions, CancellationToken cancellationToken)
+    private async Task<ResourceInfo?> CompleteUploadCoreAsync(string resourceName, string uploadId,
+        ResourceCompleteUploadOptions? options, CancellationToken cancellationToken)
     {
         ThrowIfInvalidUpload(resourceName, uploadId);
-        conditions = conditions is { IsEmpty: false } ? conditions : null;
-        bool createOnly = IsCreate(mode, conditions, "conditions", nameof(mode));
+        options ??= new ResourceCompleteUploadOptions();
+        ResourceConditions? conditions = options.Conditions is { IsEmpty: false } set ? set : null;
+        bool createOnly = IsCreate(options.Mode, conditions, nameof(ResourceCompleteUploadOptions.Conditions), nameof(options));
         ResourceAddress location = At(resourceName);
 
         if (await resourceRepository.GetStagedVersionAsync(location, uploadId, cancellationToken).ConfigureAwait(false) is not { } staged)

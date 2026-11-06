@@ -348,7 +348,7 @@ public abstract partial class ResourcefullContractTests
         var clock = new ManualTimeProvider { Now = DateTimeOffset.UtcNow };
         using ServiceProvider provider = BuildServiceProvider(clock);
         IResourceContainerClient container = await NewContainerAsync(provider);
-        ResourceUpload upload = await container.StartUploadAsync("a",
+        ResourceUploadSession upload = await container.StartUploadAsync("a",
             new ResourceUploadSessionOptions { RetainUntil = clock.Now.AddHours(1), LegalHold = true });
         await container.AppendUploadAsync("a", upload.UploadId, 0, new MemoryStream([1, 2, 3]));
 

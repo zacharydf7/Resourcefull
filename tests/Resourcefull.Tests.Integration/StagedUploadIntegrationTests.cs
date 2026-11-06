@@ -191,7 +191,7 @@ public class StagedUploadIntegrationTests(SqlServerFixture fixture)
         string versionId = await StagedVersionIdAsync(container.Name);
 
         // Act
-        ResourceUpload? session = await container.GetUploadAsync("video.mp4", versionId);
+        ResourceUploadSession? session = await container.GetUploadAsync("video.mp4", versionId);
         bool canceled = await container.CancelUploadAsync("video.mp4", versionId);
         content.Resume();
         ResourceInfo stored = await upload;

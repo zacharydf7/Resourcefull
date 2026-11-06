@@ -16,7 +16,7 @@ public abstract partial class ResourcefullContractTests
         IResourceContainerClient container = await NewContainerAsync(provider);
         byte[][] parts = [RandomNumberGenerator.GetBytes(100), RandomNumberGenerator.GetBytes(3 * 1024 * 1024 + 7), RandomNumberGenerator.GetBytes(1)];
         byte[] whole = [.. parts.SelectMany(p => p)];
-        ResourceUpload upload = await container.StartUploadAsync("video.mp4", new ResourceUploadSessionOptions
+        ResourceUploadSession upload = await container.StartUploadAsync("video.mp4", new ResourceUploadSessionOptions
         {
             Headers = new ResourceHeaders("video/mp4", whole.Length),
             Metadata = new Dictionary<string, string> { ["source"] = "camera" }
@@ -45,7 +45,7 @@ public abstract partial class ResourcefullContractTests
         // Arrange
         using ServiceProvider provider = BuildServiceProvider();
         IResourceContainerClient container = await NewContainerAsync(provider);
-        ResourceUpload upload = await container.StartUploadAsync("a");
+        ResourceUploadSession upload = await container.StartUploadAsync("a");
         await container.AppendUploadAsync("a", upload.UploadId, 0, new MemoryStream([1, 2, 3]));
 
         // Act
@@ -54,7 +54,7 @@ public abstract partial class ResourcefullContractTests
         List<ResourceInfo> listed = await container.ListResourcesAsync().ToListAsync();
         ResourceContainerUsage usage = await container.GetUsageAsync();
         IReadOnlyList<ResourceInfo> largest = await container.GetTopVersionsAsync(ResourceVersionOrder.LargestFirst);
-        ResourceUpload? session = await container.GetUploadAsync("a", upload.UploadId);
+        ResourceUploadSession? session = await container.GetUploadAsync("a", upload.UploadId);
 
         // Assert
         Assert.Null(info);
@@ -73,7 +73,7 @@ public abstract partial class ResourcefullContractTests
         // Arrange: an append whose answer was lost is sent again from the same offset.
         using ServiceProvider provider = BuildServiceProvider();
         IResourceContainerClient container = await NewContainerAsync(provider);
-        ResourceUpload upload = await container.StartUploadAsync("a");
+        ResourceUploadSession upload = await container.StartUploadAsync("a");
         await container.AppendUploadAsync("a", upload.UploadId, 0, new MemoryStream([1, 2, 3]));
 
         // Act
@@ -97,7 +97,7 @@ public abstract partial class ResourcefullContractTests
         // Arrange
         using ServiceProvider provider = BuildServiceProvider();
         IResourceContainerClient container = await NewContainerAsync(provider);
-        ResourceUpload upload = await container.StartUploadAsync("empty.txt");
+        ResourceUploadSession upload = await container.StartUploadAsync("empty.txt");
 
         // Act
         ResourceInfo? stored = await container.CompleteUploadAsync("empty.txt", upload.UploadId);
@@ -116,15 +116,15 @@ public abstract partial class ResourcefullContractTests
         using ServiceProvider provider = BuildServiceProvider(o => o.UseVersioning());
         IResourceContainerClient container = await NewContainerAsync(provider);
         ResourceInfo existing = await container.UploadAsync("a", BinaryData.FromString("old"));
-        ResourceUpload upload = await container.StartUploadAsync("a", new ResourceUploadSessionOptions());
+        ResourceUploadSession upload = await container.StartUploadAsync("a", new ResourceUploadSessionOptions());
         await container.AppendUploadAsync("a", upload.UploadId, 0, new MemoryStream("new"u8.ToArray()));
 
         // Act
         await Assert.ThrowsAsync<ResourceConflictException>(() => container.CompleteUploadAsync("a", upload.UploadId));
         await Assert.ThrowsAsync<ResourcePreconditionFailedException>(() => container.CompleteUploadAsync("a", upload.UploadId,
-            ResourceWriteMode.Replace, new ResourceConditions { IfMatchVersionId = "not-the-current-version" }));
-        ResourceInfo? replaced = await container.CompleteUploadAsync("a", upload.UploadId, ResourceWriteMode.Replace,
-            new ResourceConditions { IfMatchVersionId = existing.VersionId });
+            new ResourceCompleteUploadOptions { Mode = ResourceWriteMode.Replace, Conditions = new ResourceConditions { IfMatchVersionId = "not-the-current-version" } }));
+        ResourceInfo? replaced = await container.CompleteUploadAsync("a", upload.UploadId,
+            new ResourceCompleteUploadOptions { Mode = ResourceWriteMode.Replace, Conditions = new ResourceConditions { IfMatchVersionId = existing.VersionId } });
 
         // Assert
         Assert.Equal(upload.UploadId, replaced!.VersionId);
@@ -140,7 +140,7 @@ public abstract partial class ResourcefullContractTests
         // Arrange
         using ServiceProvider provider = BuildServiceProvider();
         IResourceContainerClient container = await NewContainerAsync(provider);
-        ResourceUpload upload = await container.StartUploadAsync("a");
+        ResourceUploadSession upload = await container.StartUploadAsync("a");
         await container.AppendUploadAsync("a", upload.UploadId, 0, new MemoryStream([1]));
 
         // Act
@@ -170,7 +170,7 @@ public abstract partial class ResourcefullContractTests
             inspected = await ReadAllAsync(upload.Content, cancellationToken);
             return ResourceInspectionResult.Refused("Not allowed.");
         };
-        ResourceUpload upload = await container.StartUploadAsync("a");
+        ResourceUploadSession upload = await container.StartUploadAsync("a");
         await container.AppendUploadAsync("a", upload.UploadId, 0, new MemoryStream(content));
 
         // Act
@@ -190,7 +190,7 @@ public abstract partial class ResourcefullContractTests
         // Arrange: a session that said it would hold 5 bytes, with 3 appended.
         using ServiceProvider provider = BuildServiceProvider();
         IResourceContainerClient container = await NewContainerAsync(provider);
-        ResourceUpload upload = await container.StartUploadAsync("a", new ResourceUploadSessionOptions
+        ResourceUploadSession upload = await container.StartUploadAsync("a", new ResourceUploadSessionOptions
         {
             Headers = new ResourceHeaders(null, 5)
         });
@@ -198,7 +198,7 @@ public abstract partial class ResourcefullContractTests
 
         // Act
         await Assert.ThrowsAsync<ResourceContentLengthMismatchException>(() => container.CompleteUploadAsync("a", upload.UploadId));
-        ResourceUpload? kept = await container.GetUploadAsync("a", upload.UploadId);
+        ResourceUploadSession? kept = await container.GetUploadAsync("a", upload.UploadId);
         await container.AppendUploadAsync("a", upload.UploadId, 3, new MemoryStream([4, 5]));
         ResourceInfo? stored = await container.CompleteUploadAsync("a", upload.UploadId);
 
@@ -227,7 +227,7 @@ public abstract partial class ResourcefullContractTests
             new ResourceUploadSessionOptions { Headers = new ResourceHeaders("application/pdf", 11) }));
 
         // An append stops at the size limit, counting what's already stored.
-        ResourceUpload upload = await container.StartUploadAsync("a", pdf);
+        ResourceUploadSession upload = await container.StartUploadAsync("a", pdf);
         await container.AppendUploadAsync("a", upload.UploadId, 0, new MemoryStream(new byte[6]));
         var tooLarge = await Assert.ThrowsAsync<ResourcePolicyViolationException>(() =>
             container.AppendUploadAsync("a", upload.UploadId, 6, new MemoryStream(new byte[6])));
@@ -253,7 +253,7 @@ public abstract partial class ResourcefullContractTests
             MaxContainerSize = 10
         }));
         IResourceContainerClient container = await NewContainerAsync(provider);
-        ResourceUpload upload = await container.StartUploadAsync("a");
+        ResourceUploadSession upload = await container.StartUploadAsync("a");
         await container.AppendUploadAsync("a", upload.UploadId, 0, new MemoryStream(new byte[6]));
 
         // Act
@@ -275,7 +275,7 @@ public abstract partial class ResourcefullContractTests
         IResourceContainerClient container = await NewContainerAsync(provider);
         ResourceRepository repository = provider.GetRequiredService<ResourceRepository>();
         var location = new ResourceAddress(container.Name, "a");
-        ResourceUpload upload = await container.StartUploadAsync("a");
+        ResourceUploadSession upload = await container.StartUploadAsync("a");
         await container.AppendUploadAsync("a", upload.UploadId, 0, new MemoryStream([1, 2, 3, 4, 5]));
 
         // Act
@@ -298,8 +298,8 @@ public abstract partial class ResourcefullContractTests
         var clock = new ManualTimeProvider { Now = DateTimeOffset.UtcNow };
         using ServiceProvider provider = BuildServiceProvider(o => o.Services.AddSingleton<TimeProvider>(clock));
         IResourceContainerClient container = await NewContainerAsync(provider);
-        ResourceUpload idle = await container.StartUploadAsync("idle");
-        ResourceUpload active = await container.StartUploadAsync("active");
+        ResourceUploadSession idle = await container.StartUploadAsync("idle");
+        ResourceUploadSession active = await container.StartUploadAsync("active");
         clock.Now = clock.Now.AddHours(20);
         await container.AppendUploadAsync("active", active.UploadId, 0, new MemoryStream([1]));
         clock.Now = clock.Now.AddHours(5);

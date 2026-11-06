@@ -18,7 +18,7 @@ This page is about calling sessions from your own code. For uploads from browser
 
 ```csharp
 // 1. Start: say what the file is. Nothing is stored yet.
-ResourceUpload upload = await container.StartUploadAsync("video.mp4", new ResourceUploadSessionOptions
+ResourceUploadSession upload = await container.StartUploadAsync("video.mp4", new ResourceUploadSessionOptions
 {
     Headers = new ResourceHeaders("video/mp4", ContentLength: fileLength),
     Metadata = new Dictionary<string, string> { ["camera"] = "front door" }
@@ -33,7 +33,7 @@ ResourceInfo? stored = await container.CompleteUploadAsync("video.mp4", upload.U
 ```
 
 - **`StartUploadAsync`** takes the version's content type, metadata and expiry, and the length the file is expected
-  to have. It returns a `ResourceUpload` with the session's `UploadId`, which every later call names, and its
+  to have. It returns a `ResourceUploadSession` with the session's `UploadId`, which every later call names, and its
   `Offset`: how many bytes are stored, 0 at the start. Keep the upload ID somewhere that survives a restart, such as
   your own database or the client that's uploading.
 - **`AppendUploadAsync`** stores a part. It takes the offset the part starts at, which must be the session's
@@ -50,7 +50,7 @@ at a time with the file system, S3 and Azure Blob, so an append that fails partw
 provider stores an append whole or not at all.) To resume, ask the session where it ended, and send the rest from there:
 
 ```csharp
-ResourceUpload? current = await container.GetUploadAsync("video.mp4", uploadId);
+ResourceUploadSession? current = await container.GetUploadAsync("video.mp4", uploadId);
 if (current is null)
 {
     // The session was completed, canceled, or deleted after a day without appends: start again.
@@ -78,8 +78,11 @@ local database.
 The write's mode and conditions go to `CompleteUploadAsync`, because that's when they're decided:
 
 ```csharp
-ResourceInfo? stored = await container.CompleteUploadAsync("video.mp4", uploadId, ResourceWriteMode.Replace,
-    new ResourceConditions { IfMatchVersionId = versionTheUserSaw });
+ResourceInfo? stored = await container.CompleteUploadAsync("video.mp4", uploadId, new ResourceCompleteUploadOptions
+{
+    Mode = ResourceWriteMode.Replace,
+    Conditions = new ResourceConditions { IfMatchVersionId = versionTheUserSaw }
+});
 ```
 
 - **`ResourceWriteMode.Create`, the default,** refuses a name that already has a current version, with
@@ -109,7 +112,7 @@ content, the session is deleted, since that content is never to be stored.
 - **The expected length,** when you give `StartUploadAsync` one, is checked against the container's size limits at
   the start, and again as the session completes: completing a session whose appended content is a different length
   throws `ResourceContentLengthMismatchException`, so a client that completes too early doesn't store a cut-off file.
-  `ResourceUpload.DeclaredLength` returns this length, so a client that resumes knows when it's done.
+  `ResourceUploadSession.DeclaredLength` returns this length, so a client that resumes knows when it's done.
 - **A session nothing is appended to for 24 hours is deleted** by the [expiry](expiry.md) sweep, along with what it
   stored. Without `UseExpiry`, nothing sweeps sessions: call `DeleteExpiredAsync` on a schedule, or cancel the
   sessions you abandon, or they stay. With a provider of your own that doesn't support expiry, cancel them: there's no

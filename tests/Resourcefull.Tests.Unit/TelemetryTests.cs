@@ -158,7 +158,7 @@ public sealed class TelemetryTests : IDisposable
         using Activity root = TestSource.StartActivity("test")!;
 
         // Act
-        ResourceUpload upload = await container.StartUploadAsync("video.mp4");
+        ResourceUploadSession upload = await container.StartUploadAsync("video.mp4");
         upload = (await container.AppendUploadAsync("video.mp4", upload.UploadId, 0, new MemoryStream(new byte[3])))!;
         await container.AppendUploadAsync("video.mp4", upload.UploadId, upload.Offset, new MemoryStream(new byte[4]));
         await container.CompleteUploadAsync("video.mp4", upload.UploadId);
@@ -172,6 +172,29 @@ public sealed class TelemetryTests : IDisposable
         Assert.Equal([3.0, 4.0], _measurements.Where(m => m.Instrument == "resourcefull.client.appended").Select(m => m.Value));
         Assert.Contains(_measurements, m => m.Instrument == "resourcefull.client.uploaded" && m.Value == 7
             && Equals(m.Tags["resourcefull.operation"], "upload_complete"));
+    }
+
+    [Fact]
+    public async Task CompleteUploadAsync_ShouldTagTheWriteModeAndConditions_WhenGivenThem()
+    {
+        // Arrange
+        using ServiceProvider provider = NewServices();
+        IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>().CreateContainerAsync("c");
+        ResourceInfo existing = await container.UploadAsync("a", BinaryData.FromString("x"));
+        ResourceUploadSession upload = await container.StartUploadAsync("a");
+        using Activity root = TestSource.StartActivity("test")!;
+
+        // Act
+        await container.CompleteUploadAsync("a", upload.UploadId, new ResourceCompleteUploadOptions
+        {
+            Mode = ResourceWriteMode.Replace,
+            Conditions = new ResourceConditions { IfMatchVersionId = existing.VersionId }
+        });
+
+        // Assert
+        Activity span = Assert.Single(SpansIn(root), s => s.OperationName == "resourcefull upload_complete");
+        Assert.Equal("replace", span.GetTagItem("resourcefull.write_mode"));
+        Assert.Equal(true, span.GetTagItem("resourcefull.conditional"));
     }
 
     [Fact]

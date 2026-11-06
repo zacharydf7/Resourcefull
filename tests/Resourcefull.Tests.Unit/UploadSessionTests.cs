@@ -6,6 +6,22 @@ namespace Resourcefull.Tests.Unit;
 public class UploadSessionTests
 {
     [Fact]
+    public async Task CompleteUploadAsync_ShouldThrowArgumentException_WhenGivenConditionsInCreateMode()
+    {
+        // Arrange
+        var repository = new Mock<ResourceRepository>(MockBehavior.Strict);
+        var container = new ResourceContainerClient(repository.Object, null, new ResourcefullOptions(), "c", null);
+
+        // Act
+        var thrown = await Assert.ThrowsAsync<ArgumentException>(() => container.CompleteUploadAsync("a", "u1",
+            new ResourceCompleteUploadOptions { Conditions = new ResourceConditions { IfMatchVersionId = "v1" } }));
+
+        // Assert: refused before the provider is asked anything.
+        Assert.Equal("options", thrown.ParamName);
+        Assert.Contains(nameof(ResourceCompleteUploadOptions.Conditions), thrown.Message);
+    }
+
+    [Fact]
     public async Task CompleteUploadAsync_ShouldThrowAndCompleteNothing_WhenAnAppendLandsWhileTheContentIsMeasured()
     {
         // Arrange: the session had 3 bytes when its checks ran, and 5 by the time its content was read.

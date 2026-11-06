@@ -303,7 +303,7 @@ internal sealed partial class ResourceUploadEndpoints(ResourceUploadEndpointOpti
         }
         IResourceContainerClient container = Resources(httpContext).GetContainerClient(target.ContainerName);
         CancellationToken cancellationToken = httpContext.RequestAborted;
-        ResourceUpload upload;
+        ResourceUploadSession upload;
         try
         {
             if (target.Mode == ResourceWriteMode.Create
@@ -338,7 +338,7 @@ internal sealed partial class ResourceUploadEndpoints(ResourceUploadEndpointOpti
         {
             LiftBodySizeLimit(httpContext);
             var content = new BoundedStream(request.Body, length);
-            ResourceUpload? appended;
+            ResourceUploadSession? appended;
             try
             {
                 appended = await container.AppendUploadAsync(session.ResourceName, session.UploadId, 0, content, cancellationToken)
@@ -384,7 +384,7 @@ internal sealed partial class ResourceUploadEndpoints(ResourceUploadEndpointOpti
         HttpResponse response = httpContext.Response;
         response.Headers.CacheControl = "no-store";
         IResourceContainerClient container = Resources(httpContext).GetContainerClient(session.ContainerName);
-        ResourceUpload? upload = await container.GetUploadAsync(session.ResourceName, session.UploadId, httpContext.RequestAborted)
+        ResourceUploadSession? upload = await container.GetUploadAsync(session.ResourceName, session.UploadId, httpContext.RequestAborted)
             .ConfigureAwait(false);
         if (upload is null)
         {
@@ -432,7 +432,7 @@ internal sealed partial class ResourceUploadEndpoints(ResourceUploadEndpointOpti
         LiftBodySizeLimit(httpContext);
         IResourceContainerClient container = Resources(httpContext).GetContainerClient(session.ContainerName);
         var content = new BoundedStream(request.Body, Math.Max(session.Length - offset, 0));
-        ResourceUpload? upload;
+        ResourceUploadSession? upload;
         try
         {
             upload = await container.AppendUploadAsync(session.ResourceName, session.UploadId, offset, content, httpContext.RequestAborted)
@@ -490,9 +490,10 @@ internal sealed partial class ResourceUploadEndpoints(ResourceUploadEndpointOpti
         ResourceInfo? version;
         try
         {
-            version = await container.CompleteUploadAsync(session.ResourceName, session.UploadId,
-                session.Replace ? ResourceWriteMode.Replace : ResourceWriteMode.Create, cancellationToken: CancellationToken.None)
-                .ConfigureAwait(false);
+            version = await container.CompleteUploadAsync(session.ResourceName, session.UploadId, new ResourceCompleteUploadOptions
+            {
+                Mode = session.Replace ? ResourceWriteMode.Replace : ResourceWriteMode.Create
+            }, CancellationToken.None).ConfigureAwait(false);
         }
         catch (ResourceUploadOffsetException exception)
         {

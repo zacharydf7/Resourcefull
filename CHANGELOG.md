@@ -80,7 +80,8 @@
 - **Uploading in parts.** An upload session stores a large file over several appends, and what's stored survives a
   dropped connection or a restart: `StartUploadAsync`, then `AppendUploadAsync` from each part's offset,
   `GetUploadAsync` to find where to resume, and `CompleteUploadAsync`, which makes the version current with the
-  write mode and conditions it's given, as `UploadAsync` does. `CancelUploadAsync` gives up on one. An append that
+  write mode and conditions in its `ResourceCompleteUploadOptions`, as `UploadAsync` does. `CancelUploadAsync` gives up
+  on one. An append that
   doesn't start where the stored content ends throws `ResourceUploadOffsetException` (409 Conflict in ASP.NET
   Core), so a part is never stored twice. Completing reads the content back once to hash and inspect it. The expiry
   sweep deletes a session nothing was appended to for a day, and the same goes for what a stopped upload left behind,

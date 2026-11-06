@@ -12,8 +12,29 @@ namespace Resourcefull;
 /// <param name="DeclaredLength">
 /// The length the session said the version would have, if it did: the session completes only with that many bytes.
 /// </param>
-public sealed record ResourceUpload(string ContainerName, string ResourceName, string UploadId, long Offset,
+public sealed record ResourceUploadSession(string ContainerName, string ResourceName, string UploadId, long Offset,
     long? DeclaredLength = null);
+
+/// <summary>
+/// What completing an upload session does when the name already has a current version.
+/// <para>Coming in 4.0.</para>
+/// </summary>
+public sealed class ResourceCompleteUploadOptions
+{
+    /// <summary>
+    /// What the completion does when the name already has a current version: <see cref="ResourceWriteMode.Create"/>, the
+    /// default, refuses it, and <see cref="ResourceWriteMode.Replace"/> stores the session's version as the new current
+    /// version.
+    /// </summary>
+    public ResourceWriteMode Mode { get; init; }
+
+    /// <summary>
+    /// Complete the session only if the name's current version meets these, decided as the session's version becomes
+    /// current; otherwise <see cref="ResourcePreconditionFailedException"/> is thrown and the session stays. They need
+    /// <see cref="Mode"/> set to <see cref="ResourceWriteMode.Replace"/>, since a name that meets them has a current version.
+    /// </summary>
+    public ResourceConditions? Conditions { get; init; }
+}
 
 /// <summary>
 /// What an upload session stores its version with: the content type, declared length, metadata and expiry, given once
