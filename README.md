@@ -1,8 +1,6 @@
 # Resourcefull
 
 [![NuGet](https://img.shields.io/nuget/v/Resourcefull.svg)](https://www.nuget.org/packages/Resourcefull)
-[![Build](https://github.com/zacharydf7/Resourcefull/actions/workflows/build.yml/badge.svg)](https://github.com/zacharydf7/Resourcefull/actions/workflows/build.yml)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/zacharydf7/Resourcefull/blob/main/LICENSE)
 
 Resourcefull stores and serves files of any type and size from infrastructure you run yourself: the SQL Server or
 PostgreSQL database you already have, or a directory on your own disks, with nothing new to deploy. Upload, download,
@@ -117,13 +115,9 @@ you're trying to do, plus the API reference. Deciding between Resourcefull, obje
   sharing a bucket, permissions and costs
 - [Azure Blob Storage](https://resourcefull.dev/docs/providers/azure-blob.html): connecting to an
   account, permissions, account settings and costs
-- [Upgrading](https://resourcefull.dev/docs/upgrading.html), including from 2.x, and the
-  [changelog](https://github.com/zacharydf7/Resourcefull/blob/main/CHANGELOG.md)
-
-## Contributing
-
-See [CONTRIBUTING.md](https://github.com/zacharydf7/Resourcefull/blob/main/CONTRIBUTING.md).
+- [Changelog](https://resourcefull.dev/CHANGELOG.html)
 
 ## License
 
-[MIT](https://github.com/zacharydf7/Resourcefull/blob/main/LICENSE)
+Free to use, including in commercial projects, under the Resourcefull License, which comes with each package in its
+`LICENSE` file. Versions before 4.0 were released under the MIT license, which still applies to them.

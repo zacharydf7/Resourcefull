@@ -41,7 +41,7 @@
       "_appTitle": "Resourcefull",
       "_appLogoPath": "assets/logo.svg",
       "_appFaviconPath": "assets/icon.svg",
-      "_appFooter": "<span>Resourcefull is open source under the MIT license. <a href=\"https://www.nuget.org/packages/Resourcefull\">NuGet</a></span>",
+      "_appFooter": "<span><a href=\"https://www.nuget.org/packages/Resourcefull\">NuGet</a></span>",
       "_enableSearch": true
     }
   }

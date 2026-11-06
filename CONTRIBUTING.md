@@ -1,12 +1,6 @@
-# Contributing
+# Working on Resourcefull
 
-Thanks for helping with Resourcefull. Bug reports, questions and ideas are welcome as
-[issues](https://github.com/zacharydf7/Resourcefull/issues); for a larger change, open an issue to discuss it before
-you start. Report a security vulnerability privately instead, as
-[SECURITY.md](https://github.com/zacharydf7/Resourcefull/blob/main/SECURITY.md) explains.
-
-Everyone taking part is expected to follow the
-[code of conduct](https://github.com/zacharydf7/Resourcefull/blob/main/CODE_OF_CONDUCT.md).
+How to build, test and release Resourcefull, and the project's conventions.
 
 ## Building and testing
 
@@ -153,7 +147,7 @@ Three rules keep the scripts generated and safe to run again:
 - **Telemetry is part of done.** A change that adds or changes an operation records its span and metrics, adds
   the operation to [Telemetry](docs/telemetry.md), and has a test that observes them; the test that calls every
   public client method fails for a method that records no span.
-- **Pull requests** keep to one change, with tests, and update the docs when behavior changes.
+- **Each change** is one commit, with tests, and updates the docs and `CHANGELOG.md` when behavior changes.
 - **Unreleased features are labeled.** The docs site is published from `main`, so a page or section about something
   not yet on nuget.org says so, under its heading (not in it, so its link doesn't change):
   `<div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 4.0</span></div>`. In tables and sentences,
@@ -162,8 +156,6 @@ Three rules keep the scripts generated and safe to run again:
   in their XML docs, on a line of its own: on the same line as other text, the API reference shows it as code.
 
 ## Releasing
-
-For maintainers:
 
 1. **Before tagging,** check `<VersionPrefix>` in `src/Directory.Build.props` is the release's version (every build
    but the release tag's adds `-ci.<run>` or `-dev` to it). Turn the release's labels from upcoming to added: in

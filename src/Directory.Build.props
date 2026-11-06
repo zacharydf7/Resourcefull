@@ -11,17 +11,15 @@
     <VersionSuffix Condition="'$(VersionSuffix)' == '' and '$(GITHUB_ACTIONS)' == 'true' and '$(GITHUB_REF_TYPE)' != 'tag'">ci.$(GITHUB_RUN_NUMBER)</VersionSuffix>
     <VersionSuffix Condition="'$(VersionSuffix)' == '' and '$(GITHUB_ACTIONS)' != 'true'">dev</VersionSuffix>
     <Authors>Zachary Fry</Authors>
-    <Copyright>Copyright (c) Zachary Fry</Copyright>
+    <Copyright>Copyright (c) 2024-2026 Zachary Fry</Copyright>
     <PackageTags>file-storage;file-upload;blob;blob-storage;object-storage;uploads;downloads;versioning;sqlserver;streaming;opentelemetry</PackageTags>
     <PackageProjectUrl>https://resourcefull.dev/</PackageProjectUrl>
-    <RepositoryUrl>https://github.com/zacharydf7/Resourcefull</RepositoryUrl>
-    <RepositoryType>git</RepositoryType>
-    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageLicenseFile>LICENSE</PackageLicenseFile>
     <PackageIcon>icon.png</PackageIcon>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <EnablePackageValidation>true</EnablePackageValidation>
     <!-- Packing fails on any change that would break code compiled against the last release; bump it at each release.
-         4.0 breaks 3.x on purpose, so there's no baseline until 4.0.0 is released: then set it to 4.0.0. -->
+         There's no baseline until 4.0.0 is released: then set it to 4.0.0. -->
 
     <!-- XML docs ship in the packages for IntelliSense and the API reference, so every public member needs one. -->
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
@@ -29,9 +27,10 @@
     <!-- Every await uses ConfigureAwait(false); .editorconfig says why. -->
     <WarningsAsErrors>$(WarningsAsErrors);CA2007</WarningsAsErrors>
 
-    <!-- A symbol package, so consumers can step into the library. -->
+    <!-- A symbol package, so a debugger can show line numbers. The repository is private, so nothing links to its source. -->
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <EnableSourceLink>false</EnableSourceLink>
   </PropertyGroup>
 
   <!-- Deterministic paths in what CI builds and publishes. -->
@@ -41,6 +40,7 @@
 
   <ItemGroup>
     <None Include="$(MSBuildThisFileDirectory)../README.md" Pack="true" PackagePath="/" Visible="false" />
+    <None Include="$(MSBuildThisFileDirectory)../LICENSE" Pack="true" PackagePath="/" Visible="false" />
     <None Include="$(MSBuildThisFileDirectory)../assets/icon.png" Pack="true" PackagePath="/" Visible="false" />
   </ItemGroup>
 

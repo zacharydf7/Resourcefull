@@ -1,21 +1,26 @@
-MIT License
+Resourcefull License
 
-Copyright (c) 2024 Zachary Fry
+Copyright (c) 2024-2026 Zachary Fry. All rights reserved, except as granted below.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+1. Use. You may use this version of the Resourcefull packages (every package whose name starts with "Resourcefull",
+   together the "Software") free of charge, for any purpose, including in commercial projects. You may copy and distribute
+   it as part of software or services you build with it, and keep unmodified copies in private package feeds, caches and
+   build systems. Extending the Software through its public API, such as with a storage provider, an upload inspector or a
+   policy provider, and testing those with Resourcefull.Testing, is use.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+2. Documentation. You may copy code from the Software's documentation into your own software, and use it there under
+   whatever terms you choose.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+3. Restrictions. Apart from what sections 1 and 2 allow, you may not sell, sublicense or redistribute the Software, and
+   you may not modify, decompile, disassemble or otherwise reverse engineer it, except where applicable law allows this
+   despite these terms.
+
+4. Other versions. These terms apply to the version of the Software they come with. Other versions may come with
+   different terms. Versions before 4.0 were released under the MIT license, which still applies to them.
+
+5. Termination. If you break these terms, your permission to use the Software ends.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE
+WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.

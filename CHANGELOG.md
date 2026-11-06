@@ -304,6 +304,8 @@
 
 ### Changed
 
+- **A new license.** Each package in 4.0 comes with the Resourcefull License: free to use, including in commercial
+  projects, with no rights to the source. Versions before 4.0 stay under the MIT license.
 - **The dashboard works with named stores, and its JSON API is versioned.** `ResourcefullDashboardOptions.StoreName`
   chooses the store the dashboard shows and changes. Links come from that store's signer, request spans carry
   `resourcefull.store`, and the log of each change names the store. With a store name, `HealthChecks` defaults to no checks.
