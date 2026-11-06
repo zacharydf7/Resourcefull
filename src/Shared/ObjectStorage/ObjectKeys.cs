@@ -44,18 +44,21 @@ internal sealed class ObjectKeys(string prefix, int segmentBytes = ObjectKeys.Se
     /// <summary>
     /// The key of a version's expiry entry: its expiry time, fixed-width so keys sort by it, then its version ID, so
     /// entries that expire at the same time sort as the contract lists them, then the token the version records for the
-    /// entry, so no two writes of an entry share a key, then its container's ID and its blob.
+    /// entry, so no two writes of an entry share a key, then its container's ID and its blob. Entries with the same time
+    /// and version ID don't sort by container and name, which are too long to fit in a key: a listing reads them all and
+    /// sorts them itself.
     /// </summary>
     public string Expiry(DateTimeOffset expiresAt, string versionId, string token, string containerId, string blob) =>
         $"{Expiries}{expiresAt.UtcTicks:D19}/{Escape(versionId)}{End}/{token}/{containerId}/{blob}";
 
     /// <summary>
-    /// What a listing of the entries after <paramref name="expiresAt"/> and <paramref name="versionId"/> starts after:
-    /// past every entry with both, since <c>0</c> sorts after the <c>/</c> that follows them, and before the next
-    /// version ID's, since an escape never ends with the <c>!</c> that ends a version ID.
+    /// What a listing of the entries from <paramref name="expiresAt"/> and <paramref name="versionId"/> on starts after.
+    /// It sorts before every entry with both, whose keys continue it with a <c>/</c>. It sorts after every entry with an
+    /// earlier version ID, even one this ID starts with: that entry's key has <c>!/</c> where this key has more of the
+    /// escaped ID, and <c>!/</c> sorts first.
     /// </summary>
-    public string ExpiriesAfter(DateTimeOffset expiresAt, string versionId) =>
-        $"{Expiries}{expiresAt.UtcTicks:D19}/{Escape(versionId)}{End}0";
+    public string ExpiriesFrom(DateTimeOffset expiresAt, string versionId) =>
+        $"{Expiries}{expiresAt.UtcTicks:D19}/{Escape(versionId)}{End}";
 
     /// <summary>The prefix of the purge entries, which sort by when their versions leave a bin, as expiry entries sort.</summary>
     public string Purges { get; } = prefix + "t/";
@@ -64,9 +67,9 @@ internal sealed class ObjectKeys(string prefix, int segmentBytes = ObjectKeys.Se
     public string Purge(DateTimeOffset purgeAt, string versionId, string token, string containerId, string blob) =>
         $"{Purges}{purgeAt.UtcTicks:D19}/{Escape(versionId)}{End}/{token}/{containerId}/{blob}";
 
-    /// <summary>What a listing of the purge entries after <paramref name="purgeAt"/> and <paramref name="versionId"/> starts after.</summary>
-    public string PurgesAfter(DateTimeOffset purgeAt, string versionId) =>
-        $"{Purges}{purgeAt.UtcTicks:D19}/{Escape(versionId)}{End}0";
+    /// <summary>What a listing of the purge entries from <paramref name="purgeAt"/> and <paramref name="versionId"/> on starts after.</summary>
+    public string PurgesFrom(DateTimeOffset purgeAt, string versionId) =>
+        $"{Purges}{purgeAt.UtcTicks:D19}/{Escape(versionId)}{End}";
 
     /// <summary>What an expiry entry's key, after <see cref="Expiries"/>, or a purge entry's after <see cref="Purges"/>, says.</summary>
     internal static (DateTimeOffset ExpiresAt, string VersionId, string Token, string ContainerId, string Blob) ParseExpiry(string key)
@@ -135,11 +138,11 @@ internal sealed class ObjectKeys(string prefix, int segmentBytes = ObjectKeys.Se
         $"{Bin(containerId)}{DateTimeOffset.MaxValue.UtcTicks - deletedAt.UtcTicks:D19}/{Escape(versionId)}{End}/{token}/{contentLength}";
 
     /// <summary>
-    /// What a listing of the bin entries after <paramref name="deletedAt"/> and <paramref name="versionId"/>, in the bin's
-    /// order, starts after, as <see cref="ExpiriesAfter"/> does for expiry entries.
+    /// What a listing of the bin entries from <paramref name="deletedAt"/> and <paramref name="versionId"/> on, in the
+    /// bin's order, starts after, as <see cref="ExpiriesFrom"/> does for expiry entries.
     /// </summary>
-    public string BinAfter(string containerId, DateTimeOffset deletedAt, string versionId) =>
-        $"{Bin(containerId)}{DateTimeOffset.MaxValue.UtcTicks - deletedAt.UtcTicks:D19}/{Escape(versionId)}{End}0";
+    public string BinFrom(string containerId, DateTimeOffset deletedAt, string versionId) =>
+        $"{Bin(containerId)}{DateTimeOffset.MaxValue.UtcTicks - deletedAt.UtcTicks:D19}/{Escape(versionId)}{End}";
 
     /// <summary>What a bin entry's key, after <see cref="Bin"/>, says.</summary>
     internal static (DateTimeOffset DeletedAt, string VersionId, string Token, long ContentLength) ParseBinEntry(string key)

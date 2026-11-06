@@ -85,7 +85,7 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
         query.Where(c => c.Name.StartsWith(prefix));
 
     /// <summary>Counts the abandoned uploads' versions a sweep deleted, in the provider's own telemetry.</summary>
-    protected abstract void CountAbandonedUploads(int deleted);
+    protected abstract void CountAbandonedUploads(long deleted);
 
     /// <summary>
     /// How often an upload moves its staged version's <see cref="ResourceModel.StagedAt"/> forward, as a chunk arrives:
@@ -585,12 +585,12 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
         public DateTimeOffset StagedAt { get; set; }
     }
 
-    public override async Task<int> DeleteAbandonedUploadsAsync(DateTimeOffset staleBefore,
+    public override async Task<long> DeleteAbandonedUploadsAsync(DateTimeOffset staleBefore,
         CancellationToken cancellationToken = default)
     {
         using ResourceDbContext dbContext = dbContextFactory.CreateDbContext();
         IExecutionStrategy strategy = dbContext.Database.CreateExecutionStrategy();
-        int deleted = 0;
+        long deleted = 0;
         var failures = new List<Exception>();
         long afterId = 0;
         while (true)
@@ -1049,10 +1049,10 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
     /// <summary>How many names <see cref="IndexMetadataAsync"/> indexes in one transaction.</summary>
     private const int NamesPerIndexBatch = 100;
 
-    public override async Task<int> IndexMetadataAsync(string resourceContainerName, CancellationToken cancellationToken = default)
+    public override async Task<long> IndexMetadataAsync(string resourceContainerName, CancellationToken cancellationToken = default)
     {
         if (SearchableMetadataKeys.Count == 0 || HasNul(resourceContainerName)) return 0;
-        int indexed = 0;
+        long indexed = 0;
         string? afterName = null;
         while (true)
         {
@@ -1422,7 +1422,7 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
     public override bool SupportsExpiry => true;
 
     public override async Task<IReadOnlyList<ResourceInfo>> GetExpiredAsync(DateTimeOffset now, int maxVersions,
-        (DateTimeOffset ExpiresAt, string VersionId)? after = null, CancellationToken cancellationToken = default)
+        ResourceVersionKey? after = null, CancellationToken cancellationToken = default)
     {
         using ResourceDbContext dbContext = dbContextFactory.CreateDbContext();
 
@@ -1431,15 +1431,19 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
             && !r.LegalHold && (r.RetainUntil == null || r.RetainUntil <= now));
         if (after is { } last)
         {
-            (DateTimeOffset afterExpiry, string afterVersion) = last;
+            (DateTimeOffset afterExpiry, (string afterContainer, string afterName), string afterVersion) = last;
             // Written as a range on the index's first column, so it seeks to where the last batch ended.
             expired = expired.Where(r => r.ExpiresAt >= afterExpiry
-                && (r.ExpiresAt > afterExpiry || string.Compare(r.VersionId, afterVersion) > 0));
+                && (r.ExpiresAt > afterExpiry || string.Compare(r.VersionId, afterVersion) > 0
+                    || (r.VersionId == afterVersion && (string.Compare(r.ContainerName, afterContainer) > 0
+                        || (r.ContainerName == afterContainer && string.Compare(r.Name, afterName) > 0)))));
         }
 
         return await expired
             .OrderBy(r => r.ExpiresAt)
             .ThenBy(r => r.VersionId)
+            .ThenBy(r => r.ContainerName)
+            .ThenBy(r => r.Name)
             .Take(maxVersions)
             .Select(AsResourceInfo)
             .ToListAsync(cancellationToken).ConfigureAwait(false);
@@ -1461,24 +1465,23 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
         }, cancellationToken);
     }
 
-    public override async Task<IReadOnlyCollection<(ResourceAddress Resource, string VersionId)>> DeleteExpiredVersionsAsync(
-        IReadOnlyList<(ResourceAddress Resource, string VersionId)> versions, DateTimeOffset now,
-        CancellationToken cancellationToken = default)
+    public override async Task<IReadOnlyCollection<ResourceVersionAddress>> DeleteExpiredVersionsAsync(
+        IReadOnlyList<ResourceVersionAddress> versions, DateTimeOffset now, CancellationToken cancellationToken = default)
     {
-        var deleted = new List<(ResourceAddress, string)>();
+        var deleted = new List<ResourceVersionAddress>();
         // The expired versions left for a later batch, with their chunks.
         List<(ResourceAddress Resource, string VersionId, int Chunks)> later = [];
-        List<(ResourceAddress Resource, string VersionId)> batch = [.. versions.Distinct()];
+        List<ResourceVersionAddress> batch = [.. versions.Distinct()];
         while (batch.Count > 0)
         {
             // What an earlier attempt deleted, should a retry follow a commit whose acknowledgment was lost.
-            List<(ResourceAddress, string)> deletedInAnEarlierAttempt = [];
+            List<ResourceVersionAddress> deletedInAnEarlierAttempt = [];
 
             // A transaction under the batch's names' locks, so a change to an expiry can't come between the check and
             // the delete. It deletes up to ChunksPerDeleteBatch chunks' worth, as a container or name delete does, and
             // leaves the rest of the expired versions for the next.
-            List<(ResourceAddress Resource, string VersionId)> current = batch;
-            (List<(ResourceAddress, string)> gone, List<(ResourceAddress, string, int)> left) = await WriteNamesAsync(
+            List<ResourceVersionAddress> current = batch;
+            (List<ResourceVersionAddress> gone, List<(ResourceAddress, string, int)> left) = await WriteNamesAsync(
                 current.Select(v => v.Resource),
                 async (dbContext, ct) =>
                 {
@@ -1492,7 +1495,7 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
             // fit the budget, so it locks only the names it deletes.
             later = [.. left, .. later];
             int count = CountWithinDeleteBudget(later.Select(v => v.Chunks));
-            batch = [.. later.Take(count).Select(v => (v.Resource, v.VersionId))];
+            batch = [.. later.Take(count).Select(v => new ResourceVersionAddress(v.Resource, v.VersionId))];
             later = [.. later.Skip(count)];
         }
         return deleted;
@@ -1519,9 +1522,9 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
     /// Deletes those of <paramref name="versions"/> still expired, up to <see cref="ChunksPerDeleteBatch"/> chunks' worth,
     /// and returns the versions it deleted and those still expired, with their chunks, that it left for another batch.
     /// </summary>
-    private async Task<(List<(ResourceAddress, string)> Deleted, List<(ResourceAddress, string, int)> Left)>
-        DeleteExpiredBatchAsync(ResourceDbContext dbContext, List<(ResourceAddress Resource, string VersionId)> versions,
-            DateTimeOffset now, List<(ResourceAddress, string)> deletedInAnEarlierAttempt, CancellationToken ct)
+    private async Task<(List<ResourceVersionAddress> Deleted, List<(ResourceAddress, string, int)> Left)>
+        DeleteExpiredBatchAsync(ResourceDbContext dbContext, List<ResourceVersionAddress> versions,
+            DateTimeOffset now, List<ResourceVersionAddress> deletedInAnEarlierAttempt, CancellationToken ct)
     {
         string[] ids = [.. versions.Select(v => v.VersionId).Distinct()];
         string[] batchContainers = [.. versions.Select(v => v.Resource.ContainerName).Distinct()];
@@ -1535,7 +1538,7 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
                 .Select(r => new { Version = r, Chunks = r.Chunks!.Count })
                 .ToListAsync(ct).ConfigureAwait(false))
             .Where(f => wanted.Contains(
-                (new ResourceAddress(f.Version.ContainerName, f.Version.Name), f.Version.VersionId!)))
+                new ResourceVersionAddress(new ResourceAddress(f.Version.ContainerName, f.Version.Name), f.Version.VersionId!)))
             .ToList();
         var expired = found.Where(f => f.Version.ExpiresAt <= now && IsDeletable(f.Version, now)).ToList();
         var deleting = expired.Take(CountWithinDeleteBudget(expired.Select(e => e.Chunks))).ToList();
@@ -1569,10 +1572,10 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
             await IndexNameAsync(dbContext, containerName, name, ct).ConfigureAwait(false);
 
         // A version gone already counts if an earlier attempt deleted it.
-        static (ResourceAddress, string) Key(ResourceModel version) =>
-            (new ResourceAddress(version.ContainerName, version.Name), version.VersionId!);
-        var foundKeys = found.Select(f => Key(f.Version)).ToHashSet();
-        return ([.. deleting.Select(d => Key(d.Version)), .. deletedInAnEarlierAttempt.Where(v => !foundKeys.Contains(v))],
+        static ResourceVersionAddress AddressOf(ResourceModel version) =>
+            new(new ResourceAddress(version.ContainerName, version.Name), version.VersionId!);
+        var foundKeys = found.Select(f => AddressOf(f.Version)).ToHashSet();
+        return ([.. deleting.Select(d => AddressOf(d.Version)), .. deletedInAnEarlierAttempt.Where(v => !foundKeys.Contains(v))],
             [.. expired.Skip(deleting.Count).Select(e => (new ResourceAddress(e.Version.ContainerName, e.Version.Name),
                 e.Version.VersionId!, e.Chunks))]);
     }
@@ -1673,7 +1676,7 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
 
     /// <summary>A seek on the index of versions in bins, newest deletion first.</summary>
     public override async Task<DeletedVersionPage> GetDeletedPageAsync(string resourceContainerName, string? prefix,
-        (DateTimeOffset DeletedAt, string VersionId)? after, int pageSize, CancellationToken cancellationToken = default)
+        ResourceVersionKey? after, int pageSize, CancellationToken cancellationToken = default)
     {
         if (HasNul(resourceContainerName) || HasNul(prefix)) return new DeletedVersionPage([], null);
         using ResourceDbContext dbContext = dbContextFactory.CreateDbContext();
@@ -1681,23 +1684,27 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
         if (prefix is not null) bin = WithNamePrefix(bin, prefix, null);
         if (after is { } last)
         {
-            DateTimeOffset afterDeleted = last.DeletedAt;
+            DateTimeOffset afterDeleted = last.At;
             string? afterVersion = CutAtNul(last.VersionId);
+            string? afterName = CutAtNul(last.Resource.ResourceName);
             // Written as a range on the index's second column, so it seeks to where the last page ended.
             bin = bin.Where(r => r.DeletedAt <= afterDeleted
-                && (r.DeletedAt < afterDeleted || string.Compare(r.VersionId, afterVersion) > 0));
+                && (r.DeletedAt < afterDeleted || string.Compare(r.VersionId, afterVersion) > 0
+                    || (r.VersionId == afterVersion && string.Compare(r.Name, afterName) > 0)));
         }
 
         // One more than a page, to tell whether another follows.
         List<ResourceInfo> found = await bin
             .OrderByDescending(r => r.DeletedAt)
             .ThenBy(r => r.VersionId)
+            .ThenBy(r => r.Name)
             .Take(pageSize + 1)
             .Select(AsResourceInfo)
             .ToListAsync(cancellationToken).ConfigureAwait(false);
         if (found.Count <= pageSize) return new DeletedVersionPage(found, null);
         found.RemoveAt(pageSize);
-        return new DeletedVersionPage(found, (found[^1].DeletedAt!.Value, found[^1].VersionId));
+        return new DeletedVersionPage(found, new ResourceVersionKey(found[^1].DeletedAt!.Value,
+            new ResourceAddress(resourceContainerName, found[^1].Name), found[^1].VersionId));
     }
 
     public override async Task<IReadOnlyList<ResourceInfo>> GetDeletedVersionsAsync(ResourceAddress resource,
@@ -1715,9 +1722,9 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
     /// Takes the versions out of the bin under the name's lock. They keep their row IDs, which order a name's versions,
     /// so they come back among the older versions in the order they were stored.
     /// </summary>
-    public override Task<int> UndeleteAsync(ResourceAddress resource, string? versionId, CancellationToken cancellationToken = default)
+    public override Task<long> UndeleteAsync(ResourceAddress resource, string? versionId, CancellationToken cancellationToken = default)
     {
-        int undeletedInAnEarlierAttempt = 0;
+        long undeletedInAnEarlierAttempt = 0;
         return WriteNameAsync(resource.ContainerName, resource.ResourceName, async (dbContext, ct) =>
         {
             List<ResourceModel> returning = await Binned(dbContext, resource, versionId).ToListAsync(ct).ConfigureAwait(false);
@@ -1742,14 +1749,14 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
     /// Deletes the versions under the name's lock, in batches of up to <see cref="ChunksPerDeleteBatch"/> chunks that
     /// each commit on their own, as a delete of a name does.
     /// </summary>
-    public override async Task<int> PurgeDeletedAsync(ResourceAddress resource, string? versionId, DateTimeOffset? dueBy,
+    public override async Task<long> PurgeDeletedAsync(ResourceAddress resource, string? versionId, DateTimeOffset? dueBy,
         CancellationToken cancellationToken = default)
     {
-        int purged = 0;
+        long purged = 0;
         while (true)
         {
-            int purgedInAnEarlierAttempt = 0;
-            (int count, bool more) = await WriteNameAsync(resource.ContainerName, resource.ResourceName, async (dbContext, ct) =>
+            long purgedInAnEarlierAttempt = 0;
+            (long count, bool more) = await WriteNameAsync(resource.ContainerName, resource.ResourceName, async (dbContext, ct) =>
             {
                 IQueryable<ResourceModel> binned = Binned(dbContext, resource, versionId);
                 if (dueBy is { } due) binned = binned.Where(r => r.PurgeAt <= due);
@@ -1776,19 +1783,24 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
 
     /// <summary>A seek on the index of versions in bins by purge time, as <see cref="GetExpiredAsync"/> seeks expiries.</summary>
     public override async Task<IReadOnlyList<ResourceInfo>> GetPurgeableAsync(DateTimeOffset now, int maxVersions,
-        (DateTimeOffset PurgeAt, string VersionId)? after = null, CancellationToken cancellationToken = default)
+        ResourceVersionKey? after = null, CancellationToken cancellationToken = default)
     {
         using ResourceDbContext dbContext = dbContextFactory.CreateDbContext();
         IQueryable<ResourceModel> due = Bin(dbContext).Where(r => r.PurgeAt != null && r.PurgeAt <= now);
         if (after is { } last)
         {
-            (DateTimeOffset afterPurge, string afterVersion) = last;
-            due = due.Where(r => r.PurgeAt >= afterPurge && (r.PurgeAt > afterPurge || string.Compare(r.VersionId, afterVersion) > 0));
+            (DateTimeOffset afterPurge, (string afterContainer, string afterName), string afterVersion) = last;
+            due = due.Where(r => r.PurgeAt >= afterPurge
+                && (r.PurgeAt > afterPurge || string.Compare(r.VersionId, afterVersion) > 0
+                    || (r.VersionId == afterVersion && (string.Compare(r.ContainerName, afterContainer) > 0
+                        || (r.ContainerName == afterContainer && string.Compare(r.Name, afterName) > 0)))));
         }
 
         return await due
             .OrderBy(r => r.PurgeAt)
             .ThenBy(r => r.VersionId)
+            .ThenBy(r => r.ContainerName)
+            .ThenBy(r => r.Name)
             .Take(maxVersions)
             .Select(AsResourceInfo)
             .ToListAsync(cancellationToken).ConfigureAwait(false);

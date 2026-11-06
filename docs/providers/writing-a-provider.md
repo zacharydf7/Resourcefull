@@ -230,8 +230,9 @@ To support expiry, override `SupportsExpiry` to return `true`, store `NewResourc
 
 - **List expired versions from an index, a batch at a time.** Expiry calls `GetExpiredAsync` every interval on every
   instance, so it should cost little when nothing has expired. Order them by `ExpiresAt`, then ordinally by version
-  ID, and start after the `after` version you're given: a sweep pages through every expired version this way, and
-  fails if a provider lists the same batch twice.
+  ID, then by container and name, and start after the `after` key you're given: a sweep pages through every expired
+  version this way, and fails if a provider lists the same batch twice. `ResourceVersionKey` holds all four because
+  version IDs are unique only within a name: a copied container's versions keep their IDs and expiries.
 - **Decide expiry in the delete.** `DeleteExpiredVersionAsync` deletes a version only if it's still expired when the
   delete runs, under whatever serializes writes to the name: `SetExpiryAsync` may have extended it since it was listed.
 - **Change nothing but the expiry** in `SetExpiryAsync`.
@@ -336,14 +337,14 @@ default, and the clients then refuse every delete in a container whose policy ke
   search or `GetExpiredAsync`, isn't counted in `GetContainerUsageAsync` but for `DeletedSize` and
   `DeletedVersionCount`, and isn't moved by `MoveResourceAsync`. A name whose versions are all in the bin is free for
   a create-only write, but a version ID in the bin stays taken. `DeleteContainerAsync` deletes the bin too.
-- **List it.** `GetDeletedPageAsync` lists a container's bin newest deletion first, then by version ID, and returns
-  where the next page starts; with a prefix, it may stop early and return a short page rather than read the whole
+- **List it.** `GetDeletedPageAsync` lists a container's bin newest deletion first, then by version ID and name, and
+  returns where the next page starts; with a prefix, it may stop early and return a short page rather than read the whole
   bin. `GetDeletedVersionsAsync` lists one name's.
 - **Bring versions back.** `UndeleteAsync` puts them back among the name's older versions in the order they were first
   stored, so the current version stays current; if the name has none, the most recently stored becomes current.
 - **Purge it.** `PurgeDeletedAsync` deletes versions in the bin for good, and with a time, only those due by then,
   deciding that in the purge itself. `GetPurgeableAsync` lists what's due across every container for the sweep, so
-  answer it from an index, as `GetExpiredAsync` is.
+  answer it from an index, as `GetExpiredAsync` is, and order it the same way, with `PurgeAt` in place of `ExpiresAt`.
 
 ## Metadata search
 

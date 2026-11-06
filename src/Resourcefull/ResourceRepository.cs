@@ -160,8 +160,8 @@ public abstract class ResourceRepository
     /// <param name="resourceContainerName">The container.</param>
     /// <param name="cancellationToken">Cancels the indexing; what's indexed by then stays indexed.</param>
     /// <returns>How many versions were indexed.</returns>
-    public virtual Task<int> IndexMetadataAsync(string resourceContainerName, CancellationToken cancellationToken = default) =>
-        Task.FromResult(0);
+    public virtual Task<long> IndexMetadataAsync(string resourceContainerName, CancellationToken cancellationToken = default) =>
+        Task.FromResult(0L);
 
 
     /// <summary>
@@ -450,21 +450,22 @@ public abstract class ResourceRepository
 
     /// <summary>
     /// Lists the versions, in every container, whose <see cref="ResourceInfo.ExpiresAt"/> is at or before
-    /// <paramref name="now"/>, ordered by <see cref="ResourceInfo.ExpiresAt"/> and then by version ID (ordinally), each
-    /// with <see cref="ResourceInfo.IsLatest"/> set. Expiry calls it every interval, so a provider should answer it from
-    /// an index of the versions that expire. The default implementation throws <see cref="NotSupportedException"/>:
-    /// listing every container to find them would cost too much.
+    /// <paramref name="now"/>, in <see cref="ResourceVersionKey"/> order, with <see cref="ResourceInfo.ExpiresAt"/> as its
+    /// time, each with <see cref="ResourceInfo.IsLatest"/> set. Expiry calls it every interval, so a provider should answer
+    /// it from an index of the versions that expire. The default implementation throws
+    /// <see cref="NotSupportedException"/>: listing every container to find them would cost too much.
     /// </summary>
     /// <param name="now">The time to compare expiries with.</param>
     /// <param name="maxVersions">The most versions to return.</param>
     /// <param name="after">
-    /// The expiry and version ID of the previous batch's last version, to list the ones after it in that order;
-    /// <see langword="null"/> to start from the first. A sweep goes through every expired version once this way, whatever it skips or fails to delete.
+    /// The key of the previous batch's last version, to list the ones after it in that order; <see langword="null"/> to
+    /// start from the first. A sweep goes through every expired version once this way, whatever it skips or fails to
+    /// delete.
     /// </param>
     /// <param name="cancellationToken">Cancels the listing.</param>
     /// <exception cref="NotSupportedException">The provider doesn't support expiry.</exception>
     public virtual Task<IReadOnlyList<ResourceInfo>> GetExpiredAsync(DateTimeOffset now, int maxVersions,
-        (DateTimeOffset ExpiresAt, string VersionId)? after = null, CancellationToken cancellationToken = default)
+        ResourceVersionKey? after = null, CancellationToken cancellationToken = default)
         => throw new NotSupportedException($"{GetType().Name} doesn't support expiry.");
 
     /// <summary>
@@ -493,8 +494,8 @@ public abstract class ResourceRepository
     /// </param>
     /// <param name="cancellationToken">Cancels the deletes; what's already deleted stays deleted.</param>
     /// <returns>How many uploads' leftovers it deleted.</returns>
-    public virtual Task<int> DeleteAbandonedUploadsAsync(DateTimeOffset staleBefore, CancellationToken cancellationToken = default)
-        => Task.FromResult(0);
+    public virtual Task<long> DeleteAbandonedUploadsAsync(DateTimeOffset staleBefore, CancellationToken cancellationToken = default)
+        => Task.FromResult(0L);
 
     // Upload sessions: a staged version that content is appended to over several calls, which may come from different
     // processes, and that becomes current when it's completed. A staged version is invisible to every other member,
@@ -614,15 +615,14 @@ public abstract class ResourceRepository
     /// <param name="cancellationToken">Cancels the deletes; the versions already deleted stay deleted.</param>
     /// <returns>The versions it deleted.</returns>
     /// <exception cref="NotSupportedException">The provider doesn't support expiry.</exception>
-    public virtual async Task<IReadOnlyCollection<(ResourceAddress Resource, string VersionId)>> DeleteExpiredVersionsAsync(
-        IReadOnlyList<(ResourceAddress Resource, string VersionId)> versions, DateTimeOffset now,
-        CancellationToken cancellationToken = default)
+    public virtual async Task<IReadOnlyCollection<ResourceVersionAddress>> DeleteExpiredVersionsAsync(
+        IReadOnlyList<ResourceVersionAddress> versions, DateTimeOffset now, CancellationToken cancellationToken = default)
     {
-        var deleted = new List<(ResourceAddress, string)>();
-        foreach ((ResourceAddress resource, string versionId) in versions)
+        var deleted = new List<ResourceVersionAddress>();
+        foreach (ResourceVersionAddress version in versions)
         {
-            if (await DeleteExpiredVersionAsync(resource, versionId, now, cancellationToken).ConfigureAwait(false))
-                deleted.Add((resource, versionId));
+            if (await DeleteExpiredVersionAsync(version.Resource, version.VersionId, now, cancellationToken).ConfigureAwait(false))
+                deleted.Add(version);
         }
         return deleted;
     }
@@ -771,8 +771,8 @@ public abstract class ResourceRepository
         => throw new NotSupportedException($"{GetType().Name} doesn't keep deleted versions.");
 
     /// <summary>
-    /// Lists the versions in a container's bin, newest deletion first, and those deleted at the same time by version ID
-    /// (ordinally), each with <see cref="ResourceInfo.DeletedAt"/> and <see cref="ResourceInfo.PurgeAt"/> set and
+    /// Lists the versions in a container's bin, newest deletion first, then ordinally by version ID, then by name, each
+    /// with <see cref="ResourceInfo.DeletedAt"/> and <see cref="ResourceInfo.PurgeAt"/> set and
     /// <see cref="ResourceInfo.IsLatest"/> unset. When <paramref name="prefix"/> leaves versions out, it may look at more
     /// than <paramref name="pageSize"/> to fill the page, but a provider should bound how many, and return a short page
     /// rather than read the whole bin.
@@ -788,7 +788,7 @@ public abstract class ResourceRepository
     /// <returns>The versions found, and where the next page starts.</returns>
     /// <exception cref="NotSupportedException">The provider has no bin, as by default.</exception>
     public virtual Task<DeletedVersionPage> GetDeletedPageAsync(string resourceContainerName, string? prefix,
-        (DateTimeOffset DeletedAt, string VersionId)? after, int pageSize, CancellationToken cancellationToken = default)
+        ResourceVersionKey? after, int pageSize, CancellationToken cancellationToken = default)
         => throw new NotSupportedException($"{GetType().Name} doesn't keep deleted versions.");
 
     /// <summary>
@@ -813,7 +813,7 @@ public abstract class ResourceRepository
     /// <param name="cancellationToken">Cancels the undelete.</param>
     /// <returns>How many versions came back; 0 if the bin has none of them.</returns>
     /// <exception cref="NotSupportedException">The provider has no bin, as by default.</exception>
-    public virtual Task<int> UndeleteAsync(ResourceAddress resource, string? versionId, CancellationToken cancellationToken = default)
+    public virtual Task<long> UndeleteAsync(ResourceAddress resource, string? versionId, CancellationToken cancellationToken = default)
         => throw new NotSupportedException($"{GetType().Name} doesn't keep deleted versions.");
 
     /// <summary>
@@ -828,27 +828,27 @@ public abstract class ResourceRepository
     /// <param name="cancellationToken">Cancels the purge.</param>
     /// <returns>How many versions were purged.</returns>
     /// <exception cref="NotSupportedException">The provider has no bin, as by default.</exception>
-    public virtual Task<int> PurgeDeletedAsync(ResourceAddress resource, string? versionId, DateTimeOffset? dueBy,
+    public virtual Task<long> PurgeDeletedAsync(ResourceAddress resource, string? versionId, DateTimeOffset? dueBy,
         CancellationToken cancellationToken = default)
         => throw new NotSupportedException($"{GetType().Name} doesn't keep deleted versions.");
 
     /// <summary>
     /// Lists up to <paramref name="maxVersions"/> versions, in every container's bin, whose
-    /// <see cref="ResourceInfo.PurgeAt"/> is at or before <paramref name="now"/>, ordered by it and then by version ID
-    /// (ordinally). The sweep calls it every interval, so a provider should answer it from an index, as it answers
-    /// <see cref="GetExpiredAsync"/>.
+    /// <see cref="ResourceInfo.PurgeAt"/> is at or before <paramref name="now"/>, in <see cref="ResourceVersionKey"/> order,
+    /// with <see cref="ResourceInfo.PurgeAt"/> as its time. The sweep calls it every interval, so a provider should answer
+    /// it from an index, as it answers <see cref="GetExpiredAsync"/>.
     /// <para>Coming in 4.0.</para>
     /// </summary>
     /// <param name="now">The time to compare purge times with.</param>
     /// <param name="maxVersions">The most versions to return.</param>
     /// <param name="after">
-    /// The purge time and version ID of the previous batch's last version, to list the ones after it;
-    /// <see langword="null"/> to start from the first.
+    /// The key of the previous batch's last version, to list the ones after it; <see langword="null"/> to start from the
+    /// first.
     /// </param>
     /// <param name="cancellationToken">Cancels the listing.</param>
     /// <exception cref="NotSupportedException">The provider has no bin, as by default.</exception>
     public virtual Task<IReadOnlyList<ResourceInfo>> GetPurgeableAsync(DateTimeOffset now, int maxVersions,
-        (DateTimeOffset PurgeAt, string VersionId)? after = null, CancellationToken cancellationToken = default)
+        ResourceVersionKey? after = null, CancellationToken cancellationToken = default)
         => throw new NotSupportedException($"{GetType().Name} doesn't keep deleted versions.");
 
     /// <summary>

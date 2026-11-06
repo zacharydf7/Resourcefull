@@ -303,6 +303,16 @@
 
 ### Changed
 
+- **Sweeps have clearer names, and can't skip a version.** The service client's `PurgeDeletedAsync()` is now
+  `PurgeDueAsync()`, which pairs with `DeleteExpiredAsync`. It purges only versions whose `PurgeAt` has passed, while the
+  container client's `PurgeDeletedAsync(name, versionId)` purges right away. `GetExpiredAsync`, `GetPurgeableAsync`,
+  `GetDeletedPageAsync` and `DeletedVersionPage.Next` use a `ResourceVersionKey` (time, container, name and version ID)
+  in place of a time and version ID. Copying a container keeps version IDs and expiries, so two versions can share both,
+  and a sweep whose batch ended between them left the second until the next sweep. `DeleteExpiredVersionsAsync` takes
+  and returns `ResourceVersionAddress` records in place of tuples. The `Resourcefull_SweepKeys` migration rebuilds three
+  indexes with the extra columns. Counts of versions are `long` throughout: `DeleteExpiredAsync`, `PurgeDueAsync`, `PruneAsync`,
+  `IndexMetadataAsync`, `ContentHashBackfillResult.Hashed`, and the provider's `IndexMetadataAsync`,
+  `DeleteAbandonedUploadsAsync`, `UndeleteAsync` and `PurgeDeletedAsync`.
 - **One method per operation.** Each operation of `IResourceContainerClient` and `IResourceServiceClient` from before
   3.1 is now one method, with its optional parameters and then an optional `CancellationToken` last, rather than a pair
   of overloads where only one took a token. A token can now be named without passing `null` for the parameters

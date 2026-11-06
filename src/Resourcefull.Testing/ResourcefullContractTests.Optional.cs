@@ -132,7 +132,7 @@ public abstract partial class ResourcefullContractTests
         await Assert.ThrowsAsync<NotSupportedException>(() => container.ListDeletedAsync().ToListAsync().AsTask());
         await Assert.ThrowsAsync<NotSupportedException>(() => container.UndeleteAsync("a"));
         await Assert.ThrowsAsync<NotSupportedException>(() => container.PurgeDeletedAsync("a"));
-        Assert.Equal(0, await ServiceOf(provider).PurgeDeletedAsync());
+        Assert.Equal(0, await ServiceOf(provider).PurgeDueAsync());
         Assert.True(await container.ExistsAsync("a"));
     }
 

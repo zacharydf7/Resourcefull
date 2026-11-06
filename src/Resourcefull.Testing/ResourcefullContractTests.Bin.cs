@@ -28,6 +28,78 @@ public abstract partial class ResourcefullContractTests
         container.ListDeletedAsync(new ResourceListOptions { Prefix = prefix, PageSize = pageSize }).ToListAsync().AsTask();
 
     [Fact]
+    public async Task GetPurgeableAsync_ShouldListBoth_WhenABatchEndsBetweenVersionsAlikeInPurgeTimeAndId()
+    {
+        Requires(SupportsSoftDelete, "a bin");
+        Requires(SupportsImport, "importing");
+
+        // Arrange: a container and a copy of it, whose versions share an ID, both deleted at the same moment.
+        var clock = new ManualTimeProvider { Now = DateTimeOffset.UtcNow };
+        using ServiceProvider provider = BuildBinProvider(clock);
+        IResourceContainerClient source = await NewContainerAsync(provider);
+        await source.UploadAsync("a", BinaryData.FromString("x"));
+        string copyName = NewContainerName();
+        await ServiceOf(provider).CopyContainerToAsync(source.Name, ServiceOf(provider), copyName);
+        IResourceContainerClient copy = ServiceOf(provider).GetContainerClient(copyName);
+        await source.DeleteResourceIfExistsAsync("a");
+        await copy.DeleteResourceIfExistsAsync("a");
+        clock.Now += KeptFor;
+        ResourceRepository repository = provider.GetRequiredService<ResourceRepository>();
+
+        // Act: one version at a time, so a batch ends between each pair of versions.
+        var listed = new List<string>();
+        ResourceVersionKey? after = null;
+        for (int page = 0; page < 10_000; page++)
+        {
+            IReadOnlyList<ResourceInfo> batch = await repository.GetPurgeableAsync(clock.Now, 1, after);
+            if (batch.Count == 0) break;
+            ResourceInfo version = Assert.Single(batch);
+            listed.Add(version.ContainerName);
+            after = new ResourceVersionKey(version.PurgeAt!.Value, new ResourceAddress(version.ContainerName, version.Name), version.VersionId);
+        }
+
+        // Assert: other tests' bins, in the same store, may be listed too.
+        Assert.Equal(new[] { source.Name, copyName }.Order(NameOrder), listed.Where(name => name == source.Name || name == copyName));
+        await ServiceOf(provider).PurgeDueAsync();
+        Assert.Empty(await ListDeletedAsync(source));
+        Assert.Empty(await ListDeletedAsync(copy));
+    }
+
+    [Fact]
+    public async Task ListDeletedAsync_ShouldListBoth_WhenAPageEndsBetweenVersionsAlikeInDeletionTimeAndId()
+    {
+        Requires(SupportsSoftDelete, "a bin");
+        Requires(SupportsImport, "importing");
+
+        // Arrange: names in one container whose versions share an ID, as an import can bring, deleted at one moment. Their
+        // entries in a store may list in any order, so several make it unlikely they'd come out right by chance.
+        var clock = new ManualTimeProvider { Now = DateTimeOffset.UtcNow };
+        using ServiceProvider provider = BuildBinProvider(clock);
+        IResourceContainerClient container = await NewContainerAsync(provider);
+        string versionId = Guid.CreateVersion7().ToString();
+        string[] names = ["a", "b", "c", "d", "e", "f"];
+
+        async IAsyncEnumerable<ImportedVersion> Versions(DateTimeOffset at)
+        {
+            foreach (string name in names.Reverse())
+            {
+                yield return new ImportedVersion(new ResourceInfo { ContainerName = "", Name = name, VersionId = versionId, LastModified = at },
+                    _ => Task.FromResult<Stream?>(new MemoryStream([1])));
+            }
+            await Task.CompletedTask;
+        }
+        await ServiceOf(provider).ImportVersionsAsync(container.Name, Versions(clock.Now));
+        foreach (string name in names) await container.DeleteResourceIfExistsAsync(name);
+
+        // Act
+        List<ResourceInfo> listed = await ListDeletedAsync(container, pageSize: 1);
+
+        // Assert
+        Assert.Equal(names, listed.Select(v => v.Name));
+        Assert.All(listed, v => Assert.Equal(versionId, v.VersionId));
+    }
+
+    [Fact]
     public async Task DeleteResourceIfExistsAsync_ShouldMoveEveryVersionToTheBin_WhenTheContainerKeepsDeletedVersions()
     {
         Requires(SupportsSoftDelete, "a bin");
@@ -252,7 +324,7 @@ public abstract partial class ResourcefullContractTests
         clock.Now = clock.Now + KeptFor - TimeSpan.FromHours(1);
 
         // Act
-        int purged = await ServiceOf(provider).PurgeDeletedAsync();
+        long purged = await ServiceOf(provider).PurgeDueAsync();
 
         // Assert: other tests' bins, in the same store, may have been due too.
         Assert.True(purged >= 1);
@@ -278,7 +350,7 @@ public abstract partial class ResourcefullContractTests
         await container.UndeleteAsync("a");
 
         // Act
-        int purged = await repository.PurgeDeletedAsync(new ResourceAddress(container.Name, "a"), listed.VersionId, clock.Now);
+        long purged = await repository.PurgeDeletedAsync(new ResourceAddress(container.Name, "a"), listed.VersionId, clock.Now);
 
         // Assert
         Assert.Equal(0, purged);

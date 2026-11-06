@@ -165,8 +165,16 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : R
 
     public override bool SupportsExpiry => true;
 
+    /// <summary>Where a version falls against a key with the same time: by version ID, then container and name.</summary>
+    private static int CompareAtSameTime(ResourceInfo version, ResourceVersionKey key)
+    {
+        int order = string.CompareOrdinal(version.VersionId, key.VersionId);
+        if (order == 0) order = string.CompareOrdinal(version.ContainerName, key.Resource.ContainerName);
+        return order != 0 ? order : string.CompareOrdinal(version.Name, key.Resource.ResourceName);
+    }
+
     public override Task<IReadOnlyList<ResourceInfo>> GetExpiredAsync(DateTimeOffset now, int maxVersions,
-        (DateTimeOffset ExpiresAt, string VersionId)? after = null, CancellationToken cancellationToken = default) =>
+        ResourceVersionKey? after = null, CancellationToken cancellationToken = default) =>
         UnderLockAsync<IReadOnlyList<ResourceInfo>>(() =>
         [
             .. _containers.Values
@@ -174,10 +182,12 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : R
                 .SelectMany(versions => versions
                     .Where(v => v.ResourceInfo.ExpiresAt <= now && v.ResourceInfo.IsDeletableAt(now))
                     .Select(v => ToResourceInfo(v, isLatest: v == versions.MaxBy(r => r.Sequence))))
-                .Where(v => after is not { } last || v.ExpiresAt > last.ExpiresAt
-                    || (v.ExpiresAt == last.ExpiresAt && string.CompareOrdinal(v.VersionId, last.VersionId) > 0))
+                .Where(v => after is not { } last || v.ExpiresAt > last.At
+                    || (v.ExpiresAt == last.At && CompareAtSameTime(v, last) > 0))
                 .OrderBy(v => v.ExpiresAt)
                 .ThenBy(v => v.VersionId, StringComparer.Ordinal)
+                .ThenBy(v => v.ContainerName, StringComparer.Ordinal)
+                .ThenBy(v => v.Name, StringComparer.Ordinal)
                 .Take(maxVersions)
         ], cancellationToken);
 
@@ -315,18 +325,19 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : R
         }, cancellationToken);
 
     public override Task<DeletedVersionPage> GetDeletedPageAsync(string resourceContainerName, string? prefix,
-        (DateTimeOffset DeletedAt, string VersionId)? after, int pageSize, CancellationToken cancellationToken = default) =>
+        ResourceVersionKey? after, int pageSize, CancellationToken cancellationToken = default) =>
         UnderLockAsync(() =>
         {
             List<ResourceInfo> found = [.. InBinOrder((_containers.GetValueOrDefault(resourceContainerName)?.Deleted ?? [])
                     .Where(pair => prefix is null || pair.Key.StartsWith(prefix, StringComparison.Ordinal))
                     .SelectMany(pair => pair.Value))
-                .Where(v => after is not { } last || v.DeletedAt < last.DeletedAt
-                    || (v.DeletedAt == last.DeletedAt && string.CompareOrdinal(v.VersionId, last.VersionId) > 0))
+                .Where(v => after is not { } last || v.DeletedAt < last.At
+                    || (v.DeletedAt == last.At && CompareAtSameTime(v, last) > 0))
                 .Take(pageSize + 1)];
             if (found.Count <= pageSize) return new DeletedVersionPage(found, null);
             found.RemoveAt(pageSize);
-            return new DeletedVersionPage(found, (found[^1].DeletedAt!.Value, found[^1].VersionId));
+            return new DeletedVersionPage(found, new ResourceVersionKey(found[^1].DeletedAt!.Value,
+                new ResourceAddress(found[^1].ContainerName, found[^1].Name), found[^1].VersionId));
         }, cancellationToken);
 
     public override Task<IReadOnlyList<ResourceInfo>> GetDeletedVersionsAsync(ResourceAddress resource,
@@ -335,14 +346,15 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : R
             [.. InBinOrder(_containers.GetValueOrDefault(resource.ContainerName)?.Deleted.GetValueOrDefault(resource.ResourceName) ?? [])],
             cancellationToken);
 
-    /// <summary>Versions in the bin as it lists them: newest deletion first, then by version ID.</summary>
+    /// <summary>Versions in the bin as it lists them: newest deletion first, then by version ID and name.</summary>
     private static IEnumerable<ResourceInfo> InBinOrder(IEnumerable<InMemoryResource> versions) => versions
         .Select(v => ToResourceInfo(v, isLatest: false))
         .OrderByDescending(v => v.DeletedAt)
-        .ThenBy(v => v.VersionId, StringComparer.Ordinal);
+        .ThenBy(v => v.VersionId, StringComparer.Ordinal)
+        .ThenBy(v => v.Name, StringComparer.Ordinal);
 
-    public override Task<int> UndeleteAsync(ResourceAddress resource, string? versionId, CancellationToken cancellationToken = default) =>
-        UnderLockAsync(() =>
+    public override Task<long> UndeleteAsync(ResourceAddress resource, string? versionId, CancellationToken cancellationToken = default) =>
+        UnderLockAsync<long>(() =>
         {
             if (_containers.GetValueOrDefault(resource.ContainerName) is not { } container
                 || !container.Deleted.TryGetValue(resource.ResourceName, out List<InMemoryResource>? bin))
@@ -368,9 +380,9 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : R
             return returning.Count;
         }, cancellationToken);
 
-    public override Task<int> PurgeDeletedAsync(ResourceAddress resource, string? versionId, DateTimeOffset? dueBy,
+    public override Task<long> PurgeDeletedAsync(ResourceAddress resource, string? versionId, DateTimeOffset? dueBy,
         CancellationToken cancellationToken = default) =>
-        UnderLockAsync(() =>
+        UnderLockAsync<long>(() =>
         {
             if (_containers.GetValueOrDefault(resource.ContainerName) is not { } container
                 || !container.Deleted.TryGetValue(resource.ResourceName, out List<InMemoryResource>? bin))
@@ -382,17 +394,19 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : R
         }, cancellationToken);
 
     public override Task<IReadOnlyList<ResourceInfo>> GetPurgeableAsync(DateTimeOffset now, int maxVersions,
-        (DateTimeOffset PurgeAt, string VersionId)? after = null, CancellationToken cancellationToken = default) =>
+        ResourceVersionKey? after = null, CancellationToken cancellationToken = default) =>
         UnderLockAsync<IReadOnlyList<ResourceInfo>>(() =>
         [
             .. _containers.Values
                 .SelectMany(container => container.Deleted.Values.SelectMany(bin => bin))
                 .Select(v => ToResourceInfo(v, isLatest: false))
                 .Where(v => v.PurgeAt <= now)
-                .Where(v => after is not { } last || v.PurgeAt > last.PurgeAt
-                    || (v.PurgeAt == last.PurgeAt && string.CompareOrdinal(v.VersionId, last.VersionId) > 0))
+                .Where(v => after is not { } last || v.PurgeAt > last.At
+                    || (v.PurgeAt == last.At && CompareAtSameTime(v, last) > 0))
                 .OrderBy(v => v.PurgeAt)
                 .ThenBy(v => v.VersionId, StringComparer.Ordinal)
+                .ThenBy(v => v.ContainerName, StringComparer.Ordinal)
+                .ThenBy(v => v.Name, StringComparer.Ordinal)
                 .Take(maxVersions)
         ], cancellationToken);
 
@@ -507,10 +521,10 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : R
         UnderLockAsync(() => _containers.GetValueOrDefault(resource.ContainerName) is { } container
             && container.Staged.Remove((resource.ResourceName, versionId)), cancellationToken);
 
-    public override Task<int> DeleteAbandonedUploadsAsync(DateTimeOffset staleBefore, CancellationToken cancellationToken = default) =>
+    public override Task<long> DeleteAbandonedUploadsAsync(DateTimeOffset staleBefore, CancellationToken cancellationToken = default) =>
         UnderLockAsync(() =>
         {
-            int deleted = 0;
+            long deleted = 0;
             foreach (InMemoryResourceContainer container in _containers.Values)
             {
                 foreach (var key in container.Staged.Where(s => s.Value.StagedAt < staleBefore).Select(s => s.Key).ToList())

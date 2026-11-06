@@ -602,10 +602,10 @@ public class S3IntegrationTests(S3Fixture fixture)
         });
 
         // Act
-        int whileYoung = await repository.DeleteAbandonedUploadsAsync(DateTimeOffset.UtcNow.AddDays(-1));
+        long whileYoung = await repository.DeleteAbandonedUploadsAsync(DateTimeOffset.UtcNow.AddDays(-1));
         int keysWhileYoung = await CountKeysAsync(prefix + "u/");
         clock.Now = DateTimeOffset.UtcNow.AddHours(2);
-        int onceOld = await repository.DeleteAbandonedUploadsAsync(DateTimeOffset.UtcNow.AddDays(-1));
+        long onceOld = await repository.DeleteAbandonedUploadsAsync(DateTimeOffset.UtcNow.AddDays(-1));
 
         // Assert: the deleted container's session went at once and the orphaned segment once it was an hour old; the
         // live session stays, its record and its segment.
@@ -1068,14 +1068,14 @@ public class S3IntegrationTests(S3Fixture fixture)
 
         // Act: sweeps two days on, half a day after that, and a day after the first.
         clock.Now = DateTimeOffset.UtcNow.AddDays(2);
-        int first = await repository.DeleteAbandonedUploadsAsync(DateTimeOffset.UtcNow.AddDays(-1));
+        long first = await repository.DeleteAbandonedUploadsAsync(DateTimeOffset.UtcNow.AddDays(-1));
         int unnamedAfterFirst = await CountKeysAsync(unnamed);
         int leftAfterFirst = await CountKeysAsync(left);
         clock.Now = DateTimeOffset.UtcNow.AddDays(2.5);
-        int tooSoon = await repository.DeleteAbandonedUploadsAsync(DateTimeOffset.UtcNow.AddDays(-1));
+        long tooSoon = await repository.DeleteAbandonedUploadsAsync(DateTimeOffset.UtcNow.AddDays(-1));
         int unnamedAfterTooSoon = await CountKeysAsync(unnamed);
         clock.Now = DateTimeOffset.UtcNow.AddDays(3).AddMinutes(1);
-        int second = await repository.DeleteAbandonedUploadsAsync(DateTimeOffset.UtcNow.AddDays(-1));
+        long second = await repository.DeleteAbandonedUploadsAsync(DateTimeOffset.UtcNow.AddDays(-1));
 
         // Assert: the first scan only noted the unnamed content, a sweep within the day didn't scan, and the next scan
         // deleted it and counted it; the deleted container's object went at the first; the named version is untouched.
@@ -1147,7 +1147,7 @@ public class S3IntegrationTests(S3Fixture fixture)
         clock.Now = DateTimeOffset.UtcNow.AddHours(12);
         await repository.DeleteAbandonedUploadsAsync(DateTimeOffset.UtcNow.AddDays(-1));
         clock.Now = DateTimeOffset.UtcNow.AddHours(36).AddMinutes(1);
-        int second = await repository.DeleteAbandonedUploadsAsync(DateTimeOffset.UtcNow.AddDays(-1));
+        long second = await repository.DeleteAbandonedUploadsAsync(DateTimeOffset.UtcNow.AddDays(-1));
 
         // Assert: the first scan passed over the young content, so the second, the first to find it old, only noted it.
         Assert.Equal(0, second);

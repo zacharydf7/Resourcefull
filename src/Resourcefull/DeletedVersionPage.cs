@@ -10,7 +10,7 @@ namespace Resourcefull.Providers;
 /// set. With a prefix, there may be fewer than were asked for even when more follow.
 /// </param>
 /// <param name="Next">
-/// The deletion time and version ID to continue after, past every version this page looked at, including those the
-/// prefix left out; <see langword="null"/> when the bin has nothing more.
+/// Where the next page continues, past every version this page looked at, including those the prefix left out;
+/// <see langword="null"/> when the bin has nothing more. Its <see cref="ResourceVersionKey.At"/> is the deletion time.
 /// </param>
-public sealed record DeletedVersionPage(IReadOnlyList<ResourceInfo> Versions, (DateTimeOffset DeletedAt, string VersionId)? Next);
+public sealed record DeletedVersionPage(IReadOnlyList<ResourceInfo> Versions, ResourceVersionKey? Next);

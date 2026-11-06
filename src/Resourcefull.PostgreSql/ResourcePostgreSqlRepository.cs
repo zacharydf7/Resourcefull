@@ -52,7 +52,7 @@ internal class ResourcePostgreSqlRepository(IDbContextFactory<ResourceDbContext>
     protected override bool IsUniqueViolation(Exception exception) =>
         (exception as PostgresException ?? exception.InnerException as PostgresException) is { SqlState: UniqueViolation };
 
-    protected override void CountAbandonedUploads(int deleted) => PostgreSqlTelemetry.CountAbandonedUploads(deleted, StoreName);
+    protected override void CountAbandonedUploads(long deleted) => PostgreSqlTelemetry.CountAbandonedUploads(deleted, StoreName);
 
     protected override Task<List<int>> LockStagedVersionAsync(ResourceDbContext attempt, long resourceId, DateTimeOffset? staleBefore,
         CancellationToken cancellationToken)

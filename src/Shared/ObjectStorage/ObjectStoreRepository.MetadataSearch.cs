@@ -68,7 +68,7 @@ internal sealed partial class ObjectStoreRepository
         return found.OfType<ResourceInfo>();
     }
 
-    public override async Task<int> IndexMetadataAsync(string resourceContainerName, CancellationToken cancellationToken = default)
+    public override async Task<long> IndexMetadataAsync(string resourceContainerName, CancellationToken cancellationToken = default)
     {
         if (SearchableMetadataKeys.Count == 0
             || await GetContainerAsync(resourceContainerName, cancellationToken).ConfigureAwait(false) is not { } container)
@@ -77,7 +77,7 @@ internal sealed partial class ObjectStoreRepository
         }
 
         string heads = _keys.Heads(container.Id);
-        int indexed = 0;
+        long indexed = 0;
         await foreach (string[] keys in ListKeysAsync(heads, null, item => item.Size > EmptyHeadSize, () => int.MaxValue,
             cancellationToken).ConfigureAwait(false))
         {

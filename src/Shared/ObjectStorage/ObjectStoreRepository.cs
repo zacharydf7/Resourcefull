@@ -458,23 +458,70 @@ internal sealed partial class ObjectStoreRepository(IObjectStore store, string k
 
     public override bool SupportsExpiry => true;
 
-    public override async Task<IReadOnlyList<ResourceInfo>> GetExpiredAsync(DateTimeOffset now, int maxVersions,
-        (DateTimeOffset ExpiresAt, string VersionId)? after = null, CancellationToken cancellationToken = default)
+    public override Task<IReadOnlyList<ResourceInfo>> GetExpiredAsync(DateTimeOffset now, int maxVersions,
+        ResourceVersionKey? after = null, CancellationToken cancellationToken = default) =>
+        ListDueAsync(_keys.Expiries, after is { } last ? _keys.ExpiriesFrom(last.At, last.VersionId) : null, after, now, maxVersions,
+            v => v.ExpiresAt, async (batch, ct) => (await ReadExpiredAsync(batch, ct).ConfigureAwait(false)).Where(v => v.IsDeletableAt(now)),
+            cancellationToken);
+
+    /// <summary>
+    /// Lists the versions whose entries under <paramref name="entries"/>, expiry or purge, are due by
+    /// <paramref name="now"/>, in <see cref="ResourceVersionKey"/> order. Entries with the same time and version ID, as a
+    /// copied container's are, sort by container and name only once they're read. So a listing reads whole groups before
+    /// it cuts the result to <paramref name="maxVersions"/>, and the next listing starts again at the start of the last
+    /// version's group.
+    /// </summary>
+    private async Task<IReadOnlyList<ResourceInfo>> ListDueAsync(string entries, string? startAfter, ResourceVersionKey? after,
+        DateTimeOffset now, int maxVersions, Func<ResourceInfo, DateTimeOffset?> timeOf,
+        Func<List<ObjectListing>, CancellationToken, Task<IEnumerable<ResourceInfo>>> read, CancellationToken cancellationToken)
     {
-        string? startAfter = after is { } last ? _keys.ExpiriesAfter(last.ExpiresAt, last.VersionId) : null;
-        var expired = new List<ResourceInfo>();
+        var due = new List<ResourceInfo>();
         var batch = new List<ObjectListing>();
-        await foreach (ObjectListing entry in store.ListAsync(_keys.Expiries, startAfter, cancellationToken).ConfigureAwait(false))
+        (DateTimeOffset, string)? group = null;
+        await foreach (ObjectListing entry in store.ListAsync(entries, startAfter, cancellationToken).ConfigureAwait(false))
         {
-            if (ObjectKeys.ParseExpiry(entry.Key[_keys.Expiries.Length..]).ExpiresAt > now) break;
+            (DateTimeOffset at, string versionId, _, _, _) = ObjectKeys.ParseExpiry(entry.Key[entries.Length..]);
+            if (at > now || (due.Count >= maxVersions && group != (at, versionId))) break;
+            group = (at, versionId);
             batch.Add(entry);
-            if (batch.Count < Math.Min(maxVersions - expired.Count, ParallelReads)) continue;
-            expired.AddRange((await ReadExpiredAsync(batch, cancellationToken).ConfigureAwait(false)).Where(v => v.IsDeletableAt(now)));
+            if (batch.Count < Math.Min(maxVersions - due.Count, ParallelReads)) continue;
+            due.AddRange((await read(batch, cancellationToken).ConfigureAwait(false)).Where(v => IsPast(v, timeOf(v), after)));
             batch.Clear();
-            if (expired.Count >= maxVersions) return expired;
         }
-        expired.AddRange((await ReadExpiredAsync(batch, cancellationToken).ConfigureAwait(false)).Where(v => v.IsDeletableAt(now)));
-        return expired;
+        due.AddRange((await read(batch, cancellationToken).ConfigureAwait(false)).Where(v => IsPast(v, timeOf(v), after)));
+        SortGroupsByName(due, timeOf);
+        return due.Count > maxVersions ? due[..maxVersions] : due;
+    }
+
+    /// <summary>
+    /// Whether a version listed from the start of <paramref name="after"/>'s group of entries comes after it: only those
+    /// in that group can come before.
+    /// </summary>
+    private static bool IsPast(ResourceInfo version, DateTimeOffset? time, ResourceVersionKey? after) =>
+        after is not { } last || time != last.At || version.VersionId != last.VersionId
+            || CompareByName(version, last.Resource.ContainerName, last.Resource.ResourceName) > 0;
+
+    private static int CompareByName(ResourceInfo version, string containerName, string name)
+    {
+        int order = string.CompareOrdinal(version.ContainerName, containerName);
+        return order != 0 ? order : string.CompareOrdinal(version.Name, name);
+    }
+
+    /// <summary>
+    /// Finishes putting versions in <see cref="ResourceVersionKey"/> order: their entries' keys have them by time and
+    /// version ID, so only those that share both are left to sort.
+    /// </summary>
+    private static void SortGroupsByName(List<ResourceInfo> versions, Func<ResourceInfo, DateTimeOffset?> timeOf)
+    {
+        for (int start = 0, end; start < versions.Count; start = end)
+        {
+            end = start + 1;
+            while (end < versions.Count && timeOf(versions[end]) == timeOf(versions[start])
+                && versions[end].VersionId == versions[start].VersionId)
+                end++;
+            if (end - start > 1)
+                versions.Sort(start, end - start, Comparer<ResourceInfo>.Create((x, y) => CompareByName(x, y.ContainerName, y.Name)));
+        }
     }
 
     /// <summary>The versions a batch of expiry entries name, in the entries' order, leaving out stale entries.</summary>

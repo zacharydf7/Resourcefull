@@ -71,15 +71,15 @@ public abstract partial class ResourcefullContractTests
         ResourceRepository repository = provider.GetRequiredService<ResourceRepository>();
 
         // Act
-        IReadOnlyCollection<(ResourceAddress, string)> deleted = await repository.DeleteExpiredVersionsAsync(
+        IReadOnlyCollection<ResourceVersionAddress> deleted = await repository.DeleteExpiredVersionsAsync(
         [
-            (new ResourceAddress(containerName, "a"), current.VersionId),
-            (new ResourceAddress(containerName, "b"), extended.VersionId),
-            (new ResourceAddress(containerName, "c"), "missing")
+            new(new ResourceAddress(containerName, "a"), current.VersionId),
+            new(new ResourceAddress(containerName, "b"), extended.VersionId),
+            new(new ResourceAddress(containerName, "c"), "missing")
         ], DateTimeOffset.UtcNow);
 
         // Assert
-        Assert.Equal([(new ResourceAddress(containerName, "a"), current.VersionId)], deleted);
+        Assert.Equal([new ResourceVersionAddress(new ResourceAddress(containerName, "a"), current.VersionId)], deleted);
         ResourceInfo nowCurrent = (await container.GetResourceInfoAsync("a"))!;
         Assert.Equal(older.VersionId, nowCurrent.VersionId);
         Assert.True(nowCurrent.IsLatest);
@@ -101,8 +101,8 @@ public abstract partial class ResourcefullContractTests
         ResourceRepository repository = provider.GetRequiredService<ResourceRepository>();
 
         // Act
-        IReadOnlyCollection<(ResourceAddress, string VersionId)> deleted = await repository.DeleteExpiredVersionsAsync(
-            [(location, second.VersionId), (location, third.VersionId)], DateTimeOffset.UtcNow);
+        IReadOnlyCollection<ResourceVersionAddress> deleted = await repository.DeleteExpiredVersionsAsync(
+            [new(location, second.VersionId), new(location, third.VersionId)], DateTimeOffset.UtcNow);
 
         // Assert
         Assert.Equal(new[] { second.VersionId, third.VersionId }.Order(), deleted.Select(d => d.VersionId).Order());
@@ -489,20 +489,87 @@ public abstract partial class ResourcefullContractTests
 
         // Act
         var listed = new List<ResourceInfo>();
-        (DateTimeOffset ExpiresAt, string VersionId)? after = null;
+        ResourceVersionKey? after = null;
         for (int page = 0; page < 10_000; page++)
         {
             IReadOnlyList<ResourceInfo> batch = await repository.GetExpiredAsync(now, 1, after);
             if (batch.Count == 0) break;
             ResourceInfo version = Assert.Single(batch);
             listed.Add(version);
-            after = (version.ExpiresAt!.Value, version.VersionId);
+            after = new ResourceVersionKey(version.ExpiresAt!.Value, new ResourceAddress(version.ContainerName, version.Name), version.VersionId);
         }
 
         // Assert
         Assert.Equal(stored.OrderBy(v => v.ExpiresAt).ThenBy(v => v.VersionId, StringComparer.Ordinal).Select(v => v.VersionId),
             listed.Where(v => v.ContainerName == container.Name).Select(v => v.VersionId));
         await ServiceOf(provider).DeleteExpiredAsync();
+    }
+
+    /// <summary>
+    /// A container with one version that expires at <paramref name="expiresAt"/>, and a copy of it. A copy keeps version
+    /// IDs and expiries, so the two versions are alike in both, and only their containers tell them apart.
+    /// </summary>
+    private async Task<(IResourceContainerClient First, IResourceContainerClient Second)> TwoAlikeAsync(ServiceProvider provider,
+        DateTimeOffset expiresAt)
+    {
+        IResourceContainerClient source = await NewContainerAsync(provider);
+        await source.UploadAsync("a", BinaryData.FromString("x"), Expiring(expiresAt));
+        string copyName = NewContainerName();
+        await ServiceOf(provider).CopyContainerToAsync(source.Name, ServiceOf(provider), copyName);
+        IResourceContainerClient copy = ServiceOf(provider).GetContainerClient(copyName);
+        return NameOrder.Compare(source.Name, copyName) < 0 ? (source, copy) : (copy, source);
+    }
+
+    [Fact]
+    public async Task GetExpiredAsync_ShouldListBothInContainerOrder_WhenABatchEndsBetweenVersionsAlikeInExpiryAndId()
+    {
+        Requires(SupportsExpiry, "expiry");
+        Requires(SupportsImport, "importing");
+
+        // Arrange
+        using ServiceProvider provider = BuildServiceProvider();
+        (IResourceContainerClient first, IResourceContainerClient second) = await TwoAlikeAsync(provider, Past);
+        ResourceRepository repository = provider.GetRequiredService<ResourceRepository>();
+
+        // Act: one version at a time, so a batch ends between each pair of versions.
+        var listed = new List<string>();
+        ResourceVersionKey? after = null;
+        for (int page = 0; page < 10_000; page++)
+        {
+            IReadOnlyList<ResourceInfo> batch = await repository.GetExpiredAsync(DateTimeOffset.UtcNow, 1, after);
+            if (batch.Count == 0) break;
+            ResourceInfo version = Assert.Single(batch);
+            listed.Add(version.ContainerName);
+            after = new ResourceVersionKey(version.ExpiresAt!.Value, new ResourceAddress(version.ContainerName, version.Name), version.VersionId);
+        }
+
+        // Assert: other tests' versions, in the same store, may be listed too.
+        Assert.Equal([first.Name, second.Name], listed.Where(name => name == first.Name || name == second.Name));
+        await ServiceOf(provider).DeleteExpiredAsync();
+    }
+
+    [Fact]
+    public async Task DeleteExpiredAsync_ShouldDeleteBoth_WhenVersionsAlikeInExpiryAndIdFallEitherSideOfABatchEnd()
+    {
+        Requires(SupportsExpiry, "expiry");
+        Requires(SupportsImport, "importing");
+
+        // Arrange: expiries before any other test's, so a sweep's first batch of 100 holds these 99 and then ends between
+        // the two that share an expiry and version ID.
+        using ServiceProvider provider = BuildServiceProvider();
+        var earliest = new DateTimeOffset(1800, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        IResourceContainerClient others = await NewContainerAsync(provider);
+        for (int i = 0; i < 99; i++)
+            await others.UploadAsync($"n{i:D2}", BinaryData.FromString("x"), Expiring(earliest));
+        (IResourceContainerClient first, IResourceContainerClient second) = await TwoAlikeAsync(provider, earliest.AddDays(1));
+
+        // Act
+        await ServiceOf(provider).DeleteExpiredAsync();
+
+        // Assert
+        Assert.False(await first.ExistsAsync("a"));
+        Assert.False(await second.ExistsAsync("a"));
+        Assert.Empty(await others.ListResourcesAsync().ToListAsync());
     }
 
     [Fact]

@@ -44,7 +44,7 @@ internal class ResourceSqliteRepository(IDbContextFactory<ResourceDbContext> dbC
             SqliteExtendedErrorCode: UniqueViolation or PrimaryKeyViolation
         };
 
-    protected override void CountAbandonedUploads(int deleted) => SqliteTelemetry.CountAbandonedUploads(deleted, StoreName);
+    protected override void CountAbandonedUploads(long deleted) => SqliteTelemetry.CountAbandonedUploads(deleted, StoreName);
 
     /// <summary>
     /// Adds an exact match with <c>instr</c>: EF Core matches a prefix with <c>LIKE</c>, which in SQLite ignores the case

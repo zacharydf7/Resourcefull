@@ -85,7 +85,7 @@ public class DeleteLockingIntegrationTests(SqlServerFixture fixture)
             "version" => await container.DeleteResourceIfExistsAsync("big", current.VersionId),
             "name" => await container.DeleteResourceIfExistsAsync("big"),
             "expire" => (await provider.GetRequiredService<ResourceRepository>().DeleteExpiredVersionsAsync(
-                [(new ResourceAddress(containerName, "big"), current.VersionId)], DateTimeOffset.UtcNow)).Count == 1,
+                [new(new ResourceAddress(containerName, "big"), current.VersionId)], DateTimeOffset.UtcNow)).Count == 1,
             _ => await service.DeleteContainerIfExistsAsync(containerName)
         };
 
@@ -107,7 +107,7 @@ public class DeleteLockingIntegrationTests(SqlServerFixture fixture)
                 .Options)) { ChunksPerDeleteBatch = 4 };
         string containerName = $"c-{Guid.NewGuid():N}";
         await repository.AddContainerAsync(containerName, new Dictionary<string, string>());
-        List<(ResourceAddress, string)> versions = [];
+        List<ResourceVersionAddress> versions = [];
         for (int i = 0; i < 9; i++)
         {
             var version = new NewResourceVersion(new ResourceAddress(containerName, $"n{i}"), $"v{i}")
@@ -115,12 +115,12 @@ public class DeleteLockingIntegrationTests(SqlServerFixture fixture)
                 ExpiresAt = DateTimeOffset.UnixEpoch
             };
             await repository.AddResourceAsync(version, new MemoryStream("x"u8.ToArray()));
-            versions.Add((version.Resource, version.VersionId));
+            versions.Add(new ResourceVersionAddress(version.Resource, version.VersionId));
         }
         locks.Counts.Clear();
 
         // Act
-        IReadOnlyCollection<(ResourceAddress, string)> deleted =
+        IReadOnlyCollection<ResourceVersionAddress> deleted =
             await repository.DeleteExpiredVersionsAsync(versions, DateTimeOffset.UtcNow);
 
         // Assert: the first transaction, before it knows their chunks, locks every name.

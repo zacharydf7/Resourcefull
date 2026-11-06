@@ -23,7 +23,7 @@ public class ExpiryTests
     }
 
     /// <summary>The expiry service, over a service client that answers each sweep with <paramref name="sweep"/>.</summary>
-    private static (ExpiryService Service, Mock<IResourceServiceClient> Client) NewService(Func<int, Task<int>> sweep, TimeSpan interval)
+    private static (ExpiryService Service, Mock<IResourceServiceClient> Client) NewService(Func<int, Task<long>> sweep, TimeSpan interval)
     {
         var client = new Mock<IResourceServiceClient>();
         int calls = 0;
@@ -44,7 +44,7 @@ public class ExpiryTests
         archive.Setup(c => c.DeleteExpiredAsync(It.IsAny<CancellationToken>())).Returns(() =>
         {
             swept.TrySetResult();
-            return Task.FromResult(0);
+            return Task.FromResult(0L);
         });
         ServiceProvider services = new ServiceCollection().AddScoped(_ => unnamed.Object)
             .AddKeyedScoped("archive", (_, _) => archive.Object).AddKeyedScoped("archive", (_, _) => RepositoryWithExpiry())
@@ -71,7 +71,7 @@ public class ExpiryTests
         {
             if (call == 1) throw new InvalidOperationException("Storage is down.");
             secondSweep.TrySetResult();
-            return Task.FromResult(0);
+            return Task.FromResult(0L);
         }, TimeSpan.FromMilliseconds(20));
 
         // Act
@@ -91,14 +91,14 @@ public class ExpiryTests
     {
         // Arrange: the first purge fails, and the sweep goes on to a second.
         (ExpiryService service, Mock<IResourceServiceClient> client) = NewService(
-            _ => expiryFails ? throw new InvalidOperationException("Storage is down.") : Task.FromResult(0), TimeSpan.FromMilliseconds(20));
+            _ => expiryFails ? throw new InvalidOperationException("Storage is down.") : Task.FromResult(0L), TimeSpan.FromMilliseconds(20));
         var secondPurge = new TaskCompletionSource();
         int purges = 0;
-        client.Setup(c => c.PurgeDeletedAsync(It.IsAny<CancellationToken>())).Returns(() =>
+        client.Setup(c => c.PurgeDueAsync(It.IsAny<CancellationToken>())).Returns(() =>
         {
             if (++purges == 1) throw new InvalidOperationException("Storage is down.");
             secondPurge.TrySetResult();
-            return Task.FromResult(0);
+            return Task.FromResult(0L);
         });
 
         // Act
@@ -117,14 +117,14 @@ public class ExpiryTests
         // Arrange: the first two sweeps fail, each followed by a purge. Later ones succeed, so the test can't stop the
         // service during a failing sweep.
         (ExpiryService service, Mock<IResourceServiceClient> client) = NewService(
-            call => call <= 2 ? throw new NotSupportedException("No expiry after all.") : Task.FromResult(0),
+            call => call <= 2 ? throw new NotSupportedException("No expiry after all.") : Task.FromResult(0L),
             TimeSpan.FromMilliseconds(20));
         var secondPurge = new TaskCompletionSource();
         int purges = 0;
-        client.Setup(c => c.PurgeDeletedAsync(It.IsAny<CancellationToken>())).Returns(() =>
+        client.Setup(c => c.PurgeDueAsync(It.IsAny<CancellationToken>())).Returns(() =>
         {
             if (++purges == 2) secondPurge.TrySetResult();
-            return Task.FromResult(0);
+            return Task.FromResult(0L);
         });
 
         // Act
@@ -155,7 +155,7 @@ public class ExpiryTests
         Assert.Contains(nameof(ResourcefullOptionsBuilder.UseExpiry), thrown.Message);
         Assert.Contains(repository.Object.GetType().Name, thrown.Message);
         repository.Verify(r => r.GetExpiredAsync(It.IsAny<DateTimeOffset>(), It.IsAny<int>(),
-            It.IsAny<(DateTimeOffset, string)?>(), It.IsAny<CancellationToken>()), Times.Never);
+            It.IsAny<ResourceVersionKey?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     /// <summary>A client over a provider that takes every write, but whose <c>SupportsExpiry</c> is false.</summary>
@@ -300,7 +300,7 @@ public class ExpiryTests
             await container.UploadAsync($"r{i}", BinaryData.FromString("x"), new ResourceUploadOptions { ExpiresAt = DateTimeOffset.UtcNow.AddDays(-1) });
 
         // Act
-        int deleted = await service.DeleteExpiredAsync();
+        long deleted = await service.DeleteExpiredAsync();
 
         // Assert
         Assert.Equal(101, deleted);
@@ -334,7 +334,7 @@ public class ExpiryTests
         try
         {
             // Act
-            int deleted = await service.DeleteExpiredAsync();
+            long deleted = await service.DeleteExpiredAsync();
 
             // Assert
             Assert.Equal(1, deleted);
@@ -523,7 +523,7 @@ public class ExpiryTests
         (IResourceServiceClient service, string name) = await OverLimitAsync(services, ResourceListOptions.DefaultPageSize + 1);
 
         // Act
-        int pruned = await service.GetContainerClient(name).PruneAsync();
+        long pruned = await service.GetContainerClient(name).PruneAsync();
 
         // Assert
         Assert.Equal(ResourceListOptions.DefaultPageSize + 1, pruned);

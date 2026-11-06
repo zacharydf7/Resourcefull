@@ -57,7 +57,7 @@ To prune a whole container at once <span class="rf-badge rf-upcoming" title="Com
 prunes every name as an upload would, and returns how many versions were past the limit:
 
 ```csharp
-int pruned = await resources.GetContainerClient("contracts").PruneAsync();
+long pruned = await resources.GetContainerClient("contracts").PruneAsync();
 ```
 
 With [expiry](expiry.md) turned on <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>, pruning doesn't delete a version at once: it sets it to expire five

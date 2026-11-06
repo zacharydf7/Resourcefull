@@ -61,7 +61,7 @@ public sealed class TelemetryIntegrationTests(SqlServerFixture fixture)
         Activity upload = ours.First(s => s.OperationName == "resourcefull upload");
         Assert.All(new[] { migrate, backfill, upload }, s => Assert.Equal("sqlserver", s.GetTagItem("resourcefull.provider")));
         Assert.Equal(1, upload.GetTagItem("resourcefull.batches"));
-        Assert.Equal(2, backfill.GetTagItem("resourcefull.hashed"));
+        Assert.Equal(2L, backfill.GetTagItem("resourcefull.hashed"));
         Assert.Equal(1, backfill.GetTagItem("resourcefull.mismatches"));
         Assert.Equal(ActivityStatusCode.Unset, migrate.Status);
     }

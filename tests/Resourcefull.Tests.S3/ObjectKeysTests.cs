@@ -63,16 +63,16 @@ public class ObjectKeysTests
         // Act
         List<(DateTimeOffset, string)> byKey = [.. entries.OrderBy(KeyOf, CodePointOrder.Instance)];
 
-        // Assert: the order the contract lists expired versions in; every key parses back; and a listing after an entry
-        // starts past it and before the next.
+        // Assert: the order the contract lists expired versions in; every key parses back; and a listing from an entry
+        // starts before it and past the one before.
         Assert.Equal([.. entries.OrderBy(e => e.ExpiresAt).ThenBy(e => e.VersionId, StringComparer.Ordinal)], byKey);
         Assert.All(entries, e => Assert.Equal((e.ExpiresAt, e.VersionId, new string('t', 32), new string('c', 32), new string('b', 32)),
             ObjectKeys.ParseExpiry(KeyOf(e)[Keys.Expiries.Length..])));
         for (int i = 0; i < byKey.Count; i++)
         {
-            string after = Keys.ExpiriesAfter(byKey[i].Item1, byKey[i].Item2);
-            Assert.True(CodePointOrder.Instance.Compare(KeyOf(byKey[i]), after) < 0);
-            if (i + 1 < byKey.Count) Assert.True(CodePointOrder.Instance.Compare(after, KeyOf(byKey[i + 1])) < 0);
+            string from = Keys.ExpiriesFrom(byKey[i].Item1, byKey[i].Item2);
+            Assert.True(CodePointOrder.Instance.Compare(from, KeyOf(byKey[i])) < 0);
+            if (i > 0) Assert.True(CodePointOrder.Instance.Compare(KeyOf(byKey[i - 1]), from) < 0);
         }
     }
 

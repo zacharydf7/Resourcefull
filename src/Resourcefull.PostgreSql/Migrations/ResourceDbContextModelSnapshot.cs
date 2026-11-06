@@ -195,22 +195,22 @@ namespace Resourcefull.PostgreSql.Migrations
                         .HasDatabaseName("IX_Resources_RetainUntil")
                         .HasFilter("\"RetainUntil\" IS NOT NULL");
 
-                    b.HasIndex("ExpiresAt", "VersionId")
-                        .HasDatabaseName("IX_Resources_ExpiresAt")
-                        .HasFilter("\"ExpiresAt\" IS NOT NULL");
-
-                    b.HasIndex("PurgeAt", "VersionId")
-                        .HasDatabaseName("IX_Resources_PurgeAt")
-                        .HasFilter("\"PurgeAt\" IS NOT NULL");
-
-                    b.HasIndex("ContainerName", "DeletedAt", "VersionId")
-                        .IsDescending(false, true, false)
-                        .HasDatabaseName("IX_Resources_DeletedAt")
-                        .HasFilter("\"DeletedAt\" IS NOT NULL");
-
                     b.HasIndex("ContainerName", "Name", "VersionId")
                         .IsUnique()
                         .HasDatabaseName("UX_Resources_Container_Name_Version");
+
+                    b.HasIndex("ContainerName", "DeletedAt", "VersionId", "Name")
+                        .IsDescending(false, true, false, false)
+                        .HasDatabaseName("IX_Resources_DeletedAt")
+                        .HasFilter("\"DeletedAt\" IS NOT NULL");
+
+                    b.HasIndex("ExpiresAt", "VersionId", "ContainerName", "Name")
+                        .HasDatabaseName("IX_Resources_ExpiresAt")
+                        .HasFilter("\"ExpiresAt\" IS NOT NULL");
+
+                    b.HasIndex("PurgeAt", "VersionId", "ContainerName", "Name")
+                        .HasDatabaseName("IX_Resources_PurgeAt")
+                        .HasFilter("\"PurgeAt\" IS NOT NULL");
 
                     b.ToTable("Resources");
                 });

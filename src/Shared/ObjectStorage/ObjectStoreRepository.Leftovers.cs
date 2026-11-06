@@ -22,7 +22,7 @@ internal sealed partial class ObjectStoreRepository
     /// on to the next.
     /// </summary>
     /// <returns>How many content objects it deleted.</returns>
-    private async Task<int> SweepUnnamedContentAsync(DateTimeOffset staleBefore, List<Exception> failures,
+    private async Task<long> SweepUnnamedContentAsync(DateTimeOffset staleBefore, List<Exception> failures,
         CancellationToken cancellationToken)
     {
         Stored<ContentScan> read = await GetAsync<ContentScan>(_keys.Scan, cancellationToken).ConfigureAwait(false);

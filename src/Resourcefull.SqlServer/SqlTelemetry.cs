@@ -27,7 +27,7 @@ internal static class SqlTelemetry
         description: "Staged versions of uploads that stopped before finishing, deleted by the expiry sweep.");
 
     /// <summary>Counts the staged versions of abandoned uploads a sweep deleted.</summary>
-    public static void CountAbandonedUploads(int deleted, string? storeName)
+    public static void CountAbandonedUploads(long deleted, string? storeName)
     {
         if (deleted > 0) AbandonedUploads.Add(deleted, StoreTags(storeName));
     }

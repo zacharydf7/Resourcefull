@@ -315,7 +315,7 @@ public interface IResourceServiceClient
     /// The provider doesn't support expiry, or this is the default implementation, kept so implementations written for
     /// 3.1 still compile.
     /// </exception>
-    public Task<int> DeleteExpiredAsync(CancellationToken cancellationToken = default)
+    public Task<long> DeleteExpiredAsync(CancellationToken cancellationToken = default)
         => throw new NotSupportedException($"{GetType().Name} doesn't support expiry.");
 
     /// <summary>
@@ -337,7 +337,7 @@ public interface IResourceServiceClient
     /// </exception>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
     /// <exception cref="NotSupportedException">This is the default implementation.</exception>
-    public Task<int> PurgeDeletedAsync(CancellationToken cancellationToken = default)
+    public Task<long> PurgeDueAsync(CancellationToken cancellationToken = default)
         => throw new NotSupportedException($"{GetType().Name} doesn't keep deleted versions.");
 
     /// <summary>

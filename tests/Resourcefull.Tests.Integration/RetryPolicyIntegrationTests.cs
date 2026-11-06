@@ -115,9 +115,9 @@ public class RetryPolicyIntegrationTests(SqlServerFixture fixture)
         await LockNameAsync(opponent, transaction, new ResourceAddress(containerName, "b"));
 
         // Act: once the delete holds "a" and waits for "b", the opponent asks for "a", closing the cycle.
-        Task<IReadOnlyCollection<(ResourceAddress, string)>> delete = provider.GetRequiredService<ResourceRepository>()
-            .DeleteExpiredVersionsAsync([(new ResourceAddress(containerName, "a"), a.VersionId),
-                (new ResourceAddress(containerName, "b"), b.VersionId)], DateTimeOffset.UtcNow);
+        Task<IReadOnlyCollection<ResourceVersionAddress>> delete = provider.GetRequiredService<ResourceRepository>()
+            .DeleteExpiredVersionsAsync([new(new ResourceAddress(containerName, "a"), a.VersionId),
+                new(new ResourceAddress(containerName, "b"), b.VersionId)], DateTimeOffset.UtcNow);
         await using (SqlCommand waiting = opponent.CreateCommand())
         {
             waiting.Transaction = transaction;
@@ -131,7 +131,7 @@ public class RetryPolicyIntegrationTests(SqlServerFixture fixture)
         }
         await LockNameAsync(opponent, transaction, new ResourceAddress(containerName, "a"));
         await transaction.CommitAsync();
-        IReadOnlyCollection<(ResourceAddress, string)> deleted = await delete;
+        IReadOnlyCollection<ResourceVersionAddress> deleted = await delete;
 
         // Assert: the delete's lock lost the deadlock, and the retry deleted both.
         Assert.Contains(ResourceSqlRepository.NameLockNotGrantedError.ToString(), retries);

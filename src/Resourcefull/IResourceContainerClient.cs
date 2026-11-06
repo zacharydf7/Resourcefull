@@ -662,7 +662,7 @@ public interface IResourceContainerClient
     /// </exception>
     /// <exception cref="ResourcePolicyViolationException">The container is read-only.</exception>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
-    public Task<int> PruneAsync(CancellationToken cancellationToken = default);
+    public Task<long> PruneAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Indexes the keys <see cref="ResourcefullOptionsBuilder.UseMetadataSearch"/> names for every current version in
@@ -674,7 +674,7 @@ public interface IResourceContainerClient
     /// <param name="cancellationToken">Stops the indexing; what's indexed by then stays indexed, and running it again finishes.</param>
     /// <returns>How many versions were indexed. A container that doesn't exist has nothing to index.</returns>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
-    public Task<int> IndexMetadataAsync(CancellationToken cancellationToken = default);
+    public Task<long> IndexMetadataAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Lists the container's largest versions, or the ones that expire soonest, current and older versions alike, each

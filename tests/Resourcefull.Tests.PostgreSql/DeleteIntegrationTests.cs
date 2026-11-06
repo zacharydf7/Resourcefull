@@ -36,10 +36,10 @@ public sealed class DeleteIntegrationTests(PostgreSqlFixture fixture)
         using MeterListener listener = ListenForAbandonedUploads(deleted => Interlocked.Add(ref counted, deleted));
 
         // Act: once while it's recent, and once after it last stored anything two hours ago.
-        int whileRecent = await repository.DeleteAbandonedUploadsAsync(DateTimeOffset.UtcNow.AddHours(-1));
+        long whileRecent = await repository.DeleteAbandonedUploadsAsync(DateTimeOffset.UtcNow.AddHours(-1));
         await ExecuteAsync("""UPDATE "Resources" SET "StagedAt" = "StagedAt" - interval '2 hours' WHERE "ContainerName" = @c""",
             container.Name);
-        int onceStale = await repository.DeleteAbandonedUploadsAsync(DateTimeOffset.UtcNow.AddHours(-1));
+        long onceStale = await repository.DeleteAbandonedUploadsAsync(DateTimeOffset.UtcNow.AddHours(-1));
         cts.Cancel();
         content.Resume();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => upload);
@@ -103,7 +103,7 @@ public sealed class DeleteIntegrationTests(PostgreSqlFixture fixture)
             "version" => await container.DeleteResourceIfExistsAsync("big", current.VersionId),
             "name" => await container.DeleteResourceIfExistsAsync("big"),
             "expire" => (await provider.GetRequiredService<ResourceRepository>().DeleteExpiredVersionsAsync(
-                [(new ResourceAddress(container.Name, "big"), current.VersionId)], DateTimeOffset.UtcNow)).Count == 1,
+                [new(new ResourceAddress(container.Name, "big"), current.VersionId)], DateTimeOffset.UtcNow)).Count == 1,
             _ => await service.DeleteContainerIfExistsAsync(container.Name)
         };
 

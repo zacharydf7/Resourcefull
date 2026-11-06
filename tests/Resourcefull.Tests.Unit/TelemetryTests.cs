@@ -456,7 +456,7 @@ public sealed class TelemetryTests : IDisposable
 
         // Assert
         Activity expire = Assert.Single(SpansIn(root), s => s.OperationName == "resourcefull expire");
-        Assert.Equal(1, expire.GetTagItem("resourcefull.expired"));
+        Assert.Equal(1L, expire.GetTagItem("resourcefull.expired"));
         Assert.Equal(1, expire.GetTagItem("resourcefull.batches"));
         Assert.Single(SpansIn(root), s => s.OperationName == "resourcefull set_expiry");
     }
@@ -485,7 +485,7 @@ public sealed class TelemetryTests : IDisposable
             It.Is<DateTimeOffset>(t => t >= before.AddHours(-24) && t <= DateTimeOffset.UtcNow.AddHours(-24)),
             It.IsAny<CancellationToken>()), Times.Once);
         Activity expire = Assert.Single(SpansIn(root), s => s.OperationName == "resourcefull expire");
-        Assert.Equal(2, expire.GetTagItem("resourcefull.abandoned_uploads"));
+        Assert.Equal(2L, expire.GetTagItem("resourcefull.abandoned_uploads"));
     }
 
     [Fact]
@@ -501,7 +501,7 @@ public sealed class TelemetryTests : IDisposable
             {
                 ContainerName = "c", Name = "a", VersionId = "v1", ExpiresAt = DateTimeOffset.UnixEpoch
             }]);
-        repository.Setup(r => r.DeleteExpiredVersionsAsync(It.IsAny<IReadOnlyList<(ResourceAddress, string)>>(),
+        repository.Setup(r => r.DeleteExpiredVersionsAsync(It.IsAny<IReadOnlyList<ResourceVersionAddress>>(),
             It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("The batch failed."));
         repository.Setup(r => r.DeleteExpiredVersionAsync(It.IsAny<ResourceAddress>(), "v1", It.IsAny<DateTimeOffset>(),
@@ -531,9 +531,9 @@ public sealed class TelemetryTests : IDisposable
             {
                 ContainerName = "c", Name = "a", VersionId = "v1", ExpiresAt = DateTimeOffset.UnixEpoch
             }]);
-        repository.Setup(r => r.DeleteExpiredVersionsAsync(It.IsAny<IReadOnlyList<(ResourceAddress, string)>>(),
+        repository.Setup(r => r.DeleteExpiredVersionsAsync(It.IsAny<IReadOnlyList<ResourceVersionAddress>>(),
             It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync([(new ResourceAddress("c", "a"), "v1")]);
+            .ReturnsAsync([new ResourceVersionAddress(new ResourceAddress("c", "a"), "v1")]);
         var service = new ResourceServiceClient(repository.Object, Options.Create(new ResourcefullOptions()));
 
         // Act
@@ -541,7 +541,7 @@ public sealed class TelemetryTests : IDisposable
 
         // Assert
         Assert.Equal("The sweep failed.", (await Assert.ThrowsAsync<InvalidOperationException>(act)).Message);
-        repository.Verify(r => r.DeleteExpiredVersionsAsync(It.IsAny<IReadOnlyList<(ResourceAddress, string)>>(),
+        repository.Verify(r => r.DeleteExpiredVersionsAsync(It.IsAny<IReadOnlyList<ResourceVersionAddress>>(),
             It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -556,7 +556,7 @@ public sealed class TelemetryTests : IDisposable
         };
         repository.Setup(r => r.GetExpiredAsync(It.IsAny<DateTimeOffset>(), It.IsAny<int>(), null,
             It.IsAny<CancellationToken>())).ReturnsAsync([expired]);
-        repository.Setup(r => r.DeleteExpiredVersionsAsync(It.IsAny<IReadOnlyList<(ResourceAddress, string)>>(),
+        repository.Setup(r => r.DeleteExpiredVersionsAsync(It.IsAny<IReadOnlyList<ResourceVersionAddress>>(),
             It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("Deleting secret.txt failed."));
         repository.Setup(r => r.DeleteExpiredVersionAsync(It.IsAny<ResourceAddress>(), "v1", It.IsAny<DateTimeOffset>(),
@@ -565,7 +565,7 @@ public sealed class TelemetryTests : IDisposable
         using Activity root = TestSource.StartActivity("test")!;
 
         // Act
-        int deleted = await service.DeleteExpiredAsync();
+        long deleted = await service.DeleteExpiredAsync();
 
         // Assert
         Assert.Equal(1, deleted);
@@ -594,7 +594,7 @@ public sealed class TelemetryTests : IDisposable
 
         // Assert
         Activity prune = Assert.Single(SpansIn(root), s => s.OperationName == "resourcefull prune_container");
-        Assert.Equal(2, prune.GetTagItem("resourcefull.pruned"));
+        Assert.Equal(2L, prune.GetTagItem("resourcefull.pruned"));
     }
 
     /// <summary>Refuses to hear about the versions of the name <c>refused</c>.</summary>
@@ -624,7 +624,7 @@ public sealed class TelemetryTests : IDisposable
 
         // Assert
         Activity prune = Assert.Single(SpansIn(root), s => s.OperationName == "resourcefull prune_container");
-        Assert.Equal(2, prune.GetTagItem("resourcefull.pruned"));
+        Assert.Equal(2L, prune.GetTagItem("resourcefull.pruned"));
     }
 
     [Fact]
@@ -943,14 +943,14 @@ public sealed class TelemetryTests : IDisposable
 
         // Act
         await container.GetResourcePageAsync(new ResourceListOptions { Metadata = new ResourceMetadataMatch("customer", "secret-42") });
-        int indexed = await service.GetContainerClient("c").IndexMetadataAsync();
+        long indexed = await service.GetContainerClient("c").IndexMetadataAsync();
 
         // Assert: the value may be personal data, so no tag carries it.
         Activity page = SpansIn(root).Single(s => s.OperationName == "resourcefull list_page");
         Assert.Equal("customer", page.GetTagItem("resourcefull.metadata_key"));
         Assert.DoesNotContain(SpansIn(root).SelectMany(s => s.Tags), tag => tag.Value == "secret-42");
         Activity index = SpansIn(root).Single(s => s.OperationName == "resourcefull index_metadata");
-        Assert.Equal((0, 0), (indexed, (int)index.GetTagItem("resourcefull.indexed")!));
+        Assert.Equal((0L, 0L), (indexed, (long)index.GetTagItem("resourcefull.indexed")!));
     }
 
     /// <summary>A store where every delete finds its version protected, as when a hold lands just before it.</summary>
@@ -1048,7 +1048,7 @@ public sealed class TelemetryTests : IDisposable
         await container.DeleteResourceIfExistsAsync("early");
 
         // Act
-        await provider.GetRequiredService<IResourceServiceClient>().PurgeDeletedAsync();
+        await provider.GetRequiredService<IResourceServiceClient>().PurgeDueAsync();
         await container.UndeleteAsync("back");
         await container.PurgeDeletedAsync("early");
 
@@ -1066,7 +1066,7 @@ public sealed class TelemetryTests : IDisposable
         using ServiceProvider disposal = provider;
 
         // Act
-        await Assert.ThrowsAsync<AggregateException>(() => provider.GetRequiredService<IResourceServiceClient>().PurgeDeletedAsync());
+        await Assert.ThrowsAsync<AggregateException>(() => provider.GetRequiredService<IResourceServiceClient>().PurgeDueAsync());
 
         // Assert
         Dictionary<string, object?> failure = Assert.Single(MeasurementsOf("resourcefull.client.purge.failures"));

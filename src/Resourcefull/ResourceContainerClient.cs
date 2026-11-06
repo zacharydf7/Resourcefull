@@ -261,11 +261,11 @@ internal partial class ResourceContainerClient(ResourceRepository resourceReposi
     /// </summary>
     /// <returns>How many versions were past the limit, in the names pruned.</returns>
     /// <exception cref="AggregateException">Some names weren't pruned; the others were.</exception>
-    private async Task<int> PruneAllAsync(Activity? activity, CancellationToken cancellationToken)
+    private async Task<long> PruneAllAsync(Activity? activity, CancellationToken cancellationToken)
     {
         if (policies is not null) await policies.ThrowIfReadOnlyAsync(ContainerName, _telemetry, cancellationToken).ConfigureAwait(false);
         int keep = await MaxVersionsAsync(ContainerName, cancellationToken).ConfigureAwait(false);
-        int pruned = 0, failed = 0;
+        long pruned = 0, failed = 0;
         // The first few failures are enough to say why; an outage of the cleanup handler's dependency fails every name.
         var failures = new List<Exception>();
         string? afterName = null;
@@ -816,9 +816,9 @@ internal partial class ResourceContainerClient(ResourceRepository resourceReposi
             if (options.Metadata is not null)
                 throw new ArgumentException("A listing of the bin can't look for metadata.", nameof(options));
             string? prefix = string.IsNullOrEmpty(options.Prefix) ? null : options.Prefix;
-            (DateTimeOffset, string)? after = continuationToken is null
+            ResourceVersionKey? after = continuationToken is null
                 ? null
-                : ResourcePageToken.DecodeDeleted(continuationToken, prefix, nameof(continuationToken));
+                : ResourcePageToken.DecodeDeleted(continuationToken, ContainerName, prefix, nameof(continuationToken));
 
             DeletedVersionPage page = await resourceRepository.GetDeletedPageAsync(ContainerName, prefix, after, options.PageSize,
                 cancellationToken).ConfigureAwait(false);
@@ -837,7 +837,7 @@ internal partial class ResourceContainerClient(ResourceRepository resourceReposi
                 if (returning.Count == 0) return false;
                 await policies.CheckUndeleteAsync(ContainerName, resourceName, returning, _telemetry, cancellationToken).ConfigureAwait(false);
             }
-            int undeleted = await resourceRepository.UndeleteAsync(At(resourceName), versionId, cancellationToken).ConfigureAwait(false);
+            long undeleted = await resourceRepository.UndeleteAsync(At(resourceName), versionId, cancellationToken).ConfigureAwait(false);
             _telemetry.CountUndeleted(undeleted);
             return undeleted > 0;
         });
@@ -847,7 +847,7 @@ internal partial class ResourceContainerClient(ResourceRepository resourceReposi
         {
             ResourceNames.ThrowIfInvalidResourceName(resourceName);
             if (policies is not null) await policies.ThrowIfReadOnlyAsync(ContainerName, _telemetry, cancellationToken).ConfigureAwait(false);
-            int purged = await resourceRepository.PurgeDeletedAsync(At(resourceName), versionId, null, cancellationToken).ConfigureAwait(false);
+            long purged = await resourceRepository.PurgeDeletedAsync(At(resourceName), versionId, null, cancellationToken).ConfigureAwait(false);
             _telemetry.CountPurged(purged);
             return purged > 0;
         });
@@ -867,13 +867,13 @@ internal partial class ResourceContainerClient(ResourceRepository resourceReposi
                 new Dictionary<string, string>(metadata), cancellationToken).ConfigureAwait(false);
         });
 
-    public Task<int> PruneAsync(CancellationToken cancellationToken = default)
+    public Task<long> PruneAsync(CancellationToken cancellationToken = default)
         => _telemetry.RunAsync("prune_container", ContainerName, null, activity => PruneAllAsync(activity, cancellationToken));
 
-    public Task<int> IndexMetadataAsync(CancellationToken cancellationToken = default)
+    public Task<long> IndexMetadataAsync(CancellationToken cancellationToken = default)
         => _telemetry.RunAsync("index_metadata", ContainerName, null, async activity =>
         {
-            int indexed = await resourceRepository.IndexMetadataAsync(ContainerName, cancellationToken).ConfigureAwait(false);
+            long indexed = await resourceRepository.IndexMetadataAsync(ContainerName, cancellationToken).ConfigureAwait(false);
             activity?.SetTag("resourcefull.indexed", indexed);
             _telemetry.CountIndexed(indexed);
             return indexed;

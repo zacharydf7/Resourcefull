@@ -65,10 +65,10 @@ public class StagedUploadIntegrationTests(SqlServerFixture fixture)
         await content.Paused;
 
         // Act: once while it's recent, and once after it last stored anything two hours ago.
-        int whileRecent = await repository.DeleteAbandonedUploadsAsync(DateTimeOffset.UtcNow.AddHours(-1));
+        long whileRecent = await repository.DeleteAbandonedUploadsAsync(DateTimeOffset.UtcNow.AddHours(-1));
         await ExecuteAsync("UPDATE [Resources] SET [StagedAt] = DATEADD(hour, -2, [StagedAt]) WHERE [ContainerName] = @c",
             container.Name);
-        int onceStale = await repository.DeleteAbandonedUploadsAsync(DateTimeOffset.UtcNow.AddHours(-1));
+        long onceStale = await repository.DeleteAbandonedUploadsAsync(DateTimeOffset.UtcNow.AddHours(-1));
         cts.Cancel();
         content.Resume();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => upload);

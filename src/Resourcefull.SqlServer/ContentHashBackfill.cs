@@ -54,7 +54,7 @@ public sealed class ContentHashBackfill
 
     private async Task<ContentHashBackfillResult> RunCoreAsync(CancellationToken cancellationToken)
     {
-        int hashed = 0;
+        long hashed = 0;
         long lastId = 0;
 
         while (true)
@@ -116,7 +116,7 @@ public sealed class ContentHashBackfill
 /// Every version whose recorded <see cref="ResourceInfo.ContentLength"/> differs from its stored content. A version's
 /// hash is recorded either way; its recorded length is left for you to correct, and every run reports it until then.
 /// </param>
-public sealed record ContentHashBackfillResult(int Hashed, IReadOnlyList<ContentLengthMismatch> Mismatches);
+public sealed record ContentHashBackfillResult(long Hashed, IReadOnlyList<ContentLengthMismatch> Mismatches);
 
 /// <summary>A version whose recorded length differs from the length of its stored content.</summary>
 public sealed record ContentLengthMismatch(string ContainerName, string Name, string VersionId, long RecordedLength, long StoredLength);

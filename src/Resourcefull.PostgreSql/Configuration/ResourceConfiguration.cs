@@ -60,7 +60,7 @@ internal class ResourceConfiguration : IEntityTypeConfiguration<ResourceModel>
 
         // Only the versions that expire, in the order a sweep lists them, so each batch is a seek however many versions
         // there are, expired ones that read-only containers keep included.
-        builder.HasIndex(r => new { r.ExpiresAt, r.VersionId })
+        builder.HasIndex(r => new { r.ExpiresAt, r.VersionId, r.ContainerName, r.Name })
             .HasFilter("\"ExpiresAt\" IS NOT NULL")
             .HasDatabaseName("IX_Resources_ExpiresAt");
 
@@ -79,13 +79,13 @@ internal class ResourceConfiguration : IEntityTypeConfiguration<ResourceModel>
         builder.HasQueryFilter(r => r.StagedAt == null && r.DeletedAt == null);
 
         // Only the versions in bins, newest deletion first in each container, as the bin lists them.
-        builder.HasIndex(r => new { r.ContainerName, r.DeletedAt, r.VersionId })
-            .IsDescending(false, true, false)
+        builder.HasIndex(r => new { r.ContainerName, r.DeletedAt, r.VersionId, r.Name })
+            .IsDescending(false, true, false, false)
             .HasFilter("\"DeletedAt\" IS NOT NULL")
             .HasDatabaseName("IX_Resources_DeletedAt");
 
         // Only the versions in bins, in the order the sweep purges them, so a sweep that finds none due reads nothing else.
-        builder.HasIndex(r => new { r.PurgeAt, r.VersionId })
+        builder.HasIndex(r => new { r.PurgeAt, r.VersionId, r.ContainerName, r.Name })
             .HasFilter("\"PurgeAt\" IS NOT NULL")
             .HasDatabaseName("IX_Resources_PurgeAt");
 

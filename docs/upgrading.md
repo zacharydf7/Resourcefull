@@ -33,9 +33,12 @@ your code, and makes one database change that a 3.x application can't run agains
 | | `Resourcefull_AddRetention` | adds the nullable `RetainUntil` column and the `LegalHold` column, false for every version already stored, with an index of each for the versions they [protect](deleting-safely.md) | nothing |
 | | `Resourcefull_AddMetadataSearch` | adds the `ResourceMetadata` table, the index of [searchable metadata](listing.md#finding-resources-by-metadata), empty until you name keys; versions stored before then are added when you index them | nothing |
 | | `Resourcefull_AddBin` | adds the nullable `DeletedAt` and `PurgeAt` columns, set while a version is in a [bin](deleting-safely.md#the-bin), with an index of each for the versions in bins | nothing |
+| | `Resourcefull_SweepKeys` | rebuilds the indexes of the versions that expire and the versions in bins, adding the container and name, so a sweep can't skip a version that shares its time and version ID with another | on a large table, expect reads and writes of `Resources` to wait while the indexes build |
 
 Every migration from 3.0 on only adds columns or indexes, and runs while the application is up, except
-`Resourcefull_DropStoredUri` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>.
+`Resourcefull_DropStoredUri` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> and
+`Resourcefull_SweepKeys` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span>, which holds up the table
+while it rebuilds its indexes.
 
 ## Upgrading a running application
 

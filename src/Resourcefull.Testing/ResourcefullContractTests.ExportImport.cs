@@ -484,12 +484,12 @@ public abstract partial class ResourcefullContractTests
         await service.ImportContainerAsync(name, await Format1ExportAsync());
 
         // Act
-        int pruned = await service.GetContainerClient(name).PruneAsync();
-        int prunedAgain = await service.GetContainerClient(name).PruneAsync();
+        long pruned = await service.GetContainerClient(name).PruneAsync();
+        long prunedAgain = await service.GetContainerClient(name).PruneAsync();
 
         // Assert: the older version went; the current one, and the other name's only one, stayed.
         IResourceContainerClient container = service.GetContainerClient(name);
-        Assert.Equal((1, 0), (pruned, prunedAgain));
+        Assert.Equal((1L, 0L), (pruned, prunedAgain));
         Assert.Equal(["0193a1b2-0000-7000-8000-000000000002"],
             (await container.GetResourceVersionsAsync("notes.txt")).Select(v => v.VersionId));
         Assert.Single(await container.GetResourceVersionsAsync("copy.txt"));

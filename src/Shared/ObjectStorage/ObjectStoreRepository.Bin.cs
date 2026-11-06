@@ -109,48 +109,55 @@ internal sealed partial class ObjectStoreRepository
     /// once the page is full or, with a prefix, once it has looked at <see cref="MaxBinEntriesExamined"/> entries.
     /// </summary>
     public override async Task<DeletedVersionPage> GetDeletedPageAsync(string resourceContainerName, string? prefix,
-        (DateTimeOffset DeletedAt, string VersionId)? after, int pageSize, CancellationToken cancellationToken = default)
+        ResourceVersionKey? after, int pageSize, CancellationToken cancellationToken = default)
     {
         if (await GetContainerAsync(resourceContainerName, cancellationToken).ConfigureAwait(false) is not { } container)
             return new DeletedVersionPage([], null);
 
         string bin = _keys.Bin(container.Id);
-        string? startAfter = after is { } last ? _keys.BinAfter(container.Id, last.DeletedAt, last.VersionId) : null;
+        string? startAfter = after is { } last ? _keys.BinFrom(container.Id, last.At, last.VersionId) : null;
         var page = new List<ResourceInfo>(pageSize);
         var batch = new List<ObjectListing>();
-        string? lastExamined = null;
         int examined = 0;
-        bool more = false;
+        // The time and version ID of the first entry past where it stopped, which says another page follows.
+        (DateTimeOffset At, string VersionId)? next = null;
+        (DateTimeOffset, string)? group = null;
         await foreach (ObjectListing entry in store.ListAsync(bin, startAfter, cancellationToken).ConfigureAwait(false))
         {
-            // One more entry than the page needs says another page follows.
-            if (page.Count >= pageSize || examined >= MaxBinEntriesExamined)
+            (DateTimeOffset deletedAt, string versionId, _, _) = ObjectKeys.ParseBinEntry(entry.Key[bin.Length..]);
+            // Entries with the same time and version ID sort by name only once they're read, so the listing never stops
+            // inside such a group.
+            if ((page.Count >= pageSize || examined >= MaxBinEntriesExamined) && group != (deletedAt, versionId))
             {
-                more = true;
+                next = (deletedAt, versionId);
                 break;
             }
+            group = (deletedAt, versionId);
             batch.Add(entry);
             if (batch.Count < Math.Min(pageSize - page.Count, ParallelReads)) continue;
             examined += batch.Count;
-            lastExamined = batch[^1].Key;
-            page.AddRange(await ReadBinnedAsync(resourceContainerName, container.Id, bin, batch, prefix, cancellationToken).ConfigureAwait(false));
+            page.AddRange((await ReadBinnedAsync(resourceContainerName, container.Id, bin, batch, prefix, cancellationToken).ConfigureAwait(false))
+                .Where(v => IsPast(v, v.DeletedAt, after)));
             batch.Clear();
         }
         if (batch.Count > 0)
         {
-            lastExamined = batch[^1].Key;
-            page.AddRange(await ReadBinnedAsync(resourceContainerName, container.Id, bin, batch, prefix, cancellationToken).ConfigureAwait(false));
+            page.AddRange((await ReadBinnedAsync(resourceContainerName, container.Id, bin, batch, prefix, cancellationToken).ConfigureAwait(false))
+                .Where(v => IsPast(v, v.DeletedAt, after)));
         }
+        SortGroupsByName(page, v => v.DeletedAt);
 
-        if (!more) return new DeletedVersionPage(page, null);
-        // A page that filled continues after its last version; one that stopped looking, after the last entry it read.
-        if (page.Count >= pageSize)
+        // A full page continues after its last version. One that stopped looking continues at the start of the next
+        // entry's group: the key's name is empty, which sorts before every real name, so it excludes nothing in that group.
+        if (page.Count > pageSize || (page.Count == pageSize && next is not null))
         {
             page.RemoveRange(pageSize, page.Count - pageSize);
-            return new DeletedVersionPage(page, (page[^1].DeletedAt!.Value, page[^1].VersionId));
+            return new DeletedVersionPage(page, new ResourceVersionKey(page[^1].DeletedAt!.Value,
+                new ResourceAddress(resourceContainerName, page[^1].Name), page[^1].VersionId));
         }
-        (DateTimeOffset deletedAt, string examinedVersion, _, _) = ObjectKeys.ParseBinEntry(lastExamined![bin.Length..]);
-        return new DeletedVersionPage(page, (deletedAt, examinedVersion));
+        return new DeletedVersionPage(page, next is { } start
+            ? new ResourceVersionKey(start.At, new ResourceAddress(resourceContainerName, ""), start.VersionId)
+            : null);
     }
 
     /// <summary>
@@ -201,7 +208,7 @@ internal sealed partial class ObjectStoreRepository
     /// write, and deletes their bin and purge entries. When another writer changes the head so a version comes back whose
     /// expiry entry wasn't written, it starts again.
     /// </summary>
-    public override async Task<int> UndeleteAsync(ResourceAddress resource, string? versionId, CancellationToken cancellationToken = default)
+    public override async Task<long> UndeleteAsync(ResourceAddress resource, string? versionId, CancellationToken cancellationToken = default)
     {
         if (await GetContainerAsync(resource.ContainerName, cancellationToken).ConfigureAwait(false) is not { } container) return 0;
         string headKey = _keys.Head(container.Id, resource.ResourceName);
@@ -290,7 +297,7 @@ internal sealed partial class ObjectStoreRepository
     /// Takes the versions out of the bin in one head write, then deletes their content and every entry they have.
     /// Content whose delete fails is no longer named by any head, and stays until the sweep deletes it.
     /// </summary>
-    public override async Task<int> PurgeDeletedAsync(ResourceAddress resource, string? versionId, DateTimeOffset? dueBy,
+    public override async Task<long> PurgeDeletedAsync(ResourceAddress resource, string? versionId, DateTimeOffset? dueBy,
         CancellationToken cancellationToken = default)
     {
         if (await GetContainerAsync(resource.ContainerName, cancellationToken).ConfigureAwait(false) is not { } container) return 0;
@@ -310,24 +317,10 @@ internal sealed partial class ObjectStoreRepository
     }
 
     /// <summary>Lists the purge entries due by <paramref name="now"/>, as <see cref="GetExpiredAsync"/> lists expiry entries.</summary>
-    public override async Task<IReadOnlyList<ResourceInfo>> GetPurgeableAsync(DateTimeOffset now, int maxVersions,
-        (DateTimeOffset PurgeAt, string VersionId)? after = null, CancellationToken cancellationToken = default)
-    {
-        string? startAfter = after is { } last ? _keys.PurgesAfter(last.PurgeAt, last.VersionId) : null;
-        var due = new List<ResourceInfo>();
-        var batch = new List<ObjectListing>();
-        await foreach (ObjectListing entry in store.ListAsync(_keys.Purges, startAfter, cancellationToken).ConfigureAwait(false))
-        {
-            if (ObjectKeys.ParseExpiry(entry.Key[_keys.Purges.Length..]).ExpiresAt > now) break;
-            batch.Add(entry);
-            if (batch.Count < Math.Min(maxVersions - due.Count, ParallelReads)) continue;
-            due.AddRange(await ReadPurgeableAsync(batch, cancellationToken).ConfigureAwait(false));
-            batch.Clear();
-            if (due.Count >= maxVersions) return due;
-        }
-        due.AddRange(await ReadPurgeableAsync(batch, cancellationToken).ConfigureAwait(false));
-        return due;
-    }
+    public override Task<IReadOnlyList<ResourceInfo>> GetPurgeableAsync(DateTimeOffset now, int maxVersions,
+        ResourceVersionKey? after = null, CancellationToken cancellationToken = default) =>
+        ListDueAsync(_keys.Purges, after is { } last ? _keys.PurgesFrom(last.At, last.VersionId) : null, after, now, maxVersions,
+            v => v.PurgeAt, ReadPurgeableAsync, cancellationToken);
 
     /// <summary>The versions a batch of purge entries name, in the entries' order, leaving out stale entries.</summary>
     private async Task<IEnumerable<ResourceInfo>> ReadPurgeableAsync(List<ObjectListing> entries, CancellationToken cancellationToken)

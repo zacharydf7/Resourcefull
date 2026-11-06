@@ -246,7 +246,7 @@ internal sealed class ClientTelemetry(string provider, ResourcefullOptions optio
         counter.Add(1, tags);
     }
 
-    public void CountIndexed(int versions)
+    public void CountIndexed(long versions)
     {
         if (versions > 0 && Telemetry.MetadataIndexed.Enabled) Telemetry.MetadataIndexed.Add(versions, StoreTags());
     }
@@ -269,12 +269,12 @@ internal sealed class ClientTelemetry(string provider, ResourcefullOptions optio
         if (Telemetry.Expired.Enabled) Telemetry.Expired.Add(1, StoreTags());
     }
 
-    public void CountPurged(int versions)
+    public void CountPurged(long versions)
     {
         if (versions > 0 && Telemetry.Purged.Enabled) Telemetry.Purged.Add(versions, StoreTags());
     }
 
-    public void CountUndeleted(int versions)
+    public void CountUndeleted(long versions)
     {
         if (versions > 0 && Telemetry.Undeleted.Enabled) Telemetry.Undeleted.Add(versions, StoreTags());
     }

@@ -67,7 +67,7 @@ internal static class ObjectStoreTelemetry
     }
 
     /// <summary>Counts the abandoned upload sessions and unnamed content objects a sweep deleted.</summary>
-    public static void CountAbandonedUploads(int deleted, string? storeName)
+    public static void CountAbandonedUploads(long deleted, string? storeName)
     {
         if (deleted > 0) Count(AbandonedUploads, storeName, deleted);
     }

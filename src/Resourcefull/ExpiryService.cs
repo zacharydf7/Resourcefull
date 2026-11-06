@@ -59,7 +59,7 @@ internal sealed partial class ExpiryService(IServiceScopeFactory scopes, ExpiryS
                     }
                     try
                     {
-                        await client.PurgeDeletedAsync(stoppingToken).ConfigureAwait(false);
+                        await client.PurgeDueAsync(stoppingToken).ConfigureAwait(false);
                     }
                     catch (Exception exception) when (!stoppingToken.IsCancellationRequested)
                     {

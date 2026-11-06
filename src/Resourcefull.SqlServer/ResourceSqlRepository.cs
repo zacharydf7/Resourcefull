@@ -55,7 +55,7 @@ internal class ResourceSqlRepository(IDbContextFactory<ResourceDbContext> dbCont
             Number: SqlUniqueIndexViolation or SqlUniqueConstraintViolation
         };
 
-    protected override void CountAbandonedUploads(int deleted) => SqlTelemetry.CountAbandonedUploads(deleted, StoreName);
+    protected override void CountAbandonedUploads(long deleted) => SqlTelemetry.CountAbandonedUploads(deleted, StoreName);
 
     protected override Task<List<int>> LockStagedVersionAsync(ResourceDbContext attempt, long resourceId, DateTimeOffset? staleBefore,
         CancellationToken cancellationToken) =>

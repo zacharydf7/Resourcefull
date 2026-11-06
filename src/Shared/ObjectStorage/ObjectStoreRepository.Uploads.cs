@@ -501,9 +501,9 @@ internal sealed partial class ObjectStoreRepository
     /// day, it also deletes content no head names, which writes and deletes that stopped partway leave behind, and finishes
     /// purging deleted containers.
     /// </summary>
-    public override async Task<int> DeleteAbandonedUploadsAsync(DateTimeOffset staleBefore, CancellationToken cancellationToken = default)
+    public override async Task<long> DeleteAbandonedUploadsAsync(DateTimeOffset staleBefore, CancellationToken cancellationToken = default)
     {
-        int deleted = 0;
+        long deleted = 0;
         var failures = new List<Exception>();
         var containerIds = new Dictionary<string, string?>();
         string? session = null;

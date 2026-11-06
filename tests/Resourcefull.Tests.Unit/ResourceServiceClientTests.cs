@@ -411,8 +411,8 @@ public class ResourceServiceClientTests
         var repository = new Mock<ResourceRepository>();
         var expired = new ResourceInfo { ContainerName = "c", Name = "n", VersionId = "v1", ExpiresAt = DateTimeOffset.UnixEpoch };
         repository.Setup(r => r.GetExpiredAsync(It.IsAny<DateTimeOffset>(), It.IsAny<int>(), null, It.IsAny<CancellationToken>())).ReturnsAsync([expired]);
-        repository.Setup(r => r.DeleteExpiredVersionsAsync(It.IsAny<IReadOnlyList<(ResourceAddress, string)>>(),
-            It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>())).ReturnsAsync([(new ResourceAddress("c", "n"), "v1")]);
+        repository.Setup(r => r.DeleteExpiredVersionsAsync(It.IsAny<IReadOnlyList<ResourceVersionAddress>>(),
+            It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>())).ReturnsAsync([new ResourceVersionAddress(new ResourceAddress("c", "n"), "v1")]);
         var service = NewService(repository.Object);
 
         // Act
@@ -421,13 +421,13 @@ public class ResourceServiceClientTests
         // Assert: the check for any, the page, and its batch delete.
         repository.Verify(r => r.GetExpiredAsync(It.IsAny<DateTimeOffset>(), It.IsAny<int>(), null, cts.Token), Times.Exactly(2));
         repository.Verify(r => r.DeleteExpiredVersionsAsync(
-            It.Is<IReadOnlyList<(ResourceAddress, string)>>(v => IsOnly(v, "c", "n", "v1")),
+            It.Is<IReadOnlyList<ResourceVersionAddress>>(v => IsOnly(v, "c", "n", "v1")),
             It.IsAny<DateTimeOffset>(), cts.Token), Times.Once);
     }
 
-    private static bool IsOnly(IReadOnlyList<(ResourceAddress, string)> versions, string container, string name,
+    private static bool IsOnly(IReadOnlyList<ResourceVersionAddress> versions, string container, string name,
         string versionId) =>
-        versions.Count == 1 && versions[0] == (new ResourceAddress(container, name), versionId);
+        versions.Count == 1 && versions[0] == new ResourceVersionAddress(new ResourceAddress(container, name), versionId);
 
     /// <summary>
     /// Without versioning, an expired current version with the version it replaced waiting behind it, and a provider
@@ -446,9 +446,9 @@ public class ResourceServiceClientTests
             It.IsAny<CancellationToken>())).ReturnsAsync([current]);
         repository.Setup(r => r.GetResourceVersionsAsync(new ResourceAddress("c", "n"), It.IsAny<CancellationToken>()))
             .ReturnsAsync([current, replaced]);
-        repository.Setup(r => r.DeleteExpiredVersionsAsync(It.IsAny<IReadOnlyList<(ResourceAddress, string)>>(),
+        repository.Setup(r => r.DeleteExpiredVersionsAsync(It.IsAny<IReadOnlyList<ResourceVersionAddress>>(),
             It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()))
-            .Returns(() => Task.FromException<IReadOnlyCollection<(ResourceAddress, string)>>(failure()));
+            .Returns(() => Task.FromException<IReadOnlyCollection<ResourceVersionAddress>>(failure()));
         repository.Setup(r => r.GetResourceInfoAsync(new ResourceAddress("c", "n"), "current", It.IsAny<CancellationToken>()))
             .ReturnsAsync((ResourceInfo?)null);
         var service = new ResourceServiceClient(repository.Object, Options.Create(new ResourcefullOptions()),
@@ -463,7 +463,7 @@ public class ResourceServiceClientTests
         var (repository, service) = NewSweepWhoseBatchFailsPartway(() => new InvalidOperationException("The batch failed."));
 
         // Act
-        int deleted = await service.DeleteExpiredAsync();
+        long deleted = await service.DeleteExpiredAsync();
 
         // Assert: counted, and the replaced version didn't become current again.
         Assert.Equal(1, deleted);
@@ -498,12 +498,12 @@ public class ResourceServiceClientTests
             new() { ContainerName = container, Name = name, VersionId = id, ExpiresAt = DateTimeOffset.UnixEpoch };
         repository.Setup(r => r.GetExpiredAsync(It.IsAny<DateTimeOffset>(), It.IsAny<int>(), null,
             It.IsAny<CancellationToken>())).ReturnsAsync([Expired("c", "n", "v1"), Expired("d", "n", "v1"), Expired("c", "o", "v2")]);
-        repository.Setup(r => r.DeleteExpiredVersionsAsync(It.Is<IReadOnlyList<(ResourceAddress, string)>>(v => v.Count == 3),
+        repository.Setup(r => r.DeleteExpiredVersionsAsync(It.Is<IReadOnlyList<ResourceVersionAddress>>(v => v.Count == 3),
             It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync([(new ResourceAddress("c", "n"), "v1"), (new ResourceAddress("c", "o"), "v2")]);
+            .ReturnsAsync([new ResourceVersionAddress(new ResourceAddress("c", "n"), "v1"), new ResourceVersionAddress(new ResourceAddress("c", "o"), "v2")]);
 
         // Act
-        int deleted = await NewService(repository.Object).DeleteExpiredAsync();
+        long deleted = await NewService(repository.Object).DeleteExpiredAsync();
 
         // Assert
         Assert.Equal(2, deleted);
@@ -577,14 +577,14 @@ public class ResourceServiceClientTests
             new() { ContainerName = "c", Name = id, VersionId = id, ExpiresAt = DateTimeOffset.UnixEpoch };
         repository.Setup(r => r.GetExpiredAsync(It.IsAny<DateTimeOffset>(), It.IsAny<int>(), null,
             It.IsAny<CancellationToken>())).ReturnsAsync([Expired("a"), Expired("b")]);
-        repository.Setup(r => r.DeleteExpiredVersionsAsync(It.IsAny<IReadOnlyList<(ResourceAddress, string)>>(),
+        repository.Setup(r => r.DeleteExpiredVersionsAsync(It.IsAny<IReadOnlyList<ResourceVersionAddress>>(),
             It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("The batch failed."));
         repository.Setup(r => r.DeleteExpiredVersionAsync(It.IsAny<ResourceAddress>(), It.IsAny<string>(),
             It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>())).ReturnsAsync(true);
 
         // Act
-        int deleted = await NewService(repository.Object).DeleteExpiredAsync();
+        long deleted = await NewService(repository.Object).DeleteExpiredAsync();
 
         // Assert
         Assert.Equal(2, deleted);

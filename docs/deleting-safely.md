@@ -186,8 +186,8 @@ await documents.PurgeDeletedAsync("reports/q3.xlsx");                    // ever
 await documents.PurgeDeletedAsync("reports/q3.xlsx", deleted.VersionId); // one of them
 ```
 
-That's your own delete, so the cleanup handler isn't told about it. `IResourceServiceClient.PurgeDeletedAsync()`
-runs the sweep's purge whenever you call it.
+That's your own delete, so the cleanup handler isn't told about it. `IResourceServiceClient.PurgeDueAsync()` runs the
+sweep's purge whenever you call it, so it purges only versions whose `PurgeAt` has passed.
 
 ### An example: invoices
 

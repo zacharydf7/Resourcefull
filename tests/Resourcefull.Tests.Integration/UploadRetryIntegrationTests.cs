@@ -378,22 +378,22 @@ public class UploadRetryIntegrationTests(SqlServerFixture fixture)
         var failure = new FailOnceInterceptor(failAfterCommit: true, commitsBeforeFailing: 1);
         (ResourceSqlRepository repository, string c) = await NewRepositoryAsync(failure, arm: false);
         var expiresAt = new DateTimeOffset(2000, 1, 1, 0, 0, 0, TimeSpan.Zero);
-        List<(ResourceAddress, string)> versions = [];
+        List<ResourceVersionAddress> versions = [];
         for (int i = 0; i < 5; i++)
         {
             var version = new NewResourceVersion(new ResourceAddress(c, $"n{i}"), $"v{i}") { ExpiresAt = expiresAt };
             await repository.AddResourceAsync(version, new MemoryStream(Payload));
-            versions.Add((version.Resource, version.VersionId));
+            versions.Add(new ResourceVersionAddress(version.Resource, version.VersionId));
         }
         failure.Arm();
 
         // Act
-        IReadOnlyCollection<(ResourceAddress, string)> deleted =
+        IReadOnlyCollection<ResourceVersionAddress> deleted =
             await repository.DeleteExpiredVersionsAsync(versions, DateTimeOffset.UtcNow);
 
         // Assert
         Assert.True(failure.Failed);
-        Assert.Equal(versions.OrderBy(v => v.Item2), deleted.OrderBy(v => v.Item2));
+        Assert.Equal(versions.OrderBy(v => v.VersionId), deleted.OrderBy(v => v.VersionId));
         for (int i = 0; i < 5; i++) Assert.Empty(await repository.GetResourceVersionsAsync(new ResourceAddress(c, $"n{i}")));
     }
 

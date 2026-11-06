@@ -1,6 +1,7 @@
 using System.Buffers.Text;
 using System.Security.Cryptography;
 using System.Text;
+using Resourcefull.Providers;
 
 namespace Resourcefull;
 
@@ -39,26 +40,29 @@ internal static class ResourcePageToken
 
     private const string DeletedVersion = "d1";
 
-    public static string EncodeDeleted(string? prefix, (DateTimeOffset DeletedAt, string VersionId) next) =>
-        $"{DeletedVersion}.{next.DeletedAt.UtcTicks}.{Base64Url.EncodeToString(Encoding.UTF8.GetBytes(next.VersionId))}.{Fingerprint(prefix, null)}";
+    public static string EncodeDeleted(string? prefix, ResourceVersionKey next) =>
+        $"{DeletedVersion}.{next.At.UtcTicks}.{Base64Url.EncodeToString(Encoding.UTF8.GetBytes(next.VersionId))}." +
+        $"{Base64Url.EncodeToString(Encoding.UTF8.GetBytes(next.Resource.ResourceName))}.{Fingerprint(prefix, null)}";
 
-    /// <summary>Where the token's listing of a bin continues: after this deletion time and version ID.</summary>
+    /// <summary>Where the token's listing of <paramref name="containerName"/>'s bin continues.</summary>
     /// <exception cref="ArgumentException">
     /// The token is malformed, or belongs to another listing: of another prefix, or of current resources.
     /// </exception>
-    public static (DateTimeOffset DeletedAt, string VersionId) DecodeDeleted(string token, string? prefix, string paramName)
+    public static ResourceVersionKey DecodeDeleted(string token, string containerName, string? prefix, string paramName)
     {
         string[] parts = token.Split('.');
-        if (parts.Length != 4 || parts[0] != DeletedVersion
+        if (parts.Length != 5 || parts[0] != DeletedVersion
             || !long.TryParse(parts[1], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out long ticks)
             || ticks > DateTimeOffset.MaxValue.UtcTicks)
             throw new ArgumentException("The continuation token isn't one a listing of the bin returned.", paramName);
-        if (parts[3] != Fingerprint(prefix, null))
+        if (parts[4] != Fingerprint(prefix, null))
             throw new ArgumentException("The continuation token belongs to a listing of another prefix.", paramName);
 
         try
         {
-            return (new DateTimeOffset(ticks, TimeSpan.Zero), Encoding.UTF8.GetString(Base64Url.DecodeFromChars(parts[2])));
+            return new ResourceVersionKey(new DateTimeOffset(ticks, TimeSpan.Zero),
+                new ResourceAddress(containerName, Encoding.UTF8.GetString(Base64Url.DecodeFromChars(parts[3]))),
+                Encoding.UTF8.GetString(Base64Url.DecodeFromChars(parts[2])));
         }
         catch (FormatException exception)
         {

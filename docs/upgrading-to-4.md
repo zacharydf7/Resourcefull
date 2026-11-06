@@ -177,7 +177,7 @@ change the members whose signatures changed:
 | `AddResourceContainerAsync(ResourceContainerInfo)` | `AddContainerAsync(string resourceContainerName, IReadOnlyDictionary<string, string> metadata, ...)` |
 | `CopyResourceAsync`'s `ResourceInfo destination` | A `NewResourceVersion` |
 | `ImportVersionAsync(string resourceContainerName, ResourceInfo version, ...)` | `ImportVersionAsync(NewResourceVersion version, ...)` |
-| `GetExpiredAsync`'s `ResourceInfo? after` | `(DateTimeOffset ExpiresAt, string VersionId)? after`: the expiry and version ID of the previous batch's last version |
+| `GetExpiredAsync`'s `ResourceInfo? after` | `ResourceVersionKey? after`: the key of the previous batch's last version |
 | `IDictionary<string, string>` metadata parameters | `IReadOnlyDictionary<string, string>` |
 | Lists returned as `List<T>` | `IReadOnlyList<T>` |
 

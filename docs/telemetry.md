@@ -146,7 +146,7 @@ metrics. It also has:
 | `list_deleted` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | `GetDeletedPageAsync`, and each page of the [bin](deleting-safely.md#the-bin) that `ListDeletedAsync` fetches | `resourcefull.page_size` |
 | `undelete` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | `UndeleteAsync` | |
 | `purge_deleted` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | `PurgeDeletedAsync` on a container client | |
-| `purge` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | `PurgeDeletedAsync` on the service client, and each sweep of [`UseExpiry`](expiry.md), when it finds versions due to leave a bin | `resourcefull.purged`: how many versions it purged |
+| `purge` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> | `PurgeDueAsync` on the service client, and each sweep of [`UseExpiry`](expiry.md), when it finds versions due to leave a bin | `resourcefull.purged`: how many versions it purged |
 | `delete` | `DeleteResourceIfExistsAsync` | `resourcefull.conditional`; when a [retained or held](deleting-safely.md) version refuses it, `resourcefull.refusal_reason` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> |
 | `create_container` | `CreateContainerAsync`, `CreateContainerIfNotExistsAsync` | |
 | `get_container` | `GetInfoAsync` | |

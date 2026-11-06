@@ -123,13 +123,13 @@ internal partial class ResourceServiceClient(ResourceRepository resourceReposito
             })];
         });
 
-    public async Task<int> DeleteExpiredAsync(CancellationToken cancellationToken = default)
+    public async Task<long> DeleteExpiredAsync(CancellationToken cancellationToken = default)
     {
         DateTimeOffset now = (timeProvider ?? TimeProvider.System).GetUtcNow();
         // What uploads that stopped partway left behind, which nothing else deletes; a provider that leaves nothing
         // behind answers at once. The provider counts them, so a sweep that finds nothing expired still shows them. A
         // failure here mustn't hold up the expired versions, so it's reported after them.
-        int abandoned = 0;
+        long abandoned = 0;
         Exception? abandonedFailure = null;
         try
         {
@@ -151,7 +151,8 @@ internal partial class ResourceServiceClient(ResourceRepository resourceReposito
 
         return await _telemetry.RunAsync("expire", null, null, async activity =>
         {
-            int deleted = 0, failed = 0, batches = 0, fallbacks = 0;
+            long deleted = 0, failed = 0;
+            int batches = 0, fallbacks = 0;
             // The first few failures are enough to say why; an outage of the handler's dependency fails every version.
             var failures = new List<Exception>();
             void Fail(Exception exception)
@@ -166,8 +167,8 @@ internal partial class ResourceServiceClient(ResourceRepository resourceReposito
                 await resourceRepository.GetResourceInfoAsync(new ResourceAddress(version.ContainerName, version.Name),
                     version.VersionId, CancellationToken.None).ConfigureAwait(false) is null;
 
-            static (ResourceAddress, string) Key(ResourceInfo version) =>
-                (new ResourceAddress(version.ContainerName, version.Name), version.VersionId);
+            static ResourceVersionAddress AddressOf(ResourceInfo version) =>
+                new(new ResourceAddress(version.ContainerName, version.Name), version.VersionId);
 
             // Deletes a batch of versions together, or, if that fails, each on its own, so one version that fails
             // doesn't hold up the rest. Returns the versions deleted.
@@ -175,11 +176,11 @@ internal partial class ResourceServiceClient(ResourceRepository resourceReposito
             {
                 try
                 {
-                    HashSet<(ResourceAddress, string)> deletedTogether =
-                        [.. await resourceRepository.DeleteExpiredVersionsAsync([.. versions.Select(Key)], now,
+                    HashSet<ResourceVersionAddress> deletedTogether =
+                        [.. await resourceRepository.DeleteExpiredVersionsAsync([.. versions.Select(AddressOf)], now,
                             cancellationToken).ConfigureAwait(false)];
                     batches++;
-                    return [.. versions.Where(v => deletedTogether.Contains(Key(v)))];
+                    return [.. versions.Where(v => deletedTogether.Contains(AddressOf(v)))];
                 }
                 catch (Exception exception)
                     when (exception is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
@@ -209,7 +210,7 @@ internal partial class ResourceServiceClient(ResourceRepository resourceReposito
             }
 
             // Each batch starts after the last one ended, so the versions a sweep skips or fails on can't hold up the rest.
-            (DateTimeOffset ExpiresAt, string VersionId)? after = null;
+            ResourceVersionKey? after = null;
             while (true)
             {
                 IReadOnlyList<ResourceInfo> expired = await resourceRepository.GetExpiredAsync(now, ExpiredPerBatch, after, cancellationToken).ConfigureAwait(false);
@@ -279,10 +280,10 @@ internal partial class ResourceServiceClient(ResourceRepository resourceReposito
                 }
 
                 if (expired.Count < ExpiredPerBatch) break;
-                if (expired[^1].VersionId == after?.VersionId)
+                ResourceVersionKey next = KeyOf(expired[^1], expired[^1].ExpiresAt ?? throw new InvalidOperationException($"{resourceRepository.GetType().Name} listed an expired version without an expiry: its GetExpiredAsync must list only versions with an ExpiresAt."));
+                if (next == after)
                     throw new InvalidOperationException($"{resourceRepository.GetType().Name} listed the same expired versions again: its GetExpiredAsync must list the versions after the one given.");
-                after = (expired[^1].ExpiresAt ?? throw new InvalidOperationException($"{resourceRepository.GetType().Name} listed an expired version without an expiry: its GetExpiredAsync must list only versions with an ExpiresAt."),
-                    expired[^1].VersionId);
+                after = next;
             }
 
             activity?.SetTag("resourcefull.expired", deleted);
@@ -304,7 +305,11 @@ internal partial class ResourceServiceClient(ResourceRepository resourceReposito
         }).ConfigureAwait(false);
     }
 
-    public async Task<int> PurgeDeletedAsync(CancellationToken cancellationToken = default)
+    /// <summary>The key of a version in a listing by <paramref name="at"/>.</summary>
+    private static ResourceVersionKey KeyOf(ResourceInfo version, DateTimeOffset at) =>
+        new(at, new ResourceAddress(version.ContainerName, version.Name), version.VersionId);
+
+    public async Task<long> PurgeDueAsync(CancellationToken cancellationToken = default)
     {
         // Nothing can be in a bin the provider doesn't have, and expiry still runs.
         if (!resourceRepository.SupportsSoftDelete) return 0;
@@ -314,9 +319,9 @@ internal partial class ResourceServiceClient(ResourceRepository resourceReposito
 
         return await _telemetry.RunAsync("purge", null, null, async activity =>
         {
-            int purged = 0, failed = 0;
+            long purged = 0, failed = 0;
             var failures = new List<Exception>();
-            (DateTimeOffset PurgeAt, string VersionId)? after = null;
+            ResourceVersionKey? after = null;
             while (true)
             {
                 IReadOnlyList<ResourceInfo> due = await resourceRepository.GetPurgeableAsync(now, ExpiredPerBatch, after, cancellationToken).ConfigureAwait(false);
@@ -333,7 +338,7 @@ internal partial class ResourceServiceClient(ResourceRepository resourceReposito
                             await _telemetry.NotifyCleanupAsync(cleanupHandler, new ResourceCleanup(version, ResourceCleanupReason.Purged, now),
                                 cancellationToken).ConfigureAwait(false);
                         }
-                        int count = await resourceRepository.PurgeDeletedAsync(new ResourceAddress(version.ContainerName, version.Name),
+                        long count = await resourceRepository.PurgeDeletedAsync(new ResourceAddress(version.ContainerName, version.Name),
                             version.VersionId, now, cancellationToken).ConfigureAwait(false);
                         purged += count;
                         _telemetry.CountPurged(count);
@@ -348,10 +353,10 @@ internal partial class ResourceServiceClient(ResourceRepository resourceReposito
                 }
 
                 if (due.Count < ExpiredPerBatch) break;
-                if (due[^1].VersionId == after?.VersionId)
+                ResourceVersionKey next = KeyOf(due[^1], due[^1].PurgeAt ?? throw new InvalidOperationException($"{resourceRepository.GetType().Name} listed a version to purge without a purge time: its GetPurgeableAsync must list only versions with a PurgeAt."));
+                if (next == after)
                     throw new InvalidOperationException($"{resourceRepository.GetType().Name} listed the same versions to purge again: its GetPurgeableAsync must list the versions after the one given.");
-                after = (due[^1].PurgeAt ?? throw new InvalidOperationException($"{resourceRepository.GetType().Name} listed a version to purge without a purge time: its GetPurgeableAsync must list only versions with a PurgeAt."),
-                    due[^1].VersionId);
+                after = next;
             }
 
             activity?.SetTag("resourcefull.purged", purged);
