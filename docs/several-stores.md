@@ -104,17 +104,17 @@ store's client:
 app.MapPost("/archive/share/{container}/{**name}", async (string container, string name,
     [FromKeyedServices("archive")] IResourceLinkSigner links, CancellationToken cancellationToken) =>
 {
-    string? token = await links.CreateTokenAsync(new ResourceLink(container, name), cancellationToken);
+    string? token = await links.CreateDownloadTokenAsync(new ResourceDownloadLink(container, name), cancellationToken);
     return token is null
         ? Results.NotFound()
         : Results.Ok(new { url = $"https://example.com/archive/shared/{token}" });
 }).RequireAuthorization();
 
 app.MapMethods("/archive/shared/{token}", ["GET", "HEAD"], (string token,
-    [FromKeyedServices("archive")] IResourceServiceClient archive) => Results.SharedResource(archive, token));
+    [FromKeyedServices("archive")] IResourceServiceClient archive) => Results.SharedDownload(archive, token));
 ```
 
-`Results.SharedResource` and `Results.SharedUpload` check the token with the signer of the store whose client they're
+`Results.SharedDownload` and `Results.SharedUpload` check the token with the signer of the store whose client they're
 given. A token opens only with the signer of the store that made it, so a link made for one store gets 404 at another
 store's endpoint, even when both stores have a file at the same container and name. Map one endpoint for each store's
 links.

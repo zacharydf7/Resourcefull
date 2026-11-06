@@ -69,17 +69,17 @@ stop people opening a file through links you've already given out:
   out. See Microsoft's guide to [key management](https://learn.microsoft.com/aspnet/core/security/data-protection/implementation/key-management), which covers revoking keys.
 
 If you need to cancel individual links, keep a list of the links you've created in your own database, and check it in
-the endpoint that serves them before calling `Results.SharedResource`. `IResourceLinkSigner.Check(token)` tells you
+the endpoint that serves them before calling `Results.SharedDownload`. `IResourceLinkSigner.CheckDownload(token)` tells you
 which file and version a token is for, so you can look it up.
 
 ## Checking a token yourself
 
-`IResourceLinkSigner.Check(token)` tells you whether a token is valid, expired or invalid, and for a valid or expired
+`IResourceLinkSigner.CheckDownload(token)` tells you whether a token is valid, expired or invalid, and for a valid or expired
 one, which file, version and expiry it carries. Use it to record which links are opened, to keep your own list of
 canceled links, or to serve links some other way:
 
 ```csharp
-ResourceLinkCheck check = links.Check(token);
+ResourceDownloadLinkCheck check = links.CheckDownload(token);
 if (check.Status == ResourceLinkStatus.Valid)
     logger.LogInformation("Link to {Name} opened", check.Link!.ResourceName);
 ```

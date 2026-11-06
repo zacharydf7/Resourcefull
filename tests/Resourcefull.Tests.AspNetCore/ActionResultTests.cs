@@ -60,15 +60,15 @@ public class ActionResultTests
     }
 
     [Fact]
-    public async Task SharedResourceHttpResult_ShouldSendTheLinkedResource_WhenRunAsAnActionResult()
+    public async Task SharedDownloadHttpResult_ShouldSendTheLinkedResource_WhenRunAsAnActionResult()
     {
         // Arrange
         await using TestApp app = await StartWithDigitsAsync();
-        string token = (await app.Links.CreateTokenAsync(new ResourceLink(TestApp.Container, "digits.txt")))!;
+        string token = (await app.Links.CreateDownloadTokenAsync(new ResourceDownloadLink(TestApp.Container, "digits.txt")))!;
         IResourceServiceClient resources = app.Services.CreateScope().ServiceProvider.GetRequiredService<IResourceServiceClient>();
 
         // Act
-        (HttpResponse response, string body) = await ExecuteAsync(app, TypedResults.SharedResource(resources, token));
+        (HttpResponse response, string body) = await ExecuteAsync(app, TypedResults.SharedDownload(resources, token));
 
         // Assert
         Assert.Equal((StatusCodes.Status200OK, "0123456789"), (response.StatusCode, body));

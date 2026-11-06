@@ -89,6 +89,8 @@ internal sealed class UploadApp : IAsyncDisposable
 
     public IResourceLinkSigner Links => _app.Services.CreateScope().ServiceProvider.GetRequiredService<IResourceLinkSigner>();
 
+    public IResourceServiceClient Resources => _app.Services.CreateScope().ServiceProvider.GetRequiredService<IResourceServiceClient>();
+
     public static async Task<UploadApp> StartAsync(bool expiry = false, ResourceSize? maxSize = null, ContainerPolicy? policy = null,
         bool onPort = false, TimeProvider? clock = null)
     {

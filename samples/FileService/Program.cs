@@ -137,7 +137,7 @@ files.MapDelete("/{**name}", async (string name, ClaimsPrincipal user, IResource
 files.MapPost("/share/{**name}", async (string name, ClaimsPrincipal user, IResourceLinkSigner links,
     HttpRequest request, CancellationToken cancellationToken) =>
 {
-    string? token = await links.CreateTokenAsync(new ResourceLink(ContainerOf(user), name)
+    string? token = await links.CreateDownloadTokenAsync(new ResourceDownloadLink(ContainerOf(user), name)
     {
         ExpiresIn = TimeSpan.FromDays(1)
     }, cancellationToken);
@@ -147,7 +147,7 @@ files.MapPost("/share/{**name}", async (string name, ClaimsPrincipal user, IReso
 });
 
 app.MapMethods("/shared/{token}", ["GET", "HEAD"], (string token, IResourceServiceClient resources) =>
-    Results.SharedResource(resources, token));
+    Results.SharedDownload(resources, token));
 
 app.Run();
 

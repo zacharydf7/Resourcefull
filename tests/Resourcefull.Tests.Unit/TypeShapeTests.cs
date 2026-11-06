@@ -21,7 +21,7 @@ public class TypeShapeTests
         // take only their identity by position and the rest as properties, which can grow.
         string[] identities =
         [
-            "NewResourceVersion", "ResourceAddress", "ResourceLink", "ResourceMetadataMatch", "ResourceOrigin", "ResourceRange",
+            "NewResourceVersion", "ResourceAddress", "ResourceDownloadLink", "ResourceMetadataMatch", "ResourceOrigin", "ResourceRange",
             "ResourceUploadLink", "ResourceUploadTarget", "ResourceUriContext", "ResourceVersionAddress", "ResourceVersionKey"
         ];
 

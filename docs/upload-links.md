@@ -31,17 +31,18 @@ This is your application's endpoint, so you decide who may ask for a link. Here,
 link that lets a customer upload up to 20 MiB per file, of images and PDFs, into the claim's own folder, for a week:
 
 ```csharp
-app.MapPost("/claims/{claimId:int}/upload-link", (int claimId, IResourceLinkSigner links) =>
+app.MapPost("/claims/{claimId:int}/upload-link", async (int claimId, IResourceLinkSigner links, CancellationToken cancellationToken) =>
 {
-    string token = links.CreateUploadToken(new ResourceUploadLink("claims")
+    string? token = await links.CreateUploadTokenAsync(new ResourceUploadLink("claims")
     {
         NamePrefix = $"{claimId}/",
         MaxSize = ResourceSize.Megabytes(20),
         AllowedContentTypes = ["image/*", "application/pdf"],
         ExpiresIn = TimeSpan.FromDays(7)
-    });
+    }, cancellationToken);
 
-    return Results.Ok(new { url = $"https://example.com/upload/{token}" });
+    // The token is null if the container doesn't exist.
+    return token is null ? Results.NotFound() : Results.Ok(new { url = $"https://example.com/upload/{token}" });
 }).RequireAuthorization("ClaimsHandlers");
 ```
 
@@ -149,7 +150,7 @@ file. The upload is then held to that length: a body cut short stores nothing.
 | uses a link that has expired | **410 Gone** |
 | uses a link that was changed, made up, or sealed with keys this application no longer has, or a download link's token | **404 Not Found** |
 | names a file the link doesn't cover: a name for a link to one name, no name for a link with a prefix, or any name for a form | **404 Not Found** |
-| uses a link whose container doesn't exist, or no longer does | **404 Not Found** |
+| uses a link whose container no longer exists | **404 Not Found** |
 | has no `Content-Length`, for a link with `MaxSize` | **411 Length Required** |
 | is larger than `MaxSize` | **413 Content Too Large** |
 | has a type the link doesn't allow | **415 Unsupported Media Type** |

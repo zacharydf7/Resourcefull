@@ -64,7 +64,7 @@ public sealed class SharedUploadHttpResult : IResult, IActionResult
         HttpRequest request = httpContext.Request;
         HttpResponse response = httpContext.Response;
 
-        IResourceLinkSigner signer = ResourceLinkServiceCollectionExtensions.SignerFor(httpContext, Resources, "Results.SharedUpload");
+        IResourceLinkSigner signer = ResourcefullLinksServiceCollectionExtensions.SignerFor(httpContext, Resources, "Results.SharedUpload");
         ResourceUploadLinkCheck check = signer.CheckUpload(Token);
         ResourceLinkTelemetry.Record(httpContext, check.Status, Resources.StoreName);
 

@@ -77,7 +77,7 @@ public class TusClientTests
         // Arrange: a link that takes files under in/, used without signing in.
         string folder = ClientFolder();
         await using UploadApp app = await UploadApp.StartAsync(onPort: true);
-        string token = app.Links.CreateUploadToken(new ResourceUploadLink(UploadApp.Container) { NamePrefix = "in/" });
+        string token = (await app.Links.CreateUploadTokenAsync(new ResourceUploadLink(UploadApp.Container) { NamePrefix = "in/" }))!;
 
         // Act
         Summary summary = await UploadAsync(folder, new Uri(app.Address!, $"/upload-links/{token}"), "linked.bin", "interrupted");

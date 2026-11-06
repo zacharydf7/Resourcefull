@@ -13,7 +13,7 @@ Every public type and member of the seven library packages, generated from their
 - **`Resourcefull.S3`**: `UseS3` and `ResourcefullS3Options`.
 - **`Resourcefull.AzureBlob`**: `UseAzureBlob` and `ResourcefullAzureBlobOptions`.
 - **`Resourcefull.AspNetCore`**: `Results.Resource`, `UploadFromRequestAsync`, `AddResourcefullExceptionHandler`,
-  signed download and upload links (`AddResourcefullLinks`, `IResourceLinkSigner`, `Results.SharedResource`,
+  signed download and upload links (`AddResourcefullLinks`, `IResourceLinkSigner`, `Results.SharedDownload`,
   `Results.SharedUpload`), and the dashboard (`MapResourcefullDashboard`).
 
 The eighth package, `Resourcefull.Testing`, holds the contract tests for checking a provider; see

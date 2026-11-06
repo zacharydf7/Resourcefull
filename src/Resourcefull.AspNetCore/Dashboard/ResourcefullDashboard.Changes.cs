@@ -140,39 +140,39 @@ public static partial class ResourcefullDashboardEndpointRouteBuilderExtensions
                 Record(httpContext, "download_link");
                 if (LinkLifetime(change.ExpiresInMinutes) is not { } expiresIn) return BadLifetime();
                 IResourceLinkSigner signer = Signer(httpContext);
-                string? token = await signer.CreateTokenAsync(new ResourceLink(container, name)
+                string? token = await signer.CreateDownloadTokenAsync(new ResourceDownloadLink(container, name)
                 {
                     VersionId = versionId, ExpiresIn = expiresIn
                 }, cancellationToken).ConfigureAwait(false);
                 if (token is null) return Results.NotFound();
                 Audit(httpContext, "download_link", container, name, versionId);
-                return Results.Json(new LinkView(LinkUrl(httpContext, downloadPath, token), signer.Check(token).Link!.ExpiresAt), Json);
+                return Results.Json(new LinkView(LinkUrl(httpContext, downloadPath, token), signer.CheckDownload(token).Link!.ExpiresAt), Json);
             });
         }
 
         if (options.UploadLinkPath is { } uploadPath)
         {
-            changes.MapPost("/upload-link", async (string container, UploadLinkChange change, IResourceServiceClient resources,
-                HttpContext httpContext, CancellationToken cancellationToken) =>
+            changes.MapPost("/upload-link", async (string container, UploadLinkChange change, HttpContext httpContext,
+                CancellationToken cancellationToken) =>
             {
                 Record(httpContext, "upload_link");
                 if (LinkLifetime(change.ExpiresInMinutes) is not { } expiresIn) return BadLifetime();
-                if (!await resources.ContainerExistsAsync(container, cancellationToken).ConfigureAwait(false)) return Results.NotFound();
                 IResourceLinkSigner signer = Signer(httpContext);
-                string token;
+                string? token;
                 try
                 {
-                    token = signer.CreateUploadToken(new ResourceUploadLink(container)
+                    token = await signer.CreateUploadTokenAsync(new ResourceUploadLink(container)
                     {
                         ResourceName = change.Name, NamePrefix = change.NamePrefix, ExpiresIn = expiresIn,
                         Mode = change.Replace ? ResourceWriteMode.Replace : ResourceWriteMode.Create
-                    });
+                    }, cancellationToken).ConfigureAwait(false);
                 }
-                catch (ArgumentException exception)
+                catch (ArgumentException exception) when (exception.ParamName == "link")
                 {
                     // The signer refuses a link with both a name and a prefix, or neither, or one that breaks the name rules.
                     return BadInput(exception.Message);
                 }
+                if (token is null) return Results.NotFound();
                 Audit(httpContext, "upload_link", container, change.Name ?? change.NamePrefix, null);
                 return Results.Json(new LinkView(LinkUrl(httpContext, uploadPath, token), signer.CheckUpload(token).Link!.ExpiresAt), Json);
             });

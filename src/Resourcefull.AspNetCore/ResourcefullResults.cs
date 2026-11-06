@@ -34,18 +34,18 @@ public static class ResourcefullResults
             new ResourceLookupHttpResult(container, resourceName, options, versionId);
 
         /// <summary>
-        /// Sends the resource a signed link grants, to whoever holds the link, without authentication. See
-        /// <see cref="SharedResourceHttpResult"/>, and <see cref="IResourceLinkSigner.CreateTokenAsync"/> to make links.
+        /// Sends the resource a signed download link grants, to whoever holds the link, without authentication. See
+        /// <see cref="SharedDownloadHttpResult"/>, and <see cref="IResourceLinkSigner.CreateDownloadTokenAsync"/> to make links.
         /// </summary>
         /// <param name="resources">The client to read the resource through.</param>
         /// <param name="token">The token from the link's URL.</param>
         /// <returns>The result, which checks the token when it runs.</returns>
-        public static IResult SharedResource(IResourceServiceClient resources, string token) =>
-            new SharedResourceHttpResult(resources, token);
+        public static IResult SharedDownload(IResourceServiceClient resources, string token) =>
+            new SharedDownloadHttpResult(resources, token);
 
         /// <summary>
         /// Stores the request's body through a signed upload link, for whoever holds the link, without authentication.
-        /// See <see cref="SharedUploadHttpResult"/>, and <see cref="IResourceLinkSigner.CreateUploadToken"/> to make links.
+        /// See <see cref="SharedUploadHttpResult"/>, and <see cref="IResourceLinkSigner.CreateUploadTokenAsync"/> to make links.
         /// </summary>
         /// <param name="resources">The client to store the upload through.</param>
         /// <param name="token">The token from the link's URL.</param>
@@ -76,8 +76,8 @@ public static class ResourcefullTypedResults
             string? versionId = null, ResourceResultOptions? options = null) =>
             new(container, resourceName, options, versionId);
 
-        /// <inheritdoc cref="ResourcefullResults.SharedResource(IResourceServiceClient, string)"/>
-        public static SharedResourceHttpResult SharedResource(IResourceServiceClient resources, string token) =>
+        /// <inheritdoc cref="ResourcefullResults.SharedDownload(IResourceServiceClient, string)"/>
+        public static SharedDownloadHttpResult SharedDownload(IResourceServiceClient resources, string token) =>
             new(resources, token);
 
         /// <inheritdoc cref="ResourcefullResults.SharedUpload(IResourceServiceClient, string, string?)"/>

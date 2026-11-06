@@ -22,11 +22,11 @@ public class FormUploadLinkTests
         return form;
     }
 
-    private static string Token(TestApp app, string? name = null, string? prefix = null, ResourceSize? maxSize = null, string[]? types = null) =>
-        app.Links.CreateUploadToken(new ResourceUploadLink(TestApp.Container)
+    private static async Task<string> TokenAsync(TestApp app, string? name = null, string? prefix = null, ResourceSize? maxSize = null, string[]? types = null) =>
+        (await app.Links.CreateUploadTokenAsync(new ResourceUploadLink(TestApp.Container)
         {
             ResourceName = name, NamePrefix = prefix, MaxSize = maxSize, AllowedContentTypes = types
-        });
+        }))!;
 
     private static async Task<string?> ReadAsync(TestApp app, string name) =>
         (await app.Files.DownloadContentAsync(name))?.Content.ToString();
@@ -43,7 +43,7 @@ public class FormUploadLinkTests
     {
         // Arrange
         await using TestApp app = await TestApp.StartAsync();
-        string token = Token(app, prefix: "claims/1042/");
+        string token = await TokenAsync(app, prefix: "claims/1042/");
 
         // Act
         HttpResponseMessage response = await app.Client.PostAsync($"/upload/{token}",
@@ -67,7 +67,7 @@ public class FormUploadLinkTests
         await using TestApp app = await TestApp.StartAsync();
 
         // Act
-        HttpResponseMessage response = await app.Client.PostAsync($"/upload/{Token(app, name: "contract.pdf")}",
+        HttpResponseMessage response = await app.Client.PostAsync($"/upload/{await TokenAsync(app, name: "contract.pdf")}",
             Form(("signed scan.pdf", "application/pdf", "signed")));
 
         // Assert
@@ -88,8 +88,8 @@ public class FormUploadLinkTests
         await using TestApp app = await TestApp.StartAsync();
         await app.Files.UploadAsync("in/taken.jpg", BinaryData.FromString("theirs"));
         string token = problem == "second-file"
-            ? Token(app, name: "in/first.jpg")
-            : Token(app, prefix: "in/", maxSize: 5, types: ["image/*"]);
+            ? await TokenAsync(app, name: "in/first.jpg")
+            : await TokenAsync(app, prefix: "in/", maxSize: 5, types: ["image/*"]);
         (string, string, string) second = problem switch
         {
             "wrong-type" => ("second.html", "text/html", "two"),
@@ -120,7 +120,7 @@ public class FormUploadLinkTests
     {
         // Arrange
         await using TestApp app = await TestApp.StartAsync();
-        string token = Token(app, prefix: "in/", maxSize: ResourceSize.Kilobytes(1));
+        string token = await TokenAsync(app, prefix: "in/", maxSize: ResourceSize.Kilobytes(1));
 
         // Act
         HttpResponseMessage atLimit = await app.Client.PostAsync($"/upload/{token}",
@@ -145,7 +145,7 @@ public class FormUploadLinkTests
         form.Headers.ContentType = MediaTypeHeaderValue.Parse("multipart/form-data; boundary=b");
 
         // Act
-        HttpResponseMessage response = await app.Client.PostAsync($"/upload/{Token(app, prefix: "in/")}", form);
+        HttpResponseMessage response = await app.Client.PostAsync($"/upload/{await TokenAsync(app, prefix: "in/")}", form);
 
         // Assert: the first file stays, and is listed; the second isn't stored.
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
@@ -164,7 +164,7 @@ public class FormUploadLinkTests
         form.Headers.ContentType = MediaTypeHeaderValue.Parse("multipart/form-data; boundary=b");
 
         // Act
-        HttpResponseMessage response = await app.Client.PostAsync($"/upload/{Token(app, prefix: "in/")}", form);
+        HttpResponseMessage response = await app.Client.PostAsync($"/upload/{await TokenAsync(app, prefix: "in/")}", form);
 
         // Assert: the stored file is listed, and not named as the one refused.
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
@@ -179,7 +179,7 @@ public class FormUploadLinkTests
         // Arrange: a server that accepts 9,000 bytes, more than the form reader reads ahead, and a form of two files whose
         // second goes past that limit.
         await using TestApp app = await TestApp.StartAsync();
-        var request = new HttpRequestMessage(HttpMethod.Post, $"/upload/{Token(app, prefix: "in/")}")
+        var request = new HttpRequestMessage(HttpMethod.Post, $"/upload/{await TokenAsync(app, prefix: "in/")}")
         {
             Content = Form(("first.jpg", "image/jpeg", "one"), ("second.jpg", "image/jpeg", new string('x', 20_000)))
         };
@@ -205,7 +205,7 @@ public class FormUploadLinkTests
         form.Headers.ContentType = MediaTypeHeaderValue.Parse($"multipart/form-data; boundary={boundary}");
 
         // Act
-        HttpResponseMessage response = await app.Client.PostAsync($"/upload/{Token(app, prefix: "in/")}", form);
+        HttpResponseMessage response = await app.Client.PostAsync($"/upload/{await TokenAsync(app, prefix: "in/")}", form);
 
         // Assert
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
@@ -224,7 +224,7 @@ public class FormUploadLinkTests
         form.Add(empty);
 
         // Act
-        HttpResponseMessage response = await app.Client.PostAsync($"/upload/{Token(app, prefix: "in/")}", form);
+        HttpResponseMessage response = await app.Client.PostAsync($"/upload/{await TokenAsync(app, prefix: "in/")}", form);
 
         // Assert
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
@@ -238,7 +238,7 @@ public class FormUploadLinkTests
         await using TestApp app = await TestApp.StartAsync();
 
         // Act
-        HttpResponseMessage response = await app.Client.PostAsync($"/upload/{Token(app, prefix: "in/")}/photo.jpg",
+        HttpResponseMessage response = await app.Client.PostAsync($"/upload/{await TokenAsync(app, prefix: "in/")}/photo.jpg",
             Form(("photo.jpg", "image/jpeg", "one")));
 
         // Assert
@@ -255,7 +255,7 @@ public class FormUploadLinkTests
         string sent = await form.ReadAsStringAsync();
 
         // Act
-        HttpResponseMessage response = await app.Client.PutAsync($"/upload/{Token(app, name: "message")}", form);
+        HttpResponseMessage response = await app.Client.PutAsync($"/upload/{await TokenAsync(app, name: "message")}", form);
 
         // Assert
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);

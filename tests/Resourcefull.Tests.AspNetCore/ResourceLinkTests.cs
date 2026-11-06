@@ -17,17 +17,17 @@ public class ResourceLinkTests
         return app;
     }
 
-    private static async Task<string> TokenAsync(TestApp app, ResourceLink? link = null) =>
-        (await app.Links.CreateTokenAsync(link ?? new ResourceLink(TestApp.Container, "2026/report.txt")))!;
+    private static async Task<string> TokenAsync(TestApp app, ResourceDownloadLink? link = null) =>
+        (await app.Links.CreateDownloadTokenAsync(link ?? new ResourceDownloadLink(TestApp.Container, "2026/report.txt")))!;
 
     [Fact]
-    public async Task SharedResource_ShouldOfferTheFileAsADownload_WhenAnInlineLinksFileIsReplacedByAPage()
+    public async Task SharedDownload_ShouldOfferTheFileAsADownload_WhenAnInlineLinksFileIsReplacedByAPage()
     {
         // Arrange: an inline link to whatever is current, and the image it was made for replaced by a web page.
         await using TestApp app = await TestApp.StartAsync();
         await app.Files.UploadAsync("avatar", BinaryData.FromString("png"), new ResourceUploadOptions { Headers =
             new ResourceHeaders { ContentType = "image/png" } });
-        string token = await TokenAsync(app, new ResourceLink(TestApp.Container, "avatar") { Inline = true, FollowCurrent = true });
+        string token = await TokenAsync(app, new ResourceDownloadLink(TestApp.Container, "avatar") { Inline = true, FollowCurrent = true });
         await app.Files.UploadAsync("avatar", BinaryData.FromString("<script></script>"), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace, Headers = new ResourceHeaders
         {
             ContentType = "text/html"
@@ -48,7 +48,7 @@ public class ResourceLinkTests
     }
 
     [Fact]
-    public async Task SharedResource_ShouldSendTheFileWithoutPassingTheLinkOn_WhenTheLinkIsValid()
+    public async Task SharedDownload_ShouldSendTheFileWithoutPassingTheLinkOn_WhenTheLinkIsValid()
     {
         // Arrange
         await using TestApp app = await StartWithReportAsync();
@@ -67,12 +67,12 @@ public class ResourceLinkTests
     }
 
     [Fact]
-    public async Task SharedResource_ShouldSendTheVersionCurrentWhenTheLinkWasMade_WhenANewerOneIsUploaded()
+    public async Task SharedDownload_ShouldSendTheVersionCurrentWhenTheLinkWasMade_WhenANewerOneIsUploaded()
     {
         // Arrange
         await using TestApp app = await StartWithReportAsync();
         string pinned = await TokenAsync(app);
-        string following = await TokenAsync(app, new ResourceLink(TestApp.Container, "2026/report.txt") { FollowCurrent = true });
+        string following = await TokenAsync(app, new ResourceDownloadLink(TestApp.Container, "2026/report.txt") { FollowCurrent = true });
         await app.Files.UploadAsync("2026/report.txt", BinaryData.FromString("second"), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace });
 
         // Act
@@ -85,12 +85,12 @@ public class ResourceLinkTests
     }
 
     [Fact]
-    public async Task SharedResource_ShouldAnswerGoneButStillNotPassTheLinkOn_WhenTheLinkHasExpired()
+    public async Task SharedDownload_ShouldAnswerGoneButStillNotPassTheLinkOn_WhenTheLinkHasExpired()
     {
         // Arrange
         var clock = new ManualTimeProvider();
         await using TestApp app = await StartWithReportAsync(clock);
-        string token = await TokenAsync(app, new ResourceLink(TestApp.Container, "2026/report.txt") { ExpiresIn = TimeSpan.FromMinutes(10) });
+        string token = await TokenAsync(app, new ResourceDownloadLink(TestApp.Container, "2026/report.txt") { ExpiresIn = TimeSpan.FromMinutes(10) });
         HttpResponseMessage before = await app.Client.GetAsync($"/shared/{token}");
 
         // Act
@@ -105,7 +105,7 @@ public class ResourceLinkTests
     }
 
     [Fact]
-    public async Task SharedResource_ShouldAnswerNotFound_WhenTheTokenWasChangedMadeUpOrSignedByAnotherApp()
+    public async Task SharedDownload_ShouldAnswerNotFound_WhenTheTokenWasChangedMadeUpOrSignedByAnotherApp()
     {
         // Arrange
         await using TestApp app = await StartWithReportAsync();
@@ -130,7 +130,7 @@ public class ResourceLinkTests
     }
 
     [Fact]
-    public async Task SharedResource_ShouldAnswerNotFound_WhenTheLinksVersionIsGone()
+    public async Task SharedDownload_ShouldAnswerNotFound_WhenTheLinksVersionIsGone()
     {
         // Arrange
         await using TestApp app = await StartWithReportAsync();
@@ -145,11 +145,11 @@ public class ResourceLinkTests
     }
 
     [Fact]
-    public async Task SharedResource_ShouldShowTheFileInlineAndAnswerRanges_WhenTheLinkSaysInline()
+    public async Task SharedDownload_ShouldShowTheFileInlineAndAnswerRanges_WhenTheLinkSaysInline()
     {
         // Arrange
         await using TestApp app = await StartWithReportAsync();
-        string token = await TokenAsync(app, new ResourceLink(TestApp.Container, "2026/report.txt") { Inline = true });
+        string token = await TokenAsync(app, new ResourceDownloadLink(TestApp.Container, "2026/report.txt") { Inline = true });
         var request = new HttpRequestMessage(HttpMethod.Get, $"/shared/{token}");
         request.Headers.Range = new RangeHeaderValue(1, 3);
 
@@ -163,16 +163,16 @@ public class ResourceLinkTests
     }
 
     [Fact]
-    public async Task CreateTokenAsync_ShouldReturnNullOrThrow_WhenTheResourceIsMissingOrTheLinkIsMalformed()
+    public async Task CreateDownloadTokenAsync_ShouldReturnNullOrThrow_WhenTheResourceIsMissingOrTheLinkIsMalformed()
     {
         // Arrange
         await using TestApp app = await StartWithReportAsync();
 
         // Act
-        string? missing = await app.Links.CreateTokenAsync(new ResourceLink(TestApp.Container, "missing.txt"));
-        string? missingVersion = await app.Links.CreateTokenAsync(new ResourceLink(TestApp.Container, "2026/report.txt") { VersionId = "no-such-version" });
-        Task both() => app.Links.CreateTokenAsync(new ResourceLink(TestApp.Container, "2026/report.txt") { VersionId = "v", FollowCurrent = true });
-        Task neverValid() => app.Links.CreateTokenAsync(new ResourceLink(TestApp.Container, "2026/report.txt") { ExpiresIn = TimeSpan.Zero });
+        string? missing = await app.Links.CreateDownloadTokenAsync(new ResourceDownloadLink(TestApp.Container, "missing.txt"));
+        string? missingVersion = await app.Links.CreateDownloadTokenAsync(new ResourceDownloadLink(TestApp.Container, "2026/report.txt") { VersionId = "no-such-version" });
+        Task both() => app.Links.CreateDownloadTokenAsync(new ResourceDownloadLink(TestApp.Container, "2026/report.txt") { VersionId = "v", FollowCurrent = true });
+        Task neverValid() => app.Links.CreateDownloadTokenAsync(new ResourceDownloadLink(TestApp.Container, "2026/report.txt") { ExpiresIn = TimeSpan.Zero });
 
         // Assert
         Assert.Null(missing);
@@ -182,21 +182,21 @@ public class ResourceLinkTests
     }
 
     [Fact]
-    public async Task Check_ShouldSayWhatTheLinkGrants_WhenTheTokenIsValidOrExpired()
+    public async Task CheckDownload_ShouldSayWhatTheLinkGrants_WhenTheTokenIsValidOrExpired()
     {
         // Arrange
         var clock = new ManualTimeProvider();
         await using TestApp app = await StartWithReportAsync(clock);
         ResourceInfo current = (await app.Files.GetResourceInfoAsync("2026/report.txt"))!;
-        string token = await TokenAsync(app, new ResourceLink(TestApp.Container, "2026/report.txt") { ExpiresIn = TimeSpan.FromHours(2), Inline = true });
+        string token = await TokenAsync(app, new ResourceDownloadLink(TestApp.Container, "2026/report.txt") { ExpiresIn = TimeSpan.FromHours(2), Inline = true });
 
         // Act
-        ResourceLinkCheck valid = app.Links.Check(token);
+        ResourceDownloadLinkCheck valid = app.Links.CheckDownload(token);
         clock.Now = clock.Now.AddHours(3);
-        ResourceLinkCheck expired = app.Links.Check(token);
+        ResourceDownloadLinkCheck expired = app.Links.CheckDownload(token);
 
         // Assert
-        var granted = new SignedResourceLink
+        var granted = new SignedResourceDownloadLink
         {
             ContainerName = TestApp.Container,
             ResourceName = "2026/report.txt",
@@ -204,31 +204,31 @@ public class ResourceLinkTests
             ExpiresAt = new DateTimeOffset(2026, 1, 1, 2, 0, 0, TimeSpan.Zero),
             Inline = true
         };
-        Assert.Equal(new ResourceLinkCheck { Status = ResourceLinkStatus.Valid, Link = granted }, valid);
-        Assert.Equal(new ResourceLinkCheck { Status = ResourceLinkStatus.Expired, Link = granted }, expired);
-        Assert.Equal(new ResourceLinkCheck { Status = ResourceLinkStatus.Invalid }, app.Links.Check(""));
+        Assert.Equal(new ResourceDownloadLinkCheck { Status = ResourceLinkStatus.Valid, Link = granted }, valid);
+        Assert.Equal(new ResourceDownloadLinkCheck { Status = ResourceLinkStatus.Expired, Link = granted }, expired);
+        Assert.Equal(new ResourceDownloadLinkCheck { Status = ResourceLinkStatus.Invalid }, app.Links.CheckDownload(""));
     }
 
     [Fact]
-    public async Task SharedResource_ShouldSayWhatToAdd_WhenSignedLinksArentRegistered()
+    public async Task SharedDownload_ShouldSayWhatToAdd_WhenSignedLinksArentRegistered()
     {
         // Arrange: a request whose services have no link signer.
         var context = new DefaultHttpContext { RequestServices = new ServiceCollection().BuildServiceProvider() };
 
         // Act
-        Task act() => Results.SharedResource(new Moq.Mock<IResourceServiceClient>().Object, "token").ExecuteAsync(context);
+        Task act() => Results.SharedDownload(new Moq.Mock<IResourceServiceClient>().Object, "token").ExecuteAsync(context);
 
         // Assert
         Assert.Contains("AddResourcefullLinks", (await Assert.ThrowsAsync<InvalidOperationException>(act)).Message);
     }
 
     [Fact]
-    public async Task SharedResource_ShouldSendTheNamedStoresFile_WhenTheLinkIsFromThatStore()
+    public async Task SharedDownload_ShouldSendTheNamedStoresFile_WhenTheLinkIsFromThatStore()
     {
         // Arrange: the same container and name in both stores, with different content.
         await using TestApp app = await StartWithReportAsync();
         await app.ArchiveFiles.UploadAsync("2026/report.txt", BinaryData.FromString("archived"));
-        string token = (await app.ArchiveLinks.CreateTokenAsync(new ResourceLink(TestApp.Container, "2026/report.txt")))!;
+        string token = (await app.ArchiveLinks.CreateDownloadTokenAsync(new ResourceDownloadLink(TestApp.Container, "2026/report.txt")))!;
 
         // Act
         HttpResponseMessage response = await app.Client.GetAsync($"/archive/shared/{token}");
@@ -241,24 +241,24 @@ public class ResourceLinkTests
     [Theory]
     [InlineData(false, "/archive/shared/")]
     [InlineData(true, "/shared/")]
-    public async Task SharedResource_ShouldAnswerNotFound_WhenTheLinkIsFromAnotherStore(bool fromArchive, string endpoint)
+    public async Task SharedDownload_ShouldAnswerNotFound_WhenTheLinkIsFromAnotherStore(bool fromArchive, string endpoint)
     {
         // Arrange: the file is in both stores, so only the token's store can refuse it.
         await using TestApp app = await StartWithReportAsync();
         await app.ArchiveFiles.UploadAsync("2026/report.txt", BinaryData.FromString("archived"));
         IResourceLinkSigner signer = fromArchive ? app.ArchiveLinks : app.Links;
-        string token = (await signer.CreateTokenAsync(new ResourceLink(TestApp.Container, "2026/report.txt")))!;
+        string token = (await signer.CreateDownloadTokenAsync(new ResourceDownloadLink(TestApp.Container, "2026/report.txt")))!;
 
         // Act
         HttpResponseMessage response = await app.Client.GetAsync(endpoint + token);
 
         // Assert
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
-        Assert.Equal(ResourceLinkStatus.Invalid, (fromArchive ? app.Links : app.ArchiveLinks).Check(token).Status);
+        Assert.Equal(ResourceLinkStatus.Invalid, (fromArchive ? app.Links : app.ArchiveLinks).CheckDownload(token).Status);
     }
 
     [Fact]
-    public async Task SharedResource_ShouldSayWhichStoresLinksToAdd_WhenANamedStoresLinksArentRegistered()
+    public async Task SharedDownload_ShouldSayWhichStoresLinksToAdd_WhenANamedStoresLinksArentRegistered()
     {
         // Arrange: a client for a named store, and a request whose services have no link signer.
         var archive = new Moq.Mock<IResourceServiceClient>();
@@ -266,7 +266,7 @@ public class ResourceLinkTests
         var context = new DefaultHttpContext { RequestServices = new ServiceCollection().BuildServiceProvider() };
 
         // Act
-        Task act() => Results.SharedResource(archive.Object, "token").ExecuteAsync(context);
+        Task act() => Results.SharedDownload(archive.Object, "token").ExecuteAsync(context);
 
         // Assert
         Assert.Contains("AddResourcefullLinks(\"archive\")", (await Assert.ThrowsAsync<InvalidOperationException>(act)).Message);

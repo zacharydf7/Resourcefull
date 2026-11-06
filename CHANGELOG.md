@@ -114,7 +114,7 @@
   read the store's name from `ResourcefullOptionsBuilder.StoreName`, and a new `UseProvider` overload takes a factory.
   `IResourceServiceClient.StoreName` says which store a client works with; a class that implements the interface
   implements it too. Signed links work with every store: `AddResourcefullLinks("archive")` adds a keyed signer for a
-  named store, and `Results.SharedResource` and `Results.SharedUpload` check a token with the signer of the store whose
+  named store, and `Results.SharedDownload` and `Results.SharedUpload` check a token with the signer of the store whose
   client they're given. A link made for one store doesn't open at another's endpoint. See
   [Several stores](docs/several-stores.md).
 - **Listing containers a page at a time.** `ListContainersAsync` enumerates every container, or those whose names start
@@ -152,11 +152,11 @@
   `resourcefull.client.copy.versions`; `ImportVersionsAsync` records an `import_versions` span. See
   [Moving to another provider](docs/moving-providers.md).
 - **Signed, expiring links.** `Resourcefull.AspNetCore` can create links that let anyone download one file, without
-  signing in, until they expire: `AddResourcefullLinks`, `IResourceLinkSigner.CreateTokenAsync` and
-  `Results.SharedResource`. Links are sealed with ASP.NET Core Data Protection, can't be changed or read, and show the
+  signing in, until they expire: `AddResourcefullLinks`, `IResourceLinkSigner.CreateDownloadTokenAsync` and
+  `Results.SharedDownload`. Links are sealed with ASP.NET Core Data Protection, can't be changed or read, and show the
   version that was current when they were made unless they follow the current one. See
   [Sharing files with links](docs/sharing-links.md).
-- **Upload links.** `IResourceLinkSigner.CreateUploadToken` creates links that let anyone upload without signing in
+- **Upload links.** `IResourceLinkSigner.CreateUploadTokenAsync` creates links that let anyone upload without signing in
   until they expire. A link uploads to one name or to names under a prefix, and can set a size limit, allowed content
   types, and whether an upload may replace a file (by default it can't). `Results.SharedUpload` serves them, checking
   the link's limits before the body is read, and `CheckUpload` reads a token. Upload and download tokens are sealed
@@ -298,12 +298,19 @@
   Resourcefull's own, such as the command timeout or the retries. See [SQL Server](docs/providers/sql-server.md#retries).
 - **Disposable downloads.** `ResourceDownloadResult` implements `IDisposable` and `IAsyncDisposable`, disposing its
   stream, so `await using` works on the download itself.
-- **Razor Pages.** The results `TypedResults.Resource` and `TypedResults.SharedResource` return are also MVC action
+- **Razor Pages.** The results `TypedResults.Resource` and `TypedResults.SharedDownload` return are also MVC action
   results, so a Razor Pages handler, which can't return an `IResult`, can return them. See
   [MVC, Razor Pages and Blazor](docs/aspnet-core/mvc-razor-blazor.md#razor-pages).
 
 ### Changed
 
+- **Download links are called download links.** `ResourceLink`, `SignedResourceLink` and `ResourceLinkCheck` are now
+  `ResourceDownloadLink`, `SignedResourceDownloadLink` and `ResourceDownloadLinkCheck`, and `CreateTokenAsync`, `Check` and
+  `Results.SharedResource` are now `CreateDownloadTokenAsync`, `CheckDownload` and `Results.SharedDownload`, matching upload
+  links' names. `CreateUploadToken` is now `CreateUploadTokenAsync`, which returns `null` when the container doesn't exist,
+  as `CreateDownloadTokenAsync` does when the resource doesn't, so you find out a container is missing when you create the
+  link, not when someone uses it. `ResourceLinkServiceCollectionExtensions` is now
+  `ResourcefullLinksServiceCollectionExtensions`. Links already made keep working.
 - **Copying a container takes options.** `CopyContainerToAsync` takes a `ContainerCopyOptions`: `DestinationName` replaces
   the `destinationContainerName` parameter, and `Existing` works as it does for `CopyStoreToAsync`, so one container can
   be checked or brought up to date without a prefix that also matches its neighbors. `ContainerCopyResult` says what
@@ -327,9 +334,9 @@
   For example, `new ResourceHeaders { ContentType = type }`. The same goes for `ContainerUsage`, `ResourceCleanup`,
   `ResourceUploadSession`, `ResourceUploadInspection`, `ResourceContent`, `StoreCopyResult` and the other copy, export
   and import results, `ImportedVersion`, `DeletedVersionPage`, `StagedVersion`, `WrittenContent`,
-  `ContentHashBackfillResult`, `ContentLengthMismatch`, and ASP.NET Core's `SignedResourceLink`,
-  `SignedResourceUploadLink`, `ResourceLinkCheck`, `ResourceUploadLinkCheck` and `ResourceUploadRequest`. What identifies
-  something stays positional: `ResourceAddress` is all identity, and `ResourceLink` takes its container and resource
+  `ContentHashBackfillResult`, `ContentLengthMismatch`, and ASP.NET Core's `SignedResourceDownloadLink`,
+  `SignedResourceUploadLink`, `ResourceDownloadLinkCheck`, `ResourceUploadLinkCheck` and `ResourceUploadRequest`. What identifies
+  something stays positional: `ResourceAddress` is all identity, and `ResourceDownloadLink` takes its container and resource
   names by position and the rest as properties.
 - **Sealed types.** `ResourceDownloadResult` is a sealed class, because a record's `with` made a second owner of its
   stream, and its one constructor requires `totalLength`. `ResourceUploadOptions`, `ResourcefullOptions`,

@@ -42,14 +42,14 @@ public sealed class PreconditionTelemetryTests
     [InlineData("valid", HttpStatusCode.OK)]
     [InlineData("expired", HttpStatusCode.Gone)]
     [InlineData("invalid", HttpStatusCode.NotFound)]
-    public async Task SharedResource_ShouldRecordTheLinksStatusOnTheRequestSpan_WhenALinkIsOpened(string expected, HttpStatusCode expectedStatus)
+    public async Task SharedDownload_ShouldRecordTheLinksStatusOnTheRequestSpan_WhenALinkIsOpened(string expected, HttpStatusCode expectedStatus)
     {
         // Arrange
         var clock = new ManualTimeProvider();
         await using TestApp app = await TestApp.StartAsync(clock: clock);
         await app.Files.UploadAsync("report.txt", BinaryData.FromString("x"));
         string token = expected == "invalid" ? "not-a-token"
-            : (await app.Links.CreateTokenAsync(new ResourceLink(TestApp.Container, "report.txt")))!;
+            : (await app.Links.CreateDownloadTokenAsync(new ResourceDownloadLink(TestApp.Container, "report.txt")))!;
         if (expected == "expired") clock.Now = clock.Now.AddHours(2);
 
         // Act
@@ -70,7 +70,7 @@ public sealed class PreconditionTelemetryTests
         var clock = new ManualTimeProvider();
         await using TestApp app = await TestApp.StartAsync(clock: clock);
         string token = expected == "invalid" ? "not-a-token"
-            : app.Links.CreateUploadToken(new ResourceUploadLink(TestApp.Container) { ResourceName = "report.txt" });
+            : (await app.Links.CreateUploadTokenAsync(new ResourceUploadLink(TestApp.Container) { ResourceName = "report.txt" }))!;
         if (expected == "expired") clock.Now = clock.Now.AddHours(2);
 
         // Act
@@ -85,7 +85,7 @@ public sealed class PreconditionTelemetryTests
     [Theory]
     [InlineData(true, "archive")]
     [InlineData(false, null)]
-    public async Task SharedResource_ShouldRecordANamedStoreOnTheRequestSpan_WhenItsLinkIsOpened(bool archive, string? expected)
+    public async Task SharedDownload_ShouldRecordANamedStoreOnTheRequestSpan_WhenItsLinkIsOpened(bool archive, string? expected)
     {
         // Arrange
         await using TestApp app = await TestApp.StartAsync();
@@ -141,7 +141,7 @@ public sealed class PreconditionTelemetryTests
         var clock = new ManualTimeProvider();
         await using UploadApp app = await UploadApp.StartAsync(clock: clock);
         string token = expected == "invalid" ? "not-a-token"
-            : app.Links.CreateUploadToken(new ResourceUploadLink(UploadApp.Container) { ResourceName = "report.txt" });
+            : (await app.Links.CreateUploadTokenAsync(new ResourceUploadLink(UploadApp.Container) { ResourceName = "report.txt" }))!;
         if (expected == "expired") clock.Now = clock.Now.AddHours(2);
 
         // Act

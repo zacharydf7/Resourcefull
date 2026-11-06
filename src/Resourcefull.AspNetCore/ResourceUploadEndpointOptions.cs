@@ -65,7 +65,7 @@ public sealed class ResourceUploadLinkEndpointOptions
     /// <summary>
     /// The store whose upload links the endpoints take, added with
     /// <see cref="ResourcefullServiceCollectionExtensions.AddKeyedResourcefull"/> and given signed links with
-    /// <see cref="ResourceLinkServiceCollectionExtensions.AddResourcefullLinks"/>; <see langword="null"/>, the default,
+    /// <see cref="ResourcefullLinksServiceCollectionExtensions.AddResourcefullLinks"/>; <see langword="null"/>, the default,
     /// for the store <see cref="ResourcefullServiceCollectionExtensions.AddResourcefull"/> adds.
     /// </summary>
     public string? StoreName { get; set; }

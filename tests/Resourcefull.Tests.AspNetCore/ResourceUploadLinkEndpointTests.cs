@@ -11,12 +11,12 @@ namespace Resourcefull.Tests.AspNetCore;
 
 public class ResourceUploadLinkEndpointTests
 {
-    private static string Token(UploadApp app, string? name = null, string? prefix = null, ResourceSize? maxSize = null,
+    private static async Task<string> TokenAsync(UploadApp app, string? name = null, string? prefix = null, ResourceSize? maxSize = null,
         string[]? types = null, ResourceWriteMode mode = ResourceWriteMode.Create) =>
-        app.Links.CreateUploadToken(new ResourceUploadLink(UploadApp.Container)
+        (await app.Links.CreateUploadTokenAsync(new ResourceUploadLink(UploadApp.Container)
         {
             ResourceName = name, NamePrefix = prefix, MaxSize = maxSize, AllowedContentTypes = types, Mode = mode
-        });
+        }))!;
 
     /// <summary>Starts an upload through the link <paramref name="token"/>, and returns its URL.</summary>
     private static async Task<string> StartAsync(UploadApp app, string token, long length, string? user = null,
@@ -38,7 +38,7 @@ public class ResourceUploadLinkEndpointTests
     {
         // Arrange
         await using UploadApp app = await UploadApp.StartAsync();
-        string token = Token(app, prefix: "claims/1042/", types: ["image/*"]);
+        string token = await TokenAsync(app, prefix: "claims/1042/", types: ["image/*"]);
         string url = await StartAsync(app, token, 5, metadata: [("filename", "photo.jpg"), ("filetype", "image/jpeg")]);
 
         // Act
@@ -58,7 +58,7 @@ public class ResourceUploadLinkEndpointTests
     {
         // Arrange: tus clients send the file's name whatever the link.
         await using UploadApp app = await UploadApp.StartAsync();
-        string url = await StartAsync(app, Token(app, name: "contract.pdf"), 3, metadata: ("filename", "scan 1.pdf"));
+        string url = await StartAsync(app, await TokenAsync(app, name: "contract.pdf"), 3, metadata: ("filename", "scan 1.pdf"));
 
         // Act
         await PatchAsync(app, url, 0, "abc"u8.ToArray());
@@ -88,8 +88,8 @@ public class ResourceUploadLinkEndpointTests
         string token = problem switch
         {
             "invalid" => "not-a-token",
-            "download" => (await app.Links.CreateTokenAsync(new ResourceLink(UploadApp.Container, "in/taken.jpg")))!,
-            _ => Token(app, prefix: "in/", maxSize: 10, types: ["image/*"])
+            "download" => (await app.Links.CreateDownloadTokenAsync(new ResourceDownloadLink(UploadApp.Container, "in/taken.jpg")))!,
+            _ => await TokenAsync(app, prefix: "in/", maxSize: 10, types: ["image/*"])
         };
         if (problem == "expired") clock.Now = clock.Now.AddHours(2);
         (string Key, string? Value)[] metadata = problem switch
@@ -124,10 +124,8 @@ public class ResourceUploadLinkEndpointTests
         // own size limit that refuses an upload of 11 bytes.
         await using UploadApp app = await UploadApp.StartAsync(policy: limit == "policy" ? new ContainerPolicy { MaxResourceSize = 10 } : null,
             maxSize: limit == "endpoints" ? 10 : null);
-        string token = app.Links.CreateUploadToken(new ResourceUploadLink(limit == "no-container" ? "gone" : UploadApp.Container)
-        {
-            NamePrefix = "in/"
-        });
+        string token = (await app.Links.CreateUploadTokenAsync(new ResourceUploadLink(UploadApp.Container) { NamePrefix = "in/" }))!;
+        if (limit == "no-container") await app.Resources.DeleteContainerIfExistsAsync(UploadApp.Container);
 
         // Act
         HttpResponseMessage response = await app.Client.SendAsync(Create(11, Metadata(("filename", "a.bin")), $"/upload-links/{token}"));
@@ -144,7 +142,7 @@ public class ResourceUploadLinkEndpointTests
         // Arrange: an upload started an hour before its link expires.
         var clock = new ManualTimeProvider();
         await using UploadApp app = await UploadApp.StartAsync(clock: clock);
-        string token = Token(app, name: "video.mp4");
+        string token = await TokenAsync(app, name: "video.mp4");
         string url = await StartAsync(app, token, 6, metadata: ("filename", "video.mp4"));
         await PatchAsync(app, url, 0, "abc"u8.ToArray());
 
@@ -164,7 +162,7 @@ public class ResourceUploadLinkEndpointTests
     {
         // Arrange
         await using UploadApp app = await UploadApp.StartAsync();
-        string url = await StartAsync(app, Token(app, name: "a.bin"), 3, user: "alice", metadata: ("filename", "a.bin"));
+        string url = await StartAsync(app, await TokenAsync(app, name: "a.bin"), 3, user: "alice", metadata: ("filename", "a.bin"));
 
         // Act
         HttpResponseMessage response = await PatchAsync(app, url, 0, "abc"u8.ToArray());
@@ -179,7 +177,7 @@ public class ResourceUploadLinkEndpointTests
     {
         // Arrange: two uploads started through one create-only link to one name, as a plain upload could be sent twice.
         await using UploadApp app = await UploadApp.StartAsync();
-        string token = Token(app, name: "form.pdf");
+        string token = await TokenAsync(app, name: "form.pdf");
         string first = await StartAsync(app, token, 3, metadata: ("filename", "form.pdf"));
         string second = await StartAsync(app, token, 3, metadata: ("filename", "form.pdf"));
         await PatchAsync(app, first, 0, "one"u8.ToArray());
@@ -200,7 +198,7 @@ public class ResourceUploadLinkEndpointTests
     {
         // Arrange
         await using UploadApp app = await UploadApp.StartAsync();
-        string token = Token(app, name: "contract.pdf", mode: ResourceWriteMode.Replace);
+        string token = await TokenAsync(app, name: "contract.pdf", mode: ResourceWriteMode.Replace);
         await PatchAsync(app, await StartAsync(app, token, 3, metadata: ("filename", "contract.pdf")), 0, "one"u8.ToArray());
 
         // Act
@@ -218,7 +216,7 @@ public class ResourceUploadLinkEndpointTests
         // Arrange: an upload started through a link, and one started at /uploads, whose endpoints are mapped with the
         // same pattern string.
         await using UploadApp app = await UploadApp.StartAsync();
-        string token = Token(app, prefix: "in/");
+        string token = await TokenAsync(app, prefix: "in/");
         HttpResponseMessage started = await app.Client.SendAsync(Create(3, Metadata(("filename", "a.bin")), $"/links/uploads/{token}"));
         string throughLink = started.Headers.Location!.ToString();
         HttpResponseMessage created = await app.Client.SendAsync(Create(3, Metadata(("filename", "b.bin"))));

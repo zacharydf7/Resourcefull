@@ -61,7 +61,7 @@ a container; a real application would check that the user may see that file:
 app.MapPost("/share/{container}/{**name}", async (string container, string name,
     IResourceLinkSigner links, CancellationToken cancellationToken) =>
 {
-    string? token = await links.CreateTokenAsync(new ResourceLink(container, name)
+    string? token = await links.CreateDownloadTokenAsync(new ResourceDownloadLink(container, name)
     {
         ExpiresIn = TimeSpan.FromDays(7)
     }, cancellationToken);
@@ -72,7 +72,7 @@ app.MapPost("/share/{container}/{**name}", async (string container, string name,
 }).RequireAuthorization();
 ```
 
-`CreateTokenAsync` returns `null` when the file doesn't exist, so you can tell the user rather than hand out a link that
+`CreateDownloadTokenAsync` returns `null` when the file doesn't exist, so you can tell the user rather than hand out a link that
 won't work.
 
 ### 3. Add the endpoint that serves links
@@ -81,14 +81,14 @@ This endpoint must **not** require sign-in, because the people opening links can
 
 ```csharp
 app.MapMethods("/shared/{token}", ["GET", "HEAD"], (string token, IResourceServiceClient resources) =>
-    Results.SharedResource(resources, token));
+    Results.SharedDownload(resources, token));
 ```
 
 The token is safe to put in a URL path: it only uses letters, digits, `-` and `_`.
 
 ## What a link can do
 
-`ResourceLink` describes the link you're creating:
+`ResourceDownloadLink` describes the link you're creating:
 
 | Property | Default | What it does |
 |---|---|---|
@@ -151,10 +151,10 @@ to files you overwrite with `FollowCurrent = true`.
 **A link answers 404 straight after it was created.** Check that the URL holds the whole token; some email and chat
 programs cut long URLs, or break them across lines.
 
-**`Results.SharedResource` throws "needs signed links added with AddResourcefullLinks".** Add
+**`Results.SharedDownload` throws "needs signed links added with AddResourcefullLinks".** Add
 `builder.Services.AddResourcefullLinks()`. For a [named store](several-stores.md#signed-links), the message names the
 store: add `builder.Services.AddResourcefullLinks("archive")` with that store's name.
 
 **A link answers 404 at one endpoint but works at another.** Each store's links work only at an endpoint that passes
-that store's client to `Results.SharedResource` or `Results.SharedUpload`. See
+that store's client to `Results.SharedDownload` or `Results.SharedUpload`. See
 [Several stores](several-stores.md#signed-links).

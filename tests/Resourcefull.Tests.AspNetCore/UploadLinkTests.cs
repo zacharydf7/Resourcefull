@@ -1,5 +1,7 @@
+using System.Buffers.Text;
 using System.Net;
 using System.Net.Http.Headers;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Resourcefull.AspNetCore;
@@ -20,7 +22,7 @@ public class UploadLinkTests
     {
         // Arrange
         await using TestApp app = await TestApp.StartAsync();
-        string token = app.Links.CreateUploadToken(new ResourceUploadLink(TestApp.Container) { ResourceName = "claims/1042.txt" });
+        string token = (await app.Links.CreateUploadTokenAsync(new ResourceUploadLink(TestApp.Container) { ResourceName = "claims/1042.txt" }))!;
 
         // Act
         HttpResponseMessage response = await app.Client.PutAsync($"/upload/{token}", Text("hello"));
@@ -38,7 +40,7 @@ public class UploadLinkTests
     {
         // Arrange
         await using TestApp app = await TestApp.StartAsync();
-        string token = app.Links.CreateUploadToken(new ResourceUploadLink(TestApp.Container) { NamePrefix = "claims/1042/" });
+        string token = (await app.Links.CreateUploadTokenAsync(new ResourceUploadLink(TestApp.Container) { NamePrefix = "claims/1042/" }))!;
 
         // Act
         HttpResponseMessage first = await app.Client.PutAsync($"/upload/{token}/photo.jpg", Text("one"));
@@ -55,8 +57,8 @@ public class UploadLinkTests
     {
         // Arrange: a link to one name, given a name of its own, and a link with a prefix, given none.
         await using TestApp app = await TestApp.StartAsync();
-        string oneName = app.Links.CreateUploadToken(new ResourceUploadLink(TestApp.Container) { ResourceName = "a.txt" });
-        string prefixed = app.Links.CreateUploadToken(new ResourceUploadLink(TestApp.Container) { NamePrefix = "in/" });
+        string oneName = (await app.Links.CreateUploadTokenAsync(new ResourceUploadLink(TestApp.Container) { ResourceName = "a.txt" }))!;
+        string prefixed = (await app.Links.CreateUploadTokenAsync(new ResourceUploadLink(TestApp.Container) { NamePrefix = "in/" }))!;
 
         // Act
         HttpResponseMessage named = await app.Client.PutAsync($"/upload/{oneName}/b.txt", Text("x"));
@@ -72,10 +74,10 @@ public class UploadLinkTests
     {
         // Arrange: at most 4 bytes of plain text or PDF.
         await using TestApp app = await TestApp.StartAsync();
-        string token = app.Links.CreateUploadToken(new ResourceUploadLink(TestApp.Container)
+        string token = (await app.Links.CreateUploadTokenAsync(new ResourceUploadLink(TestApp.Container)
         {
             ResourceName = "a.txt", MaxSize = 4, AllowedContentTypes = ["text/plain", "application/pdf"]
-        });
+        }))!;
         // A stream that can't be measured, so the request has no Content-Length.
         var unmeasured = new StreamContent(new NonSeekableStream([1, 2]));
         unmeasured.Headers.ContentType = MediaTypeHeaderValue.Parse("text/plain");
@@ -101,7 +103,7 @@ public class UploadLinkTests
         // Arrange
         await using TestApp app = await TestApp.StartAsync();
         await app.Files.UploadAsync("a.txt", BinaryData.FromString("first"));
-        string token = app.Links.CreateUploadToken(new ResourceUploadLink(TestApp.Container) { ResourceName = "a.txt" });
+        string token = (await app.Links.CreateUploadTokenAsync(new ResourceUploadLink(TestApp.Container) { ResourceName = "a.txt" }))!;
 
         // Act
         HttpResponseMessage response = await app.Client.PutAsync($"/upload/{token}", Text("second"));
@@ -117,10 +119,10 @@ public class UploadLinkTests
     {
         // Arrange
         await using TestApp app = await TestApp.StartAsync();
-        string token = app.Links.CreateUploadToken(new ResourceUploadLink(TestApp.Container)
+        string token = (await app.Links.CreateUploadTokenAsync(new ResourceUploadLink(TestApp.Container)
         {
             ResourceName = "a.txt", Mode = ResourceWriteMode.Replace
-        });
+        }))!;
 
         // Act
         HttpResponseMessage created = await app.Client.PutAsync($"/upload/{token}", Text("first"));
@@ -136,7 +138,7 @@ public class UploadLinkTests
     {
         // Arrange: the link takes any type, the container only PDFs.
         await using TestApp app = await TestApp.StartAsync(policy: new ContainerPolicy { AllowedContentTypes = ["application/pdf"] });
-        string token = app.Links.CreateUploadToken(new ResourceUploadLink(TestApp.Container) { ResourceName = "a.txt" });
+        string token = (await app.Links.CreateUploadTokenAsync(new ResourceUploadLink(TestApp.Container) { ResourceName = "a.txt" }))!;
 
         // Act
         HttpResponseMessage response = await app.Client.PutAsync($"/upload/{token}", Text("x"));
@@ -154,7 +156,7 @@ public class UploadLinkTests
     {
         // Arrange
         await using TestApp app = await TestApp.StartAsync();
-        string token = app.Links.CreateUploadToken(new ResourceUploadLink(TestApp.Container) { NamePrefix = "in/", Mode = mode });
+        string token = (await app.Links.CreateUploadTokenAsync(new ResourceUploadLink(TestApp.Container) { NamePrefix = "in/", Mode = mode }))!;
 
         // Act: a name that ends in a space.
         HttpResponseMessage response = await app.Client.PutAsync($"/upload/{token}/photo.jpg%20", Text("x"));
@@ -170,7 +172,9 @@ public class UploadLinkTests
     {
         // Arrange
         await using TestApp app = await TestApp.StartAsync();
-        string token = app.Links.CreateUploadToken(new ResourceUploadLink("deleted-claims") { ResourceName = "a.txt" });
+        await app.Resources.CreateContainerAsync("deleted-claims");
+        string token = (await app.Links.CreateUploadTokenAsync(new ResourceUploadLink("deleted-claims") { ResourceName = "a.txt" }))!;
+        await app.Resources.DeleteContainerIfExistsAsync("deleted-claims");
 
         // Act
         HttpResponseMessage response = await app.Client.PutAsync($"/upload/{token}", Text("x"));
@@ -181,15 +185,45 @@ public class UploadLinkTests
     }
 
     [Fact]
+    public async Task CreateTokens_ShouldSealWithThePurposesLinksAlreadyMadeUse_WhenCalled()
+    {
+        // Arrange
+        await using TestApp app = await TestApp.StartAsync();
+        await app.Files.UploadAsync("a.txt", BinaryData.FromString("a"));
+        IDataProtectionProvider dataProtection = app.Services.GetRequiredService<IDataProtectionProvider>();
+
+        // Act
+        string download = (await app.Links.CreateDownloadTokenAsync(new ResourceDownloadLink(TestApp.Container, "a.txt")))!;
+        string upload = (await app.Links.CreateUploadTokenAsync(new ResourceUploadLink(TestApp.Container) { ResourceName = "a.txt" }))!;
+
+        // Assert: changing a purpose would stop every link already handed out from working, so these are written out.
+        Assert.NotEmpty(dataProtection.CreateProtector("Resourcefull.ResourceLink.v1").Unprotect(Base64Url.DecodeFromChars(download)));
+        Assert.NotEmpty(dataProtection.CreateProtector("Resourcefull.ResourceUploadLink.v1").Unprotect(Base64Url.DecodeFromChars(upload)));
+    }
+
+    [Fact]
+    public async Task CreateUploadTokenAsync_ShouldReturnNull_WhenTheContainerDoesntExist()
+    {
+        // Arrange
+        await using TestApp app = await TestApp.StartAsync();
+
+        // Act
+        string? token = await app.Links.CreateUploadTokenAsync(new ResourceUploadLink("no-such-container") { ResourceName = "a.txt" });
+
+        // Assert
+        Assert.Null(token);
+    }
+
+    [Fact]
     public async Task SharedUpload_ShouldAnswerGone_WhenTheLinkHasExpired()
     {
         // Arrange
         var clock = new ManualTimeProvider();
         await using TestApp app = await TestApp.StartAsync(clock: clock);
-        string token = app.Links.CreateUploadToken(new ResourceUploadLink(TestApp.Container)
+        string token = (await app.Links.CreateUploadTokenAsync(new ResourceUploadLink(TestApp.Container)
         {
             ResourceName = "a.txt", ExpiresIn = TimeSpan.FromMinutes(10)
-        });
+        }))!;
 
         // Act
         clock.Now = clock.Now.AddMinutes(10);
@@ -201,16 +235,16 @@ public class UploadLinkTests
     }
 
     [Fact]
-    public async Task SharedUploadAndSharedResource_ShouldAnswerNotFound_WhenGivenTheOtherKindOfToken()
+    public async Task SharedUploadAndSharedDownload_ShouldAnswerNotFound_WhenGivenTheOtherKindOfToken()
     {
         // Arrange
         await using TestApp app = await TestApp.StartAsync();
         await app.Files.UploadAsync("a.txt", BinaryData.FromString("first"));
-        string download = (await app.Links.CreateTokenAsync(new ResourceLink(TestApp.Container, "a.txt")))!;
-        string upload = app.Links.CreateUploadToken(new ResourceUploadLink(TestApp.Container)
+        string download = (await app.Links.CreateDownloadTokenAsync(new ResourceDownloadLink(TestApp.Container, "a.txt")))!;
+        string upload = (await app.Links.CreateUploadTokenAsync(new ResourceUploadLink(TestApp.Container)
         {
             ResourceName = "a.txt", Mode = ResourceWriteMode.Replace
-        });
+        }))!;
 
         // Act
         HttpResponseMessage uploadedWithDownloadToken = await app.Client.PutAsync($"/upload/{download}", Text("second"));
@@ -223,19 +257,19 @@ public class UploadLinkTests
     }
 
     [Fact]
-    public async Task CreateUploadToken_ShouldThrow_WhenTheLinkIsMalformed()
+    public async Task CreateUploadTokenAsync_ShouldThrow_WhenTheLinkIsMalformed()
     {
         // Arrange
         await using TestApp app = await TestApp.StartAsync();
         var link = new ResourceUploadLink(TestApp.Container) { ResourceName = "a.txt" };
 
         // Act & Assert
-        Assert.Throws<ArgumentException>(() => app.Links.CreateUploadToken(link with { NamePrefix = "in/" }));
-        Assert.Throws<ArgumentException>(() => app.Links.CreateUploadToken(link with { ResourceName = null }));
-        Assert.Throws<ArgumentException>(() => app.Links.CreateUploadToken(link with { ResourceName = " a.txt" }));
-        Assert.Throws<ArgumentException>(() => app.Links.CreateUploadToken(link with { ResourceName = null, NamePrefix = "\tin/" }));
-        Assert.Throws<ArgumentException>(() => app.Links.CreateUploadToken(new ResourceUploadLink(" ") { ResourceName = "a.txt" }));
-        Assert.Throws<ArgumentOutOfRangeException>(() => app.Links.CreateUploadToken(link with { ExpiresIn = TimeSpan.Zero }));
+        await Assert.ThrowsAsync<ArgumentException>(() => app.Links.CreateUploadTokenAsync(link with { NamePrefix = "in/" }));
+        await Assert.ThrowsAsync<ArgumentException>(() => app.Links.CreateUploadTokenAsync(link with { ResourceName = null }));
+        await Assert.ThrowsAsync<ArgumentException>(() => app.Links.CreateUploadTokenAsync(link with { ResourceName = " a.txt" }));
+        await Assert.ThrowsAsync<ArgumentException>(() => app.Links.CreateUploadTokenAsync(link with { ResourceName = null, NamePrefix = "\tin/" }));
+        await Assert.ThrowsAsync<ArgumentException>(() => app.Links.CreateUploadTokenAsync(new ResourceUploadLink(" ") { ResourceName = "a.txt" }));
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => app.Links.CreateUploadTokenAsync(link with { ExpiresIn = TimeSpan.Zero }));
     }
 
     [Fact]
@@ -244,11 +278,11 @@ public class UploadLinkTests
         // Arrange
         var clock = new ManualTimeProvider();
         await using TestApp app = await TestApp.StartAsync(clock: clock);
-        string token = app.Links.CreateUploadToken(new ResourceUploadLink(TestApp.Container)
+        string token = (await app.Links.CreateUploadTokenAsync(new ResourceUploadLink(TestApp.Container)
         {
             NamePrefix = "in/", ExpiresIn = TimeSpan.FromHours(2), MaxSize = 10, AllowedContentTypes = ["image/*"],
             Mode = ResourceWriteMode.Replace
-        });
+        }))!;
 
         // Act
         ResourceUploadLinkCheck valid = app.Links.CheckUpload(token);
@@ -283,7 +317,7 @@ public class UploadLinkTests
     {
         // Arrange
         await using TestApp app = await TestApp.StartAsync();
-        string token = app.ArchiveLinks.CreateUploadToken(new ResourceUploadLink(TestApp.Container) { ResourceName = "claims/1042.txt" });
+        string token = (await app.ArchiveLinks.CreateUploadTokenAsync(new ResourceUploadLink(TestApp.Container) { ResourceName = "claims/1042.txt" }))!;
 
         // Act
         HttpResponseMessage response = await app.Client.PutAsync($"/archive/upload/{token}", Text("hello"));
@@ -302,7 +336,7 @@ public class UploadLinkTests
         // Arrange
         await using TestApp app = await TestApp.StartAsync();
         var link = new ResourceUploadLink(TestApp.Container) { ResourceName = "claims/1042.txt" };
-        string token = (fromArchive ? app.ArchiveLinks : app.Links).CreateUploadToken(link);
+        string token = (await (fromArchive ? app.ArchiveLinks : app.Links).CreateUploadTokenAsync(link))!;
 
         // Act
         HttpResponseMessage response = await app.Client.PutAsync(endpoint + token, Text("hello"));

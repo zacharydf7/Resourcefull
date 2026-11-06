@@ -4,7 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace Resourcefull.AspNetCore;
 
 /// <summary>
-/// Sends the resource a signed link grants, to whoever holds the link, without authentication: the token is the
+/// Sends the resource a signed download link grants, to whoever holds the link, without authentication: the token is the
 /// permission. A valid link's resource is sent as <see cref="ResourceLookupHttpResult"/> sends one, ranges and
 /// conditional requests included. An expired link gets 410 Gone; a token this application didn't sign, or a link to a
 /// resource or version that's gone, gets 404. Every response carries <c>Referrer-Policy: no-referrer</c> and
@@ -12,9 +12,9 @@ namespace Resourcefull.AspNetCore;
 /// <c>Referer</c> header of pages the file links to, nor kept by shared caches.
 /// <para>Coming in 4.0.</para>
 /// </summary>
-public sealed class SharedResourceHttpResult : IResult, IActionResult
+public sealed class SharedDownloadHttpResult : IResult, IActionResult
 {
-    internal SharedResourceHttpResult(IResourceServiceClient resources, string token)
+    internal SharedDownloadHttpResult(IResourceServiceClient resources, string token)
     {
         ArgumentNullException.ThrowIfNull(resources);
         ArgumentNullException.ThrowIfNull(token);
@@ -36,8 +36,8 @@ public sealed class SharedResourceHttpResult : IResult, IActionResult
         response.Headers["Referrer-Policy"] = "no-referrer";
         response.Headers.CacheControl = "private";
 
-        IResourceLinkSigner signer = ResourceLinkServiceCollectionExtensions.SignerFor(httpContext, Resources, "Results.SharedResource");
-        ResourceLinkCheck check = signer.Check(Token);
+        IResourceLinkSigner signer = ResourcefullLinksServiceCollectionExtensions.SignerFor(httpContext, Resources, "Results.SharedDownload");
+        ResourceDownloadLinkCheck check = signer.CheckDownload(Token);
         ResourceLinkTelemetry.Record(httpContext, check.Status, Resources.StoreName);
 
         switch (check)

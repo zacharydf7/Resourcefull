@@ -83,7 +83,7 @@ public static partial class ResourcefullUploadsEndpointRouteBuilderExtensions
     /// <summary>
     /// Maps tus 1.0 endpoints at <paramref name="pattern"/> for signed upload links, so whoever holds a link can upload
     /// what it allows without signing in, and resume the upload when the connection drops. A tus client's endpoint is
-    /// <paramref name="pattern"/>, a <c>/</c> and the link's token, from <see cref="IResourceLinkSigner.CreateUploadToken"/>.
+    /// <paramref name="pattern"/>, a <c>/</c> and the link's token, from <see cref="IResourceLinkSigner.CreateUploadTokenAsync"/>.
     /// The endpoints work as <see cref="MapResourcefullUploads"/>'s do, with the link deciding where each upload goes.
     /// </summary>
     /// <remarks>
@@ -110,7 +110,7 @@ public static partial class ResourcefullUploadsEndpointRouteBuilderExtensions
     /// and <see cref="ResourceUploadLinkEndpointOptions.MaxSize"/>.
     /// </param>
     /// <returns>The group the endpoints are in, to add CORS or rate limits to.</returns>
-    /// <exception cref="InvalidOperationException">The store's signed links aren't added with <see cref="ResourceLinkServiceCollectionExtensions.AddResourcefullLinks"/>.</exception>
+    /// <exception cref="InvalidOperationException">The store's signed links aren't added with <see cref="ResourcefullLinksServiceCollectionExtensions.AddResourcefullLinks"/>.</exception>
     public static RouteGroupBuilder MapResourcefullUploadLinks(this IEndpointRouteBuilder endpoints, string pattern,
         Action<ResourceUploadLinkEndpointOptions>? configure = null)
     {
@@ -125,7 +125,7 @@ public static partial class ResourcefullUploadsEndpointRouteBuilderExtensions
             ? services.GetService<IServiceProviderIsService>()?.IsService(typeof(IResourceLinkSigner))
             : services.GetService<IServiceProviderIsKeyedService>()?.IsKeyedService(typeof(IResourceLinkSigner), storeName);
         if (signs == false)
-            throw new InvalidOperationException(ResourceLinkServiceCollectionExtensions.NoSignerMessage(nameof(MapResourcefullUploadLinks), storeName));
+            throw new InvalidOperationException(ResourcefullLinksServiceCollectionExtensions.NoSignerMessage(nameof(MapResourcefullUploadLinks), storeName));
 
         var options = new ResourceUploadEndpointOptions
         {
@@ -554,7 +554,7 @@ internal sealed partial class ResourceUploadEndpoints(ResourceUploadEndpointOpti
     private async Task<ResourceUploadTarget?> LinkTargetAsync(HttpContext httpContext, long length, IReadOnlyDictionary<string, string> metadata)
     {
         IResourceServiceClient resources = Resources(httpContext);
-        ResourceUploadLinkCheck check = ResourceLinkServiceCollectionExtensions.SignerFor(httpContext, resources, Caller)
+        ResourceUploadLinkCheck check = ResourcefullLinksServiceCollectionExtensions.SignerFor(httpContext, resources, Caller)
             .CheckUpload((string)httpContext.Request.RouteValues["link"]!);
         ResourceLinkTelemetry.Record(httpContext, check.Status, resources.StoreName);
         if (check is not { Status: ResourceLinkStatus.Valid, Link: { } link })

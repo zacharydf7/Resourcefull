@@ -33,7 +33,7 @@ public sealed class ResourcefullDashboardOptions
 
     /// <summary>
     /// With <see cref="AllowChanges"/>, the path of your application's endpoint that serves download links with
-    /// <c>Results.SharedResource</c>, with <c>{token}</c> where the token goes, such as <c>/shared/{token}</c>. The
+    /// <c>Results.SharedDownload</c>, with <c>{token}</c> where the token goes, such as <c>/shared/{token}</c>. The
     /// dashboard then creates download links, and needs <c>AddResourcefullLinks</c>. <see langword="null"/>, the default,
     /// leaves them out.
     /// </summary>

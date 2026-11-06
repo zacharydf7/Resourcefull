@@ -47,6 +47,8 @@ internal sealed class TestApp : IAsyncDisposable
     /// <summary>Creates signed links in this app.</summary>
     public IResourceLinkSigner Links => _app.Services.CreateScope().ServiceProvider.GetRequiredService<IResourceLinkSigner>();
 
+    public IResourceServiceClient Resources => _app.Services.CreateScope().ServiceProvider.GetRequiredService<IResourceServiceClient>();
+
     /// <summary>The <see cref="Container"/> container in the store named <see cref="ArchiveStore"/>.</summary>
     public IResourceContainerClient ArchiveFiles => _app.Services.CreateScope().ServiceProvider
         .GetRequiredKeyedService<IResourceServiceClient>(ArchiveStore).GetContainerClient(Container);
@@ -100,13 +102,13 @@ internal sealed class TestApp : IAsyncDisposable
         app.MapGet("/ranged-inline/{**name}", (string name, IResourceServiceClient resources) =>
             TypedResults.Resource(resources.GetContainerClient(Container), name, null, new ResourceResultOptions { Inline = true, FileName = "shown.txt" }));
         app.MapMethods("/shared/{token}", ["GET", "HEAD"], (string token, IResourceServiceClient resources) =>
-            Results.SharedResource(resources, token));
+            Results.SharedDownload(resources, token));
         app.MapPut("/files/{**name}", (string name, HttpRequest request, IResourceServiceClient resources, CancellationToken cancellationToken) =>
             resources.GetContainerClient(Container).UploadFromRequestAsync(name, request, null, cancellationToken));
         app.MapMethods("/upload/{token}/{**name}", ["PUT", "POST"], (string token, string? name, IResourceServiceClient resources) =>
             Results.SharedUpload(resources, token, name));
         app.MapGet("/archive/shared/{token}", (string token, [FromKeyedServices(ArchiveStore)] IResourceServiceClient archive) =>
-            Results.SharedResource(archive, token));
+            Results.SharedDownload(archive, token));
         app.MapPut("/archive/upload/{token}/{**name}", (string token, string? name, [FromKeyedServices(ArchiveStore)] IResourceServiceClient archive) =>
             Results.SharedUpload(archive, token, name));
         app.MapGet("/throw", () => { throw toThrow!; });

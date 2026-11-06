@@ -12,12 +12,12 @@ namespace Resourcefull.AspNetCore;
 
 /// <summary>
 /// What a signed link to a resource lets its holder download, and for how long. Pass it to
-/// <see cref="IResourceLinkSigner.CreateTokenAsync"/>.
+/// <see cref="IResourceLinkSigner.CreateDownloadTokenAsync"/>.
 /// <para>Coming in 4.0.</para>
 /// </summary>
 /// <param name="ContainerName">The container the resource is in.</param>
 /// <param name="ResourceName">The resource to share.</param>
-public sealed record ResourceLink(string ContainerName, string ResourceName)
+public sealed record ResourceDownloadLink(string ContainerName, string ResourceName)
 {
     /// <summary>How long the link works, from when it's created: one hour unless you say otherwise.</summary>
     public TimeSpan ExpiresIn { get; init; } = TimeSpan.FromHours(1);
@@ -43,10 +43,10 @@ public sealed record ResourceLink(string ContainerName, string ResourceName)
 }
 
 /// <summary>
-/// What a valid token says its holder may download.
+/// What a valid download token lets its holder download.
 /// <para>Coming in 4.0.</para>
 /// </summary>
-public sealed record SignedResourceLink
+public sealed record SignedResourceDownloadLink
 {
     /// <summary>The container the resource is in.</summary>
     public required string ContainerName { get; init; }
@@ -83,21 +83,21 @@ public enum ResourceLinkStatus
 }
 
 /// <summary>
-/// The result of checking a token.
+/// The result of checking a download token.
 /// <para>Coming in 4.0.</para>
 /// </summary>
-public sealed record ResourceLinkCheck
+public sealed record ResourceDownloadLinkCheck
 {
     /// <summary>Whether the token is a link that still works.</summary>
     public required ResourceLinkStatus Status { get; init; }
 
     /// <summary>What a valid or expired token grants; <see langword="null"/> for an invalid one.</summary>
-    public SignedResourceLink? Link { get; init; }
+    public SignedResourceDownloadLink? Link { get; init; }
 }
 
 /// <summary>
 /// Creates and checks the tokens of signed links: strings that let whoever holds them download one resource, or upload
-/// what an upload link allows, until they expire, without signing in. Register it with <see cref="ResourceLinkServiceCollectionExtensions.AddResourcefullLinks"/>.
+/// what an upload link allows, until they expire, without signing in. Register it with <see cref="ResourcefullLinksServiceCollectionExtensions.AddResourcefullLinks"/>.
 /// Tokens are signed and encrypted with ASP.NET Core Data Protection, so they can't be changed, read or made up, and
 /// they work on every instance that shares the application's Data Protection keys. Each store has a signer of its own,
 /// and a token made by one store's signer doesn't work with another store.
@@ -106,22 +106,22 @@ public sealed record ResourceLinkCheck
 public interface IResourceLinkSigner
 {
     /// <summary>
-    /// Creates a token for <paramref name="link"/>, to put into a URL your application serves with
-    /// <c>Results.SharedResource</c>. Anyone with the URL can download the resource until the link expires.
+    /// Creates a token for a download <paramref name="link"/>, to put into a URL your application serves with
+    /// <c>Results.SharedDownload</c>. Anyone with the URL can download the resource until the link expires.
     /// </summary>
     /// <param name="link">What to share, and for how long.</param>
     /// <param name="cancellationToken">Cancels looking the resource up.</param>
     /// <returns>The token, or <see langword="null"/> if the resource (or the version asked for) doesn't exist.</returns>
-    /// <exception cref="ArgumentOutOfRangeException"><see cref="ResourceLink.ExpiresIn"/> isn't positive.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><see cref="ResourceDownloadLink.ExpiresIn"/> isn't positive.</exception>
     /// <exception cref="ArgumentException">
-    /// <see cref="ResourceLink.FollowCurrent"/> is set with a <see cref="ResourceLink.VersionId"/>, or a name breaks the
+    /// <see cref="ResourceDownloadLink.FollowCurrent"/> is set with a <see cref="ResourceDownloadLink.VersionId"/>, or a name breaks the
     /// name rules.
     /// </exception>
-    Task<string?> CreateTokenAsync(ResourceLink link, CancellationToken cancellationToken = default);
+    Task<string?> CreateDownloadTokenAsync(ResourceDownloadLink link, CancellationToken cancellationToken = default);
 
-    /// <summary>Checks a token: whether this application signed it, whether it has expired, and what it grants.</summary>
+    /// <summary>Checks a download token: whether this application signed it, whether it has expired, and what it grants.</summary>
     /// <param name="token">The token from the link's URL.</param>
-    ResourceLinkCheck Check(string token);
+    ResourceDownloadLinkCheck CheckDownload(string token);
 
     /// <summary>
     /// Creates a token for an upload <paramref name="link"/>, to put into a URL your application serves with
@@ -131,13 +131,14 @@ public interface IResourceLinkSigner
     /// are sealed apart, so neither works as the other.
     /// </summary>
     /// <param name="link">Where uploads go, what they may be, and for how long.</param>
-    /// <returns>The token.</returns>
+    /// <param name="cancellationToken">Cancels looking the container up.</param>
+    /// <returns>The token, or <see langword="null"/> if the container doesn't exist.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><see cref="ResourceUploadLink.ExpiresIn"/> isn't positive.</exception>
     /// <exception cref="ArgumentException">
     /// The link sets both <see cref="ResourceUploadLink.ResourceName"/> and <see cref="ResourceUploadLink.NamePrefix"/>, or
     /// neither, or a name breaks the name rules.
     /// </exception>
-    string CreateUploadToken(ResourceUploadLink link);
+    Task<string?> CreateUploadTokenAsync(ResourceUploadLink link, CancellationToken cancellationToken = default);
 
     /// <summary>Checks an upload token: whether this application signed it, whether it has expired, and what it allows.</summary>
     /// <param name="token">The token from the link's URL.</param>
@@ -154,7 +155,7 @@ internal sealed class ResourceLinkSigner(IDataProtectionProvider dataProtection,
     private readonly IDataProtector _uploadProtector = Protector(dataProtection, "Resourcefull.ResourceUploadLink.v1", resources.StoreName);
     private readonly TimeProvider _clock = timeProvider ?? TimeProvider.System;
 
-    public async Task<string?> CreateTokenAsync(ResourceLink link, CancellationToken cancellationToken = default)
+    public async Task<string?> CreateDownloadTokenAsync(ResourceDownloadLink link, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(link);
         ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(link.ExpiresIn, TimeSpan.Zero, nameof(link));
@@ -170,11 +171,11 @@ internal sealed class ResourceLinkSigner(IDataProtectionProvider dataProtection,
         return Base64Url.EncodeToString(_protector.Protect(JsonSerializer.SerializeToUtf8Bytes(payload)));
     }
 
-    public ResourceLinkCheck Check(string token)
+    public ResourceDownloadLinkCheck CheckDownload(string token)
     {
         if (Open<Payload>(_protector, token) is not { } payload)
-            return new ResourceLinkCheck { Status = ResourceLinkStatus.Invalid };
-        var link = new SignedResourceLink
+            return new ResourceDownloadLinkCheck { Status = ResourceLinkStatus.Invalid };
+        var link = new SignedResourceDownloadLink
         {
             ContainerName = payload.ContainerName,
             ResourceName = payload.ResourceName,
@@ -182,10 +183,10 @@ internal sealed class ResourceLinkSigner(IDataProtectionProvider dataProtection,
             ExpiresAt = DateTimeOffset.FromUnixTimeMilliseconds(payload.ExpiresAt),
             Inline = payload.Inline
         };
-        return new ResourceLinkCheck { Status = StatusAt(link.ExpiresAt), Link = link };
+        return new ResourceDownloadLinkCheck { Status = StatusAt(link.ExpiresAt), Link = link };
     }
 
-    public string CreateUploadToken(ResourceUploadLink link)
+    public async Task<string?> CreateUploadTokenAsync(ResourceUploadLink link, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(link);
         ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(link.ExpiresIn, TimeSpan.Zero, nameof(link));
@@ -197,6 +198,7 @@ internal sealed class ResourceLinkSigner(IDataProtectionProvider dataProtection,
         {
             throw new ArgumentException("The upload link's container name, resource name or prefix breaks the name rules.", nameof(link));
         }
+        if (!await resources.ContainerExistsAsync(link.ContainerName, cancellationToken).ConfigureAwait(false)) return null;
 
         var payload = new UploadPayload(link.ContainerName, link.ResourceName, link.NamePrefix, link.MaxSize?.Bytes,
             link.AllowedContentTypes?.ToArray(), link.Mode == ResourceWriteMode.Replace,
@@ -280,7 +282,7 @@ internal static class ResourceLinkTelemetry
 /// Registers signed links.
 /// <para>Coming in 4.0.</para>
 /// </summary>
-public static class ResourceLinkServiceCollectionExtensions
+public static class ResourcefullLinksServiceCollectionExtensions
 {
     /// <summary>
     /// Adds <see cref="IResourceLinkSigner"/> for a store, and ASP.NET Core Data Protection if it isn't added yet.
