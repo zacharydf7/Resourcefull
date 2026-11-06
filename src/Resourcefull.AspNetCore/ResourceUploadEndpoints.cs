@@ -112,12 +112,7 @@ public static partial class ResourcefullUploadsEndpointRouteBuilderExtensions
         ArgumentNullException.ThrowIfNull(pattern);
         string? storeName = options?.StoreName;
         if (storeName is not null) ArgumentException.ThrowIfNullOrWhiteSpace(storeName, nameof(options));
-        IServiceProvider services = endpoints.ServiceProvider;
-        bool? signs = storeName is null
-            ? services.GetService<IServiceProviderIsService>()?.IsService(typeof(IResourceLinkSigner))
-            : services.GetService<IServiceProviderIsKeyedService>()?.IsKeyedService(typeof(IResourceLinkSigner), storeName);
-        if (signs == false)
-            throw new InvalidOperationException(ResourcefullLinksServiceCollectionExtensions.NoSignerMessage(nameof(MapResourcefullUploadLinks), storeName));
+        ResourcefullLinksServiceCollectionExtensions.ThrowIfNoSigner(endpoints.ServiceProvider, storeName, nameof(MapResourcefullUploadLinks));
 
         var uploads = new ResourceUploadEndpoints(null, options?.OnCompletedAsync, storeName, options?.MaxSize, pattern);
         RouteGroupBuilder group = endpoints.MapGroup(pattern);
@@ -605,12 +600,19 @@ internal sealed partial class ResourceUploadEndpoints(Func<HttpContext, Resource
     /// <summary>Whether the route's upload link decides where an upload goes.</summary>
     private bool ThroughLinks => resolve is null;
 
-    private IResourceServiceClient Resources(HttpContext httpContext) =>
+    private IResourceServiceClient Resources(HttpContext httpContext) => StoreClient(httpContext, storeName, Caller);
+
+    /// <summary>The client of the store named <paramref name="storeName"/>, or of the unnamed store.</summary>
+    /// <exception cref="InvalidOperationException">No store has that name; <paramref name="caller"/> names the API in the error.</exception>
+    internal static IResourceServiceClient StoreClient(HttpContext httpContext, string? storeName, string caller) =>
         storeName is null
             ? httpContext.RequestServices.GetRequiredService<IResourceServiceClient>()
             : httpContext.RequestServices.GetKeyedService<IResourceServiceClient>(storeName)
-                ?? throw new InvalidOperationException(
-                    $"{Caller} needs a store named '{storeName}' added with {nameof(ResourcefullServiceCollectionExtensions.AddKeyedResourcefull)}.");
+                ?? throw new InvalidOperationException(NoStoreMessage(caller, storeName));
+
+    /// <summary>Says that <paramref name="caller"/> needs a store named <paramref name="storeName"/>.</summary>
+    internal static string NoStoreMessage(string caller, string storeName) =>
+        $"{caller} needs a store named '{storeName}' added with {nameof(ResourcefullServiceCollectionExtensions.AddKeyedResourcefull)}.";
 
     /// <summary>
     /// Sets <c>Upload-Expires</c> to when the expiry sweep deletes the upload if nothing more is appended, when the

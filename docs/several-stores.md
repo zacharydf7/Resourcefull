@@ -123,4 +123,6 @@ A named store's tokens are sealed with its name, so renaming the store makes the
 removing the Data Protection keys does. Adding a named store doesn't change the links of the store `AddResourcefull`
 adds.
 
-`Results.Resource` and the [exception handler](aspnet-core/status-codes.md) work with every store.
+`Results.Resource` and the [exception handler](aspnet-core/status-codes.md) work with every store. So do the
+[resumable upload endpoints](aspnet-core/resumable-uploads.md) and the [dashboard](aspnet-core/dashboard.md), through a
+`StoreName` option on each.

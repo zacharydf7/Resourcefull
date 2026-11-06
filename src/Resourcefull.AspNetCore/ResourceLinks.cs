@@ -330,6 +330,16 @@ public static class ResourcefullLinksServiceCollectionExtensions
             ?? throw new InvalidOperationException(NoSignerMessage(caller, storeName));
     }
 
+    /// <summary>Throws if the store named <paramref name="storeName"/> has no signer, so <paramref name="caller"/> fails when it's mapped.</summary>
+    /// <exception cref="InvalidOperationException">That store's signed links aren't added.</exception>
+    internal static void ThrowIfNoSigner(IServiceProvider services, string? storeName, string caller)
+    {
+        bool? signs = storeName is null
+            ? services.GetService<IServiceProviderIsService>()?.IsService(typeof(IResourceLinkSigner))
+            : services.GetService<IServiceProviderIsKeyedService>()?.IsKeyedService(typeof(IResourceLinkSigner), storeName);
+        if (signs == false) throw new InvalidOperationException(NoSignerMessage(caller, storeName));
+    }
+
     /// <summary>Says that <paramref name="caller"/> needs the signed links of the store named <paramref name="storeName"/> added.</summary>
     internal static string NoSignerMessage(string caller, string? storeName) => storeName is null
         ? $"{caller} needs signed links added with {nameof(AddResourcefullLinks)}."

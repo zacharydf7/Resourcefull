@@ -32,7 +32,7 @@ async function api(path, parameters, signal) {
   for (const [name, value] of Object.entries(parameters || {})) {
     if (value) query.set(name, value);
   }
-  const response = await fetch("api/" + path + (query.size ? "?" + query : ""),
+  const response = await fetch("api/v1/" + path + (query.size ? "?" + query : ""),
     { headers: { Accept: "application/json" }, signal });
   if (response.status === 404) return null;
   if (!response.ok) throw new Error(response.status === 401 || response.status === 403
@@ -110,7 +110,7 @@ async function send(method, path, parameters, body) {
     headers["Content-Type"] = "application/json";
     content = JSON.stringify(body);
   }
-  const response = await fetch("api/" + path + (query.size ? "?" + query : ""), { method, headers, body: content });
+  const response = await fetch("api/v1/" + path + (query.size ? "?" + query : ""), { method, headers, body: content });
   if (response.status === 404) throw new Error("This no longer exists.");
   const json = (response.headers.get("Content-Type") || "").includes("json") ? await response.json() : null;
   if (!response.ok) {
@@ -518,7 +518,7 @@ async function showHealth() {
   try {
     const report = await api("health");
     if (report.status === null) {
-      health.textContent = "No health checks registered.";
+      health.textContent = "No health checks to show.";
       return;
     }
     health.replaceChildren(element("span", report.status, "badge " + report.status.toLowerCase()));

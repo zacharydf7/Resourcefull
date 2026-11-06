@@ -18,10 +18,12 @@ namespace Resourcefull.AspNetCore;
 public sealed class ResourcefullDashboardOptions
 {
     /// <summary>
-    /// The names of the health checks the dashboard runs and shows. Defaults to <c>resourcefull</c>, the name
-    /// Resourcefull's health checks are registered under unless you give them another.
+    /// The names of the health checks the dashboard runs and shows. <see langword="null"/>, the default, runs
+    /// <c>resourcefull</c>, the name Resourcefull's health checks are registered under unless you give them another. With
+    /// a <see cref="StoreName"/>, it runs none, because a check of that name may be another store's; to see this store's
+    /// health, name its check.
     /// </summary>
-    public IReadOnlyCollection<string> HealthChecks { get; init; } = ["resourcefull"];
+    public IReadOnlyCollection<string>? HealthChecks { get; init; }
 
     /// <summary>
     /// Whether the dashboard can change what's stored: upload, delete and restore files and versions, change a version's
@@ -46,6 +48,15 @@ public sealed class ResourcefullDashboardOptions
     /// needs <c>AddResourcefullLinks</c>. <see langword="null"/>, the default, leaves them out.
     /// </summary>
     public string? UploadLinkPath { get; init; }
+
+    /// <summary>
+    /// The store the dashboard shows and changes, added with <see cref="ResourcefullServiceCollectionExtensions.AddKeyedResourcefull"/>;
+    /// <see langword="null"/>, the default, for the store <see cref="ResourcefullServiceCollectionExtensions.AddResourcefull"/>
+    /// adds. Links it creates are signed by that store's signer, added with
+    /// <see cref="ResourcefullLinksServiceCollectionExtensions.AddResourcefullLinks"/>. Map the dashboard once for each store
+    /// to show.
+    /// </summary>
+    public string? StoreName { get; init; }
 }
 
 /// <summary>
@@ -71,7 +82,7 @@ public static partial class ResourcefullDashboardEndpointRouteBuilderExtensions
 
     /// <summary>
     /// Maps the dashboard at <paramref name="pattern"/>: the page at <c>{pattern}/</c>, and JSON endpoints under
-    /// <c>{pattern}/api/</c> that can serve as an admin API. They only read, unless
+    /// <c>{pattern}/api/v1/</c> that can serve as an admin API. They only read, unless
     /// <see cref="ResourcefullDashboardOptions.AllowChanges"/> is set. The dashboard shows container and file names,
     /// which can be personal data, so its endpoints throw <see cref="InvalidOperationException"/> until the group
     /// returned requires authorization, such as with <c>RequireAuthorization("admins")</c>, or a fallback authorization
@@ -84,10 +95,12 @@ public static partial class ResourcefullDashboardEndpointRouteBuilderExtensions
     /// <returns>The group the dashboard's endpoints are in, to require authorization on.</returns>
     /// <exception cref="ArgumentException">
     /// <see cref="ResourcefullDashboardOptions.DownloadLinkPath"/> or <see cref="ResourcefullDashboardOptions.UploadLinkPath"/>
-    /// doesn't start with <c>/</c> or doesn't hold <c>{token}</c>.
+    /// doesn't start with <c>/</c> or doesn't hold <c>{token}</c>, or <see cref="ResourcefullDashboardOptions.StoreName"/> is
+    /// empty or white space.
     /// </exception>
     /// <exception cref="InvalidOperationException">
-    /// Changes and a link path are set, but <c>AddResourcefullLinks</c> wasn't called, so links can't be signed.
+    /// Changes and a link path are set, but <c>AddResourcefullLinks</c> wasn't called for the store, so links can't be signed;
+    /// or no store has the name <see cref="ResourcefullDashboardOptions.StoreName"/>.
     /// </exception>
     public static RouteGroupBuilder MapResourcefullDashboard(this IEndpointRouteBuilder endpoints, string pattern = "/resourcefull",
         ResourcefullDashboardOptions? options = null)
@@ -97,8 +110,10 @@ public static partial class ResourcefullDashboardEndpointRouteBuilderExtensions
         options ??= new ResourcefullDashboardOptions();
         ThrowIfBadLinkPath(options.DownloadLinkPath, nameof(options.DownloadLinkPath));
         ThrowIfBadLinkPath(options.UploadLinkPath, nameof(options.UploadLinkPath));
+        if (options.StoreName is not null) ArgumentException.ThrowIfNullOrWhiteSpace(options.StoreName, nameof(options));
+        ThrowIfNoStore(endpoints, options.StoreName);
         ThrowIfLinksCantBeSigned(endpoints, options);
-        IReadOnlyCollection<string> healthChecks = options.HealthChecks;
+        IReadOnlyCollection<string> healthChecks = options.HealthChecks ?? (options.StoreName is null ? ["resourcefull"] : []);
         // A provider that doesn't support expiry won't start supporting it while the app runs, so after the first
         // NotSupportedException the dashboard stops asking, rather than recording a failed operation each time the page loads.
         bool expiryUnsupported = false;
@@ -106,6 +121,14 @@ public static partial class ResourcefullDashboardEndpointRouteBuilderExtensions
         RouteGroupBuilder group = endpoints.MapGroup(pattern);
         group.AddEndpointFilter(ThrowUnlessAuthorizationIsDecided);
         group.AddEndpointFilter(AnswerBadRequestForBadInput);
+        if (options.StoreName is { } storeName)
+        {
+            group.AddEndpointFilter((context, next) =>
+            {
+                context.HttpContext.Features.Get<IHttpActivityFeature>()?.Activity.SetTag("resourcefull.store", storeName);
+                return next(context);
+            });
+        }
 
         group.MapGet("/", (HttpContext httpContext) =>
         {
@@ -119,14 +142,17 @@ public static partial class ResourcefullDashboardEndpointRouteBuilderExtensions
         group.MapGet("/dashboard.js", () => File("dashboard.js", "text/javascript; charset=utf-8"));
         group.MapGet("/dashboard.css", () => File("dashboard.css", "text/css; charset=utf-8"));
 
-        group.MapGet("/api/features", (HttpContext httpContext) =>
+        // Versioned, since these are a documented admin API: a later breaking change can go into v2 beside them.
+        RouteGroupBuilder api = group.MapGroup("/api/v1");
+
+        api.MapGet("/features", (HttpContext httpContext) =>
         {
             Record(httpContext, "features");
             return Results.Json(new FeaturesView(options.AllowChanges, options.AllowChanges && options.DownloadLinkPath is not null,
                 options.AllowChanges && options.UploadLinkPath is not null), Json);
         });
 
-        group.MapGet("/api/health", async (HttpContext httpContext, CancellationToken cancellationToken) =>
+        api.MapGet("/health", async (HttpContext httpContext, CancellationToken cancellationToken) =>
         {
             Record(httpContext, "health");
             if (httpContext.RequestServices.GetService<HealthCheckService>() is not { } health)
@@ -137,10 +163,10 @@ public static partial class ResourcefullDashboardEndpointRouteBuilderExtensions
                     e.Value.Description ?? e.Value.Exception?.Message, e.Value.Data))]), Json);
         });
 
-        group.MapGet("/api/expired", async (IResourceServiceClient resources, HttpContext httpContext,
-            CancellationToken cancellationToken) =>
+        api.MapGet("/expired", async (HttpContext httpContext, CancellationToken cancellationToken) =>
         {
             Record(httpContext, "expired");
+            IResourceServiceClient resources = Store(httpContext, options);
             if (expiryUnsupported) return Results.Json(new ExpiredView(false, 0, false, null), Json);
             IReadOnlyList<ResourceInfo> expired;
             try
@@ -157,10 +183,11 @@ public static partial class ResourcefullDashboardEndpointRouteBuilderExtensions
                 expired.Count == 0 ? null : expired[0].ExpiresAt), Json);
         });
 
-        group.MapGet("/api/containers", async (string? prefix, string? continuationToken, IResourceServiceClient resources,
-            HttpContext httpContext, CancellationToken cancellationToken) =>
+        api.MapGet("/containers", async (string? prefix, string? continuationToken, HttpContext httpContext,
+            CancellationToken cancellationToken) =>
         {
             Record(httpContext, "containers");
+            IResourceServiceClient resources = Store(httpContext, options);
             ContainerPage page = await resources.GetContainerPageAsync(new ContainerListOptions { Prefix = prefix, PageSize = PageSize },
                 continuationToken, cancellationToken).ConfigureAwait(false);
             var containers = new List<ContainerView>(page.Containers.Count);
@@ -169,49 +196,51 @@ public static partial class ResourcefullDashboardEndpointRouteBuilderExtensions
             return Results.Json(new PageView<ContainerView>(containers, page.ContinuationToken), Json);
         });
 
-        group.MapGet("/api/container", async (string name, IResourceServiceClient resources, HttpContext httpContext,
-            CancellationToken cancellationToken) =>
+        api.MapGet("/container", async (string name, HttpContext httpContext, CancellationToken cancellationToken) =>
         {
             Record(httpContext, "container");
+            IResourceServiceClient resources = Store(httpContext, options);
             return await resources.GetContainerClient(name).GetInfoAsync(cancellationToken).ConfigureAwait(false) is { } container
                 ? Results.Json(await ViewAsync(resources, container, cancellationToken).ConfigureAwait(false), Json)
                 : Results.NotFound();
         });
 
-        group.MapGet("/api/resources", async (string container, string? prefix, string? continuationToken,
-            IResourceServiceClient resources, HttpContext httpContext, CancellationToken cancellationToken) =>
+        api.MapGet("/resources", async (string container, string? prefix, string? continuationToken,
+            HttpContext httpContext, CancellationToken cancellationToken) =>
         {
             Record(httpContext, "resources");
+            IResourceServiceClient resources = Store(httpContext, options);
             if (!await resources.ContainerExistsAsync(container, cancellationToken).ConfigureAwait(false)) return Results.NotFound();
             ResourcePage page = await resources.GetContainerClient(container).GetResourcePageAsync(
                 new ResourceListOptions { Prefix = prefix, PageSize = PageSize }, continuationToken, cancellationToken).ConfigureAwait(false);
             return Results.Json(new PageView<ResourceView>([.. page.Resources.Select(View)], page.ContinuationToken), Json);
         });
 
-        group.MapGet("/api/largest", (string container, IResourceServiceClient resources, HttpContext httpContext,
-            CancellationToken cancellationToken) =>
+        api.MapGet("/largest", (string container, HttpContext httpContext, CancellationToken cancellationToken) =>
         {
             Record(httpContext, "largest");
+            IResourceServiceClient resources = Store(httpContext, options);
             return TopAsync(resources, container, ResourceVersionOrder.LargestFirst, cancellationToken);
         });
 
-        group.MapGet("/api/expiring", (string container, IResourceServiceClient resources, HttpContext httpContext,
-            CancellationToken cancellationToken) =>
+        api.MapGet("/expiring", (string container, HttpContext httpContext, CancellationToken cancellationToken) =>
         {
             Record(httpContext, "expiring");
+            IResourceServiceClient resources = Store(httpContext, options);
             return TopAsync(resources, container, ResourceVersionOrder.ExpiringFirst, cancellationToken);
         });
 
-        group.MapGet("/api/versions", async (string container, string name, IResourceServiceClient resources,
-            HttpContext httpContext, CancellationToken cancellationToken) =>
+        api.MapGet("/versions", async (string container, string name, HttpContext httpContext,
+            CancellationToken cancellationToken) =>
         {
             Record(httpContext, "versions");
+            IResourceServiceClient resources = Store(httpContext, options);
             IReadOnlyList<ResourceInfo> versions = await resources.GetContainerClient(container)
                 .GetResourceVersionsAsync(name, cancellationToken).ConfigureAwait(false);
             return versions.Count == 0 ? Results.NotFound() : Results.Json(new ListView<ResourceView>([.. versions.Select(View)]), Json);
         });
 
-        if (options.AllowChanges) MapChanges(group, options);
+        if (options.AllowChanges) MapChanges(api, options);
         return group;
     }
 
@@ -255,6 +284,20 @@ public static partial class ResourcefullDashboardEndpointRouteBuilderExtensions
             return Results.Problem(statusCode: StatusCodes.Status400BadRequest, title: exception.Message);
         }
     }
+
+    /// <summary>Throws now, when the dashboard is mapped, if no store has the name it's told to show.</summary>
+    private static void ThrowIfNoStore(IEndpointRouteBuilder endpoints, string? storeName)
+    {
+        if (storeName is not null
+            && endpoints.ServiceProvider.GetService<IServiceProviderIsKeyedService>()?.IsKeyedService(typeof(IResourceServiceClient), storeName) == false)
+        {
+            throw new InvalidOperationException(ResourceUploadEndpoints.NoStoreMessage(nameof(MapResourcefullDashboard), storeName));
+        }
+    }
+
+    /// <summary>The client of the store the dashboard shows.</summary>
+    private static IResourceServiceClient Store(HttpContext httpContext, ResourcefullDashboardOptions options) =>
+        ResourceUploadEndpoints.StoreClient(httpContext, options.StoreName, nameof(MapResourcefullDashboard));
 
     /// <summary>Tags the request's span with the dashboard endpoint it called.</summary>
     private static void Record(HttpContext httpContext, string endpoint) =>

@@ -15,10 +15,150 @@ public class DashboardChangeTests
     /// <summary>A change as the page sends it, with its header.</summary>
     private static HttpRequestMessage Change(HttpMethod method, string path, object? json = null)
     {
-        var request = new HttpRequestMessage(method, "/editable/api/" + path);
+        var request = new HttpRequestMessage(method, "/editable/api/v1/" + path);
         request.Headers.Add("X-Resourcefull-Dashboard", "1");
         if (json is not null) request.Content = JsonContent.Create(json);
         return request;
+    }
+
+    [Fact]
+    public async Task MapResourcefullDashboard_ShouldShowAndChangeOnlyThatStore_WhenGivenAStoreName()
+    {
+        // Arrange: a container in each store, and one file in each, under the same name.
+        await using TestApp app = await TestApp.StartAsync();
+        IResourceServiceClient archive = app.Services.CreateScope().ServiceProvider.GetRequiredKeyedService<IResourceServiceClient>(TestApp.ArchiveStore);
+        await archive.CreateContainerAsync("only-in-archive");
+        await app.Files.UploadAsync("a.txt", BinaryData.FromString("default"));
+        await app.ArchiveFiles.UploadAsync("a.txt", BinaryData.FromString("archive"));
+        var delete = new HttpRequestMessage(HttpMethod.Delete, $"/archive-dashboard/api/v1/resource?container={TestApp.Container}&name=a.txt");
+        delete.Headers.Add("X-Resourcefull-Dashboard", "1");
+
+        // Act
+        JsonElement named = await app.Client.GetFromJsonAsync<JsonElement>("/archive-dashboard/api/v1/containers");
+        JsonElement unnamed = await app.Client.GetFromJsonAsync<JsonElement>("/resourcefull/api/v1/containers");
+        HttpResponseMessage deleted = await app.Client.SendAsync(delete);
+
+        // Assert
+        Assert.Contains("only-in-archive", named.GetProperty("items").EnumerateArray().Select(c => c.GetProperty("name").GetString()));
+        Assert.DoesNotContain("only-in-archive", unnamed.GetProperty("items").EnumerateArray().Select(c => c.GetProperty("name").GetString()));
+        Assert.Equal(HttpStatusCode.NoContent, deleted.StatusCode);
+        Assert.False(await app.ArchiveFiles.ExistsAsync("a.txt"));
+        Assert.True(await app.Files.ExistsAsync("a.txt"));
+    }
+
+    [Fact]
+    public async Task DownloadLink_ShouldBeSignedByThatStoresSigner_WhenTheDashboardHasAStoreName()
+    {
+        // Arrange
+        await using TestApp app = await TestApp.StartAsync();
+        await app.ArchiveFiles.UploadAsync("a.txt", BinaryData.FromString("archive"));
+        var request = new HttpRequestMessage(HttpMethod.Post, $"/archive-dashboard/api/v1/download-link?container={TestApp.Container}&name=a.txt")
+        {
+            Content = JsonContent.Create(new { })
+        };
+        request.Headers.Add("X-Resourcefull-Dashboard", "1");
+
+        // Act
+        JsonElement link = await (await app.Client.SendAsync(request)).Content.ReadFromJsonAsync<JsonElement>();
+        string token = link.GetProperty("url").GetString()!.Split('/')[^1];
+
+        // Assert: the archive's signer opens it, and the unnamed store's doesn't.
+        Assert.Equal(ResourceLinkStatus.Valid, app.ArchiveLinks.CheckDownload(Uri.UnescapeDataString(token)).Status);
+        Assert.Equal(ResourceLinkStatus.Invalid, app.Links.CheckDownload(Uri.UnescapeDataString(token)).Status);
+    }
+
+    [Fact]
+    public void MapResourcefullDashboard_ShouldNameTheStore_WhenItsSignedLinksArentAdded()
+    {
+        // Arrange: a store with no signer.
+        WebApplicationBuilder builder = WebApplication.CreateSlimBuilder();
+        builder.Services.AddKeyedResourcefull("archive", options => options.UseInMemory());
+        using WebApplication app = builder.Build();
+
+        // Act
+        void act() => app.MapResourcefullDashboard("/dashboard", new ResourcefullDashboardOptions
+        {
+            StoreName = "archive", AllowChanges = true, DownloadLinkPath = "/shared/{token}"
+        });
+
+        // Assert
+        Assert.Contains("AddResourcefullLinks(\"archive\")", Assert.Throws<InvalidOperationException>(act).Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void MapResourcefullDashboard_ShouldSayWhichStoreIsMissing_WhenNoStoreHasTheName()
+    {
+        // Arrange
+        WebApplicationBuilder builder = WebApplication.CreateSlimBuilder();
+        builder.Services.AddResourcefull(options => options.UseInMemory());
+        using WebApplication app = builder.Build();
+
+        // Act
+        void act() => app.MapResourcefullDashboard("/dashboard", new ResourcefullDashboardOptions { StoreName = "missing" });
+
+        // Assert
+        Assert.Contains("'missing'", Assert.Throws<InvalidOperationException>(act).Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData(" ")]
+    public void MapResourcefullDashboard_ShouldThrow_WhenTheStoreNameIsEmptyOrWhiteSpace(string storeName)
+    {
+        // Arrange
+        WebApplicationBuilder builder = WebApplication.CreateSlimBuilder();
+        builder.Services.AddResourcefull(options => options.UseInMemory());
+        using WebApplication app = builder.Build();
+
+        // Act
+        void act() => app.MapResourcefullDashboard("/dashboard", new ResourcefullDashboardOptions { StoreName = storeName });
+
+        // Assert
+        Assert.Equal("options", Assert.ThrowsAny<ArgumentException>(act).ParamName);
+    }
+
+    [Fact]
+    public async Task UploadLink_ShouldBeSignedByThatStoresSigner_WhenTheDashboardHasAStoreName()
+    {
+        // Arrange
+        await using TestApp app = await TestApp.StartAsync();
+        var request = new HttpRequestMessage(HttpMethod.Post, $"/archive-dashboard/api/v1/upload-link?container={TestApp.Container}")
+        {
+            Content = JsonContent.Create(new { namePrefix = "in/" })
+        };
+        request.Headers.Add("X-Resourcefull-Dashboard", "1");
+
+        // Act
+        JsonElement link = await (await app.Client.SendAsync(request)).Content.ReadFromJsonAsync<JsonElement>();
+        string token = Uri.UnescapeDataString(link.GetProperty("url").GetString()!.Split('/')[^1]);
+
+        // Assert: the archive's signer opens it, and the unnamed store's doesn't.
+        Assert.Equal(ResourceLinkStatus.Valid, app.ArchiveLinks.CheckUpload(token).Status);
+        Assert.Equal(ResourceLinkStatus.Invalid, app.Links.CheckUpload(token).Status);
+    }
+
+    [Fact]
+    public async Task Audit_ShouldNameTheStore_WhenAChangeIsMadeThroughEitherDashboard()
+    {
+        // Arrange: the same file in the same container of each store.
+        await using TestApp app = await TestApp.StartAsync();
+        await app.Files.UploadAsync("a.txt", BinaryData.FromString("default"));
+        await app.ArchiveFiles.UploadAsync("a.txt", BinaryData.FromString("archive"));
+        HttpRequestMessage Delete(string dashboard)
+        {
+            var request = new HttpRequestMessage(HttpMethod.Delete, $"/{dashboard}/api/v1/resource?container={TestApp.Container}&name=a.txt");
+            request.Headers.Add("X-Resourcefull-Dashboard", "1");
+            return request;
+        }
+
+        // Act
+        await app.Client.SendAsync(Delete("archive-dashboard"));
+        await app.Client.SendAsync(Delete("editable"));
+
+        // Assert
+        string[] logged = [.. app.Logs.Messages.Where(m => m.Category == "Resourcefull.AspNetCore.Dashboard").Select(m => m.Message)];
+        Assert.Contains(logged, m => m.Contains("delete by an anonymous user in store archive,", StringComparison.Ordinal));
+        Assert.Contains(logged, m => m.Contains("delete by an anonymous user in store (unnamed),", StringComparison.Ordinal));
     }
 
     private static HttpRequestMessage Upload(string name, string content, bool replace = false)
@@ -37,12 +177,12 @@ public class DashboardChangeTests
     {
         // Arrange
         await using TestApp app = await TestApp.StartAsync();
-        var request = new HttpRequestMessage(HttpMethod.Delete, $"/resourcefull/api/container?name={TestApp.Container}");
+        var request = new HttpRequestMessage(HttpMethod.Delete, $"/resourcefull/api/v1/container?name={TestApp.Container}");
         request.Headers.Add("X-Resourcefull-Dashboard", "1");
 
         // Act
         HttpResponseMessage response = await app.Client.SendAsync(request);
-        JsonElement features = await app.Client.GetFromJsonAsync<JsonElement>("/resourcefull/api/features");
+        JsonElement features = await app.Client.GetFromJsonAsync<JsonElement>("/resourcefull/api/v1/features");
 
         // Assert
         Assert.Equal(HttpStatusCode.MethodNotAllowed, response.StatusCode);
@@ -58,7 +198,7 @@ public class DashboardChangeTests
         await using TestApp app = await TestApp.StartAsync();
 
         // Act
-        JsonElement features = await app.Client.GetFromJsonAsync<JsonElement>("/editable/api/features");
+        JsonElement features = await app.Client.GetFromJsonAsync<JsonElement>("/editable/api/v1/features");
 
         // Assert
         Assert.Equal((true, true, true), (features.GetProperty("changes").GetBoolean(),
@@ -80,7 +220,7 @@ public class DashboardChangeTests
         await app.Files.UploadAsync("a.txt", BinaryData.FromString("a"));
 
         // Act
-        HttpResponseMessage withoutHeader = await app.Client.DeleteAsync($"/editable/api/resource?container={TestApp.Container}&name=a.txt");
+        HttpResponseMessage withoutHeader = await app.Client.DeleteAsync($"/editable/api/v1/resource?container={TestApp.Container}&name=a.txt");
         HttpResponseMessage fromAnotherSite = await app.Client.SendAsync(DeleteFrom("cross-site"));
         HttpResponseMessage fromAnotherOriginOfTheSite = await app.Client.SendAsync(DeleteFrom("same-site"));
 
@@ -88,7 +228,7 @@ public class DashboardChangeTests
         Assert.All(new[] { withoutHeader, fromAnotherSite, fromAnotherOriginOfTheSite }, r => Assert.Equal(HttpStatusCode.Forbidden, r.StatusCode));
         Assert.True(await app.Files.ExistsAsync("a.txt"));
         Assert.Equal(3, app.Logs.Messages.Count(m => m.Category == "Resourcefull.AspNetCore.Dashboard"
-            && m.Message.StartsWith("Dashboard refused a change, DELETE /editable/api/resource", StringComparison.Ordinal)));
+            && m.Message.StartsWith("Dashboard refused a change, DELETE /editable/api/v1/resource", StringComparison.Ordinal)));
     }
 
     [Fact]
@@ -142,7 +282,7 @@ public class DashboardChangeTests
         Assert.Equal("third", (await app.Files.DownloadContentAsync("a.txt"))!.Content.ToString());
         Assert.Equal("text/plain; charset=utf-8", (await app.Files.GetResourceInfoAsync("a.txt"))!.ContentType);
         Assert.Equal(2, app.Logs.Messages.Count(m => m.Category == "Resourcefull.AspNetCore.Dashboard"
-            && m.Message.Contains("upload by an anonymous user in container files, resource a.txt", StringComparison.Ordinal)));
+            && m.Message.Contains("upload by an anonymous user in store (unnamed), container files, resource a.txt", StringComparison.Ordinal)));
     }
 
     [Fact]

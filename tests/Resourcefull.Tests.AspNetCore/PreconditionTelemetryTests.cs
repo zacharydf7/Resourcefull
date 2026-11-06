@@ -170,10 +170,10 @@ public sealed class PreconditionTelemetryTests
 
     [Theory]
     [InlineData("/resourcefull/", "page")]
-    [InlineData("/resourcefull/api/health", "health")]
-    [InlineData("/resourcefull/api/containers", "containers")]
-    [InlineData("/resourcefull/api/container?name=files", "container")]
-    [InlineData("/resourcefull/api/resources?container=files", "resources")]
+    [InlineData("/resourcefull/api/v1/health", "health")]
+    [InlineData("/resourcefull/api/v1/containers", "containers")]
+    [InlineData("/resourcefull/api/v1/container?name=files", "container")]
+    [InlineData("/resourcefull/api/v1/resources?container=files", "resources")]
     public async Task MapResourcefullDashboard_ShouldRecordTheEndpointOnTheRequestSpan_WhenCalled(string path, string expected)
     {
         // Arrange
@@ -202,6 +202,22 @@ public sealed class PreconditionTelemetryTests
         // Assert
         Assert.Equal(HttpStatusCode.NotModified, status);
         Assert.Equal("not_modified", precondition);
+    }
+
+    [Theory]
+    [InlineData("/archive-dashboard/api/v1/containers", TestApp.ArchiveStore)]
+    [InlineData("/resourcefull/api/v1/containers", null)]
+    public async Task MapResourcefullDashboard_ShouldRecordANamedStoreOnTheRequestSpan_WhenItHasOne(string path, string? expected)
+    {
+        // Arrange
+        await using TestApp app = await TestApp.StartAsync();
+
+        // Act
+        (HttpStatusCode status, object? store) = await SendAsync(app, new HttpRequestMessage(HttpMethod.Get, path), "resourcefull.store");
+
+        // Assert
+        Assert.Equal(HttpStatusCode.OK, status);
+        Assert.Equal(expected, store);
     }
 
     [Fact]

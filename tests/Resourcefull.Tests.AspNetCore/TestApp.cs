@@ -131,6 +131,10 @@ internal sealed class TestApp : IAsyncDisposable
         {
             AllowChanges = true, DownloadLinkPath = "/shared/{token}", UploadLinkPath = "/upload/{token}"
         }).AllowAnonymous();
+        app.MapResourcefullDashboard("/archive-dashboard", new ResourcefullDashboardOptions
+        {
+            StoreName = ArchiveStore, AllowChanges = true, DownloadLinkPath = "/archive/shared/{token}", UploadLinkPath = "/archive/upload/{token}"
+        }).AllowAnonymous();
 
         await app.StartAsync();
         await app.Services.CreateScope().ServiceProvider.GetRequiredService<IResourceServiceClient>().CreateContainerAsync(Container);

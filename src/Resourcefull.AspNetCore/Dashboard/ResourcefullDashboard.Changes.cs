@@ -27,78 +27,79 @@ public static partial class ResourcefullDashboardEndpointRouteBuilderExtensions
     /// <summary>Throws now, when the dashboard is mapped, if it's told to create links the app can't sign.</summary>
     private static void ThrowIfLinksCantBeSigned(IEndpointRouteBuilder endpoints, ResourcefullDashboardOptions options)
     {
-        if (options.AllowChanges && (options.DownloadLinkPath ?? options.UploadLinkPath) is not null
-            && endpoints.ServiceProvider.GetService<IServiceProviderIsService>()?.IsService(typeof(IResourceLinkSigner)) == false)
-        {
-            throw new InvalidOperationException(NoSigner);
-        }
+        if (options.AllowChanges && (options.DownloadLinkPath ?? options.UploadLinkPath) is not null)
+            ResourcefullLinksServiceCollectionExtensions.ThrowIfNoSigner(endpoints.ServiceProvider, options.StoreName, nameof(MapResourcefullDashboard));
     }
 
-    private const string NoSigner = "The dashboard creates links only with AddResourcefullLinks: call builder.Services.AddResourcefullLinks().";
-
     /// <summary>Maps the endpoints that change what's stored, which <see cref="ResourcefullDashboardOptions.AllowChanges"/> turns on.</summary>
-    private static void MapChanges(RouteGroupBuilder group, ResourcefullDashboardOptions options)
+    private static void MapChanges(RouteGroupBuilder api, ResourcefullDashboardOptions options)
     {
-        RouteGroupBuilder changes = group.MapGroup("/api");
+        RouteGroupBuilder changes = api.MapGroup("");
         changes.AddEndpointFilter(RefuseForgedChanges);
         changes.AddEndpointFilter(AnswerStoreRefusals);
 
-        changes.MapDelete("/resource", async (string container, string name, string? versionId, IResourceServiceClient resources,
-            HttpContext httpContext, CancellationToken cancellationToken) =>
+        changes.MapDelete("/resource", async (string container, string name, string? versionId, HttpContext httpContext,
+            CancellationToken cancellationToken) =>
         {
             Record(httpContext, "delete");
+            IResourceServiceClient resources = Store(httpContext, options);
             if (!await resources.GetContainerClient(container).DeleteResourceIfExistsAsync(name, versionId, null, cancellationToken)
                 .ConfigureAwait(false)) return Results.NotFound();
-            Audit(httpContext, "delete", container, name, versionId);
+            Audit(httpContext, options, "delete", container, name, versionId);
             return Results.NoContent();
         });
 
-        changes.MapPost("/restore", async (string container, string name, string versionId, IResourceServiceClient resources,
-            HttpContext httpContext, CancellationToken cancellationToken) =>
+        changes.MapPost("/restore", async (string container, string name, string versionId, HttpContext httpContext,
+            CancellationToken cancellationToken) =>
         {
             Record(httpContext, "restore");
+            IResourceServiceClient resources = Store(httpContext, options);
             if (string.IsNullOrEmpty(versionId)) return BadInput("Give the versionId of the version to restore.");
             if (await resources.GetContainerClient(container).RestoreVersionAsync(name, versionId, cancellationToken)
                 .ConfigureAwait(false) is not { } restored) return Results.NotFound();
-            Audit(httpContext, "restore", container, name, versionId);
+            Audit(httpContext, options, "restore", container, name, versionId);
             return Results.Json(View(restored), Json);
         });
 
         changes.MapPut("/expiry", async (string container, string name, string? versionId, ExpiryChange change,
-            IResourceServiceClient resources, HttpContext httpContext, CancellationToken cancellationToken) =>
+            HttpContext httpContext, CancellationToken cancellationToken) =>
         {
             Record(httpContext, "set_expiry");
+            IResourceServiceClient resources = Store(httpContext, options);
             if (!await resources.GetContainerClient(container).SetExpiryAsync(name, versionId, change.ExpiresAt, cancellationToken)
                 .ConfigureAwait(false)) return Results.NotFound();
-            Audit(httpContext, "set_expiry", container, name, versionId);
+            Audit(httpContext, options, "set_expiry", container, name, versionId);
             return Results.NoContent();
         });
 
-        changes.MapPut("/content-type", async (string container, string name, string? versionId, ContentTypeChange change,
-            IResourceServiceClient resources, HttpContext httpContext, CancellationToken cancellationToken) =>
+        changes.MapPut("/content-type", async (string container, string name, string? versionId,
+            ContentTypeChange change, HttpContext httpContext, CancellationToken cancellationToken) =>
         {
             Record(httpContext, "set_content_type");
+            IResourceServiceClient resources = Store(httpContext, options);
             if (!await resources.GetContainerClient(container).SetContentTypeAsync(name, versionId, change.ContentType, cancellationToken)
                 .ConfigureAwait(false)) return Results.NotFound();
-            Audit(httpContext, "set_content_type", container, name, versionId);
+            Audit(httpContext, options, "set_content_type", container, name, versionId);
             return Results.NoContent();
         });
 
         changes.MapPut("/metadata", async (string container, string name, string? versionId, MetadataChange change,
-            IResourceServiceClient resources, HttpContext httpContext, CancellationToken cancellationToken) =>
+            HttpContext httpContext, CancellationToken cancellationToken) =>
         {
             Record(httpContext, "set_metadata");
+            IResourceServiceClient resources = Store(httpContext, options);
             if (!await resources.GetContainerClient(container).SetResourceMetadataAsync(name, versionId, change.Metadata ?? [],
                 cancellationToken).ConfigureAwait(false)) return Results.NotFound();
-            Audit(httpContext, "set_metadata", container, name, versionId);
+            Audit(httpContext, options, "set_metadata", container, name, versionId);
             return Results.NoContent();
         });
 
         // The file is the request body, as an upload link takes it, so a large one isn't buffered.
-        changes.MapPut("/upload", async (string container, string name, bool? replace, IResourceServiceClient resources,
-            HttpContext httpContext, CancellationToken cancellationToken) =>
+        changes.MapPut("/upload", async (string container, string name, bool? replace, HttpContext httpContext,
+            CancellationToken cancellationToken) =>
         {
             Record(httpContext, "upload");
+            IResourceServiceClient resources = Store(httpContext, options);
             HttpRequest request = httpContext.Request;
             ResourceInfo stored = await resources.GetContainerClient(container).UploadAsync(name, request.Body, new ResourceUploadOptions
             {
@@ -109,26 +110,28 @@ public static partial class ResourcefullDashboardEndpointRouteBuilderExtensions
                     ContentLength = request.ContentLength
                 }
             }, cancellationToken).ConfigureAwait(false);
-            Audit(httpContext, "upload", container, name, stored.VersionId);
+            Audit(httpContext, options, "upload", container, name, stored.VersionId);
             return Results.Json(View(stored), Json, statusCode: StatusCodes.Status201Created);
         });
 
-        changes.MapPost("/containers", async (ContainerChange change, IResourceServiceClient resources, HttpContext httpContext,
+        changes.MapPost("/containers", async (ContainerChange change, HttpContext httpContext,
             CancellationToken cancellationToken) =>
         {
             Record(httpContext, "create_container");
+            IResourceServiceClient resources = Store(httpContext, options);
             if (string.IsNullOrEmpty(change.Name)) return BadInput("Give the new container's name.");
             await resources.CreateContainerAsync(change.Name, null, cancellationToken).ConfigureAwait(false);
-            Audit(httpContext, "create_container", change.Name, null, null);
+            Audit(httpContext, options, "create_container", change.Name, null, null);
             return Results.StatusCode(StatusCodes.Status201Created);
         });
 
-        changes.MapDelete("/container", async (string name, IResourceServiceClient resources, HttpContext httpContext,
+        changes.MapDelete("/container", async (string name, HttpContext httpContext,
             CancellationToken cancellationToken) =>
         {
             Record(httpContext, "delete_container");
+            IResourceServiceClient resources = Store(httpContext, options);
             if (!await resources.DeleteContainerIfExistsAsync(name, cancellationToken).ConfigureAwait(false)) return Results.NotFound();
-            Audit(httpContext, "delete_container", name, null, null);
+            Audit(httpContext, options, "delete_container", name, null, null);
             return Results.NoContent();
         });
 
@@ -139,13 +142,13 @@ public static partial class ResourcefullDashboardEndpointRouteBuilderExtensions
             {
                 Record(httpContext, "download_link");
                 if (LinkLifetime(change.ExpiresInMinutes) is not { } expiresIn) return BadLifetime();
-                IResourceLinkSigner signer = Signer(httpContext);
+                IResourceLinkSigner signer = Signer(httpContext, options);
                 string? token = await signer.CreateDownloadTokenAsync(new ResourceDownloadLink(container, name)
                 {
                     VersionId = versionId, ExpiresIn = expiresIn
                 }, cancellationToken).ConfigureAwait(false);
                 if (token is null) return Results.NotFound();
-                Audit(httpContext, "download_link", container, name, versionId);
+                Audit(httpContext, options, "download_link", container, name, versionId);
                 return Results.Json(new LinkView(LinkUrl(httpContext, downloadPath, token), signer.CheckDownload(token).Link!.ExpiresAt), Json);
             });
         }
@@ -157,7 +160,7 @@ public static partial class ResourcefullDashboardEndpointRouteBuilderExtensions
             {
                 Record(httpContext, "upload_link");
                 if (LinkLifetime(change.ExpiresInMinutes) is not { } expiresIn) return BadLifetime();
-                IResourceLinkSigner signer = Signer(httpContext);
+                IResourceLinkSigner signer = Signer(httpContext, options);
                 string? token;
                 try
                 {
@@ -173,7 +176,7 @@ public static partial class ResourcefullDashboardEndpointRouteBuilderExtensions
                     return BadInput(exception.Message);
                 }
                 if (token is null) return Results.NotFound();
-                Audit(httpContext, "upload_link", container, change.Name ?? change.NamePrefix, null);
+                Audit(httpContext, options, "upload_link", container, change.Name ?? change.NamePrefix, null);
                 return Results.Json(new LinkView(LinkUrl(httpContext, uploadPath, token), signer.CheckUpload(token).Link!.ExpiresAt), Json);
             });
         }
@@ -218,8 +221,8 @@ public static partial class ResourcefullDashboardEndpointRouteBuilderExtensions
         }
     }
 
-    private static IResourceLinkSigner Signer(HttpContext httpContext) =>
-        httpContext.RequestServices.GetService<IResourceLinkSigner>() ?? throw new InvalidOperationException(NoSigner);
+    private static IResourceLinkSigner Signer(HttpContext httpContext, ResourcefullDashboardOptions options) =>
+        ResourcefullLinksServiceCollectionExtensions.SignerFor(httpContext, Store(httpContext, options), nameof(MapResourcefullDashboard));
 
     /// <summary>How long a link works, an hour unless the page asks otherwise, or <see langword="null"/> outside the limits.</summary>
     private static TimeSpan? LinkLifetime(int? minutes)
@@ -242,8 +245,9 @@ public static partial class ResourcefullDashboardEndpointRouteBuilderExtensions
     }
 
     /// <summary>Logs a change, with the user who made it, as the dashboard's audit trail.</summary>
-    private static void Audit(HttpContext httpContext, string action, string container, string? name, string? versionId) =>
-        LogChange(Logger(httpContext), action, UserOf(httpContext), container, name, versionId);
+    private static void Audit(HttpContext httpContext, ResourcefullDashboardOptions options, string action, string container, string? name,
+        string? versionId) =>
+        LogChange(Logger(httpContext), action, UserOf(httpContext), options.StoreName ?? "(unnamed)", container, name, versionId);
 
     private static ILogger Logger(HttpContext httpContext) =>
         httpContext.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger("Resourcefull.AspNetCore.Dashboard");
@@ -259,8 +263,8 @@ public static partial class ResourcefullDashboardEndpointRouteBuilderExtensions
     }
 
     [LoggerMessage(Level = LogLevel.Information,
-        Message = "Dashboard change {Action} by {User} in container {ContainerName}, resource {ResourceName}, version {VersionId}.")]
-    private static partial void LogChange(ILogger logger, string action, string user, string containerName, string? resourceName,
+        Message = "Dashboard change {Action} by {User} in store {StoreName}, container {ContainerName}, resource {ResourceName}, version {VersionId}.")]
+    private static partial void LogChange(ILogger logger, string action, string user, string storeName, string containerName, string? resourceName,
         string? versionId);
 
     [LoggerMessage(Level = LogLevel.Warning,

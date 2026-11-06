@@ -205,6 +205,7 @@ A request that opens a [signed link](sharing-links.md), uploads through an [uplo
 a resumable upload through one, gets `resourcefull.link`: `valid`, `expired` or `invalid`. A link for a [named store](several-stores.md) also gets
 `resourcefull.store`. A request to the [dashboard](aspnet-core/dashboard.md) gets `resourcefull.dashboard`, naming
 what it asked for, such as `containers`, `largest` or, for a change, `upload`; the
-[dashboard's telemetry](aspnet-core/dashboard.md#telemetry) lists them all. A request to the
+[dashboard's telemetry](aspnet-core/dashboard.md#telemetry) lists them all. A request to a dashboard for a named store
+also gets `resourcefull.store`. A request to the
 [resumable upload endpoints](aspnet-core/resumable-uploads.md#telemetry) gets `resourcefull.tus`: `options`,
 `create`, `resume`, `append`, `complete` or `cancel`, and, for a named store, `resourcefull.store`.

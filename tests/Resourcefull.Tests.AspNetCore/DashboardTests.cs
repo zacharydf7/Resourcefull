@@ -57,7 +57,7 @@ public class DashboardTests
         await using WebApplication _ = app;
 
         // Act
-        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => client.GetAsync("/resourcefull/api/containers"));
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => client.GetAsync("/resourcefull/api/v1/containers"));
 
         // Assert
         Assert.Contains("RequireAuthorization", exception.Message);
@@ -73,8 +73,8 @@ public class DashboardTests
 
         // Act
         HttpResponseMessage anonymousPage = await client.GetAsync("/resourcefull/");
-        HttpResponseMessage anonymousApi = await client.GetAsync("/resourcefull/api/containers");
-        HttpResponseMessage signedIn = await client.SendAsync(SignedIn("/resourcefull/api/containers"));
+        HttpResponseMessage anonymousApi = await client.GetAsync("/resourcefull/api/v1/containers");
+        HttpResponseMessage signedIn = await client.SendAsync(SignedIn("/resourcefull/api/v1/containers"));
 
         // Assert
         Assert.Equal((HttpStatusCode.Unauthorized, HttpStatusCode.Unauthorized), (anonymousPage.StatusCode, anonymousApi.StatusCode));
@@ -90,8 +90,8 @@ public class DashboardTests
         await using WebApplication _ = app;
 
         // Act
-        HttpResponseMessage anonymous = await client.GetAsync("/resourcefull/api/containers");
-        HttpResponseMessage signedIn = await client.SendAsync(SignedIn("/resourcefull/api/containers"));
+        HttpResponseMessage anonymous = await client.GetAsync("/resourcefull/api/v1/containers");
+        HttpResponseMessage signedIn = await client.SendAsync(SignedIn("/resourcefull/api/v1/containers"));
 
         // Assert
         Assert.Equal((HttpStatusCode.Unauthorized, HttpStatusCode.OK), (anonymous.StatusCode, signedIn.StatusCode));
@@ -133,10 +133,10 @@ public class DashboardTests
         for (int i = 0; i < 50; i++) await resources.CreateContainerAsync($"other-{i:00}");
 
         // Act
-        JsonElement first = await app.Client.GetFromJsonAsync<JsonElement>("/resourcefull/api/containers");
+        JsonElement first = await app.Client.GetFromJsonAsync<JsonElement>("/resourcefull/api/v1/containers");
         string token = first.GetProperty("continuationToken").GetString()!;
-        JsonElement second = await app.Client.GetFromJsonAsync<JsonElement>($"/resourcefull/api/containers?continuationToken={Uri.EscapeDataString(token)}");
-        JsonElement filtered = await app.Client.GetFromJsonAsync<JsonElement>("/resourcefull/api/containers?prefix=fil");
+        JsonElement second = await app.Client.GetFromJsonAsync<JsonElement>($"/resourcefull/api/v1/containers?continuationToken={Uri.EscapeDataString(token)}");
+        JsonElement filtered = await app.Client.GetFromJsonAsync<JsonElement>("/resourcefull/api/v1/containers?prefix=fil");
 
         // Assert
         Assert.Equal((50, 1), (first.GetProperty("items").GetArrayLength(), second.GetProperty("items").GetArrayLength()));
@@ -161,8 +161,8 @@ public class DashboardTests
         await using WebApplication _ = app;
 
         // Act
-        HttpResponseMessage token = await client.GetAsync("/resourcefull/api/containers?continuationToken=not-a-token");
-        HttpResponseMessage name = await client.GetAsync("/resourcefull/api/resources?container=%20padded");
+        HttpResponseMessage token = await client.GetAsync("/resourcefull/api/v1/containers?continuationToken=not-a-token");
+        HttpResponseMessage name = await client.GetAsync("/resourcefull/api/v1/resources?container=%20padded");
 
         // Assert
         Assert.Equal((HttpStatusCode.BadRequest, HttpStatusCode.BadRequest), (token.StatusCode, name.StatusCode));
@@ -177,8 +177,8 @@ public class DashboardTests
         await resources.CreateContainerAsync("team/reports", new Dictionary<string, string> { ["owner"] = "finance" });
 
         // Act
-        JsonElement found = await app.Client.GetFromJsonAsync<JsonElement>("/resourcefull/api/container?name=team%2Freports");
-        HttpResponseMessage missing = await app.Client.GetAsync("/resourcefull/api/container?name=missing");
+        JsonElement found = await app.Client.GetFromJsonAsync<JsonElement>("/resourcefull/api/v1/container?name=team%2Freports");
+        HttpResponseMessage missing = await app.Client.GetAsync("/resourcefull/api/v1/container?name=missing");
 
         // Assert
         Assert.Equal("team/reports", found.GetProperty("name").GetString());
@@ -199,8 +199,8 @@ public class DashboardTests
         await app.Files.UploadAsync("other.txt", BinaryData.FromString("x"));
 
         // Act
-        JsonElement page = await app.Client.GetFromJsonAsync<JsonElement>($"/resourcefull/api/resources?container={TestApp.Container}&prefix=reports/");
-        HttpResponseMessage missing = await app.Client.GetAsync("/resourcefull/api/resources?container=missing");
+        JsonElement page = await app.Client.GetFromJsonAsync<JsonElement>($"/resourcefull/api/v1/resources?container={TestApp.Container}&prefix=reports/");
+        HttpResponseMessage missing = await app.Client.GetAsync("/resourcefull/api/v1/resources?container=missing");
 
         // Assert
         JsonElement file = Assert.Single(page.GetProperty("items").EnumerateArray());
@@ -224,8 +224,8 @@ public class DashboardTests
         await app.Files.UploadAsync("b.txt", BinaryData.FromString("abcde"));
 
         // Act
-        JsonElement largest = await app.Client.GetFromJsonAsync<JsonElement>($"/resourcefull/api/largest?container={TestApp.Container}");
-        HttpResponseMessage missing = await app.Client.GetAsync("/resourcefull/api/largest?container=missing");
+        JsonElement largest = await app.Client.GetFromJsonAsync<JsonElement>($"/resourcefull/api/v1/largest?container={TestApp.Container}");
+        HttpResponseMessage missing = await app.Client.GetAsync("/resourcefull/api/v1/largest?container=missing");
 
         // Assert
         Assert.Equal([("a.txt", 10L, true), ("b.txt", 5L, true), ("a.txt", 3L, false)], Versions(largest));
@@ -243,7 +243,7 @@ public class DashboardTests
         await app.Files.UploadAsync("kept.txt", BinaryData.FromString("c"));
 
         // Act
-        JsonElement expiring = await app.Client.GetFromJsonAsync<JsonElement>($"/resourcefull/api/expiring?container={TestApp.Container}");
+        JsonElement expiring = await app.Client.GetFromJsonAsync<JsonElement>($"/resourcefull/api/v1/expiring?container={TestApp.Container}");
 
         // Assert
         Assert.Equal(["sooner.txt", "later.txt"], expiring.GetProperty("items").EnumerateArray().Select(v => v.GetProperty("name").GetString()));
@@ -260,9 +260,9 @@ public class DashboardTests
 
         // Act
         JsonElement versions = await app.Client.GetFromJsonAsync<JsonElement>(
-            $"/resourcefull/api/versions?container={TestApp.Container}&name={Uri.EscapeDataString("a&b=c.txt")}");
-        HttpResponseMessage missing = await app.Client.GetAsync($"/resourcefull/api/versions?container={TestApp.Container}&name=missing.txt");
-        HttpResponseMessage invalid = await app.Client.GetAsync($"/resourcefull/api/versions?container={TestApp.Container}&name=%20a");
+            $"/resourcefull/api/v1/versions?container={TestApp.Container}&name={Uri.EscapeDataString("a&b=c.txt")}");
+        HttpResponseMessage missing = await app.Client.GetAsync($"/resourcefull/api/v1/versions?container={TestApp.Container}&name=missing.txt");
+        HttpResponseMessage invalid = await app.Client.GetAsync($"/resourcefull/api/v1/versions?container={TestApp.Container}&name=%20a");
 
         // Assert
         Assert.Equal([("a&b=c.txt", 10L, true), ("a&b=c.txt", 3L, false)], Versions(versions));
@@ -284,8 +284,8 @@ public class DashboardTests
             await many.Files.UploadAsync($"{i}.txt", BinaryData.FromString("x"), new ResourceUploadOptions { ExpiresAt = oldest });
 
         // Act
-        JsonElement someExpired = await few.Client.GetFromJsonAsync<JsonElement>("/resourcefull/api/expired");
-        JsonElement manyExpired = await many.Client.GetFromJsonAsync<JsonElement>("/resourcefull/api/expired");
+        JsonElement someExpired = await few.Client.GetFromJsonAsync<JsonElement>("/resourcefull/api/v1/expired");
+        JsonElement manyExpired = await many.Client.GetFromJsonAsync<JsonElement>("/resourcefull/api/v1/expired");
 
         // Assert
         Assert.Equal((true, 2, false), (someExpired.GetProperty("supported").GetBoolean(), someExpired.GetProperty("count").GetInt32(),
@@ -306,8 +306,8 @@ public class DashboardTests
         await using WebApplication _ = app;
 
         // Act
-        JsonElement first = await client.GetFromJsonAsync<JsonElement>("/resourcefull/api/expired");
-        JsonElement second = await client.GetFromJsonAsync<JsonElement>("/resourcefull/api/expired");
+        JsonElement first = await client.GetFromJsonAsync<JsonElement>("/resourcefull/api/v1/expired");
+        JsonElement second = await client.GetFromJsonAsync<JsonElement>("/resourcefull/api/v1/expired");
 
         // Assert
         Assert.False(first.GetProperty("supported").GetBoolean());
@@ -326,7 +326,7 @@ public class DashboardTests
         await using WebApplication _ = app;
         HttpRequestMessage Create(string header, string user, string container)
         {
-            HttpRequestMessage request = new(HttpMethod.Post, "/resourcefull/api/containers") { Content = JsonContent.Create(new { name = container }) };
+            HttpRequestMessage request = new(HttpMethod.Post, "/resourcefull/api/v1/containers") { Content = JsonContent.Create(new { name = container }) };
             request.Headers.Add("X-Resourcefull-Dashboard", "1");
             request.Headers.Add(header, user);
             return request;
@@ -339,8 +339,26 @@ public class DashboardTests
         // Assert
         Assert.Equal((HttpStatusCode.Created, HttpStatusCode.Created), (named.StatusCode, identified.StatusCode));
         string[] changes = [.. logs.Messages.Where(m => m.Category == "Resourcefull.AspNetCore.Dashboard").Select(m => m.Message)];
-        Assert.Contains(changes, m => m.Contains("create_container by admin in container a", StringComparison.Ordinal));
-        Assert.Contains(changes, m => m.Contains("create_container by user-42 in container b", StringComparison.Ordinal));
+        Assert.Contains(changes, m => m.Contains("create_container by admin in store (unnamed), container a", StringComparison.Ordinal));
+        Assert.Contains(changes, m => m.Contains("create_container by user-42 in store (unnamed), container b", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task MapResourcefullDashboard_ShouldServeItsApiUnderV1AndThePageShouldUseIt_WhenCalled()
+    {
+        // Arrange
+        await using TestApp app = await TestApp.StartAsync();
+
+        // Act
+        HttpResponseMessage versioned = await app.Client.GetAsync("/resourcefull/api/v1/features");
+        HttpResponseMessage unversioned = await app.Client.GetAsync("/resourcefull/api/features");
+        string script = await app.Client.GetStringAsync("/resourcefull/dashboard.js");
+
+        // Assert: every call the page makes uses v1.
+        Assert.Equal(HttpStatusCode.OK, versioned.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, unversioned.StatusCode);
+        Assert.DoesNotContain("\"api/\"", script, StringComparison.Ordinal);
+        Assert.Contains("\"api/v1/\"", script, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -350,12 +368,47 @@ public class DashboardTests
         await using TestApp app = await TestApp.StartAsync();
 
         // Act
-        JsonElement report = await app.Client.GetFromJsonAsync<JsonElement>("/resourcefull/api/health");
+        JsonElement report = await app.Client.GetFromJsonAsync<JsonElement>("/resourcefull/api/v1/health");
 
         // Assert
         Assert.Equal("Healthy", report.GetProperty("status").GetString());
         JsonElement check = Assert.Single(report.GetProperty("checks").EnumerateArray());
         Assert.Equal(("resourcefull", "Healthy"), (check.GetProperty("name").GetString(), check.GetProperty("status").GetString()));
+    }
+
+    [Fact]
+    public async Task Health_ShouldNotReportAnotherStoresCheck_WhenTheDashboardHasAStoreNameAndNamesNoChecks()
+    {
+        // Arrange: the app's one check is of the unnamed store, under the default name.
+        await using TestApp app = await TestApp.StartAsync();
+
+        // Act
+        JsonElement report = await app.Client.GetFromJsonAsync<JsonElement>("/archive-dashboard/api/v1/health");
+
+        // Assert
+        Assert.Equal(JsonValueKind.Null, report.GetProperty("status").ValueKind);
+        Assert.Empty(report.GetProperty("checks").EnumerateArray());
+    }
+
+    [Fact]
+    public async Task Health_ShouldRunOnlyTheNamedChecks_WhenTheDashboardNamesThem()
+    {
+        // Arrange: a dashboard for a named store, with a check of each store.
+        (WebApplication app, HttpClient client) = await StartAsync(dashboard => dashboard.AllowAnonymous(),
+            configureServices: services =>
+            {
+                services.AddKeyedResourcefull("archive", options => options.UseInMemory());
+                services.AddHealthChecks().AddResourcefullCheck().AddResourcefullCheck("archive-db", storeName: "archive");
+            },
+            dashboardOptions: new ResourcefullDashboardOptions { StoreName = "archive", HealthChecks = ["archive-db"] });
+        await using WebApplication _ = app;
+
+        // Act
+        JsonElement report = await client.GetFromJsonAsync<JsonElement>("/resourcefull/api/v1/health");
+
+        // Assert
+        Assert.Equal("Healthy", report.GetProperty("status").GetString());
+        Assert.Equal("archive-db", Assert.Single(report.GetProperty("checks").EnumerateArray()).GetProperty("name").GetString());
     }
 
     [Fact]
@@ -366,7 +419,7 @@ public class DashboardTests
         await using WebApplication _ = app;
 
         // Act
-        JsonElement report = await client.GetFromJsonAsync<JsonElement>("/resourcefull/api/health");
+        JsonElement report = await client.GetFromJsonAsync<JsonElement>("/resourcefull/api/v1/health");
 
         // Assert
         Assert.Equal(JsonValueKind.Null, report.GetProperty("status").ValueKind);

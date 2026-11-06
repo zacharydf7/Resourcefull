@@ -62,7 +62,7 @@ app.MapResourcefullDashboard("/resourcefull").RequireAuthorization("admins");
 
 Then open `/resourcefull` in a browser. `admins` is an authorization policy you define with `AddAuthorization`, as in
 [Securing file endpoints](securing-endpoints.md). Registering the health check is optional; without one, the page
-says none is registered.
+says it has none to show.
 
 ### Who may see it
 
@@ -80,8 +80,8 @@ such as `RequireHost("admin.example.com")` or rate limiting.
 
 ### Health checks
 
-The dashboard runs the health checks named `resourcefull`, the name Resourcefull's checks get unless you give them
-another. If you registered yours under other names, say which:
+Unless it has a [`StoreName`](#more-than-one-store), the dashboard runs the health checks named `resourcefull`, the name
+Resourcefull's checks get unless you give them another. If you registered yours under other names, say which:
 
 ```csharp
 app.MapResourcefullDashboard("/resourcefull", new ResourcefullDashboardOptions
@@ -89,6 +89,25 @@ app.MapResourcefullDashboard("/resourcefull", new ResourcefullDashboardOptions
     HealthChecks = ["files-db", "archive-db"]
 }).RequireAuthorization("admins");
 ```
+
+### More than one store
+
+Each dashboard you map shows one store. To show a store added with [`AddKeyedResourcefull`](../several-stores.md), set
+`StoreName`. To show several stores, map the dashboard once for each, at a pattern of its own:
+
+```csharp
+app.MapResourcefullDashboard("/resourcefull").RequireAuthorization("admins");
+app.MapResourcefullDashboard("/resourcefull/archive", new ResourcefullDashboardOptions
+{
+    StoreName = "archive",
+    HealthChecks = ["archive-db"]
+}).RequireAuthorization("admins");
+```
+
+A dashboard for a named store runs no health checks by default, because a check named `resourcefull` may be another
+store's. To see this store's health, name its check in `HealthChecks`. If the dashboard creates [links](#links), add the store's signer with
+`AddResourcefullLinks("archive")`, and point `DownloadLinkPath` and `UploadLinkPath` at endpoints that serve that store.
+The log of each change says which store it was in.
 
 ## Making changes
 
@@ -162,7 +181,7 @@ doesn't offer that kind of link.
   does. A request whose browser reports, in `Sec-Fetch-Site`, that it came from anywhere but the dashboard's own origin
   is refused too. Each refusal is logged as a warning, under the same category as the changes.
 - **Each change is logged.** The dashboard logs every change it makes at `Information`, under the category
-  `Resourcefull.AspNetCore.Dashboard`, with the user's name, the action, and the container, file and version, so you
+  `Resourcefull.AspNetCore.Dashboard`, with the user's name, the action, and the store, container, file and version, so you
   have a record of who did what.
 
 ### Before you use changes beyond development
@@ -195,21 +214,21 @@ The dashboard is built for someone looking now and then, not for a wall display 
 
 ## The JSON endpoints
 
-The page reads these endpoints under `{pattern}/api/`, which you can call yourself, as a small admin API, to show the
+The page reads these endpoints under `{pattern}/api/v1/`, which you can call yourself, as a small admin API, to show the
 same data your own way. They answer JSON with camelCase names whatever your application's JSON settings are, and
-follow the same authorization as the page.
+follow the same authorization as the page. A later change that would break a caller goes into a `v2` beside them.
 
 | Endpoint | Returns |
 |---|---|
-| `GET api/health` | `status` (`Healthy`, `Degraded` or `Unhealthy`, or `null` when no check is registered) and `checks`: each one's `name`, `status`, `description` and `data`. |
-| `GET api/containers?prefix=&continuationToken=` | `items`: up to 50 containers, and `continuationToken` for the next page, or `null`. |
-| `GET api/container?name=` | One container, or 404 when it doesn't exist. |
-| `GET api/resources?container=&prefix=&continuationToken=` | `items`: up to 50 of the container's current files, and `continuationToken`; 404 when the container doesn't exist. |
-| `GET api/largest?container=` | `items`: the container's 20 largest versions, current and older, largest first; 404 when the container doesn't exist. |
-| `GET api/expiring?container=` | `items`: the container's 20 versions that expire soonest, soonest first, leaving out versions without an expiry; 404 when the container doesn't exist. |
-| `GET api/versions?container=&name=` | `items`: every version of one file, the current one first; 404 when the file or the container doesn't exist. |
-| `GET api/expired` | `supported`: whether the provider supports expiry; `count`: how many expired versions are waiting for the sweep, counting up to 100; `more`: whether there are more than that; and `oldestExpiry`: when the first of them expired, or `null` when none are waiting. |
-| `GET api/features` | `changes`, `downloadLinks` and `uploadLinks`: whether the dashboard was mapped to allow each. |
+| `GET api/v1/health` | `status` (`Healthy`, `Degraded` or `Unhealthy`, or `null` when no check ran) and `checks`: each one's `name`, `status`, `description` and `data`. |
+| `GET api/v1/containers?prefix=&continuationToken=` | `items`: up to 50 containers, and `continuationToken` for the next page, or `null`. |
+| `GET api/v1/container?name=` | One container, or 404 when it doesn't exist. |
+| `GET api/v1/resources?container=&prefix=&continuationToken=` | `items`: up to 50 of the container's current files, and `continuationToken`; 404 when the container doesn't exist. |
+| `GET api/v1/largest?container=` | `items`: the container's 20 largest versions, current and older, largest first; 404 when the container doesn't exist. |
+| `GET api/v1/expiring?container=` | `items`: the container's 20 versions that expire soonest, soonest first, leaving out versions without an expiry; 404 when the container doesn't exist. |
+| `GET api/v1/versions?container=&name=` | `items`: every version of one file, the current one first; 404 when the file or the container doesn't exist. |
+| `GET api/v1/expired` | `supported`: whether the provider supports expiry; `count`: how many expired versions are waiting for the sweep, counting up to 100; `more`: whether there are more than that; and `oldestExpiry`: when the first of them expired, or `null` when none are waiting. |
+| `GET api/v1/features` | `changes`, `downloadLinks` and `uploadLinks`: whether the dashboard was mapped to allow each. |
 
 With `AllowChanges`, these endpoints change what's stored. Each needs the `X-Resourcefull-Dashboard` header, with any
 value, and answers 403 Forbidden without it. When the store refuses a change, they answer with the status code and
@@ -218,16 +237,16 @@ Forbidden for a read-only container, and 404 Not Found when what they change doe
 
 | Endpoint | Does |
 |---|---|
-| `PUT api/upload?container=&name=&replace=` | Stores the request body as the file, with the request's `Content-Type`; with `replace=true`, as a new version if a file already has that name. Answers 201 Created with the version. |
-| `DELETE api/resource?container=&name=&versionId=` | Deletes one version, or with no `versionId`, every version of the file. |
-| `POST api/restore?container=&name=&versionId=` | Restores an older version as the current one, and answers with the new version. |
-| `PUT api/expiry?container=&name=&versionId=` | Sets the version's expiry from the body's `expiresAt`, or clears it with `null`; with no `versionId`, the current version's. |
-| `PUT api/content-type?container=&name=&versionId=` | Sets the version's content type from the body's `contentType`. |
-| `PUT api/metadata?container=&name=&versionId=` | Replaces the version's metadata with the body's `metadata`. |
-| `POST api/containers` | Creates a container named by the body's `name`. |
-| `DELETE api/container?name=` | Deletes the container and everything in it. |
-| `POST api/download-link?container=&name=&versionId=` | With `DownloadLinkPath`: creates a download link that works for the body's `expiresInMinutes` (an hour if it's left out, seven days at most), and answers with its `url` and `expiresAt`. |
-| `POST api/upload-link?container=` | With `UploadLinkPath`: creates an upload link for the body's `name` or its `namePrefix` (exactly one of them), that works for `expiresInMinutes` (an hour if it's left out, seven days at most), and lets uploads replace a file if `replace` is `true`. Answers with its `url` and `expiresAt`. |
+| `PUT api/v1/upload?container=&name=&replace=` | Stores the request body as the file, with the request's `Content-Type`; with `replace=true`, as a new version if a file already has that name. Answers 201 Created with the version. |
+| `DELETE api/v1/resource?container=&name=&versionId=` | Deletes one version, or with no `versionId`, every version of the file. |
+| `POST api/v1/restore?container=&name=&versionId=` | Restores an older version as the current one, and answers with the new version. |
+| `PUT api/v1/expiry?container=&name=&versionId=` | Sets the version's expiry from the body's `expiresAt`, or clears it with `null`; with no `versionId`, the current version's. |
+| `PUT api/v1/content-type?container=&name=&versionId=` | Sets the version's content type from the body's `contentType`. |
+| `PUT api/v1/metadata?container=&name=&versionId=` | Replaces the version's metadata with the body's `metadata`. |
+| `POST api/v1/containers` | Creates a container named by the body's `name`. |
+| `DELETE api/v1/container?name=` | Deletes the container and everything in it. |
+| `POST api/v1/download-link?container=&name=&versionId=` | With `DownloadLinkPath`: creates a download link that works for the body's `expiresInMinutes` (an hour if it's left out, seven days at most), and answers with its `url` and `expiresAt`. |
+| `POST api/v1/upload-link?container=` | With `UploadLinkPath`: creates an upload link for the body's `name` or its `namePrefix` (exactly one of them), that works for `expiresInMinutes` (an hour if it's left out, seven days at most), and lets uploads replace a file if `replace` is `true`. Answers with its `url` and `expiresAt`. |
 
 A container holds `name`, `metadata`, `usage` and `policy`. `usage` holds `storedSize` in bytes, `resourceCount` and
 `versionCount`, and <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> `deletedSize` in bytes and `deletedVersionCount`, what the container's
@@ -259,6 +278,7 @@ It follows the browser's light or dark setting:
 Each request to the dashboard gets `resourcefull.dashboard` on its span, naming what it asked for: `page`,
 `features`, `health`, `expired`, `containers`, `container`, `resources`, `largest`, `expiring` or `versions`, and for
 changes, `upload`, `delete`, `restore`, `set_expiry`, `set_content_type`, `set_metadata`, `create_container`,
-`delete_container`, `download_link` or `upload_link`. The operations behind it record their usual spans, such as
-`list_containers`, `get_usage`, `list_page`, `list_top`, `list_versions`, `list_expired`, `upload` and `delete`. For activity over time (uploads, downloads, errors), use the
+`delete_container`, `download_link` or `upload_link`. For a named store, the span also gets `resourcefull.store`. The
+operations behind it record their usual spans, such as `list_containers`, `get_usage`, `list_page`, `list_top`,
+`list_versions`, `list_expired`, `upload` and `delete`. For activity over time (uploads, downloads, errors), use the
 [metrics](../telemetry.md) rather than the dashboard, which only shows the current state.

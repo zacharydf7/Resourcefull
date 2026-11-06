@@ -304,6 +304,10 @@
 
 ### Changed
 
+- **The dashboard works with named stores, and its JSON API is versioned.** `ResourcefullDashboardOptions.StoreName`
+  chooses the store the dashboard shows and changes. Links come from that store's signer, request spans carry
+  `resourcefull.store`, and the log of each change names the store. With a store name, `HealthChecks` defaults to no checks.
+  The JSON endpoints moved from `api/` to `api/v1/`, so a later breaking change can go into a `v2` beside them.
 - **`UploadFromRequestAsync` returns a typed result, and passes retention on.** It returns a `ResourceUploadHttpResult` in
   place of an `IResult` that had to be downcast. The new result has the `StatusCode` and the stored `Resource`, which is
   `null` on 412, and a Razor Pages handler can return it. `RetainUntil` and `LegalHold` in its options now reach the stored version;
