@@ -82,7 +82,3 @@ directly. If another upload could replace the file between the check and the upl
 `Conditions = new ResourceConditions { IfMatchVersionId = current?.VersionId }` to the options. The upload then
 replaces only the version you compared with; if that version is no longer current, it throws
 `ResourcePreconditionFailedException` and stores nothing. See [Concurrency](concurrency.md).
-
-Whatever the numbers show, please share them on
-[issue #58](https://github.com/zacharydf7/Resourcefull/issues/58): it collects the measurements that decide whether a
-future release stores identical content once.

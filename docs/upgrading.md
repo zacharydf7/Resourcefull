@@ -75,6 +75,5 @@ is the exception: see [Upgrading to 4.0](upgrading-to-4.md#upgrading-the-databas
   instead, and keeps working for at least one more minor release and at least six months. It's removed only in a
   major release, listed in that release's upgrade guide. The compiler's warning is the notice, so build with
   warnings visible when you upgrade.
-- **Security fixes** go into the latest minor release of the current major version; see the
-  [security policy](https://github.com/zacharydf7/Resourcefull/blob/main/SECURITY.md).
+- **Security fixes** go into the latest minor release of the current major version.
 - **What it runs on:** .NET 10, and SQL Server as described in [Running SQL Server](providers/sql-server-operations.md#choosing-a-sql-server).

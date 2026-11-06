@@ -101,7 +101,6 @@ export default {
     new MutationObserver(matchLogoToTheme).observe(document.documentElement, { attributeFilter: ['data-bs-theme'] })
   },
   iconLinks: [
-    { icon: 'github', href: 'https://github.com/zacharydf7/Resourcefull', title: 'GitHub' },
     { icon: 'box-seam', href: 'https://www.nuget.org/packages/Resourcefull', title: 'NuGet' }
   ]
 }

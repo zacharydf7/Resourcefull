@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## Unreleased
 
 ### Added
 
@@ -468,7 +468,7 @@
   delete that's canceled or fails partway leaves the rest whole, and calling it again finishes it. Deleting a large
   version also no longer locks the whole content table while it runs. See
   [Versioning](docs/versioning.md#deleting).
-- **A new look.** The packages have a new icon, and the [documentation site](https://zacharydf7.github.io/Resourcefull/)
+- **A new look.** The packages have a new icon, and the [documentation site](https://resourcefull.dev/)
   has a new design, a home page, and a sidebar grouped by what you're trying to do. Pages that covered several topics
   are split into one page each; links to the old pages still work.
 - **`ResourceInfo.VersionId` is non-nullable,** since every stored version has one, so passing it to methods that
@@ -499,7 +499,7 @@
   with a synchronization context, could hang when it waited for a call with `.Result` or `.Wait()`, because the
   library's own awaits resumed on that context. They now resume on the thread pool.
 
-## [3.1.0] - 2026-10-29
+## 3.1.0 - 2026-10-29
 
 New features, all additive: code written for 3.0 keeps compiling, and custom providers keep working. The one thing to
 check is a test that expects exactly `ArgumentException` for a bad name; it's now the subclass
@@ -535,7 +535,7 @@ check is a test that expects exactly `ArgumentException` for a bad name; it's no
 - With SQL Server, a delete whose commit succeeded but whose acknowledgment was lost to a transient error, and was
   retried, reported that nothing was deleted. It now reports the delete.
 
-## [3.0.0] - 2026-10-29
+## 3.0.0 - 2026-10-29
 
 The first release of Resourcefull for general use. Coming from an earlier release, read
 [Upgrading to 3.0](docs/upgrading-to-3.md) first: it lists every change to code, behavior and the database, with what each
@@ -581,7 +581,3 @@ needs from you. Items marked *(from 1.x)* were already in 2.x.
 - Uploads and downloads of any size use a fixed amount of memory, and uploads make about half as many round trips.
 - An upload into a container deleted moments before reports the missing container. *(from 1.x)*
 - Deleting a large container works in bounded batches, and can be resumed if it stops partway.
-
-[Unreleased]: https://github.com/zacharydf7/Resourcefull/compare/v3.1.0...HEAD
-[3.1.0]: https://github.com/zacharydf7/Resourcefull/compare/v3.0.0...v3.1.0
-[3.0.0]: https://github.com/zacharydf7/Resourcefull/releases/tag/v3.0.0

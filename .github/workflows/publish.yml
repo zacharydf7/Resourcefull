@@ -22,10 +22,10 @@ jobs:
       run: |
         version="${GITHUB_REF_NAME#v}"
         # From the version's heading up to the next release's.
-        awk -v heading="## [$version]" 'index($0, heading) == 1 { found = 1; next } found && /^## \[/ { exit } found' \
+        awk -v heading="## $version - " 'index($0, heading) == 1 { found = 1; next } found && /^## / { exit } found' \
           CHANGELOG.md > notes.md
         if [ ! -s notes.md ]; then
-          echo "::error::CHANGELOG.md has no section headed \"## [$version]\"."
+          echo "::error::CHANGELOG.md has no section headed \"## $version - <date>\"."
           exit 1
         fi
         # The changelog's links are relative to the repository; a release's notes aren't in it.

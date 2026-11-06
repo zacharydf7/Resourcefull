@@ -18,12 +18,13 @@
           ]
         }
       ],
-      "dest": "api"
+      "dest": "api",
+      "disableGitFeatures": true
     }
   ],
   "build": {
     "content": [
-      { "files": [ "index.md", "toc.yml", "CONTRIBUTING.md", "CHANGELOG.md" ] },
+      { "files": [ "index.md", "toc.yml", "CHANGELOG.md" ] },
       { "files": [ "docs/**.md", "docs/toc.yml", "samples/README.md" ] },
       { "files": [ "api/**.yml", "api/index.md" ] }
     ],
@@ -33,13 +34,14 @@
       { "files": [ "**.html" ], "src": "redirects" }
     ],
     "output": "_site",
+    "disableGitFeatures": true,
     "template": [ "default", "modern", "template" ],
     "globalMetadata": {
       "_appName": "Resourcefull",
       "_appTitle": "Resourcefull",
       "_appLogoPath": "assets/logo.svg",
       "_appFaviconPath": "assets/icon.svg",
-      "_appFooter": "<span>Resourcefull is open source under the MIT license. <a href=\"https://github.com/zacharydf7/Resourcefull\">GitHub</a> · <a href=\"https://www.nuget.org/packages/Resourcefull\">NuGet</a></span>",
+      "_appFooter": "<span>Resourcefull is open source under the MIT license. <a href=\"https://www.nuget.org/packages/Resourcefull\">NuGet</a></span>",
       "_enableSearch": true
     }
   }

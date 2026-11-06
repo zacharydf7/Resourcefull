@@ -1,12 +1,13 @@
 # Samples
 
-Three apps that use Resourcefull from source. Each runs out of the box, keeping resources in memory.
+Three apps in the repository's `samples` folder that use Resourcefull from source. Each runs out of the box, keeping
+resources in memory.
 
 | Sample | What it shows |
 |---|---|
-| [`FileService`](https://github.com/zacharydf7/Resourcefull/tree/main/samples/FileService) | A file service shaped like a production deployment: each signed-in user has a container of their own with a quota and a list of accepted file types, downloads support ranges and caching, files can be shared through a link that expires, and the service reports its health and its OpenTelemetry traces and metrics. Start here for a real application. |
-| [`TestApiClient`](https://github.com/zacharydf7/Resourcefull/tree/main/samples/TestApiClient) | A minimal API over containers and resources: create, list, upload (a form file, or a request body with `If-Match`), download (the info, or the content with ETags and conditional requests), delete and restore, with the `Resourcefull.AspNetCore` package. Open `/swagger`, or send the requests in `TestApiClient.http`. |
-| [`BlazorTestClient`](https://github.com/zacharydf7/Resourcefull/tree/main/samples/BlazorTestClient) | A Blazor Server page for managing containers and resources, with version history when versioning is on. |
+| `FileService` | A file service shaped like a production deployment: each signed-in user has a container of their own with a quota and a list of accepted file types, downloads support ranges and caching, files can be shared through a link that expires, and the service reports its health and its OpenTelemetry traces and metrics. Start here for a real application. |
+| `TestApiClient` | A minimal API over containers and resources: create, list, upload (a form file, or a request body with `If-Match`), download (the info, or the content with ETags and conditional requests), delete and restore, with the `Resourcefull.AspNetCore` package. Open `/swagger`, or send the requests in `TestApiClient.http`. |
+| `BlazorTestClient` | A Blazor Server page for managing containers and resources, with version history when versioning is on. |
 
 ```shell
 dotnet run --project samples/FileService

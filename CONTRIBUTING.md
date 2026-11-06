@@ -169,8 +169,8 @@ For maintainers:
    but the release tag's adds `-ci.<run>` or `-dev` to it). Turn the release's labels from upcoming to added: in
    `docs/`, `index.md` and `src/`, replace `Coming in 4.0` with `Added in 4.0` and `rf-upcoming` with `rf-added`,
    remove the sidebar markers from `template/public/main.css`, and move the README's "Coming in" list into its
-   features. In `CHANGELOG.md`, turn `[Unreleased]` into `[4.0.0] - <date>`, start a new `[Unreleased]` section, and
-   update the compare links at the bottom. In `docs/releases.md`, turn the "Coming in" section into the release's
+   features. In `CHANGELOG.md`, turn `Unreleased` into `4.0.0 - <date>`, and start a new `Unreleased` section. In
+   `docs/releases.md`, turn the "Coming in" section into the release's
    own, and update "What's next".
 2. **Merge to `main`, then push the tag** (`v4.0.0`). The publish workflow runs every test, checks that the tag
    matches the version, publishes the packages it tested to nuget.org, and creates a GitHub Release from the

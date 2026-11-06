@@ -5,9 +5,8 @@ To store resources somewhere else, such as a file system, object storage or anot
 names, versioning, pruning, URIs and cancellation plumbing; a provider stores and retrieves.
 
 <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> This page describes 4.0, where providers derive
-from the `ResourceRepository` base class. In 3.1, a provider implements the `IResourceRepository` interface instead;
-see [this page as it was for 3.1](https://github.com/zacharydf7/Resourcefull/blob/v3.1.0/docs/providers/writing-a-provider.md),
-and [Upgrading to 4.0](../upgrading-to-4.md#custom-providers) for moving a provider across.
+from the `ResourceRepository` base class. In 3.1, a provider implements the `IResourceRepository` interface instead; see
+[Upgrading to 4.0](../upgrading-to-4.md#custom-providers) for moving a provider across.
 
 ```csharp
 public static class ResourcefullFileSystemOptionsExtensions

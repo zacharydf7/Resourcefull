@@ -18,7 +18,6 @@ Storage instead.</p>
 <div class="rf-actions">
 <a class="rf-btn rf-btn-primary" href="docs/getting-started.md">Get started <i class="bi bi-arrow-right"></i></a>
 <a class="rf-btn rf-btn-secondary" href="docs/index.md">Read the docs</a>
-<a class="rf-btn rf-btn-secondary" href="https://github.com/zacharydf7/Resourcefull"><i class="bi bi-github"></i> GitHub</a>
 </div>
 <div class="rf-install">$ <b>dotnet add package</b> <span class="rf-install-name"
 data-packages="Resourcefull.SqlServer Resourcefull.PostgreSql Resourcefull.Sqlite Resourcefull.FileSystem Resourcefull.S3 Resourcefull.AzureBlob Resourcefull.InMemory Resourcefull.AspNetCore">Resourcefull.SqlServer</span></div>

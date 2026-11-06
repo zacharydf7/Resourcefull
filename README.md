@@ -60,7 +60,7 @@ dotnet add package Resourcefull.SqlServer   # or Resourcefull.PostgreSql, or Res
 ```
 
 Register Resourcefull with a provider, and provision the database (here at startup, which suits a single instance;
-see the [SQL Server docs](https://zacharydf7.github.io/Resourcefull/docs/providers/sql-server.html) for deployment
+see the [SQL Server docs](https://resourcefull.dev/docs/providers/sql-server.html) for deployment
 steps):
 
 ```csharp
@@ -94,30 +94,30 @@ public class Reports(IResourceServiceClient resources)
 
 ## Documentation
 
-The [documentation site](https://zacharydf7.github.io/Resourcefull/) has guides for every feature, grouped by what
+The [documentation site](https://resourcefull.dev/) has guides for every feature, grouped by what
 you're trying to do, plus the API reference. Deciding between Resourcefull, object storage and the file system? See
-[When to use Resourcefull](https://zacharydf7.github.io/Resourcefull/docs/when-to-use.html).
+[When to use Resourcefull](https://resourcefull.dev/docs/when-to-use.html).
 
-- [Introduction](https://zacharydf7.github.io/Resourcefull/docs/index.html): containers, resources, versions and
+- [Introduction](https://resourcefull.dev/docs/index.html): containers, resources, versions and
   providers
-- [Getting started](https://zacharydf7.github.io/Resourcefull/docs/getting-started.html)
-- [Uploading](https://zacharydf7.github.io/Resourcefull/docs/uploading.html) and
-  [downloading](https://zacharydf7.github.io/Resourcefull/docs/downloading.html) files
-- [ASP.NET Core](https://zacharydf7.github.io/Resourcefull/docs/aspnet-core/index.html): serving downloads, accepting
+- [Getting started](https://resourcefull.dev/docs/getting-started.html)
+- [Uploading](https://resourcefull.dev/docs/uploading.html) and
+  [downloading](https://resourcefull.dev/docs/downloading.html) files
+- [ASP.NET Core](https://resourcefull.dev/docs/aspnet-core/index.html): serving downloads, accepting
   uploads and sharing files with links
-- [SQL Server](https://zacharydf7.github.io/Resourcefull/docs/providers/sql-server.html): provisioning, permissions
+- [SQL Server](https://resourcefull.dev/docs/providers/sql-server.html): provisioning, permissions
   and upgrades
-- [PostgreSQL](https://zacharydf7.github.io/Resourcefull/docs/providers/postgresql.html): provisioning, permissions
+- [PostgreSQL](https://resourcefull.dev/docs/providers/postgresql.html): provisioning, permissions
   and how it differs from SQL Server
-- [SQLite](https://zacharydf7.github.io/Resourcefull/docs/providers/sqlite.html): choosing the file, one writer at a
+- [SQLite](https://resourcefull.dev/docs/providers/sqlite.html): choosing the file, one writer at a
   time, provisioning and backups
-- [File system](https://zacharydf7.github.io/Resourcefull/docs/providers/file-system.html): choosing a directory,
+- [File system](https://resourcefull.dev/docs/providers/file-system.html): choosing a directory,
   sharing it between servers, backups and costs
-- [S3-compatible storage](https://zacharydf7.github.io/Resourcefull/docs/providers/s3.html): connecting to a store,
+- [S3-compatible storage](https://resourcefull.dev/docs/providers/s3.html): connecting to a store,
   sharing a bucket, permissions and costs
-- [Azure Blob Storage](https://zacharydf7.github.io/Resourcefull/docs/providers/azure-blob.html): connecting to an
+- [Azure Blob Storage](https://resourcefull.dev/docs/providers/azure-blob.html): connecting to an
   account, permissions, account settings and costs
-- [Upgrading](https://zacharydf7.github.io/Resourcefull/docs/upgrading.html), including from 2.x, and the
+- [Upgrading](https://resourcefull.dev/docs/upgrading.html), including from 2.x, and the
   [changelog](https://github.com/zacharydf7/Resourcefull/blob/main/CHANGELOG.md)
 
 ## Contributing

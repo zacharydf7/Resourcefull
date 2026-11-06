@@ -71,11 +71,7 @@ Coming from 1.x or 2.x? See [Upgrading to 3.0](upgrading-to-3.md). See the
 
 ## What's next
 
-These are plans, not promises: the order can change, and nothing has a date. Each links to its issue on GitHub, where a
-comment saying you need it helps decide what comes first.
+These are plans, not promises: the order can change, and nothing has a date.
 
-- **Managing files:** [finding files by metadata](https://github.com/zacharydf7/Resourcefull/issues/57),
-  [soft delete, retention and legal holds](https://github.com/zacharydf7/Resourcefull/issues/56), and
-  [storing identical content once](https://github.com/zacharydf7/Resourcefull/issues/58).
-
-Something missing? [Open an issue](https://github.com/zacharydf7/Resourcefull/issues/new/choose).
+- **Managing files:** finding files by metadata; soft delete, retention and legal holds; and storing identical content
+  once.

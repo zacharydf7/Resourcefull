@@ -13,7 +13,7 @@
     <Authors>Zachary Fry</Authors>
     <Copyright>Copyright (c) Zachary Fry</Copyright>
     <PackageTags>file-storage;file-upload;blob;blob-storage;object-storage;uploads;downloads;versioning;sqlserver;streaming;opentelemetry</PackageTags>
-    <PackageProjectUrl>https://zacharydf7.github.io/Resourcefull/</PackageProjectUrl>
+    <PackageProjectUrl>https://resourcefull.dev/</PackageProjectUrl>
     <RepositoryUrl>https://github.com/zacharydf7/Resourcefull</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
