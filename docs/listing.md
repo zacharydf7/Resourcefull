@@ -48,7 +48,7 @@ return Results.Ok(new { page.Resources, page.ContinuationToken });
 <div class="rf-version"><span class="rf-badge rf-upcoming">Coming in 4.0</span></div>
 
 A listing can also find the resources whose current version has a metadata value, such as every invoice of one customer.
-Name the keys you'll search by when you add Resourcefull, then search with `ResourceListOptions.Metadata`:
+Name the keys you'll search by when you add Resourcefull, then search with `ResourceListOptions.MetadataMatch`:
 
 ```csharp
 builder.Services.AddResourcefull(options => options
@@ -57,7 +57,7 @@ builder.Services.AddResourcefull(options => options
 
 await foreach (ResourceInfo invoice in invoices.ListResourcesAsync(new ResourceListOptions
 {
-    Metadata = new ResourceMetadataMatch("customer", "42"),
+    MetadataMatch = new ResourceMetadataMatch("customer", "42"),
     Prefix = "2026/"   // optional, as in any listing
 }))
 {

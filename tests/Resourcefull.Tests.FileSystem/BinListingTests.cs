@@ -20,7 +20,7 @@ public class BinListingTests(FileSystemFixture fixture)
         // the second before it stops. More names that don't match follow, and then one last match.
         using ServiceProvider provider = fixture.BuildServiceProvider(o =>
         {
-            o.UseExpiry().UseContainerPolicies(new ResourceContainerPolicy { KeepDeletedFor = TimeSpan.FromDays(30) });
+            o.UseExpiry().UseContainerPolicies(new ContainerPolicy { KeepDeletedFor = TimeSpan.FromDays(30) });
             o.Services.AddSingleton<TimeProvider>(new FixedClock());
         }, fixture.NewRoot());
         IResourceServiceClient service = provider.GetRequiredService<IResourceServiceClient>();

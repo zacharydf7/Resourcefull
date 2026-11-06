@@ -8,7 +8,7 @@ namespace Resourcefull;
 /// refused, and lowering a limit below what a container holds only refuses new writes.
 /// <para>Coming in 4.0.</para>
 /// </summary>
-public sealed class ResourceContainerPolicy
+public sealed class ContainerPolicy
 {
     /// <summary>
     /// The largest version an upload or restore may store. A declared length over it is refused before any content
@@ -111,7 +111,7 @@ public sealed class ResourceContainerPolicy
 }
 
 /// <summary>
-/// Gives containers their own <see cref="ResourceContainerPolicy"/>, such as from each user's plan in the application's
+/// Gives containers their own <see cref="ContainerPolicy"/>, such as from each user's plan in the application's
 /// database. Register one with <see cref="ResourcefullOptionsBuilder.UsePolicyProvider{TProvider}"/>; it's a scoped
 /// service, so it can depend on the application's own. Its answer for a container is cached for the time
 /// <see cref="ResourcefullOptionsBuilder.UseContainerPolicies"/> sets, so a change applies within that time on every
@@ -127,28 +127,28 @@ public interface IResourcePolicyProvider
     /// The container's policy, whose <see langword="null"/> properties fall back to the defaults; or
     /// <see langword="null"/> for the defaults alone.
     /// </returns>
-    ValueTask<ResourceContainerPolicy?> GetPolicyAsync(string containerName, CancellationToken cancellationToken);
+    ValueTask<ContainerPolicy?> GetPolicyAsync(string containerName, CancellationToken cancellationToken);
 }
 
 /// <summary>
-/// The rule of a <see cref="ResourceContainerPolicy"/> that a write broke.
+/// The rule of a <see cref="ContainerPolicy"/> that a write broke.
 /// <para>Coming in 4.0.</para>
 /// </summary>
 public enum ResourcePolicyRule
 {
-    /// <summary><see cref="ResourceContainerPolicy.MaxResourceSize"/>: the content is too large.</summary>
+    /// <summary><see cref="ContainerPolicy.MaxResourceSize"/>: the content is too large.</summary>
     MaxResourceSize,
 
-    /// <summary><see cref="ResourceContainerPolicy.MaxContainerSize"/>: the container has no room for the content.</summary>
+    /// <summary><see cref="ContainerPolicy.MaxContainerSize"/>: the container has no room for the content.</summary>
     MaxContainerSize,
 
-    /// <summary><see cref="ResourceContainerPolicy.MaxResourceCount"/>: the container has no room for another name.</summary>
+    /// <summary><see cref="ContainerPolicy.MaxResourceCount"/>: the container has no room for another name.</summary>
     MaxResourceCount,
 
-    /// <summary><see cref="ResourceContainerPolicy.AllowedContentTypes"/>: the upload's content type isn't allowed.</summary>
+    /// <summary><see cref="ContainerPolicy.AllowedContentTypes"/>: the upload's content type isn't allowed.</summary>
     AllowedContentTypes,
 
-    /// <summary><see cref="ResourceContainerPolicy.ReadOnly"/>: the container is read-only.</summary>
+    /// <summary><see cref="ContainerPolicy.ReadOnly"/>: the container is read-only.</summary>
     ReadOnly
 }
 
@@ -164,8 +164,8 @@ public enum ResourcePolicyRule
 /// <param name="VersionCount">How many versions it holds, current and older.</param>
 /// <param name="DeletedSize">
 /// The size of the versions in its bin, which <see cref="StoredSize"/> leaves out; see
-/// <see cref="ResourceContainerPolicy.KeepDeletedFor"/>.
+/// <see cref="ContainerPolicy.KeepDeletedFor"/>.
 /// </param>
 /// <param name="DeletedVersionCount">How many versions its bin holds, which <see cref="VersionCount"/> leaves out.</param>
-public sealed record ResourceContainerUsage(ResourceSize StoredSize, long ResourceCount, long VersionCount,
+public sealed record ContainerUsage(ResourceSize StoredSize, long ResourceCount, long VersionCount,
     ResourceSize DeletedSize = default, long DeletedVersionCount = 0);

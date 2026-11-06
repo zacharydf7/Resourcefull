@@ -27,33 +27,33 @@ public interface IResourceServiceClient
     /// yet; operations report absence at the time they run. Use the client's
     /// <see cref="IResourceContainerClient.GetInfoAsync"/> for the container's stored attributes.
     /// </summary>
-    /// <param name="resourceContainerName">The name of the resource container.</param>
-    /// <exception cref="ArgumentException"><paramref name="resourceContainerName"/> is null, empty, longer than 128 characters, or starts or ends with whitespace (<see cref="ArgumentNullException"/> when null).</exception>
-    public IResourceContainerClient GetContainerClient(string resourceContainerName);
+    /// <param name="containerName">The name of the resource container.</param>
+    /// <exception cref="ArgumentException"><paramref name="containerName"/> is null, empty, longer than 128 characters, or starts or ends with whitespace (<see cref="ArgumentNullException"/> when null).</exception>
+    public IResourceContainerClient GetContainerClient(string containerName);
 
     /// <summary>
     /// Creates a new resource container.
     /// </summary>
-    /// <param name="resourceContainerName">The name of the container to create.</param>
+    /// <param name="containerName">The name of the container to create.</param>
     /// <param name="metadata">Optional metadata to store with the container.</param>
     /// <param name="cancellationToken">Cancels the operation. A canceled create leaves no container.</param>
     /// <returns>A client for the newly created container.</returns>
     /// <exception cref="ResourceConflictException">A container with the same name already exists.</exception>
-    /// <exception cref="ArgumentException"><paramref name="resourceContainerName"/> is null, empty, longer than 128 characters, or starts or ends with whitespace (<see cref="ArgumentNullException"/> when null).</exception>
+    /// <exception cref="ArgumentException"><paramref name="containerName"/> is null, empty, longer than 128 characters, or starts or ends with whitespace (<see cref="ArgumentNullException"/> when null).</exception>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
-    public Task<IResourceContainerClient> CreateContainerAsync(string resourceContainerName, IDictionary<string, string>? metadata = null,
+    public Task<IResourceContainerClient> CreateContainerAsync(string containerName, IReadOnlyDictionary<string, string>? metadata = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Creates a resource container if it does not already exist, returning a client for it either way.
     /// </summary>
-    /// <param name="resourceContainerName">The name of the container.</param>
+    /// <param name="containerName">The name of the container.</param>
     /// <param name="metadata">Optional metadata applied only when the container is created.</param>
     /// <param name="cancellationToken">Cancels the operation.</param>
     /// <returns>A client for the container.</returns>
-    /// <exception cref="ArgumentException"><paramref name="resourceContainerName"/> is null, empty, longer than 128 characters, or starts or ends with whitespace (<see cref="ArgumentNullException"/> when null).</exception>
+    /// <exception cref="ArgumentException"><paramref name="containerName"/> is null, empty, longer than 128 characters, or starts or ends with whitespace (<see cref="ArgumentNullException"/> when null).</exception>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
-    public Task<IResourceContainerClient> CreateContainerIfNotExistsAsync(string resourceContainerName, IDictionary<string, string>? metadata = null,
+    public Task<IResourceContainerClient> CreateContainerIfNotExistsAsync(string containerName, IReadOnlyDictionary<string, string>? metadata = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -105,28 +105,28 @@ public interface IResourceServiceClient
     /// <summary>
     /// Checks whether a container exists.
     /// </summary>
-    /// <param name="resourceContainerName">The name of the container.</param>
+    /// <param name="containerName">The name of the container.</param>
     /// <param name="cancellationToken">Cancels the check.</param>
-    /// <exception cref="ArgumentException"><paramref name="resourceContainerName"/> is null, empty, longer than 128 characters, or starts or ends with whitespace (<see cref="ArgumentNullException"/> when null).</exception>
+    /// <exception cref="ArgumentException"><paramref name="containerName"/> is null, empty, longer than 128 characters, or starts or ends with whitespace (<see cref="ArgumentNullException"/> when null).</exception>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
-    public Task<bool> ContainerExistsAsync(string resourceContainerName, CancellationToken cancellationToken = default);
+    public Task<bool> ContainerExistsAsync(string containerName, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Deletes a container (and everything in it) if it exists. A large container may be deleted in several steps: if
     /// the delete is canceled or fails partway, every version it didn't reach is still whole, each remaining name still
     /// has its current version, and the container still exists, so calling it again finishes the job.
     /// </summary>
-    /// <param name="resourceContainerName">The name of the container to delete.</param>
+    /// <param name="containerName">The name of the container to delete.</param>
     /// <param name="cancellationToken">Cancels the delete.</param>
     /// <returns><see langword="true"/> if a container was deleted; otherwise <see langword="false"/>.</returns>
-    /// <exception cref="ArgumentException"><paramref name="resourceContainerName"/> is null, empty, longer than 128 characters, or starts or ends with whitespace (<see cref="ArgumentNullException"/> when null).</exception>
+    /// <exception cref="ArgumentException"><paramref name="containerName"/> is null, empty, longer than 128 characters, or starts or ends with whitespace (<see cref="ArgumentNullException"/> when null).</exception>
     /// <exception cref="ResourcePolicyViolationException">The container is read-only; nothing was deleted.</exception>
     /// <exception cref="ResourceRetainedException">
     /// A version in the container is retained or under a legal hold. Nothing was deleted, unless the version was
     /// protected while a batched delete was under way (SQL Server, PostgreSQL and SQLite delete containers in batches).
     /// </exception>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
-    public Task<bool> DeleteContainerIfExistsAsync(string resourceContainerName,
+    public Task<bool> DeleteContainerIfExistsAsync(string containerName,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -136,14 +136,14 @@ public interface IResourceServiceClient
     /// such as an HTTP response.
     /// <para>Coming in 4.0.</para>
     /// </summary>
-    /// <param name="resourceContainerName">The container to export.</param>
+    /// <param name="containerName">The container to export.</param>
     /// <param name="destination">Where to write the zip; it's left open.</param>
     /// <param name="cancellationToken">Cancels the export, leaving <paramref name="destination"/> incomplete.</param>
     /// <returns>How many resources and versions it wrote, and how much content.</returns>
     /// <exception cref="ResourceContainerNotFoundException">The container doesn't exist.</exception>
     /// <exception cref="InvalidDataException">A version's stored content doesn't match its recorded hash.</exception>
-    /// <exception cref="ArgumentException"><paramref name="resourceContainerName"/> breaks the name rules, or <paramref name="destination"/> is null.</exception>
-    public Task<ResourceExportResult> ExportContainerAsync(string resourceContainerName, Stream destination,
+    /// <exception cref="ArgumentException"><paramref name="containerName"/> breaks the name rules, or <paramref name="destination"/> is null.</exception>
+    public Task<ContainerExportResult> ExportContainerAsync(string containerName, Stream destination,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -154,7 +154,7 @@ public interface IResourceServiceClient
     /// storage or transfer, not deliberate edits, so import only exports you trust.
     /// <para>Coming in 4.0.</para>
     /// </summary>
-    /// <param name="resourceContainerName">The container to create, which mustn't exist.</param>
+    /// <param name="containerName">The container to create, which mustn't exist.</param>
     /// <param name="source">The zip, in a stream that can seek, such as a file; it's left open.</param>
     /// <param name="cancellationToken">Cancels the import, which then deletes what it created.</param>
     /// <returns>How many resources and versions it stored, and how much content.</returns>
@@ -169,13 +169,13 @@ public interface IResourceServiceClient
     /// </exception>
     /// <exception cref="ResourcePolicyViolationException">The container's policy refuses a version.</exception>
     /// <exception cref="ArgumentException">
-    /// <paramref name="resourceContainerName"/> breaks the name rules, or <paramref name="source"/> is null or can't seek.
+    /// <paramref name="containerName"/> breaks the name rules, or <paramref name="source"/> is null or can't seek.
     /// </exception>
     /// <exception cref="NotSupportedException">
     /// The provider doesn't import versions, or the export has a version that expires and the provider doesn't support
     /// expiry, or a retained or held version and the provider doesn't support retention.
     /// </exception>
-    public Task<ResourceImportResult> ImportContainerAsync(string resourceContainerName, Stream source,
+    public Task<ContainerImportResult> ImportContainerAsync(string containerName, Stream source,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -188,7 +188,7 @@ public interface IResourceServiceClient
     /// container is deleted again. <see cref="CopyContainerToAsync"/> imports through it.
     /// <para>Coming in 4.0.</para>
     /// </summary>
-    /// <param name="resourceContainerName">The container to create, which mustn't exist.</param>
+    /// <param name="containerName">The container to create, which mustn't exist.</param>
     /// <param name="versions">The versions to store, each name's oldest first.</param>
     /// <param name="metadata">The container's metadata; <see langword="null"/> for none.</param>
     /// <param name="cancellationToken">Cancels the import, which then deletes what it created.</param>
@@ -200,12 +200,12 @@ public interface IResourceServiceClient
     /// importing it again.
     /// </exception>
     /// <exception cref="ResourcePolicyViolationException">The container's policy refuses a version.</exception>
-    /// <exception cref="ArgumentException"><paramref name="resourceContainerName"/> breaks the name rules, or <paramref name="versions"/> is null.</exception>
+    /// <exception cref="ArgumentException"><paramref name="containerName"/> breaks the name rules, or <paramref name="versions"/> is null.</exception>
     /// <exception cref="NotSupportedException">
     /// The provider doesn't import versions, or a version expires and the provider doesn't support expiry, or a version
     /// is retained or held and the provider doesn't support retention.
     /// </exception>
-    public Task<ResourceImportResult> ImportContainerAsync(string resourceContainerName, IAsyncEnumerable<ImportedVersion> versions,
+    public Task<ContainerImportResult> ImportContainerAsync(string containerName, IAsyncEnumerable<ImportedVersion> versions,
         IReadOnlyDictionary<string, string>? metadata = null, CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -216,7 +216,7 @@ public interface IResourceServiceClient
     /// container, the versions stored before a failure stay.
     /// <para>Coming in 4.0.</para>
     /// </summary>
-    /// <param name="resourceContainerName">The container, which must exist.</param>
+    /// <param name="containerName">The container, which must exist.</param>
     /// <param name="versions">The versions to store, each name's oldest first.</param>
     /// <param name="cancellationToken">Cancels the import; the versions already stored stay.</param>
     /// <returns>How many resources and versions it stored, and how much content.</returns>
@@ -224,12 +224,12 @@ public interface IResourceServiceClient
     /// <exception cref="ResourceConflictException">A version's ID is already used by another version of its name, including one in the bin.</exception>
     /// <exception cref="InvalidDataException">A version's content doesn't match its hash.</exception>
     /// <exception cref="ResourcePolicyViolationException">The container's policy refuses a version.</exception>
-    /// <exception cref="ArgumentException"><paramref name="resourceContainerName"/> breaks the name rules, or <paramref name="versions"/> is null.</exception>
+    /// <exception cref="ArgumentException"><paramref name="containerName"/> breaks the name rules, or <paramref name="versions"/> is null.</exception>
     /// <exception cref="NotSupportedException">
     /// The provider doesn't import versions, or a version expires and the provider doesn't support expiry, or a version
     /// is retained or held and the provider doesn't support retention.
     /// </exception>
-    public Task<ResourceImportResult> ImportVersionsAsync(string resourceContainerName, IAsyncEnumerable<ImportedVersion> versions,
+    public Task<ContainerImportResult> ImportVersionsAsync(string containerName, IAsyncEnumerable<ImportedVersion> versions,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -242,10 +242,10 @@ public interface IResourceServiceClient
     /// fails deletes what it created. The destination's container is visible while it fills, marked unfinished. A
     /// version stored here after its name was read isn't copied; <see cref="CopyStoreToAsync"/> with
     /// <see cref="ExistingContainers.Update"/> catches up. Upload sessions in progress and the
-    /// <see cref="ResourceContainerPolicy.KeepDeletedFor">bin</see> aren't copied.
+    /// <see cref="ContainerPolicy.KeepDeletedFor">bin</see> aren't copied.
     /// <para>Coming in 4.0.</para>
     /// </summary>
-    /// <param name="resourceContainerName">The container to copy.</param>
+    /// <param name="containerName">The container to copy.</param>
     /// <param name="destination">The store to copy it to, which may be this one, for a copy under another name.</param>
     /// <param name="destinationContainerName">The name it gets there, which mustn't exist; <see langword="null"/> for its own.</param>
     /// <param name="cancellationToken">Cancels the copy, which then deletes what it created.</param>
@@ -256,7 +256,7 @@ public interface IResourceServiceClient
     /// <exception cref="NotSupportedException">
     /// The destination can't import versions.
     /// </exception>
-    public Task<ContainerCopyResult> CopyContainerToAsync(string resourceContainerName, IResourceServiceClient destination,
+    public Task<ContainerCopyResult> CopyContainerToAsync(string containerName, IResourceServiceClient destination,
         string? destinationContainerName = null, CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -333,13 +333,13 @@ public interface IResourceServiceClient
     /// them until the container is writable again.
     /// <para>Coming in 4.0.</para>
     /// </summary>
-    /// <param name="maxVersions">The most versions to return, from 1 to 1,000.</param>
+    /// <param name="count">The most versions to return, from 1 to 1,000.</param>
     /// <param name="cancellationToken">Cancels the listing.</param>
     /// <returns>The versions; empty when none are waiting.</returns>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="maxVersions"/> is outside 1 to 1,000.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="count"/> is outside 1 to 1,000.</exception>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
     /// <exception cref="NotSupportedException">
     /// The provider doesn't support expiry.
     /// </exception>
-    public Task<IReadOnlyList<ResourceInfo>> GetExpiredVersionsAsync(int maxVersions = 100, CancellationToken cancellationToken = default);
+    public Task<IReadOnlyList<ResourceInfo>> GetExpiredVersionsAsync(int count = 100, CancellationToken cancellationToken = default);
 }

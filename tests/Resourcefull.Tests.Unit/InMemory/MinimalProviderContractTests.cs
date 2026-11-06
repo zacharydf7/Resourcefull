@@ -38,9 +38,9 @@ public class MinimalProviderContractTests : ResourcefullContractTests
             ResourceWriteCondition? condition = null, CancellationToken cancellationToken = default) =>
             inner.AddResourceAsync(version, content, condition, cancellationToken);
 
-        public override Task<IReadOnlyList<ResourceInfo>> GetResourcePageAsync(string resourceContainerName, string? prefix,
+        public override Task<IReadOnlyList<ResourceInfo>> GetResourcePageAsync(string containerName, string? prefix,
             string? afterName, int pageSize, CancellationToken cancellationToken = default) =>
-            inner.GetResourcePageAsync(resourceContainerName, prefix, afterName, pageSize, cancellationToken);
+            inner.GetResourcePageAsync(containerName, prefix, afterName, pageSize, cancellationToken);
 
         public override Task<IReadOnlyList<ResourceInfo>> GetResourceVersionsAsync(ResourceAddress resource,
             CancellationToken cancellationToken = default) =>
@@ -58,20 +58,20 @@ public class MinimalProviderContractTests : ResourcefullContractTests
             ResourceConditions? conditions = null, CancellationToken cancellationToken = default) =>
             inner.DeleteResourceAsync(resource, versionId, conditions, cancellationToken);
 
-        public override Task AddContainerAsync(string resourceContainerName, IReadOnlyDictionary<string, string> metadata,
+        public override Task AddContainerAsync(string containerName, IReadOnlyDictionary<string, string> metadata,
             CancellationToken cancellationToken = default) =>
-            inner.AddContainerAsync(resourceContainerName, metadata, cancellationToken);
+            inner.AddContainerAsync(containerName, metadata, cancellationToken);
 
         public override Task<IReadOnlyList<ContainerInfo>> GetContainerPageAsync(string? prefix, string? afterName, int pageSize,
             CancellationToken cancellationToken = default) =>
             inner.GetContainerPageAsync(prefix, afterName, pageSize, cancellationToken);
 
-        public override Task<ContainerInfo?> GetContainerInfoAsync(string resourceContainerName,
+        public override Task<ContainerInfo?> GetContainerInfoAsync(string containerName,
             CancellationToken cancellationToken = default) =>
-            inner.GetContainerInfoAsync(resourceContainerName, cancellationToken);
+            inner.GetContainerInfoAsync(containerName, cancellationToken);
 
-        public override Task<bool> DeleteContainerAsync(string resourceContainerName,
+        public override Task<bool> DeleteContainerAsync(string containerName,
             CancellationToken cancellationToken = default) =>
-            inner.DeleteContainerAsync(resourceContainerName, cancellationToken);
+            inner.DeleteContainerAsync(containerName, cancellationToken);
     }
 }

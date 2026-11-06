@@ -92,7 +92,7 @@ public class ResourcefullServiceCollectionExtensionsTests
         var policies = provider.GetRequiredService<ContainerPolicySettings>();
         Assert.Equal((TimeSpan.FromSeconds(10), TimeSpan.FromMinutes(1)),
             (policies.CacheFor, policies.KeepLastKnownFor));
-        Assert.Equivalent(new ResourceContainerPolicy
+        Assert.Equivalent(new ContainerPolicy
         {
             MaxResourceSize = ResourceSize.Megabytes(100), MaxContainerSize = ResourceSize.Gigabytes(5),
             MaxResourceCount = 1000, AllowedContentTypes = ["application/pdf", "image/png"], ReadOnly = false, MaxVersions = 5,
@@ -111,7 +111,7 @@ public class ResourcefullServiceCollectionExtensionsTests
         ResourcefullOptions options = provider.GetRequiredService<IOptions<ResourcefullOptions>>().Value;
         Assert.Equal(100, options.MaxVersions);
         Assert.Equal(TimeSpan.FromMinutes(1), provider.GetRequiredService<ExpirySettings>().Interval);
-        Assert.Equivalent(new ResourceContainerPolicy(),
+        Assert.Equivalent(new ContainerPolicy(),
             provider.GetRequiredService<ContainerPolicySettings>().Defaults);
     }
 

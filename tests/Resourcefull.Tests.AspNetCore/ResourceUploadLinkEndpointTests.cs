@@ -123,7 +123,7 @@ public class ResourceUploadLinkEndpointTests
     {
         // Arrange: a link without limits of its own, and a container policy, a missing container or the endpoints'
         // own size limit that refuses an upload of 11 bytes.
-        await using UploadApp app = await UploadApp.StartAsync(policy: limit == "policy" ? new ResourceContainerPolicy { MaxResourceSize = 10 } : null,
+        await using UploadApp app = await UploadApp.StartAsync(policy: limit == "policy" ? new ContainerPolicy { MaxResourceSize = 10 } : null,
             maxSize: limit == "endpoints" ? 10 : null);
         string token = app.Links.CreateUploadToken(new ResourceUploadLink(limit == "no-container" ? "gone" : UploadApp.Container)
         {

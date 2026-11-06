@@ -10,7 +10,7 @@ namespace Resourcefull.Tests.Unit;
 
 public class ResourceServiceClientTests
 {
-    private static ResourceServiceClient NewService(ResourceRepository repository, IUriProvider? uriProvider = null)
+    private static ResourceServiceClient NewService(ResourceRepository repository, IResourceUriProvider? uriProvider = null)
         => new(repository, Options.Create(new ResourcefullOptions()), uriProvider);
 
     public static TheoryData<string?> InvalidContainerNames() =>
@@ -70,11 +70,11 @@ public class ResourceServiceClientTests
         repository.VerifyNoOtherCalls();
     }
 
-    private static IUriProvider NewBaseUrlUriProvider()
+    private static IResourceUriProvider NewBaseUrlUriProvider()
     {
-        var uriProvider = new Mock<IUriProvider>();
-        uriProvider.Setup(p => p.GetAbsoluteUri(It.IsAny<ResourcefullContext>()))
-            .Returns((ResourcefullContext context) => $"https://new.test/{context.ContainerName}");
+        var uriProvider = new Mock<IResourceUriProvider>();
+        uriProvider.Setup(p => p.GetAbsoluteUri(It.IsAny<ResourceUriContext>()))
+            .Returns((ResourceUriContext context) => $"https://new.test/{context.ContainerName}");
         return uriProvider.Object;
     }
 
@@ -134,8 +134,8 @@ public class ResourceServiceClientTests
     public async Task ContainerExistsAsync_ShouldNotAskTheUriProvider_WhenCalled()
     {
         // Arrange: a provider that only works inside a request, called from outside one.
-        var uriProvider = new Mock<IUriProvider>();
-        uriProvider.Setup(p => p.GetAbsoluteUri(It.IsAny<ResourcefullContext>())).Throws<InvalidOperationException>();
+        var uriProvider = new Mock<IResourceUriProvider>();
+        uriProvider.Setup(p => p.GetAbsoluteUri(It.IsAny<ResourceUriContext>())).Throws<InvalidOperationException>();
         var service = NewService(NewRepositoryWithStoredUris().Object, uriProvider.Object);
 
         // Act
@@ -638,7 +638,7 @@ public class ResourceServiceClientTests
             It.IsAny<CancellationToken>())).ReturnsAsync(() => new MemoryStream([1]));
 
         // Act
-        ResourceExportResult exported =
+        ContainerExportResult exported =
             await NewService(repository.Object).ExportContainerAsync("c", new MemoryStream());
 
         // Assert
@@ -711,14 +711,14 @@ public class ResourceServiceClientTests
         })];
 
         // Act: the clock moves on until the mark has been written again after the rewrite that timed out.
-        Task<ResourceImportResult> importing = client.ImportContainerAsync("d", versions.ToAsyncEnumerable());
+        Task<ContainerImportResult> importing = client.ImportContainerAsync("d", versions.ToAsyncEnumerable());
         for (int turn = 0; turn < 1000 && marks.Count < 3; turn++)
         {
             time.Advance(TimeSpan.FromMinutes(1));
             await Task.Delay(5);
         }
         release.SetResult();
-        ResourceImportResult imported = await importing;
+        ContainerImportResult imported = await importing;
 
         // Assert: marked, rewritten after the timeout, then cleared once the version was stored.
         Assert.Equal(1, imported.VersionCount);
@@ -757,7 +757,7 @@ public class ResourceServiceClientTests
         var client = new ResourceServiceClient(repository.Object, Options.Create(new ResourcefullOptions()));
 
         // Act
-        ResourceImportResult imported = await client.ImportContainerAsync("d", await OneFileExportAsync());
+        ContainerImportResult imported = await client.ImportContainerAsync("d", await OneFileExportAsync());
 
         // Assert
         Assert.Equal(1, imported.VersionCount);

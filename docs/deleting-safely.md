@@ -31,7 +31,7 @@ Or let the container's [policy](container-policies.md) give every new version on
 ```csharp
 builder.Services.AddResourcefull(options => options
     .UseSqlServer(connectionString)
-    .UseContainerPolicies(new ResourceContainerPolicy { RetainFor = TimeSpan.FromDays(7 * 365) }));
+    .UseContainerPolicies(new ContainerPolicy { RetainFor = TimeSpan.FromDays(7 * 365) }));
 ```
 
 A policy provider can set `RetainFor` for the containers that need it, such as the invoices container, and leave
@@ -102,7 +102,7 @@ back, and it's purged for good once the time you chose has passed. Turn it on wi
 builder.Services.AddResourcefull(options => options
     .UseSqlServer(connectionString)
     .UseExpiry()
-    .UseContainerPolicies(new ResourceContainerPolicy { KeepDeletedFor = TimeSpan.FromDays(30) }));
+    .UseContainerPolicies(new ContainerPolicy { KeepDeletedFor = TimeSpan.FromDays(30) }));
 ```
 
 As with any policy property, a policy provider can give each container its own: a bin for documents people edit, none
@@ -155,7 +155,7 @@ await foreach (ResourceInfo deleted in documents.ListDeletedAsync(new ResourceLi
 
 `GetDeletedPageAsync` gets one page at a time, for an API that pages its own callers, as `GetResourcePageAsync` does.
 With a prefix, a page can hold fewer versions than its page size, or none, while more follow, so keep going until
-`ContinuationToken` is `null`. A listing of the bin can't match metadata: setting `Metadata` throws `ArgumentException`.
+`ContinuationToken` is `null`. A listing of the bin can't match metadata: setting `MetadataMatch` throws `ArgumentException`.
 
 ### Bringing a version back
 
@@ -196,9 +196,9 @@ An invoices container keeps every invoice for seven years, and keeps deleted one
 ```csharp
 public sealed class InvoicePolicies : IResourcePolicyProvider
 {
-    public ValueTask<ResourceContainerPolicy?> GetPolicyAsync(string containerName, CancellationToken cancellationToken) =>
-        ValueTask.FromResult<ResourceContainerPolicy?>(containerName == "invoices"
-            ? new ResourceContainerPolicy { RetainFor = TimeSpan.FromDays(7 * 365), KeepDeletedFor = TimeSpan.FromDays(30) }
+    public ValueTask<ContainerPolicy?> GetPolicyAsync(string containerName, CancellationToken cancellationToken) =>
+        ValueTask.FromResult<ContainerPolicy?>(containerName == "invoices"
+            ? new ContainerPolicy { RetainFor = TimeSpan.FromDays(7 * 365), KeepDeletedFor = TimeSpan.FromDays(30) }
             : null);
 }
 ```

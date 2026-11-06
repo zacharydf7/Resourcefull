@@ -32,7 +32,7 @@ public sealed class ResourceCopyOptions
     /// <summary>
     /// Until when the copy can't be deleted, as <see cref="ResourceUploadOptions.RetainUntil"/> for an upload; the
     /// source's isn't copied, so <see langword="null"/> takes the destination's
-    /// <see cref="ResourceContainerPolicy.RetainFor"/>, if it has one.
+    /// <see cref="ContainerPolicy.RetainFor"/>, if it has one.
     /// <para>Coming in 4.0.</para>
     /// </summary>
     public DateTimeOffset? RetainUntil { get; init; }

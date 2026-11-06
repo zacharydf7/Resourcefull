@@ -199,7 +199,7 @@ public interface IResourceContainerClient
     /// <returns>The page, and the token for the next one if there is one.</returns>
     /// <exception cref="ArgumentException">
     /// <paramref name="continuationToken"/> is malformed or comes from a listing of another prefix or metadata match, or
-    /// <see cref="ResourceListOptions.Metadata"/> has a key that can't be searched or a value too long to search for.
+    /// <see cref="ResourceListOptions.MetadataMatch"/> has a key that can't be searched or a value too long to search for.
     /// </exception>
     /// <exception cref="ArgumentOutOfRangeException"><see cref="ResourceListOptions.PageSize"/> is outside 1 to <see cref="ResourceListOptions.MaxPageSize"/>.</exception>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
@@ -224,7 +224,7 @@ public interface IResourceContainerClient
     /// resource with many versions in several steps, oldest first and the current version last: if the delete is
     /// canceled or fails partway, every version it didn't reach is still whole, the resource still has its current
     /// version, and calling it again finishes the job. A version uploaded while it runs may remain. In a container
-    /// with a <see cref="ResourceContainerPolicy.KeepDeletedFor"/>, the versions go to the container's bin instead,
+    /// with a <see cref="ContainerPolicy.KeepDeletedFor"/>, the versions go to the container's bin instead,
     /// where <see cref="UndeleteAsync"/> can bring them back.
     /// </summary>
     /// <param name="resourceName">The name of the resource to delete.</param>
@@ -253,10 +253,10 @@ public interface IResourceContainerClient
     /// </exception>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
     /// <exception cref="NotSupportedException">
-    /// The container has a <see cref="ResourceContainerPolicy.KeepDeletedFor"/>, and the provider has no bin.
+    /// The container has a <see cref="ContainerPolicy.KeepDeletedFor"/>, and the provider has no bin.
     /// </exception>
     /// <exception cref="InvalidOperationException">
-    /// The container has a <see cref="ResourceContainerPolicy.KeepDeletedFor"/>, and the store doesn't use
+    /// The container has a <see cref="ContainerPolicy.KeepDeletedFor"/>, and the store doesn't use
     /// <see cref="ResourcefullOptionsBuilder.UseExpiry"/>, whose sweep purges the bin.
     /// </exception>
     public Task<bool> DeleteResourceIfExistsAsync(string resourceName, string? versionId = null,
@@ -283,7 +283,7 @@ public interface IResourceContainerClient
     /// <para>Coming in 4.0.</para>
     /// </summary>
     /// <param name="resourceName">The resource to copy.</param>
-    /// <param name="destinationContainer">The container to copy it to: this container's name to copy within it.</param>
+    /// <param name="destinationContainerName">The container to copy it to: this container's name to copy within it.</param>
     /// <param name="destinationName">The name to copy it to.</param>
     /// <param name="options">Which version to copy, and how to treat an existing destination; the defaults when null.</param>
     /// <param name="cancellationToken">Cancels the copy; a canceled copy stores nothing.</param>
@@ -303,7 +303,7 @@ public interface IResourceContainerClient
     /// <exception cref="NotSupportedException">
     /// <see cref="ResourceCopyOptions.ExpiresAt"/> is set and the provider doesn't support expiry; nothing was stored.
     /// </exception>
-    public Task<ResourceInfo?> CopyResourceAsync(string resourceName, string destinationContainer, string destinationName,
+    public Task<ResourceInfo?> CopyResourceAsync(string resourceName, string destinationContainerName, string destinationName,
         ResourceCopyOptions? options = null, CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -313,7 +313,7 @@ public interface IResourceContainerClient
     /// <para>Coming in 4.0.</para>
     /// </summary>
     /// <param name="resourceName">The resource to move.</param>
-    /// <param name="destinationContainer">The container to move it to: this container's name to rename it.</param>
+    /// <param name="destinationContainerName">The container to move it to: this container's name to rename it.</param>
     /// <param name="destinationName">The name to move it to, which must not exist.</param>
     /// <param name="options">What the resource's current version must be like; none when null.</param>
     /// <param name="cancellationToken">Cancels the move; a canceled move changes nothing.</param>
@@ -333,7 +333,7 @@ public interface IResourceContainerClient
     /// <exception cref="NotSupportedException">
     /// The provider doesn't move resources.
     /// </exception>
-    public Task<ResourceInfo?> MoveResourceAsync(string resourceName, string destinationContainer, string destinationName,
+    public Task<ResourceInfo?> MoveResourceAsync(string resourceName, string destinationContainerName, string destinationName,
         ResourceMoveOptions? options = null, CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -394,14 +394,14 @@ public interface IResourceContainerClient
     /// <exception cref="NotSupportedException">
     /// The provider doesn't change a version's metadata.
     /// </exception>
-    public Task<bool> SetResourceMetadataAsync(string resourceName, string? versionId, IDictionary<string, string> metadata,
-        CancellationToken cancellationToken = default);
+    public Task<bool> SetResourceMetadataAsync(string resourceName, string? versionId,
+        IReadOnlyDictionary<string, string> metadata, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Changes the content type a version is stored and served with, without uploading it again, such as to correct one
     /// declared wrongly. Only the type changes: the version keeps its ID, content, metadata,
     /// <see cref="ResourceInfo.LastModified"/> and ETag, and no new version is made. The type is checked against the
-    /// container's <see cref="ResourceContainerPolicy.AllowedContentTypes"/>, as an upload's is, but an
+    /// container's <see cref="ContainerPolicy.AllowedContentTypes"/>, as an upload's is, but an
     /// <see cref="IResourceUploadInspector"/> doesn't see the change.
     /// <para>Coming in 4.0.</para>
     /// </summary>
@@ -428,7 +428,7 @@ public interface IResourceContainerClient
     /// Keeps a version from being deleted until <paramref name="retainUntil"/>, by anyone or anything: a delete of it,
     /// of its name or of its container is refused with <see cref="ResourceRetainedException"/>, expiry leaves it until
     /// the date has passed, and pruning keeps it past the container's
-    /// <see cref="ResourceContainerPolicy.MaxVersions"/> until then. Use it for records that must be kept for a
+    /// <see cref="ContainerPolicy.MaxVersions"/> until then. Use it for records that must be kept for a
     /// period, such as invoices. The date can only move later, never earlier, and can't be cleared, so a retained
     /// version is safe from a mistaken or malicious change too. Who may set it is up to the application.
     /// <para>Coming in 4.0.</para>
@@ -477,7 +477,7 @@ public interface IResourceContainerClient
 
     /// <summary>
     /// Lists the versions in the container's bin, newest deletion first, fetching a page at a time as you enumerate.
-    /// In a container with a <see cref="ResourceContainerPolicy.KeepDeletedFor"/>, a deleted or pruned version goes to
+    /// In a container with a <see cref="ContainerPolicy.KeepDeletedFor"/>, a deleted or pruned version goes to
     /// the bin, where <see cref="UndeleteAsync"/> can bring it back until its <see cref="ResourceInfo.PurgeAt"/>.
     /// <para>Coming in 4.0.</para>
     /// </summary>
@@ -489,7 +489,7 @@ public interface IResourceContainerClient
     /// <returns>The deleted versions, each with <see cref="ResourceInfo.DeletedAt"/> and <see cref="ResourceInfo.PurgeAt"/> set.</returns>
     /// <exception cref="ArgumentException">
     /// <see cref="ResourceListOptions.PageSize"/> is outside 1 to <see cref="ResourceListOptions.MaxPageSize"/>, or
-    /// <see cref="ResourceListOptions.Metadata"/> is set.
+    /// <see cref="ResourceListOptions.MetadataMatch"/> is set.
     /// </exception>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
     /// <exception cref="NotSupportedException">
@@ -530,7 +530,7 @@ public interface IResourceContainerClient
     /// <returns>The page, and the token for the next one if there is one.</returns>
     /// <exception cref="ArgumentException">
     /// <paramref name="continuationToken"/> is malformed or comes from another listing, or
-    /// <see cref="ResourceListOptions.Metadata"/> is set.
+    /// <see cref="ResourceListOptions.MetadataMatch"/> is set.
     /// </exception>
     /// <exception cref="ArgumentOutOfRangeException">
     /// <see cref="ResourceListOptions.PageSize"/> is outside 1 to <see cref="ResourceListOptions.MaxPageSize"/>.
@@ -554,8 +554,8 @@ public interface IResourceContainerClient
     /// <param name="cancellationToken">Cancels the undelete.</param>
     /// <returns><see langword="true"/> if anything came back; <see langword="false"/> if the bin has none of it.</returns>
     /// <exception cref="ResourcePolicyViolationException">
-    /// The container is read-only, or what comes back wouldn't fit its <see cref="ResourceContainerPolicy.MaxContainerSize"/>
-    /// or <see cref="ResourceContainerPolicy.MaxResourceCount"/>, which the bin doesn't count toward; nothing came back.
+    /// The container is read-only, or what comes back wouldn't fit its <see cref="ContainerPolicy.MaxContainerSize"/>
+    /// or <see cref="ContainerPolicy.MaxResourceCount"/>, which the bin doesn't count toward; nothing came back.
     /// </exception>
     /// <exception cref="ArgumentException"><paramref name="resourceName"/> breaks the name rules.</exception>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
@@ -584,18 +584,18 @@ public interface IResourceContainerClient
 
     /// <summary>
     /// Gets what the container holds: the size of every version, and how many resources and versions there are. Use it
-    /// to show a user their storage, or against <see cref="ResourceContainerPolicy.MaxContainerSize"/>.
+    /// to show a user their storage, or against <see cref="ContainerPolicy.MaxContainerSize"/>.
     /// <para>Coming in 4.0.</para>
     /// </summary>
     /// <param name="cancellationToken">Cancels the lookup.</param>
     /// <returns>The container's usage; nothing stored when the container doesn't exist.</returns>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
-    public Task<ResourceContainerUsage> GetUsageAsync(CancellationToken cancellationToken = default);
+    public Task<ContainerUsage> GetUsageAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Gets the policy this container's writes are checked against: the defaults from
     /// <see cref="ResourcefullOptionsBuilder.UseContainerPolicies"/>, with what the policy provider gives for this
-    /// container in place of each limit it sets. Its <see cref="ResourceContainerPolicy.MaxVersions"/> is always the limit
+    /// container in place of each limit it sets. Its <see cref="ContainerPolicy.MaxVersions"/> is always the limit
     /// in force: the policy's, then the defaults', then <see cref="ResourcefullOptionsBuilder.UseVersioning"/>'s, then 1.
     /// With <see cref="GetUsageAsync"/>, use it to show a user their limits,
     /// such as "4.2 GB of 5 GB". It's cached, and stands in for the provider while it fails, as for writes.
@@ -604,7 +604,7 @@ public interface IResourceContainerClient
     /// <param name="cancellationToken">Cancels the lookup.</param>
     /// <returns>The container's policy; without container policies, one that sets only the version limit.</returns>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
-    public Task<ResourceContainerPolicy> GetPolicyAsync(CancellationToken cancellationToken = default);
+    public Task<ContainerPolicy> GetPolicyAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Replaces the container's metadata, which otherwise is set only when the container is created. The whole
@@ -623,7 +623,7 @@ public interface IResourceContainerClient
     public Task<bool> SetMetadataAsync(IReadOnlyDictionary<string, string> metadata, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Prunes every resource in the container to its <see cref="ResourceContainerPolicy.MaxVersions"/>,
+    /// Prunes every resource in the container to its <see cref="ContainerPolicy.MaxVersions"/>,
     /// as each upload prunes its own name, telling the <see cref="IResourceCleanupHandler"/> as a prune does. Run it after
     /// an import, which keeps every version it was given, or after a prune failed and its name hasn't been written since.
     /// With <see cref="ResourcefullOptionsBuilder.UseExpiry"/>, the versions past the limit are set to expire five
@@ -643,7 +643,7 @@ public interface IResourceContainerClient
 
     /// <summary>
     /// Indexes the keys <see cref="ResourcefullOptionsBuilder.UseMetadataSearch"/> names for every current version in
-    /// the container, so a listing by <see cref="ResourceListOptions.Metadata"/> finds versions stored before a key was
+    /// the container, so a listing by <see cref="ResourceListOptions.MetadataMatch"/> finds versions stored before a key was
     /// added. New writes are indexed as they're stored, so run it once after adding a key, for each container that
     /// holds versions from before. With a provider that keeps no index, it does nothing, since searches read every name.
     /// <para>Coming in 4.0.</para>
@@ -656,7 +656,7 @@ public interface IResourceContainerClient
     /// <summary>
     /// Lists the container's largest versions, or the ones that expire soonest, current and older versions alike, each
     /// with <see cref="ResourceInfo.IsLatest"/> set. Use it to see what's filling a container as it nears
-    /// <see cref="ResourceContainerPolicy.MaxContainerSize"/>, which counts every version, or what expiry deletes next.
+    /// <see cref="ContainerPolicy.MaxContainerSize"/>, which counts every version, or what expiry deletes next.
     /// It's meant for an administrator looking now and then: the store may read all of the container's versions to
     /// answer it.
     /// <para>Coming in 4.0.</para>
@@ -733,7 +733,7 @@ public interface IResourceContainerClient
     /// <see cref="ResourceUploadOffsetException.CurrentOffset"/>.
     /// </exception>
     /// <exception cref="ResourcePolicyViolationException">
-    /// The content would take the version past the container's <see cref="ResourceContainerPolicy.MaxResourceSize"/>, or
+    /// The content would take the version past the container's <see cref="ContainerPolicy.MaxResourceSize"/>, or
     /// past what the whole container may hold. Part of what arrived before the limit may stay stored.
     /// </exception>
     /// <exception cref="ResourceUploadLimitException">

@@ -13,7 +13,7 @@ public class ResourceContainerClientTests
         ResourceRepository repository,
         string containerName = Container,
         ResourcefullOptions? options = null,
-        IUriProvider? uriProvider = null,
+        IResourceUriProvider? uriProvider = null,
         ILogger? logger = null)
         => new(repository, uriProvider, options ?? new ResourcefullOptions(),
             containerName, logger);
@@ -101,8 +101,8 @@ public class ResourceContainerClientTests
         // Arrange
         var name = "newResourceName";
         var repository = NewRepository();
-        var uriProvider = new Mock<IUriProvider>();
-        uriProvider.Setup(u => u.GetAbsoluteUri(It.IsAny<ResourcefullContext>()))
+        var uriProvider = new Mock<IResourceUriProvider>();
+        uriProvider.Setup(u => u.GetAbsoluteUri(It.IsAny<ResourceUriContext>()))
             .Returns("http://resources/x");
         var client = NewClient(repository.Object, uriProvider: uriProvider.Object);
 
@@ -113,11 +113,11 @@ public class ResourceContainerClientTests
         Assert.Equal("http://resources/x", result.Uri);
     }
 
-    private static IUriProvider NewBaseUrlUriProvider()
+    private static IResourceUriProvider NewBaseUrlUriProvider()
     {
-        var uriProvider = new Mock<IUriProvider>();
-        uriProvider.Setup(p => p.GetAbsoluteUri(It.IsAny<ResourcefullContext>())).Returns((ResourcefullContext context)
-            => $"https://new.test/{context.ContainerName}/{context.ResourceName}/{context.ResourceVersionId}");
+        var uriProvider = new Mock<IResourceUriProvider>();
+        uriProvider.Setup(p => p.GetAbsoluteUri(It.IsAny<ResourceUriContext>())).Returns((ResourceUriContext context)
+            => $"https://new.test/{context.ContainerName}/{context.ResourceName}/{context.VersionId}");
         return uriProvider.Object;
     }
 
@@ -164,8 +164,8 @@ public class ResourceContainerClientTests
     {
         // Arrange
         var repository = NewRepositoryWithStoredUris();
-        var uriProvider = new Mock<IUriProvider>();
-        uriProvider.Setup(p => p.GetAbsoluteUri(It.IsAny<ResourcefullContext>())).Throws<InvalidOperationException>();
+        var uriProvider = new Mock<IResourceUriProvider>();
+        uriProvider.Setup(p => p.GetAbsoluteUri(It.IsAny<ResourceUriContext>())).Throws<InvalidOperationException>();
         var client = NewClient(repository.Object, uriProvider: uriProvider.Object);
 
         // Act
@@ -1024,7 +1024,7 @@ public class ResourceContainerClientTests
         using var cts = new CancellationTokenSource();
         var repository = NewRepository();
         repository.Setup(r => r.GetContainerUsageAsync(Container, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new ResourceContainerUsage(0, 0, 0));
+            .ReturnsAsync(new ContainerUsage(0, 0, 0));
         var client = NewClient(repository.Object);
 
         // Act

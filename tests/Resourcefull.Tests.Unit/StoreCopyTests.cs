@@ -246,7 +246,7 @@ public class StoreCopyTests : IDisposable
         ImportedVersion gone = Version("b", "v1", "") with { OpenContentAsync = _ => Task.FromResult<Stream?>(null) };
 
         // Act
-        ResourceImportResult imported = await Target.ImportContainerAsync("c", new[] { Version("a", "v1", "a"), gone }.ToAsyncEnumerable());
+        ContainerImportResult imported = await Target.ImportContainerAsync("c", new[] { Version("a", "v1", "a"), gone }.ToAsyncEnumerable());
 
         // Assert
         Assert.Equal((1L, 1L), (imported.ResourceCount, imported.VersionCount));
@@ -323,7 +323,7 @@ public class StoreCopyTests : IDisposable
     public async Task ImportContainerAsync_ShouldCountEachNameOnce_WhenItsVersionsAreInterleaved()
     {
         // Act
-        ResourceImportResult imported = await Target.ImportContainerAsync("c",
+        ContainerImportResult imported = await Target.ImportContainerAsync("c",
             new[] { Version("a", "v1", "a1"), Version("b", "v1", "b1"), Version("a", "v2", "a2") }.ToAsyncEnumerable());
 
         // Assert

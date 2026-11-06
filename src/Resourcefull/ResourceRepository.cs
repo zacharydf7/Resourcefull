@@ -103,13 +103,13 @@ public abstract class ResourceRepository
     /// SQL Server's binary collations, for one, sort a name after itself followed by characters below U+0020, since
     /// they pad the shorter name with spaces. A provider should answer this without reading the whole container.
     /// </summary>
-    /// <param name="resourceContainerName">The container to list.</param>
+    /// <param name="containerName">The container to list.</param>
     /// <param name="prefix">Only names that start with this, ordinally; <see langword="null"/> for every name.</param>
     /// <param name="afterName">Only names after this one, in the listing's order; <see langword="null"/> to start from the first.</param>
     /// <param name="pageSize">The most versions to return.</param>
     /// <param name="cancellationToken">Cancels the listing.</param>
     /// <returns>The versions; empty when there are no more, or the container does not exist.</returns>
-    public abstract Task<IReadOnlyList<ResourceInfo>> GetResourcePageAsync(string resourceContainerName, string? prefix,
+    public abstract Task<IReadOnlyList<ResourceInfo>> GetResourcePageAsync(string containerName, string? prefix,
         string? afterName, int pageSize, CancellationToken cancellationToken = default);
 
     // Metadata search
@@ -130,20 +130,20 @@ public abstract class ResourceRepository
     /// only the matches.
     /// <para>Coming in 4.0.</para>
     /// </summary>
-    /// <param name="resourceContainerName">The container to list.</param>
+    /// <param name="containerName">The container to list.</param>
     /// <param name="prefix">Only names that start with this, ordinally; <see langword="null"/> for every name.</param>
     /// <param name="afterName">Only names after this one, in the listing's order; <see langword="null"/> to start from the first.</param>
     /// <param name="pageSize">The most versions to return.</param>
     /// <param name="match">The metadata entry the current version must have; its key is one of <see cref="SearchableMetadataKeys"/>.</param>
     /// <param name="cancellationToken">Cancels the listing.</param>
     /// <returns>The versions; empty when there are no more, or the container does not exist.</returns>
-    public virtual async Task<IReadOnlyList<ResourceInfo>> FindResourcePageAsync(string resourceContainerName, string? prefix,
+    public virtual async Task<IReadOnlyList<ResourceInfo>> FindResourcePageAsync(string containerName, string? prefix,
         string? afterName, int pageSize, ResourceMetadataMatch match, CancellationToken cancellationToken = default)
     {
         var found = new List<ResourceInfo>(pageSize);
         while (found.Count < pageSize)
         {
-            IReadOnlyList<ResourceInfo> page = await GetResourcePageAsync(resourceContainerName, prefix, afterName,
+            IReadOnlyList<ResourceInfo> page = await GetResourcePageAsync(containerName, prefix, afterName,
                 ResourceListOptions.DefaultPageSize, cancellationToken).ConfigureAwait(false);
             found.AddRange(page.Where(r => match.IsMatch(r.Metadata)).Take(pageSize - found.Count));
             if (page.Count < ResourceListOptions.DefaultPageSize) break;
@@ -157,10 +157,10 @@ public abstract class ResourceRepository
     /// added to them, a batch at a time. The default implementation does nothing, for a provider that keeps no index.
     /// <para>Coming in 4.0.</para>
     /// </summary>
-    /// <param name="resourceContainerName">The container.</param>
+    /// <param name="containerName">The container.</param>
     /// <param name="cancellationToken">Cancels the indexing; what's indexed by then stays indexed.</param>
     /// <returns>How many versions were indexed.</returns>
-    public virtual Task<long> IndexMetadataAsync(string resourceContainerName, CancellationToken cancellationToken = default) =>
+    public virtual Task<long> IndexMetadataAsync(string containerName, CancellationToken cancellationToken = default) =>
         Task.FromResult(0L);
 
 
@@ -183,7 +183,7 @@ public abstract class ResourceRepository
     /// A provider should answer it in one query; the default implementation lists the names with
     /// <see cref="GetResourcePageAsync"/> and then each name's versions.
     /// </summary>
-    /// <param name="resourceContainerName">The container to list.</param>
+    /// <param name="containerName">The container to list.</param>
     /// <param name="afterName">
     /// Only names after this one, in the listing's order; <see langword="null"/> to start from the first.
     /// </param>
@@ -192,7 +192,7 @@ public abstract class ResourceRepository
     /// <returns>
     /// The versions, grouped by name; empty when there are no more names, or the container does not exist.
     /// </returns>
-    public virtual async Task<IReadOnlyList<ResourceInfo>> GetVersionPageAsync(string resourceContainerName, string? afterName,
+    public virtual async Task<IReadOnlyList<ResourceInfo>> GetVersionPageAsync(string containerName, string? afterName,
         int maxNames, CancellationToken cancellationToken = default)
     {
         var versions = new List<ResourceInfo>();
@@ -200,13 +200,13 @@ public abstract class ResourceRepository
         while (names < maxNames)
         {
             int wanted = maxNames - names;
-            IReadOnlyList<ResourceInfo> page = await GetResourcePageAsync(resourceContainerName, null, afterName, wanted,
+            IReadOnlyList<ResourceInfo> page = await GetResourcePageAsync(containerName, null, afterName, wanted,
                 cancellationToken).ConfigureAwait(false);
             foreach (ResourceInfo current in page)
             {
                 // A name deleted since it was listed has no versions left, and the next name takes its place.
                 IReadOnlyList<ResourceInfo> ofName = await GetResourceVersionsAsync(
-                    new ResourceAddress(resourceContainerName, current.Name), cancellationToken).ConfigureAwait(false);
+                    new ResourceAddress(containerName, current.Name), cancellationToken).ConfigureAwait(false);
                 if (ofName.Count > 0) names++;
                 versions.AddRange(ofName);
                 afterName = current.Name;
@@ -311,11 +311,11 @@ public abstract class ResourceRepository
     /// Adds a container, storing a copy of <paramref name="metadata"/>. Like <see cref="AddResourceAsync"/>, a duplicate
     /// is detected by the write itself.
     /// </summary>
-    /// <param name="resourceContainerName">The container's name.</param>
+    /// <param name="containerName">The container's name.</param>
     /// <param name="metadata">Its metadata.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <exception cref="ResourceConflictException">A container with the same name already exists.</exception>
-    public abstract Task AddContainerAsync(string resourceContainerName, IReadOnlyDictionary<string, string> metadata,
+    public abstract Task AddContainerAsync(string containerName, IReadOnlyDictionary<string, string> metadata,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -336,10 +336,10 @@ public abstract class ResourceRepository
     /// <summary>
     /// Gets a container, with its own copy of the stored metadata.
     /// </summary>
-    /// <param name="resourceContainerName">The container's name.</param>
+    /// <param name="containerName">The container's name.</param>
     /// <param name="cancellationToken">Cancels the lookup.</param>
     /// <returns>The container, or <see langword="null"/> when it does not exist.</returns>
-    public abstract Task<ContainerInfo?> GetContainerInfoAsync(string resourceContainerName,
+    public abstract Task<ContainerInfo?> GetContainerInfoAsync(string containerName,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -347,13 +347,13 @@ public abstract class ResourceRepository
     /// container: if it is canceled or fails partway, every version it hasn't deleted must still be whole, each
     /// remaining name must still have exactly one current version, and calling it again must finish the job.
     /// </summary>
-    /// <param name="resourceContainerName">The container's name.</param>
+    /// <param name="containerName">The container's name.</param>
     /// <param name="cancellationToken">Cancels the delete.</param>
     /// <returns><see langword="true"/> if the container existed and was deleted; otherwise <see langword="false"/>.</returns>
     /// <exception cref="ResourceRetainedException">
     /// A version in the container is retained or held; see <see cref="SupportsRetention"/>.
     /// </exception>
-    public abstract Task<bool> DeleteContainerAsync(string resourceContainerName,
+    public abstract Task<bool> DeleteContainerAsync(string containerName,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -361,12 +361,12 @@ public abstract class ResourceRepository
     /// An import uses it to mark the container it's filling as unfinished, and to clear the mark once it's done. The
     /// default implementation throws <see cref="NotSupportedException"/>, and imports then go unmarked.
     /// </summary>
-    /// <param name="resourceContainerName">The container.</param>
+    /// <param name="containerName">The container.</param>
     /// <param name="metadata">Its new metadata.</param>
     /// <param name="cancellationToken">Cancels the change.</param>
     /// <returns><see langword="true"/> if the container exists; otherwise <see langword="false"/>.</returns>
     /// <exception cref="NotSupportedException">The provider doesn't change container metadata, as by default.</exception>
-    public virtual Task<bool> SetContainerMetadataAsync(string resourceContainerName,
+    public virtual Task<bool> SetContainerMetadataAsync(string containerName,
         IReadOnlyDictionary<string, string> metadata, CancellationToken cancellationToken = default)
         => throw new NotSupportedException($"{GetType().Name} doesn't change container metadata.");
 
@@ -734,15 +734,15 @@ public abstract class ResourceRepository
 
     /// <summary>
     /// Whether the provider can keep deleted versions in a bin: <see langword="false"/> by default, and the clients then
-    /// refuse every delete in a container with a <see cref="ResourceContainerPolicy.KeepDeletedFor"/>, so nothing meant
+    /// refuse every delete in a container with a <see cref="ContainerPolicy.KeepDeletedFor"/>, so nothing meant
     /// to be kept is deleted for good.
     /// <para>Coming in 4.0.</para>
     /// </summary>
     /// <remarks>
     /// A provider that returns <see langword="true"/> must override every member in this section, and support expiry
     /// (<see cref="SupportsExpiry"/>), whose sweep purges the bin. A version in the bin is left out of every other
-    /// member: reads, listings, version lists, usage figures but for <see cref="ResourceContainerUsage.DeletedSize"/> and
-    /// <see cref="ResourceContainerUsage.DeletedVersionCount"/>, searches, expiry and moves. A name whose versions are all
+    /// member: reads, listings, version lists, usage figures but for <see cref="ContainerUsage.DeletedSize"/> and
+    /// <see cref="ContainerUsage.DeletedVersionCount"/>, searches, expiry and moves. A name whose versions are all
     /// in the bin is free, so a create-only write succeeds, but each version ID in the bin stays taken: a write with one
     /// is refused as for any version the name has. Deleting a container deletes its bin too.
     /// </remarks>
@@ -778,7 +778,7 @@ public abstract class ResourceRepository
     /// rather than read the whole bin.
     /// <para>Coming in 4.0.</para>
     /// </summary>
-    /// <param name="resourceContainerName">The container.</param>
+    /// <param name="containerName">The container.</param>
     /// <param name="prefix">Only versions of names that start with this, ordinally; <see langword="null"/> for all.</param>
     /// <param name="after">
     /// The previous page's <see cref="DeletedVersionPage.Next"/>; <see langword="null"/> for the first page.
@@ -787,7 +787,7 @@ public abstract class ResourceRepository
     /// <param name="cancellationToken">Cancels the listing.</param>
     /// <returns>The versions found, and where the next page starts.</returns>
     /// <exception cref="NotSupportedException">The provider has no bin, as by default.</exception>
-    public virtual Task<DeletedVersionPage> GetDeletedPageAsync(string resourceContainerName, string? prefix,
+    public virtual Task<DeletedVersionPage> GetDeletedPageAsync(string containerName, string? prefix,
         ResourceVersionKey? after, int pageSize, CancellationToken cancellationToken = default)
         => throw new NotSupportedException($"{GetType().Name} doesn't keep deleted versions.");
 
@@ -857,10 +857,10 @@ public abstract class ResourceRepository
     /// answer it without reading content. The default implementation pages through the container's names and lists each
     /// one's versions; override it if the store can add them up itself.
     /// </summary>
-    /// <param name="resourceContainerName">The container.</param>
+    /// <param name="containerName">The container.</param>
     /// <param name="cancellationToken">Cancels the lookup.</param>
     /// <returns>The container's usage; nothing stored when the container doesn't exist.</returns>
-    public virtual async Task<ResourceContainerUsage> GetContainerUsageAsync(string resourceContainerName,
+    public virtual async Task<ContainerUsage> GetContainerUsageAsync(string containerName,
         CancellationToken cancellationToken = default)
     {
         long storedBytes = 0, versionCount = 0;
@@ -868,12 +868,12 @@ public abstract class ResourceRepository
         string? afterName = null;
         while (true)
         {
-            IReadOnlyList<ResourceInfo> page = await GetResourcePageAsync(resourceContainerName, null, afterName,
+            IReadOnlyList<ResourceInfo> page = await GetResourcePageAsync(containerName, null, afterName,
                 ResourceListOptions.DefaultPageSize, cancellationToken).ConfigureAwait(false);
             foreach (ResourceInfo resource in page)
             {
                 foreach (ResourceInfo version in await GetResourceVersionsAsync(
-                    new ResourceAddress(resourceContainerName, resource.Name), cancellationToken).ConfigureAwait(false))
+                    new ResourceAddress(containerName, resource.Name), cancellationToken).ConfigureAwait(false))
                 {
                     storedBytes += version.ContentLength ?? 0;
                     versionCount++;
@@ -884,7 +884,7 @@ public abstract class ResourceRepository
             afterName = page[^1].Name;
         }
 
-        return new ResourceContainerUsage(storedBytes, resourceCount, versionCount);
+        return new ContainerUsage(storedBytes, resourceCount, versionCount);
     }
 
     /// <summary>
@@ -896,12 +896,12 @@ public abstract class ResourceRepository
     /// needn't be fast, but a provider that can should answer it in one query. The default implementation reads every
     /// version through <see cref="GetVersionPageAsync"/>, keeping the top <paramref name="count"/>.
     /// </summary>
-    /// <param name="resourceContainerName">The container.</param>
+    /// <param name="containerName">The container.</param>
     /// <param name="order">Which versions come first.</param>
     /// <param name="count">The most versions to return, from 1 to 1,000.</param>
     /// <param name="cancellationToken">Cancels the listing.</param>
     /// <returns>The versions; empty when there are none, or the container does not exist.</returns>
-    public virtual async Task<IReadOnlyList<ResourceInfo>> GetTopVersionsAsync(string resourceContainerName,
+    public virtual async Task<IReadOnlyList<ResourceInfo>> GetTopVersionsAsync(string containerName,
         ResourceVersionOrder order, int count, CancellationToken cancellationToken = default)
     {
         IComparer<ResourceInfo> ranking = Ranking(order);
@@ -910,7 +910,7 @@ public abstract class ResourceRepository
         string? afterName = null;
         while (true)
         {
-            IReadOnlyList<ResourceInfo> page = await GetVersionPageAsync(resourceContainerName, afterName,
+            IReadOnlyList<ResourceInfo> page = await GetVersionPageAsync(containerName, afterName,
                 ResourceListOptions.DefaultPageSize, cancellationToken).ConfigureAwait(false);
             if (page.Count == 0) break;
             foreach (ResourceInfo version in page)

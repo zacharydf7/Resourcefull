@@ -107,7 +107,7 @@ public abstract partial class ResourcefullContractTests
     {
         // Arrange
         using ServiceProvider provider = BuildServiceProvider(o => o.UseContainerPolicies(
-            new ResourceContainerPolicy { AllowedContentTypes = ["image/png"] }));
+            new ContainerPolicy { AllowedContentTypes = ["image/png"] }));
         IResourceContainerClient container = await NewContainerAsync(provider);
         await container.UploadAsync("logo.png", BinaryData.FromString("x"), Typed("image/png"));
 

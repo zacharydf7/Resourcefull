@@ -277,7 +277,7 @@ public abstract partial class ResourcefullContractTests
         // Arrange
         var clock = new ManualTimeProvider { Now = DateTimeOffset.UtcNow };
         using ServiceProvider provider = BuildServiceProvider(clock,
-            o => o.UseContainerPolicies(new ResourceContainerPolicy { RetainFor = TimeSpan.FromHours(1) }));
+            o => o.UseContainerPolicies(new ContainerPolicy { RetainFor = TimeSpan.FromHours(1) }));
         IResourceContainerClient container = await NewContainerAsync(provider);
         DateTimeOffset ownDate = clock.Now.AddMinutes(10);
 

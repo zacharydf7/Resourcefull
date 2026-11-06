@@ -176,7 +176,7 @@ internal class ResourceSqliteRepository(IDbContextFactory<ResourceDbContext> dbC
                 SELECT rowid FROM "ResourceChunks" WHERE "ResourceId" = {resourceId} ORDER BY "Index" LIMIT {ChunksPerDeleteStatement})
             """, cancellationToken);
 
-    protected override async Task<ResourceContainerUsage> MeasureContainerAsync(ResourceDbContext dbContext, string resourceContainerName,
+    protected override async Task<ContainerUsage> MeasureContainerAsync(ResourceDbContext dbContext, string containerName,
         CancellationToken cancellationToken)
     {
         // One aggregate over the container's version rows, from their recorded lengths, which doesn't touch the chunks;
@@ -188,28 +188,28 @@ internal class ResourceSqliteRepository(IDbContextFactory<ResourceDbContext> dbC
                 COALESCE(SUM(CASE WHEN r."DeletedAt" IS NOT NULL THEN r."ContentLength" END), 0) AS "DeletedSize",
                 COUNT(r."DeletedAt") AS "DeletedVersionCount"
             FROM "Resources" r
-            WHERE r."ContainerName" = {resourceContainerName} AND r."StagedAt" IS NULL
+            WHERE r."ContainerName" = {containerName} AND r."StagedAt" IS NULL
             """).ToListAsync(cancellationToken).ConfigureAwait(false))[0];
-        return new ResourceContainerUsage(usage.StoredSize, usage.ResourceCount, usage.VersionCount, usage.DeletedSize, usage.DeletedVersionCount);
+        return new ContainerUsage(usage.StoredSize, usage.ResourceCount, usage.VersionCount, usage.DeletedSize, usage.DeletedVersionCount);
     }
 
     protected override Task<bool> LockVersionInContainerAsync(ResourceDbContext attempt, long resourceId,
-        string resourceContainerName, DateTimeOffset now, CancellationToken cancellationToken) =>
+        string containerName, DateTimeOffset now, CancellationToken cancellationToken) =>
         attempt.Resources.IgnoreQueryFilters()
-            .AnyAsync(r => r.Id == resourceId && r.ContainerName == resourceContainerName
+            .AnyAsync(r => r.Id == resourceId && r.ContainerName == containerName
                 && (r.StagedAt != null || (!r.LegalHold && (r.RetainUntil == null || r.RetainUntil <= now))), cancellationToken);
 
     /// <summary>Nothing to lock: the transaction holds the database's write lock from its start.</summary>
-    protected override async Task<bool> LockEmptyContainerAsync(ResourceDbContext attempt, string resourceContainerName,
+    protected override async Task<bool> LockEmptyContainerAsync(ResourceDbContext attempt, string containerName,
         CancellationToken cancellationToken) =>
-        !await attempt.Resources.IgnoreQueryFilters().AnyAsync(r => r.ContainerName == resourceContainerName, cancellationToken)
+        !await attempt.Resources.IgnoreQueryFilters().AnyAsync(r => r.ContainerName == containerName, cancellationToken)
             .ConfigureAwait(false);
 
     /// <summary>One statement for the whole batch; the cascade deletes the versions' chunks.</summary>
-    protected override Task DeleteVersionsInContainerAsync(ResourceDbContext attempt, string resourceContainerName, List<long> ids,
+    protected override Task DeleteVersionsInContainerAsync(ResourceDbContext attempt, string containerName, List<long> ids,
         DateTimeOffset now, CancellationToken cancellationToken) =>
         attempt.Resources.IgnoreQueryFilters()
-            .Where(r => ids.Contains(r.Id) && r.ContainerName == resourceContainerName
+            .Where(r => ids.Contains(r.Id) && r.ContainerName == containerName
                 && (r.StagedAt != null || (!r.LegalHold && (r.RetainUntil == null || r.RetainUntil <= now))))
             .ExecuteDeleteAsync(cancellationToken);
 

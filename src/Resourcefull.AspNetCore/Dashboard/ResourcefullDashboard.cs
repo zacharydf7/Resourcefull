@@ -286,8 +286,8 @@ public static partial class ResourcefullDashboardEndpointRouteBuilderExtensions
         CancellationToken cancellationToken)
     {
         IResourceContainerClient client = resources.GetContainerClient(container.Name);
-        ResourceContainerUsage usage = await client.GetUsageAsync(cancellationToken).ConfigureAwait(false);
-        ResourceContainerPolicy policy = await client.GetPolicyAsync(cancellationToken).ConfigureAwait(false);
+        ContainerUsage usage = await client.GetUsageAsync(cancellationToken).ConfigureAwait(false);
+        ContainerPolicy policy = await client.GetPolicyAsync(cancellationToken).ConfigureAwait(false);
         return new ContainerView(container.Name, container.Metadata,
             new UsageView(usage.StoredSize.Bytes, usage.ResourceCount, usage.VersionCount, usage.DeletedSize.Bytes, usage.DeletedVersionCount),
             new PolicyView(policy.MaxResourceSize?.Bytes, policy.MaxContainerSize?.Bytes, policy.MaxResourceCount,

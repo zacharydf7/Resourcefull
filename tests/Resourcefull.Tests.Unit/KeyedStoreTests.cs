@@ -10,9 +10,9 @@ namespace Resourcefull.Tests.Unit;
 
 public class KeyedStoreTests
 {
-    private sealed class PathUriProvider : IUriProvider
+    private sealed class PathUriProvider : IResourceUriProvider
     {
-        public string? GetAbsoluteUri(ResourcefullContext context) => $"https://archive.test/{context.ContainerName}";
+        public string? GetAbsoluteUri(ResourceUriContext context) => $"https://archive.test/{context.ContainerName}";
     }
 
     private static ServiceProvider TwoStores(Action<ResourcefullOptionsBuilder>? configureArchive = null,
@@ -46,7 +46,7 @@ public class KeyedStoreTests
     {
         // Arrange: versioning in the archive only, and a one-resource limit in the hot store only.
         await using ServiceProvider provider = TwoStores(archive => archive.UseInMemory().UseVersioning(),
-            hot => hot.UseInMemory().UseContainerPolicies(new ResourceContainerPolicy { MaxResourceCount = 1 }));
+            hot => hot.UseInMemory().UseContainerPolicies(new ContainerPolicy { MaxResourceCount = 1 }));
         IResourceContainerClient hot = await provider.GetRequiredService<IResourceServiceClient>().CreateContainerAsync("c");
         IResourceContainerClient archive = await provider.GetRequiredKeyedService<IResourceServiceClient>("archive")
             .CreateContainerAsync("c");
@@ -134,7 +134,7 @@ public class KeyedStoreTests
     public void AddKeyedResourcefull_ShouldThrowArgumentException_WhenGivenABlankName(string name)
     {
         // Act & Assert
-        Assert.Throws<ArgumentException>("name", () => new ServiceCollection().AddKeyedResourcefull(name, options => options.UseInMemory()));
+        Assert.Throws<ArgumentException>("storeName", () => new ServiceCollection().AddKeyedResourcefull(name, options => options.UseInMemory()));
     }
 
     [Fact]

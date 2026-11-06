@@ -294,7 +294,7 @@ public sealed class PerformanceTests(SqlServerFixture fixture, ITestOutputHelper
     public async Task UploadAsync_ShouldStayWithinItsBaseline_WhenTheContainerHasLimits()
     {
         // What checking a container's limits adds to an upload: compare upload-16MiB, which has a database of its own too.
-        var limits = new ResourceContainerPolicy
+        var limits = new ContainerPolicy
         {
             MaxResourceSize = ResourceSize.Megabytes(64),
             MaxContainerSize = ResourceSize.Gigabytes(1),

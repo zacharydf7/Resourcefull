@@ -49,7 +49,7 @@ public abstract partial class ResourcefullContractTests
         var export = new MemoryStream();
 
         // Act
-        ResourceExportResult exported = await service.ExportContainerAsync(sourceName, export);
+        ContainerExportResult exported = await service.ExportContainerAsync(sourceName, export);
 
         // Assert: every name is counted and, when the provider supports import, the export holds every name's
         // content.
@@ -86,7 +86,7 @@ public abstract partial class ResourcefullContractTests
         });
 
         // Act
-        ResourceImportResult imported = await service.ImportContainerAsync(restoredName, await ExportAsync(service, sourceName));
+        ContainerImportResult imported = await service.ImportContainerAsync(restoredName, await ExportAsync(service, sourceName));
 
         // Assert
         IResourceContainerClient restored = service.GetContainerClient(restoredName);
@@ -120,7 +120,7 @@ public abstract partial class ResourcefullContractTests
 
         // Act
         var export = new MemoryStream();
-        ResourceExportResult exported = await service.ExportContainerAsync(name, new ForwardOnlyStream(export));
+        ContainerExportResult exported = await service.ExportContainerAsync(name, new ForwardOnlyStream(export));
 
         // Assert: written to a stream that can't seek, with two contents for four versions.
         export.Position = 0;
@@ -318,7 +318,7 @@ public abstract partial class ResourcefullContractTests
         await source.UploadAsync("small", BinaryData.FromString("x"));
         await source.UploadAsync("large", new MemoryStream(new byte[100]));
         string restoredName = NewContainerName();
-        TestPolicyProvider.Policies[restoredName] = new ResourceContainerPolicy { MaxResourceSize = 50 };
+        TestPolicyProvider.Policies[restoredName] = new ContainerPolicy { MaxResourceSize = 50 };
 
         // Act
         Task act() => service.ImportContainerAsync(restoredName, ExportAsync(service, source.Name).GetAwaiter().GetResult());
@@ -348,8 +348,8 @@ public abstract partial class ResourcefullContractTests
         MemoryStream export = await ExportAsync(service, source.Name);
         string restoredName = NewContainerName();
         TestPolicyProvider.Policies[restoredName] = rule == ResourcePolicyRule.MaxResourceCount
-            ? new ResourceContainerPolicy { MaxResourceCount = limit }
-            : new ResourceContainerPolicy { MaxContainerSize = limit };
+            ? new ContainerPolicy { MaxResourceCount = limit }
+            : new ContainerPolicy { MaxContainerSize = limit };
 
         // Act
         Exception? refused = await Record.ExceptionAsync(() => service.ImportContainerAsync(restoredName, export));
@@ -387,10 +387,10 @@ public abstract partial class ResourcefullContractTests
         }
         export.Position = 0;
         string restoredName = NewContainerName();
-        TestPolicyProvider.Policies[restoredName] = new ResourceContainerPolicy { MaxResourceCount = 2 };
+        TestPolicyProvider.Policies[restoredName] = new ContainerPolicy { MaxResourceCount = 2 };
 
         // Act
-        ResourceImportResult imported = await service.ImportContainerAsync(restoredName, export);
+        ContainerImportResult imported = await service.ImportContainerAsync(restoredName, export);
 
         // Assert
         Assert.Equal(2, (await service.GetContainerClient(restoredName).GetUsageAsync()).ResourceCount);

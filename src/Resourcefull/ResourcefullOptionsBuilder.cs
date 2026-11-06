@@ -115,17 +115,17 @@ public class ResourcefullOptionsBuilder
     /// Uses <typeparamref name="T"/> to give containers and resources their <c>Uri</c>, replacing any URI provider set
     /// before. It is registered as a scoped service, so it can depend on other services.
     /// </summary>
-    /// <typeparam name="T">The <see cref="IUriProvider"/> implementation.</typeparam>
-    public ResourcefullOptionsBuilder UseUriProvider<T>() where T : class, IUriProvider
+    /// <typeparam name="T">The <see cref="IResourceUriProvider"/> implementation.</typeparam>
+    public ResourcefullOptionsBuilder UseUriProvider<T>() where T : class, IResourceUriProvider
     {
-        Replace(new ServiceDescriptor(typeof(IUriProvider), StoreName, typeof(T), ServiceLifetime.Scoped));
+        Replace(new ServiceDescriptor(typeof(IResourceUriProvider), StoreName, typeof(T), ServiceLifetime.Scoped));
         return this;
     }
 
     /// <summary>
     /// Turns on versioning: each name keeps up to <paramref name="maxVersions"/> versions, so an upload with
     /// <see cref="ResourceWriteMode.Replace"/> keeps the version it replaces as an older one, and the oldest past that
-    /// limit are pruned. It's the store-wide default for <see cref="ResourceContainerPolicy.MaxVersions"/>: a container's
+    /// limit are pruned. It's the store-wide default for <see cref="ContainerPolicy.MaxVersions"/>: a container's
     /// policy, or the defaults given to <see cref="UseContainerPolicies"/>, take precedence. Without versioning, a name
     /// keeps only its current version.
     /// </summary>
@@ -173,7 +173,7 @@ public class ResourcefullOptionsBuilder
     /// <exception cref="ArgumentOutOfRangeException">
     /// <paramref name="cacheFor"/> or <paramref name="keepLastKnownFor"/> is negative.
     /// </exception>
-    public ResourcefullOptionsBuilder UseContainerPolicies(ResourceContainerPolicy? defaults = null, TimeSpan? cacheFor = null,
+    public ResourcefullOptionsBuilder UseContainerPolicies(ContainerPolicy? defaults = null, TimeSpan? cacheFor = null,
         TimeSpan? keepLastKnownFor = null)
     {
         if (cacheFor < TimeSpan.Zero)
@@ -186,7 +186,7 @@ public class ResourcefullOptionsBuilder
 
         _defaultsKeepDeleted = defaults?.KeepDeletedFor > TimeSpan.Zero;
         Replace(new ServiceDescriptor(typeof(ContainerPolicySettings), StoreName, (_, _) => new ContainerPolicySettings(
-            defaults ?? new ResourceContainerPolicy(), cacheFor ?? TimeSpan.FromSeconds(5), keepLastKnownFor ?? TimeSpan.FromMinutes(5)),
+            defaults ?? new ContainerPolicy(), cacheFor ?? TimeSpan.FromSeconds(5), keepLastKnownFor ?? TimeSpan.FromMinutes(5)),
             ServiceLifetime.Singleton));
         string? storeName = StoreName;
         Replace(new ServiceDescriptor(typeof(ContainerPolicies), StoreName, (services, _) => new ContainerPolicies(
@@ -218,7 +218,7 @@ public class ResourcefullOptionsBuilder
     /// <see cref="ResourceInfo.ExpiresAt"/>. Every instance of the application can run it. With a provider that doesn't
     /// support expiry (<see cref="ResourceRepository.SupportsExpiry"/>), the service throws
     /// <see cref="InvalidOperationException"/> when the application starts. It also changes pruning: a version past
-    /// the container's <see cref="ResourceContainerPolicy.MaxVersions"/> is set to expire five minutes later
+    /// the container's <see cref="ContainerPolicy.MaxVersions"/> is set to expire five minutes later
     /// instead of being deleted at once, so a download already reading it can finish.
     /// <para>Coming in 4.0.</para>
     /// </summary>
@@ -271,7 +271,7 @@ public class ResourcefullOptionsBuilder
     }
 
     /// <summary>
-    /// Makes listings able to find resources by these metadata keys, through <see cref="ResourceListOptions.Metadata"/>:
+    /// Makes listings able to find resources by these metadata keys, through <see cref="ResourceListOptions.MetadataMatch"/>:
     /// the provider keeps an index of each current version's value for each key, so a search reads only what matches.
     /// A value of one of these keys can be at most <see cref="ResourceMetadataMatch.MaxValueLength"/> characters, and a
     /// write that gives a longer one throws <see cref="ArgumentException"/>. Versions stored before a key was added
@@ -311,7 +311,7 @@ public class ResourcefullOptionsBuilder
     /// <item><c>Telemetry</c>: <see cref="UseTelemetry"/>, with <c>RecordResourceNames</c>.</item>
     /// <item>
     /// <c>ContainerPolicies</c>: <see cref="UseContainerPolicies"/>, with <c>CacheFor</c>, <c>KeepLastKnownFor</c> and
-    /// <c>Defaults</c>, which takes the properties of <see cref="ResourceContainerPolicy"/>. Sizes are written as
+    /// <c>Defaults</c>, which takes the properties of <see cref="ContainerPolicy"/>. Sizes are written as
     /// <see cref="ResourceSize.Parse(string, IFormatProvider?)"/> reads them, such as <c>100 MB</c>.
     /// </item>
     /// </list>
@@ -347,24 +347,24 @@ public class ResourcefullOptionsBuilder
         if (Present(section, "ContainerPolicies", "Defaults", "CacheFor", "KeepLastKnownFor") is { } policies)
         {
             IConfigurationSection? defaults = Present(policies, "Defaults",
-                nameof(ResourceContainerPolicy.MaxResourceSize), nameof(ResourceContainerPolicy.MaxContainerSize),
-                nameof(ResourceContainerPolicy.MaxResourceCount), nameof(ResourceContainerPolicy.AllowedContentTypes),
-                nameof(ResourceContainerPolicy.ReadOnly), nameof(ResourceContainerPolicy.MaxVersions),
-                nameof(ResourceContainerPolicy.RetainFor), nameof(ResourceContainerPolicy.KeepDeletedFor));
-            int? maxVersions = defaults is null ? null : Read<int>(defaults, nameof(ResourceContainerPolicy.MaxVersions));
+                nameof(ContainerPolicy.MaxResourceSize), nameof(ContainerPolicy.MaxContainerSize),
+                nameof(ContainerPolicy.MaxResourceCount), nameof(ContainerPolicy.AllowedContentTypes),
+                nameof(ContainerPolicy.ReadOnly), nameof(ContainerPolicy.MaxVersions),
+                nameof(ContainerPolicy.RetainFor), nameof(ContainerPolicy.KeepDeletedFor));
+            int? maxVersions = defaults is null ? null : Read<int>(defaults, nameof(ContainerPolicy.MaxVersions));
             TimeSpan? cacheFor = Read<TimeSpan>(policies, "CacheFor");
             TimeSpan? keepLastKnownFor = Read<TimeSpan>(policies, "KeepLastKnownFor");
             // Built in Apply, so a value the policy refuses, such as MaxVersions of 0, names the section.
-            Apply(policies, () => UseContainerPolicies(defaults is null ? null : new ResourceContainerPolicy
+            Apply(policies, () => UseContainerPolicies(defaults is null ? null : new ContainerPolicy
             {
-                MaxResourceSize = Read<ResourceSize>(defaults, nameof(ResourceContainerPolicy.MaxResourceSize)),
-                MaxContainerSize = Read<ResourceSize>(defaults, nameof(ResourceContainerPolicy.MaxContainerSize)),
-                MaxResourceCount = Read<long>(defaults, nameof(ResourceContainerPolicy.MaxResourceCount)),
-                AllowedContentTypes = ReadList(defaults, nameof(ResourceContainerPolicy.AllowedContentTypes)),
-                ReadOnly = Read<bool>(defaults, nameof(ResourceContainerPolicy.ReadOnly)),
+                MaxResourceSize = Read<ResourceSize>(defaults, nameof(ContainerPolicy.MaxResourceSize)),
+                MaxContainerSize = Read<ResourceSize>(defaults, nameof(ContainerPolicy.MaxContainerSize)),
+                MaxResourceCount = Read<long>(defaults, nameof(ContainerPolicy.MaxResourceCount)),
+                AllowedContentTypes = ReadList(defaults, nameof(ContainerPolicy.AllowedContentTypes)),
+                ReadOnly = Read<bool>(defaults, nameof(ContainerPolicy.ReadOnly)),
                 MaxVersions = maxVersions,
-                RetainFor = Read<TimeSpan>(defaults, nameof(ResourceContainerPolicy.RetainFor)),
-                KeepDeletedFor = Read<TimeSpan>(defaults, nameof(ResourceContainerPolicy.KeepDeletedFor))
+                RetainFor = Read<TimeSpan>(defaults, nameof(ContainerPolicy.RetainFor)),
+                KeepDeletedFor = Read<TimeSpan>(defaults, nameof(ContainerPolicy.KeepDeletedFor))
             }, cacheFor, keepLastKnownFor));
         }
         return this;
@@ -379,7 +379,7 @@ public class ResourcefullOptionsBuilder
     {
         if (_defaultsKeepDeleted && !_expiryRegistered)
         {
-            throw new InvalidOperationException($"The default container policy sets {nameof(ResourceContainerPolicy.KeepDeletedFor)}, " +
+            throw new InvalidOperationException($"The default container policy sets {nameof(ContainerPolicy.KeepDeletedFor)}, " +
                 $"but nothing would purge the deleted versions it keeps: call {nameof(UseExpiry)} too, whose sweep does.");
         }
     }

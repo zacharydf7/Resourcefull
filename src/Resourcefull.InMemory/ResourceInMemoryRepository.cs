@@ -29,7 +29,7 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : R
     private async Task<WrittenContent> AddVersionAsync(NewResourceVersion version, Stream stream,
         ResourceWriteCondition condition, DateTimeOffset? lastModified, CancellationToken cancellationToken)
     {
-        (string resourceContainerName, string resourceName) = version.Resource;
+        (string containerName, string resourceName) = version.Resource;
         bool createOnly = condition.CreateOnly;
         ResourceConditions? conditions = condition.Conditions;
 
@@ -39,9 +39,9 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : R
         {
             await UnderLockAsync(() =>
             {
-                if (_containers.ContainsKey(resourceContainerName))
-                    ThrowIfNotMet(conditions, resourceContainerName, resourceName,
-                        VersionsOf(resourceContainerName, resourceName).MaxBy(r => r.Sequence));
+                if (_containers.ContainsKey(containerName))
+                    ThrowIfNotMet(conditions, containerName, resourceName,
+                        VersionsOf(containerName, resourceName).MaxBy(r => r.Sequence));
                 return true;
             }, cancellationToken).ConfigureAwait(false);
         }
@@ -55,11 +55,11 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : R
         {
             // Checked in the same step as the insert, so a container deleted while the content was read is reported
             // rather than written into.
-            InMemoryResourceContainer container = _containers.GetValueOrDefault(resourceContainerName)
-                ?? throw ContainerMissing(resourceContainerName);
+            InMemoryResourceContainer container = _containers.GetValueOrDefault(containerName)
+                ?? throw ContainerMissing(containerName);
 
             if (createOnly && container.Resources.ContainsKey(resourceName))
-                throw ResourceExists(resourceContainerName, resourceName);
+                throw ResourceExists(containerName, resourceName);
 
             container.Resources.TryGetValue(resourceName, out List<InMemoryResource>? versions);
             // A version ID in the bin stays taken, so an undelete never meets the same ID.
@@ -67,13 +67,13 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : R
                 .Any(v => v.ResourceInfo.VersionId == version.VersionId))
             {
                 throw new ResourceConflictException($"The resource {resourceName} in the container " +
-                    $"{resourceContainerName} already has a version {version.VersionId}.")
+                    $"{containerName} already has a version {version.VersionId}.")
                 {
-                    ContainerName = resourceContainerName, ResourceName = resourceName
+                    ContainerName = containerName, ResourceName = resourceName
                 };
             }
             if (conditions is not null)
-                ThrowIfNotMet(conditions, resourceContainerName, resourceName, versions?.MaxBy(r => r.Sequence));
+                ThrowIfNotMet(conditions, containerName, resourceName, versions?.MaxBy(r => r.Sequence));
 
             // Stamped as the version becomes current, not before its content was read. A wrong declared length throws
             // here, before anything is stored.
@@ -246,9 +246,9 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : R
             return true;
         }, cancellationToken);
 
-    public override Task<IReadOnlyList<ResourceInfo>> GetResourcePageAsync(string resourceContainerName, string? prefix,
+    public override Task<IReadOnlyList<ResourceInfo>> GetResourcePageAsync(string containerName, string? prefix,
         string? afterName, int pageSize, CancellationToken cancellationToken = default) =>
-        UnderLockAsync<IReadOnlyList<ResourceInfo>>(() => _containers.GetValueOrDefault(resourceContainerName) is { } container
+        UnderLockAsync<IReadOnlyList<ResourceInfo>>(() => _containers.GetValueOrDefault(containerName) is { } container
             ? [.. container.Resources
                 .Where(pair => (prefix is null || pair.Key.StartsWith(prefix, StringComparison.Ordinal))
                     && (afterName is null || string.CompareOrdinal(pair.Key, afterName) > 0))
@@ -297,14 +297,14 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : R
         CancellationToken cancellationToken) =>
         UnderLockAsync(() =>
         {
-            (string resourceContainerName, string resourceName) = resource;
+            (string containerName, string resourceName) = resource;
             if (conditions is not null)
             {
-                ThrowIfNotMet(conditions, resourceContainerName, resourceName,
-                    VersionsOf(resourceContainerName, resourceName).MaxBy(r => r.Sequence));
+                ThrowIfNotMet(conditions, containerName, resourceName,
+                    VersionsOf(containerName, resourceName).MaxBy(r => r.Sequence));
             }
 
-            if (_containers.GetValueOrDefault(resourceContainerName) is not { } container
+            if (_containers.GetValueOrDefault(containerName) is not { } container
                 || !container.Resources.TryGetValue(resourceName, out List<InMemoryResource>? versions))
                 return false;
             List<InMemoryResource> removed = [.. versions.Where(r => versionId is null || r.ResourceInfo.VersionId == versionId)];
@@ -324,11 +324,11 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : R
             return true;
         }, cancellationToken);
 
-    public override Task<DeletedVersionPage> GetDeletedPageAsync(string resourceContainerName, string? prefix,
+    public override Task<DeletedVersionPage> GetDeletedPageAsync(string containerName, string? prefix,
         ResourceVersionKey? after, int pageSize, CancellationToken cancellationToken = default) =>
         UnderLockAsync(() =>
         {
-            List<ResourceInfo> found = [.. InBinOrder((_containers.GetValueOrDefault(resourceContainerName)?.Deleted ?? [])
+            List<ResourceInfo> found = [.. InBinOrder((_containers.GetValueOrDefault(containerName)?.Deleted ?? [])
                     .Where(pair => prefix is null || pair.Key.StartsWith(prefix, StringComparison.Ordinal))
                     .SelectMany(pair => pair.Value))
                 .Where(v => after is not { } last || v.DeletedAt < last.At
@@ -410,30 +410,30 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : R
                 .Take(maxVersions)
         ], cancellationToken);
 
-    public override Task<bool> SetContainerMetadataAsync(string resourceContainerName,
+    public override Task<bool> SetContainerMetadataAsync(string containerName,
         IReadOnlyDictionary<string, string> metadata, CancellationToken cancellationToken = default) =>
         UnderLockAsync(() =>
         {
-            if (!_containers.TryGetValue(resourceContainerName, out InMemoryResourceContainer? container)) return false;
+            if (!_containers.TryGetValue(containerName, out InMemoryResourceContainer? container)) return false;
             container.Metadata.Clear();
             foreach (KeyValuePair<string, string> entry in metadata) container.Metadata[entry.Key] = entry.Value;
             return true;
         }, cancellationToken);
 
-    public override Task AddContainerAsync(string resourceContainerName, IReadOnlyDictionary<string, string> metadata,
+    public override Task AddContainerAsync(string containerName, IReadOnlyDictionary<string, string> metadata,
         CancellationToken cancellationToken = default) =>
         UnderLockAsync(() =>
         {
             var container = new InMemoryResourceContainer
             {
-                Name = resourceContainerName,
+                Name = containerName,
                 Metadata = new Dictionary<string, string>(metadata)
             };
-            if (!_containers.TryAdd(resourceContainerName, container))
+            if (!_containers.TryAdd(containerName, container))
             {
-                throw new ResourceConflictException($"The container {resourceContainerName} already exists.")
+                throw new ResourceConflictException($"The container {containerName} already exists.")
                 {
-                    ContainerName = resourceContainerName
+                    ContainerName = containerName
                 };
             }
             return true;
@@ -448,18 +448,18 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : R
             .Take(pageSize)
             .Select(pair => ToContainerInfo(pair.Value))], cancellationToken);
 
-    public override Task<ContainerInfo?> GetContainerInfoAsync(string resourceContainerName,
+    public override Task<ContainerInfo?> GetContainerInfoAsync(string containerName,
         CancellationToken cancellationToken = default) =>
-        UnderLockAsync(() => _containers.GetValueOrDefault(resourceContainerName) is { } container
+        UnderLockAsync(() => _containers.GetValueOrDefault(containerName) is { } container
             ? ToContainerInfo(container)
             : null, cancellationToken);
 
     public override Task StartStagedVersionAsync(NewResourceVersion version, CancellationToken cancellationToken = default) =>
         UnderLockAsync(() =>
         {
-            (string resourceContainerName, string resourceName) = version.Resource;
-            InMemoryResourceContainer container = _containers.GetValueOrDefault(resourceContainerName)
-                ?? throw ContainerMissing(resourceContainerName);
+            (string containerName, string resourceName) = version.Resource;
+            InMemoryResourceContainer container = _containers.GetValueOrDefault(containerName)
+                ?? throw ContainerMissing(containerName);
             container.Staged.Add((resourceName, version.VersionId),
                 new InMemoryStagedVersion { Version = version, StagedAt = _clock.GetUtcNow() });
             return true;
@@ -501,14 +501,14 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : R
         CancellationToken cancellationToken = default) =>
         UnderLockAsync(() =>
         {
-            (string resourceContainerName, string resourceName) = resource;
+            (string containerName, string resourceName) = resource;
             if (ThrowIfNotAt(resource, versionId, contentLength) is not { } staged) return null;
-            InMemoryResourceContainer container = _containers[resourceContainerName];
+            InMemoryResourceContainer container = _containers[containerName];
             container.Resources.TryGetValue(resourceName, out List<InMemoryResource>? versions);
             if (condition?.CreateOnly == true && versions is not null)
-                throw ResourceExists(resourceContainerName, resourceName);
+                throw ResourceExists(containerName, resourceName);
             if (condition?.Conditions is { } conditions)
-                ThrowIfNotMet(conditions, resourceContainerName, resourceName, versions?.MaxBy(r => r.Sequence));
+                ThrowIfNotMet(conditions, containerName, resourceName, versions?.MaxBy(r => r.Sequence));
 
             var written = new WrittenContent(contentLength, contentHash, _clock.GetUtcNow());
             AddVersion(container, staged.Version, staged.Content.ToArray(), written);
@@ -558,22 +558,22 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : R
         return staged;
     }
 
-    public override Task<bool> DeleteContainerAsync(string resourceContainerName,
+    public override Task<bool> DeleteContainerAsync(string containerName,
         CancellationToken cancellationToken = default) =>
         UnderLockAsync(() =>
         {
-            if (!_containers.TryGetValue(resourceContainerName, out InMemoryResourceContainer? container)) return false;
+            if (!_containers.TryGetValue(containerName, out InMemoryResourceContainer? container)) return false;
             ThrowIfAnyRetained(container.Resources.Values.SelectMany(versions => versions));
-            return _containers.Remove(resourceContainerName);
+            return _containers.Remove(containerName);
         }, cancellationToken);
 
-    public override Task<ResourceContainerUsage> GetContainerUsageAsync(string resourceContainerName,
+    public override Task<ContainerUsage> GetContainerUsageAsync(string containerName,
         CancellationToken cancellationToken = default) =>
-        UnderLockAsync(() => _containers.GetValueOrDefault(resourceContainerName) is { } container
-            ? new ResourceContainerUsage(container.Resources.Values.Sum(versions => versions.Sum(v => (long)v.Content.Length)),
+        UnderLockAsync(() => _containers.GetValueOrDefault(containerName) is { } container
+            ? new ContainerUsage(container.Resources.Values.Sum(versions => versions.Sum(v => (long)v.Content.Length)),
                 container.Resources.Count, container.Resources.Values.Sum(versions => (long)versions.Count),
                 container.Deleted.Values.Sum(bin => bin.Sum(v => (long)v.Content.Length)), container.Deleted.Values.Sum(bin => (long)bin.Count))
-            : new ResourceContainerUsage(0, 0, 0), cancellationToken);
+            : new ContainerUsage(0, 0, 0), cancellationToken);
 
     private async Task<T> UnderLockAsync<T>(Func<T> action, CancellationToken cancellationToken)
     {
@@ -605,22 +605,22 @@ internal class ResourceInMemoryRepository(TimeProvider? timeProvider = null) : R
             $"container {resource.ContainerName} is retained until {version.RetainUntil:O}, and that can't move earlier.");
 
     /// <summary>A name with no current version meets no condition; empty conditions are no conditions.</summary>
-    private static ResourceContainerNotFoundException ContainerMissing(string resourceContainerName) =>
-        new($"The container {resourceContainerName} doesn't exist.") { ContainerName = resourceContainerName };
+    private static ResourceContainerNotFoundException ContainerMissing(string containerName) =>
+        new($"The container {containerName} doesn't exist.") { ContainerName = containerName };
 
-    private static ResourceConflictException ResourceExists(string resourceContainerName, string resourceName) =>
-        new($"The resource {resourceName} already exists in the container {resourceContainerName}.")
+    private static ResourceConflictException ResourceExists(string containerName, string resourceName) =>
+        new($"The resource {resourceName} already exists in the container {containerName}.")
         {
-            ContainerName = resourceContainerName, ResourceName = resourceName
+            ContainerName = containerName, ResourceName = resourceName
         };
 
-    private static void ThrowIfNotMet(ResourceConditions conditions, string resourceContainerName, string resourceName,
+    private static void ThrowIfNotMet(ResourceConditions conditions, string containerName, string resourceName,
         InMemoryResource? current) =>
-        conditions.ThrowIfNotMet(new ResourceAddress(resourceContainerName, resourceName), current?.ResourceInfo.VersionId,
+        conditions.ThrowIfNotMet(new ResourceAddress(containerName, resourceName), current?.ResourceInfo.VersionId,
             current?.ResourceInfo.ContentHash);
 
-    private List<InMemoryResource> VersionsOf(string resourceContainerName, string resourceName) =>
-        _containers.GetValueOrDefault(resourceContainerName)?.Resources.GetValueOrDefault(resourceName) ?? [];
+    private List<InMemoryResource> VersionsOf(string containerName, string resourceName) =>
+        _containers.GetValueOrDefault(containerName)?.Resources.GetValueOrDefault(resourceName) ?? [];
 
     private static InMemoryResource? Resolve(List<InMemoryResource> versions, string? versionId) => versionId == null
         ? versions.MaxBy(r => r.Sequence)

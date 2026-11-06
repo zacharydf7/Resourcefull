@@ -22,12 +22,12 @@ public abstract partial class ResourcefullContractTests
 
         public ValueTask OnCleanupAsync(ResourceCleanup cleanup, CancellationToken cancellationToken)
         {
-            if (Refusing.ContainsKey(cleanup.Resource.ContainerName)) throw new InvalidOperationException("The audit system is down.");
+            if (Refusing.ContainsKey(cleanup.Version.ContainerName)) throw new InvalidOperationException("The audit system is down.");
             Cleanups.Enqueue(cleanup);
             return ValueTask.CompletedTask;
         }
 
-        public static List<ResourceCleanup> In(string containerName) => [.. Cleanups.Where(c => c.Resource.ContainerName == containerName)];
+        public static List<ResourceCleanup> In(string containerName) => [.. Cleanups.Where(c => c.Version.ContainerName == containerName)];
     }
 
     [Fact]
@@ -226,8 +226,8 @@ public abstract partial class ResourcefullContractTests
 
         // Assert
         List<ResourceCleanup> cleanups = RecordingCleanupHandler.In(name);
-        Assert.Contains(cleanups, c => c.Reason == ResourceCleanupReason.Pruned && c.Resource.VersionId == pruned.VersionId);
-        Assert.Contains(cleanups, c => c.Reason == ResourceCleanupReason.Expired && c.Resource.VersionId == expired.VersionId);
+        Assert.Contains(cleanups, c => c.Reason == ResourceCleanupReason.Pruned && c.Version.VersionId == pruned.VersionId);
+        Assert.Contains(cleanups, c => c.Reason == ResourceCleanupReason.Expired && c.Version.VersionId == expired.VersionId);
         Assert.Equal(2, cleanups.Count);
     }
 
@@ -259,7 +259,7 @@ public abstract partial class ResourcefullContractTests
         Assert.False(reportedWhilePruning);
         Assert.False(await container.ExistsAsync("notes.txt", first.VersionId));
         ResourceCleanup cleanup = Assert.Single(RecordingCleanupHandler.In(container.Name));
-        Assert.Equal((ResourceCleanupReason.Expired, first.VersionId), (cleanup.Reason, cleanup.Resource.VersionId));
+        Assert.Equal((ResourceCleanupReason.Expired, first.VersionId), (cleanup.Reason, cleanup.Version.VersionId));
     }
 
     [Fact]
@@ -296,7 +296,7 @@ public abstract partial class ResourcefullContractTests
                 .UsePolicyProvider<TestPolicyProvider>())
             : BuildServiceProvider(o => o.UseExpiry());
         string name = NewContainerName();
-        TestPolicyProvider.Policies[name] = new ResourceContainerPolicy { MaxVersions = 1 };
+        TestPolicyProvider.Policies[name] = new ContainerPolicy { MaxVersions = 1 };
         IResourceContainerClient container = await ServiceOf(provider).CreateContainerAsync(name);
         await container.UploadAsync("notes.txt", BinaryData.FromString("replaced"));
         ResourceInfo current = await container.UploadAsync("notes.txt", BinaryData.FromString("current"),
@@ -454,12 +454,12 @@ public abstract partial class ResourcefullContractTests
         IResourceContainerClient other = await NewContainerAsync(provider);
         await frozen.UploadAsync("a", BinaryData.FromString("x"), Expiring(Past));
         await other.UploadAsync("a", BinaryData.FromString("x"), Expiring(Past.AddMinutes(1)));
-        TestPolicyProvider.Policies[frozenName] = new ResourceContainerPolicy { ReadOnly = true };
+        TestPolicyProvider.Policies[frozenName] = new ContainerPolicy { ReadOnly = true };
 
         // Act
         await service.DeleteExpiredAsync();
         bool keptWhileFrozen = await frozen.ExistsAsync("a");
-        TestPolicyProvider.Policies[frozenName] = new ResourceContainerPolicy { ReadOnly = false };
+        TestPolicyProvider.Policies[frozenName] = new ContainerPolicy { ReadOnly = false };
         await service.DeleteExpiredAsync();
 
         // Assert
@@ -581,7 +581,7 @@ public abstract partial class ResourcefullContractTests
         string name = NewContainerName();
         IResourceContainerClient container = await ServiceOf(provider).CreateContainerAsync(name);
         ResourceInfo stored = await container.UploadAsync("a", BinaryData.FromString("x"));
-        TestPolicyProvider.Policies[name] = new ResourceContainerPolicy { ReadOnly = true };
+        TestPolicyProvider.Policies[name] = new ContainerPolicy { ReadOnly = true };
 
         // Act
         Task act() => container.SetExpiryAsync("a", stored.VersionId, Future);

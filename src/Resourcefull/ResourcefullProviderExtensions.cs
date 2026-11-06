@@ -25,19 +25,19 @@ public static class ResourcefullProviderExtensions
         {
             if (conditions.IsEmpty) return;
 
-            (string resourceContainerName, string resourceName) = resource;
+            (string containerName, string resourceName) = resource;
             if (currentVersionId is null
                 || (conditions.IfMatchVersionId is { } id && id != currentVersionId)
                 || (conditions.IfMatchContentHash is { } hash && hash != currentContentHash))
             {
                 throw new ResourcePreconditionFailedException(currentVersionId is null
-                    ? $"The resource {resourceName} in the container {resourceContainerName} has no current version to " +
+                    ? $"The resource {resourceName} in the container {containerName} has no current version to " +
                         "meet the conditions."
                     : $"The current version {currentVersionId} of the resource {resourceName} in the container " +
-                        $"{resourceContainerName} doesn't meet the conditions.",
+                        $"{containerName} doesn't meet the conditions.",
                     currentVersionId, currentContentHash)
                 {
-                    ContainerName = resourceContainerName, ResourceName = resourceName
+                    ContainerName = containerName, ResourceName = resourceName
                 };
             }
         }

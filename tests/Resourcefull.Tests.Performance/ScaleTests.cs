@@ -55,7 +55,7 @@ public sealed class ScaleTests(SqlServerFixture fixture, ITestOutputHelper outpu
     public async Task ContainerOfManyNames_ShouldBeMeasured_WhenReadListedLimitedSweptAndDeleted()
     {
         // A size limit, so an upload adds up what the container holds.
-        var limits = new ResourceContainerPolicy { MaxContainerSize = ResourceSize.Terabytes(1) };
+        var limits = new ContainerPolicy { MaxContainerSize = ResourceSize.Terabytes(1) };
         IResourceContainerClient container =
             await NewContainerAsync("names", options => options.UseContainerPolicies(limits));
         await SeedAsync(container);

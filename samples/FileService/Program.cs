@@ -19,7 +19,7 @@ var builder = WebApplication.CreateBuilder(args);
 // files when it stops.
 string? connectionString = builder.Configuration.GetConnectionString("Resources");
 bool inMemory = string.IsNullOrWhiteSpace(connectionString);
-var defaultPolicy = builder.Configuration.GetSection("Files:DefaultPolicy").Get<ResourceContainerPolicy>();
+var defaultPolicy = builder.Configuration.GetSection("Files:DefaultPolicy").Get<ContainerPolicy>();
 builder.Services.AddResourcefull(options =>
 {
     if (inMemory) options.UseInMemory();
@@ -100,7 +100,7 @@ files.MapGet("/", async (ClaimsPrincipal user, IResourceServiceClient resources,
 app.MapGet("/usage", async (ClaimsPrincipal user, IResourceServiceClient resources,
     CancellationToken cancellationToken) =>
 {
-    ResourceContainerUsage usage = await FilesOf(user, resources).GetUsageAsync(cancellationToken);
+    ContainerUsage usage = await FilesOf(user, resources).GetUsageAsync(cancellationToken);
     return Results.Ok(new { stored = usage.StoredSize.ToString(), limit = defaultPolicy?.MaxContainerSize?.ToString() });
 }).RequireAuthorization();
 

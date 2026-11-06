@@ -49,7 +49,7 @@ public abstract partial class ResourcefullContractTests
         await source.UploadAsync("a.pdf", BinaryData.FromString("a"), new ResourceUploadOptions { Headers = new ResourceHeaders("application/pdf", null) });
         await source.UploadAsync("b.txt", BinaryData.FromString("b"), new ResourceUploadOptions { Headers = new ResourceHeaders("text/plain", null) });
         using ServiceProvider strict = BuildServiceProvider(o =>
-            o.UseContainerPolicies(new ResourceContainerPolicy { AllowedContentTypes = ["application/pdf"] }));
+            o.UseContainerPolicies(new ContainerPolicy { AllowedContentTypes = ["application/pdf"] }));
         string copyName = NewContainerName();
 
         // Act & Assert

@@ -19,7 +19,7 @@ public abstract partial class ResourcefullContractTests
     private static async Task<List<string>> FindAsync(IResourceContainerClient container, string customer, string? prefix = null) =>
         [.. (await container.ListResourcesAsync(new ResourceListOptions
         {
-            Metadata = new ResourceMetadataMatch(Customer, customer), Prefix = prefix
+            MetadataMatch = new ResourceMetadataMatch(Customer, customer), Prefix = prefix
         }).ToListAsync()).Select(r => r.Name)];
 
     [Fact]
@@ -52,7 +52,7 @@ public abstract partial class ResourcefullContractTests
         IResourceContainerClient container = await NewContainerAsync(provider);
         for (int i = 0; i < 5; i++) await container.UploadAsync($"m{i}", BinaryData.FromString("m"), ForCustomer("42"));
         for (int i = 0; i < 3; i++) await container.UploadAsync($"o{i}", BinaryData.FromString("o"), ForCustomer("7"));
-        var options = new ResourceListOptions { Metadata = new ResourceMetadataMatch(Customer, "42"), PageSize = 2 };
+        var options = new ResourceListOptions { MetadataMatch = new ResourceMetadataMatch(Customer, "42"), PageSize = 2 };
 
         // Act
         var names = new List<string>();
@@ -72,7 +72,7 @@ public abstract partial class ResourcefullContractTests
         Assert.Equal(["m0", "m1", "m2", "m3", "m4"], names);
         Assert.Equal(3, pages);
         await Assert.ThrowsAsync<ArgumentException>(() => container.GetResourcePageAsync(
-            new ResourceListOptions { Metadata = new ResourceMetadataMatch(Customer, "7") }, first.ContinuationToken));
+            new ResourceListOptions { MetadataMatch = new ResourceMetadataMatch(Customer, "7") }, first.ContinuationToken));
     }
 
     [Fact]
@@ -85,7 +85,7 @@ public abstract partial class ResourcefullContractTests
         // Act & Assert
         await Assert.ThrowsAsync<ArgumentException>(() => container.ListResourcesAsync(new ResourceListOptions
         {
-            Metadata = new ResourceMetadataMatch("region", "eu")
+            MetadataMatch = new ResourceMetadataMatch("region", "eu")
         }).ToListAsync().AsTask());
     }
 
@@ -186,7 +186,7 @@ public abstract partial class ResourcefullContractTests
         // match.
         List<string> paged = [.. (await container.ListResourcesAsync(new ResourceListOptions
         {
-            Metadata = new ResourceMetadataMatch(Customer, "42"), PageSize = 1
+            MetadataMatch = new ResourceMetadataMatch(Customer, "42"), PageSize = 1
         }).ToListAsync()).Select(r => r.Name)];
 
         // Assert

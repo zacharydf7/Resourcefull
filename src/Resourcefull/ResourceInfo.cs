@@ -117,7 +117,7 @@ public sealed record ResourceInfo
     /// <summary>
     /// When the version in the bin is purged for good, within one interval, by
     /// <see cref="ResourcefullOptionsBuilder.UseExpiry"/>: its <see cref="DeletedAt"/> plus the
-    /// <see cref="ResourceContainerPolicy.KeepDeletedFor"/> in force when it was deleted. <see langword="null"/> for a
+    /// <see cref="ContainerPolicy.KeepDeletedFor"/> in force when it was deleted. <see langword="null"/> for a
     /// version that isn't in the bin.
     /// <para>Coming in 4.0.</para>
     /// </summary>

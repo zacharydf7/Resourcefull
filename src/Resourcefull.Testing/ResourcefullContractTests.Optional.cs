@@ -102,7 +102,7 @@ public abstract partial class ResourcefullContractTests
         IResourceContainerClient container = await NewContainerAsync(provider);
         await container.UploadAsync("a", BinaryData.FromString("a"));
         using ServiceProvider retainingAll = BuildServiceProvider(o =>
-            o.UseContainerPolicies(new ResourceContainerPolicy { RetainFor = TimeSpan.FromDays(1) }));
+            o.UseContainerPolicies(new ContainerPolicy { RetainFor = TimeSpan.FromDays(1) }));
 
         // Act & Assert: a version the provider would leave unprotected isn't stored.
         await Assert.ThrowsAsync<NotSupportedException>(() => container.SetRetentionAsync("a", null, DateTimeOffset.UtcNow.AddDays(1)));
@@ -123,7 +123,7 @@ public abstract partial class ResourcefullContractTests
 
         // Arrange
         using ServiceProvider provider = BuildServiceProvider(o =>
-            o.UseExpiry().UseContainerPolicies(new ResourceContainerPolicy { KeepDeletedFor = TimeSpan.FromDays(1) }));
+            o.UseExpiry().UseContainerPolicies(new ContainerPolicy { KeepDeletedFor = TimeSpan.FromDays(1) }));
         IResourceContainerClient container = await NewContainerAsync(provider);
         await container.UploadAsync("a", BinaryData.FromString("a"));
 

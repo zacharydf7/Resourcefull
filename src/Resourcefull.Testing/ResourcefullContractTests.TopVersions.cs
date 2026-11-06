@@ -88,13 +88,13 @@ public abstract partial class ResourcefullContractTests
     [Theory]
     [InlineData(0)]
     [InlineData(1001)]
-    public async Task GetExpiredVersionsAsync_ShouldThrowArgumentOutOfRange_WhenGivenACountOutsideTheLimits(int maxVersions)
+    public async Task GetExpiredVersionsAsync_ShouldThrowArgumentOutOfRange_WhenGivenACountOutsideTheLimits(int count)
     {
         // Arrange
         using ServiceProvider provider = BuildServiceProvider();
 
         // Act
-        Task act() => ServiceOf(provider).GetExpiredVersionsAsync(maxVersions);
+        Task act() => ServiceOf(provider).GetExpiredVersionsAsync(count);
 
         // Assert
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(act);

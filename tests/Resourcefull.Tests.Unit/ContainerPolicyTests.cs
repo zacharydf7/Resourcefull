@@ -13,10 +13,10 @@ public class ContainerPolicyTests
     [Theory]
     [InlineData(0)]
     [InlineData(-1)]
-    public void ResourceContainerPolicy_ShouldThrowOutOfRange_WhenGivenMaxVersionsBelowOne(int maxVersions)
+    public void ContainerPolicy_ShouldThrowOutOfRange_WhenGivenMaxVersionsBelowOne(int maxVersions)
     {
         // Act
-        void act() => _ = new ResourceContainerPolicy { MaxVersions = maxVersions };
+        void act() => _ = new ContainerPolicy { MaxVersions = maxVersions };
 
         // Assert
         Assert.Throws<ArgumentOutOfRangeException>(act);
@@ -31,11 +31,11 @@ public class ContainerPolicyTests
     public void AllowsContentType_ShouldMatchAsAnUploadIsChecked_WhenGivenAType(string? contentType, bool allowed)
     {
         // Arrange
-        var policy = new ResourceContainerPolicy { AllowedContentTypes = ["application/pdf", "image/*"] };
+        var policy = new ContainerPolicy { AllowedContentTypes = ["application/pdf", "image/*"] };
 
         // Act & Assert
         Assert.Equal(allowed, policy.AllowsContentType(contentType));
-        Assert.True(new ResourceContainerPolicy().AllowsContentType(contentType));
+        Assert.True(new ContainerPolicy().AllowsContentType(contentType));
     }
 
     [Theory]
@@ -111,7 +111,7 @@ public class ContainerPolicyTests
         }).Build();
 
         // Act
-        ResourceContainerPolicy policy = configuration.GetSection("Policy").Get<ResourceContainerPolicy>()!;
+        ContainerPolicy policy = configuration.GetSection("Policy").Get<ContainerPolicy>()!;
 
         // Assert
         Assert.Equal(ResourceSize.Megabytes(100), policy.MaxResourceSize);
@@ -163,8 +163,8 @@ public class ContainerPolicyTests
 
     private sealed class KeepsDeletedProvider : IResourcePolicyProvider
     {
-        public ValueTask<ResourceContainerPolicy?> GetPolicyAsync(string containerName, CancellationToken cancellationToken) =>
-            ValueTask.FromResult<ResourceContainerPolicy?>(new ResourceContainerPolicy { KeepDeletedFor = TimeSpan.FromDays(1) });
+        public ValueTask<ContainerPolicy?> GetPolicyAsync(string containerName, CancellationToken cancellationToken) =>
+            ValueTask.FromResult<ContainerPolicy?>(new ContainerPolicy { KeepDeletedFor = TimeSpan.FromDays(1) });
     }
 
     [Fact]
@@ -172,7 +172,7 @@ public class ContainerPolicyTests
     {
         // Act
         void act() => new ServiceCollection().AddResourcefull(o => o.UseInMemory()
-            .UseContainerPolicies(new ResourceContainerPolicy { KeepDeletedFor = TimeSpan.FromDays(1) }));
+            .UseContainerPolicies(new ContainerPolicy { KeepDeletedFor = TimeSpan.FromDays(1) }));
 
         // Assert
         Assert.Contains(nameof(ResourcefullOptionsBuilder.UseExpiry), Assert.Throws<InvalidOperationException>(act).Message);
@@ -202,7 +202,7 @@ public class ContainerPolicyTests
         // Arrange: a version in the bin, and a second store on the same storage whose policy makes it read-only.
         using ServiceProvider provider = new ServiceCollection()
             .AddResourcefull(o => o.UseInMemory().UseExpiry()
-                .UseContainerPolicies(new ResourceContainerPolicy { KeepDeletedFor = TimeSpan.FromDays(1) }, TimeSpan.Zero))
+                .UseContainerPolicies(new ContainerPolicy { KeepDeletedFor = TimeSpan.FromDays(1) }, TimeSpan.Zero))
             .BuildServiceProvider();
         IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>().CreateContainerAsync("c");
         await container.UploadAsync("a", BinaryData.FromString("a"));
@@ -210,7 +210,7 @@ public class ContainerPolicyTests
         ResourceRepository repository = provider.GetRequiredService<ResourceRepository>();
         using ServiceProvider readOnlyProvider = new ServiceCollection()
             .AddResourcefull(o => o.UseProvider(_ => repository, ServiceLifetime.Singleton)
-                .UseContainerPolicies(new ResourceContainerPolicy { ReadOnly = true }))
+                .UseContainerPolicies(new ContainerPolicy { ReadOnly = true }))
             .BuildServiceProvider();
         IResourceContainerClient frozen = readOnlyProvider.GetRequiredService<IResourceServiceClient>().GetContainerClient("c");
 
@@ -222,21 +222,21 @@ public class ContainerPolicyTests
 
     private sealed class ReadOnlyProvider : IResourcePolicyProvider
     {
-        public ValueTask<ResourceContainerPolicy?> GetPolicyAsync(string containerName, CancellationToken cancellationToken) =>
-            ValueTask.FromResult<ResourceContainerPolicy?>(new ResourceContainerPolicy { ReadOnly = true });
+        public ValueTask<ContainerPolicy?> GetPolicyAsync(string containerName, CancellationToken cancellationToken) =>
+            ValueTask.FromResult<ContainerPolicy?>(new ContainerPolicy { ReadOnly = true });
     }
 
     private sealed class TwoVersionsProvider : IResourcePolicyProvider
     {
-        public ValueTask<ResourceContainerPolicy?> GetPolicyAsync(string containerName, CancellationToken cancellationToken) =>
-            ValueTask.FromResult<ResourceContainerPolicy?>(new ResourceContainerPolicy { MaxVersions = 2 });
+        public ValueTask<ContainerPolicy?> GetPolicyAsync(string containerName, CancellationToken cancellationToken) =>
+            ValueTask.FromResult<ContainerPolicy?>(new ContainerPolicy { MaxVersions = 2 });
     }
 
     private sealed class LargerLimitsProvider : IResourcePolicyProvider
     {
-        public ValueTask<ResourceContainerPolicy?> GetPolicyAsync(string containerName,
+        public ValueTask<ContainerPolicy?> GetPolicyAsync(string containerName,
             CancellationToken cancellationToken) =>
-            ValueTask.FromResult<ResourceContainerPolicy?>(new ResourceContainerPolicy
+            ValueTask.FromResult<ContainerPolicy?>(new ContainerPolicy
             {
                 MaxResourceSize = ResourceSize.Gigabytes(1), MaxContainerSize = ResourceSize.Gigabytes(5)
             });
@@ -248,7 +248,7 @@ public class ContainerPolicyTests
         // Arrange: defaults for the size and types, and a provider that sets the size and the container's size.
         using ServiceProvider provider = new ServiceCollection()
             .AddResourcefull(o => o.UseInMemory()
-                .UseContainerPolicies(new ResourceContainerPolicy
+                .UseContainerPolicies(new ContainerPolicy
                 {
                     MaxResourceSize = ResourceSize.Megabytes(100), AllowedContentTypes = ["application/pdf"]
                 })
@@ -258,7 +258,7 @@ public class ContainerPolicyTests
             .CreateContainerAsync("c");
 
         // Act
-        ResourceContainerPolicy policy = await container.GetPolicyAsync();
+        ContainerPolicy policy = await container.GetPolicyAsync();
 
         // Assert
         Assert.Equal((ResourceSize.Gigabytes(1), ResourceSize.Gigabytes(5)),
@@ -278,7 +278,7 @@ public class ContainerPolicyTests
         using ServiceProvider services = new ServiceCollection().AddResourcefull(o =>
         {
             o.UseInMemory().UseVersioning(10)
-                .UseContainerPolicies(new ResourceContainerPolicy { MaxVersions = defaults }, cacheFor: TimeSpan.Zero);
+                .UseContainerPolicies(new ContainerPolicy { MaxVersions = defaults }, cacheFor: TimeSpan.Zero);
             if (provider) o.UsePolicyProvider<TwoVersionsProvider>();
         }).BuildServiceProvider();
         IResourceContainerClient container = await services.GetRequiredService<IResourceServiceClient>()
@@ -305,18 +305,18 @@ public class ContainerPolicyTests
             .CreateContainerAsync("c");
 
         // Act
-        ResourceContainerPolicy policy = await container.GetPolicyAsync();
+        ContainerPolicy policy = await container.GetPolicyAsync();
 
         // Assert
-        Assert.Equivalent(new ResourceContainerPolicy { MaxVersions = maxVersions }, policy);
+        Assert.Equivalent(new ContainerPolicy { MaxVersions = maxVersions }, policy);
     }
 
     private sealed class ReadOnlyDestination : IResourcePolicyProvider
     {
-        public ValueTask<ResourceContainerPolicy?> GetPolicyAsync(string containerName,
+        public ValueTask<ContainerPolicy?> GetPolicyAsync(string containerName,
             CancellationToken cancellationToken) =>
-            ValueTask.FromResult<ResourceContainerPolicy?>(
-                new ResourceContainerPolicy { ReadOnly = containerName == "d" });
+            ValueTask.FromResult<ContainerPolicy?>(
+                new ContainerPolicy { ReadOnly = containerName == "d" });
     }
 
     [Fact]
@@ -366,10 +366,10 @@ public class ContainerPolicyTests
             .ReturnsAsync([new ResourceInfo { ContainerName = "c", Name = "b", VersionId = "b1", ContentLength = null }]);
 
         // Act
-        ResourceContainerUsage usage = await repository.Object.GetContainerUsageAsync("c");
+        ContainerUsage usage = await repository.Object.GetContainerUsageAsync("c");
 
         // Assert
-        Assert.Equal(new ResourceContainerUsage(15, 2, 3), usage);
+        Assert.Equal(new ContainerUsage(15, 2, 3), usage);
     }
 
     [Fact]
@@ -388,11 +388,11 @@ public class ContainerPolicyTests
             .ReturnsAsync([new ResourceInfo { ContainerName = "c", Name = "x", VersionId = "v", ContentLength = 2 }]);
 
         // Act
-        ResourceContainerUsage usage = await repository.Object.GetContainerUsageAsync("c");
+        ContainerUsage usage = await repository.Object.GetContainerUsageAsync("c");
 
         // Assert
         int names = ResourceListOptions.DefaultPageSize + 1;
-        Assert.Equal(new ResourceContainerUsage(2L * names, names, names), usage);
+        Assert.Equal(new ContainerUsage(2L * names, names, names), usage);
         repository.Verify(r => r.GetResourcePageAsync("c", null, last, It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -407,7 +407,7 @@ public class ContainerPolicyTests
     public async Task MoveResourceAsync_ShouldCheckTheNewCurrentVersion_WhenAnUploadMakesOneCurrentDuringTheMove()
     {
         // Arrange: the move checks v1, then an upload makes v2, too large for the destination, current before it moves.
-        using var settings = new ContainerPolicySettings(new ResourceContainerPolicy { MaxResourceSize = new ResourceSize(10) }, TimeSpan.Zero, TimeSpan.Zero);
+        using var settings = new ContainerPolicySettings(new ContainerPolicy { MaxResourceSize = new ResourceSize(10) }, TimeSpan.Zero, TimeSpan.Zero);
         var repository = new Mock<ResourceRepository>();
         repository.SetupSequence(r => r.GetResourceVersionsAsync(new ResourceAddress("c", "a"), It.IsAny<CancellationToken>()))
             .ReturnsAsync([Version("v1", 5)])
@@ -430,7 +430,7 @@ public class ContainerPolicyTests
     public async Task MoveResourceAsync_ShouldReportTheCallersUnmetConditions_WhenTheCurrentVersionHasNotChanged()
     {
         // Arrange
-        using var settings = new ContainerPolicySettings(new ResourceContainerPolicy(), TimeSpan.Zero, TimeSpan.Zero);
+        using var settings = new ContainerPolicySettings(new ContainerPolicy(), TimeSpan.Zero, TimeSpan.Zero);
         var repository = new Mock<ResourceRepository>();
         repository.Setup(r => r.GetResourceVersionsAsync(new ResourceAddress("c", "a"), It.IsAny<CancellationToken>())).ReturnsAsync([Version("v1", 5)]);
         repository.Setup(r => r.MoveResourceAsync(new ResourceAddress("c", "a"), new ResourceAddress("d", "a"),
@@ -450,7 +450,7 @@ public class ContainerPolicyTests
     public async Task MoveResourceAsync_ShouldMoveTheNewCurrentVersion_WhenItMeetsThePolicyOnTheSecondCheck()
     {
         // Arrange: an upload makes v2 current between the first check and the move; v2 fits too.
-        using var settings = new ContainerPolicySettings(new ResourceContainerPolicy { MaxResourceSize = new ResourceSize(10) }, TimeSpan.Zero, TimeSpan.Zero);
+        using var settings = new ContainerPolicySettings(new ContainerPolicy { MaxResourceSize = new ResourceSize(10) }, TimeSpan.Zero, TimeSpan.Zero);
         var repository = new Mock<ResourceRepository>();
         repository.SetupSequence(r => r.GetResourceVersionsAsync(new ResourceAddress("c", "a"), It.IsAny<CancellationToken>()))
             .ReturnsAsync([Version("v1", 5)])
@@ -475,7 +475,7 @@ public class ContainerPolicyTests
     public async Task MoveResourceAsync_ShouldGiveUpAfterFiveChecks_WhenUploadsKeepMakingNewVersionsCurrent()
     {
         // Arrange: every time the move checks the name, another upload has made a newer version current by the move.
-        using var settings = new ContainerPolicySettings(new ResourceContainerPolicy(), TimeSpan.Zero, TimeSpan.Zero);
+        using var settings = new ContainerPolicySettings(new ContainerPolicy(), TimeSpan.Zero, TimeSpan.Zero);
         var repository = new Mock<ResourceRepository>();
         int checks = 0;
         repository.Setup(r => r.GetResourceVersionsAsync(new ResourceAddress("c", "a"), It.IsAny<CancellationToken>()))
@@ -496,7 +496,7 @@ public class ContainerPolicyTests
     public async Task MoveResourceAsync_ShouldReportTheCallersVersionUnmetWithoutMoving_WhenItIsNotTheCurrentOne()
     {
         // Arrange
-        using var settings = new ContainerPolicySettings(new ResourceContainerPolicy(), TimeSpan.Zero, TimeSpan.Zero);
+        using var settings = new ContainerPolicySettings(new ContainerPolicy(), TimeSpan.Zero, TimeSpan.Zero);
         var repository = new Mock<ResourceRepository>();
         repository.Setup(r => r.GetResourceVersionsAsync(new ResourceAddress("c", "a"), It.IsAny<CancellationToken>())).ReturnsAsync([Version("v1", 5)]);
 
@@ -516,10 +516,10 @@ public class ContainerPolicyTests
     {
         public static readonly ConcurrentDictionary<string, bool> Down = new();
 
-        public ValueTask<ResourceContainerPolicy?> GetPolicyAsync(string containerName, CancellationToken cancellationToken) =>
+        public ValueTask<ContainerPolicy?> GetPolicyAsync(string containerName, CancellationToken cancellationToken) =>
             Down.ContainsKey(containerName)
                 ? throw new InvalidOperationException("The policy store is down.")
-                : ValueTask.FromResult<ResourceContainerPolicy?>(new ResourceContainerPolicy { MaxResourceSize = new ResourceSize(10) });
+                : ValueTask.FromResult<ContainerPolicy?>(new ContainerPolicy { MaxResourceSize = new ResourceSize(10) });
     }
 
     private static async Task<IResourceContainerClient> NewFlakyContainerAsync(ServiceProvider services) =>
@@ -593,9 +593,9 @@ public class ContainerPolicyTests
     {
         public static readonly ConcurrentDictionary<string, int> Asked = new();
 
-        public ValueTask<ResourceContainerPolicy?> GetPolicyAsync(string containerName, CancellationToken cancellationToken) =>
+        public ValueTask<ContainerPolicy?> GetPolicyAsync(string containerName, CancellationToken cancellationToken) =>
             Asked.AddOrUpdate(containerName, 1, (_, n) => n + 1) == 1
-                ? ValueTask.FromResult<ResourceContainerPolicy?>(null)
+                ? ValueTask.FromResult<ContainerPolicy?>(null)
                 : throw new InvalidOperationException("The policy store is down.");
     }
 
@@ -603,7 +603,7 @@ public class ContainerPolicyTests
     public async Task ThrowIfReadOnlyAsync_ShouldAskTheFailingProviderOncePerCacheTime_WhenTheLastKnownPolicyStandsIn()
     {
         // Arrange: the provider gave the policy, then its cached answer ran out, and the provider went down.
-        using var settings = new ContainerPolicySettings(new ResourceContainerPolicy(), TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(5));
+        using var settings = new ContainerPolicySettings(new ContainerPolicy(), TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(5));
         var policies = new ContainerPolicies(settings, new Mock<ResourceRepository>().Object, new CountingFailingPolicies());
         var telemetry = new ClientTelemetry("test", new ResourcefullOptions());
         string name = $"c-{Guid.NewGuid():N}";
@@ -622,9 +622,9 @@ public class ContainerPolicyTests
     {
         private static readonly ConcurrentDictionary<string, bool> Given = new();
 
-        public ValueTask<ResourceContainerPolicy?> GetPolicyAsync(string containerName, CancellationToken cancellationToken)
+        public ValueTask<ContainerPolicy?> GetPolicyAsync(string containerName, CancellationToken cancellationToken)
         {
-            if (Given.TryAdd(containerName, true)) return ValueTask.FromResult<ResourceContainerPolicy?>(null);
+            if (Given.TryAdd(containerName, true)) return ValueTask.FromResult<ContainerPolicy?>(null);
             cancellationToken.ThrowIfCancellationRequested();
             throw new InvalidOperationException("Expected a canceled token.");
         }
@@ -634,7 +634,7 @@ public class ContainerPolicyTests
     public async Task ThrowIfReadOnlyAsync_ShouldThrowOperationCanceled_WhenTheCallerCancelsWhileThePolicyProviderFails()
     {
         // Arrange: a last known policy is kept, but the failure is the caller's own cancellation.
-        using var settings = new ContainerPolicySettings(new ResourceContainerPolicy(), TimeSpan.Zero, TimeSpan.FromMinutes(5));
+        using var settings = new ContainerPolicySettings(new ContainerPolicy(), TimeSpan.Zero, TimeSpan.FromMinutes(5));
         var policies = new ContainerPolicies(settings, new Mock<ResourceRepository>().Object, new CanceledPolicies());
         var telemetry = new ClientTelemetry("test", new ResourcefullOptions());
         string name = $"c-{Guid.NewGuid():N}";
@@ -664,7 +664,7 @@ public class ContainerPolicyTests
     {
         // Arrange
         using ServiceProvider services = new ServiceCollection()
-            .AddResourcefull(o => o.UseInMemory().UseContainerPolicies(new ResourceContainerPolicy { ReadOnly = true }))
+            .AddResourcefull(o => o.UseInMemory().UseContainerPolicies(new ContainerPolicy { ReadOnly = true }))
             .BuildServiceProvider();
         IResourceServiceClient service = services.GetRequiredService<IResourceServiceClient>();
         await service.CreateContainerAsync("c");

@@ -278,10 +278,10 @@ internal sealed partial class ObjectStoreRepository(IObjectStore store, string k
     }
 
     /// <summary>Lists the names' heads in key order, which is their names' code point order, and reads them.</summary>
-    public override async Task<IReadOnlyList<ResourceInfo>> GetResourcePageAsync(string resourceContainerName, string? prefix,
+    public override async Task<IReadOnlyList<ResourceInfo>> GetResourcePageAsync(string containerName, string? prefix,
         string? afterName, int pageSize, CancellationToken cancellationToken = default)
     {
-        if (await GetContainerAsync(resourceContainerName, cancellationToken).ConfigureAwait(false) is not { } container)
+        if (await GetContainerAsync(containerName, cancellationToken).ConfigureAwait(false) is not { } container)
             return [];
 
         string heads = _keys.Heads(container.Id);
@@ -295,7 +295,7 @@ internal sealed partial class ObjectStoreRepository(IObjectStore store, string k
                 Head? head = read?.Move is null ? Live(read) : await ReadHeadAsync(key, cancellationToken).ConfigureAwait(false);
                 // A name whose versions were deleted, or moved, since it was listed is left out, as is one with only a bin.
                 if (head is not null)
-                    page.Add(ToInfo(resourceContainerName, ObjectKeys.Unescape(key[heads.Length..]), head.Versions[^1], true));
+                    page.Add(ToInfo(containerName, ObjectKeys.Unescape(key[heads.Length..]), head.Versions[^1], true));
             }
             if (page.Count >= pageSize) break;
         }
@@ -421,11 +421,11 @@ internal sealed partial class ObjectStoreRepository(IObjectStore store, string k
     /// left with only a bin take those out of the names. Content an unfinished write left behind counts until the sweep
     /// deletes it, and while a move is being made, a name it moves counts in both places.
     /// </summary>
-    public override async Task<ResourceContainerUsage> GetContainerUsageAsync(string resourceContainerName,
+    public override async Task<ContainerUsage> GetContainerUsageAsync(string containerName,
         CancellationToken cancellationToken = default)
     {
-        if (await GetContainerAsync(resourceContainerName, cancellationToken).ConfigureAwait(false) is not { } container)
-            return new ResourceContainerUsage(0, 0, 0);
+        if (await GetContainerAsync(containerName, cancellationToken).ConfigureAwait(false) is not { } container)
+            return new ContainerUsage(0, 0, 0);
 
         long storedBytes = 0, versions = 0, resources = 0;
         await foreach (ObjectListing content in store.ListAsync(_keys.Contents(container.Id), null, cancellationToken).ConfigureAwait(false))
@@ -446,7 +446,7 @@ internal sealed partial class ObjectStoreRepository(IObjectStore store, string k
         }
         await foreach (ObjectListing _ in store.ListAsync(_keys.EmptiedNames(container.Id), null, cancellationToken).ConfigureAwait(false))
             resources--;
-        return new ResourceContainerUsage(Math.Max(0, storedBytes - deletedBytes), Math.Max(0, resources),
+        return new ContainerUsage(Math.Max(0, storedBytes - deletedBytes), Math.Max(0, resources),
             Math.Max(0, versions - deletedVersions), deletedBytes, deletedVersions);
     }
 
@@ -623,10 +623,10 @@ internal sealed partial class ObjectStoreRepository(IObjectStore store, string k
 
     // Resource Containers
 
-    public override async Task AddContainerAsync(string resourceContainerName, IReadOnlyDictionary<string, string> metadata,
+    public override async Task AddContainerAsync(string containerName, IReadOnlyDictionary<string, string> metadata,
         CancellationToken cancellationToken = default)
     {
-        string key = _keys.Container(resourceContainerName);
+        string key = _keys.Container(containerName);
         var record = new ContainerRecord(Guid.NewGuid().ToString("N"), new Dictionary<string, string>(metadata));
         for (int attempt = 1; ; attempt++)
         {
@@ -636,9 +636,9 @@ internal sealed partial class ObjectStoreRepository(IObjectStore store, string k
             if (existing.Value?.Id == record.Id) return;
             if (existing.Value is { Deleted: false })
             {
-                throw new ResourceConflictException($"The container {resourceContainerName} already exists.")
+                throw new ResourceConflictException($"The container {containerName} already exists.")
                 {
-                    ContainerName = resourceContainerName
+                    ContainerName = containerName
                 };
             }
             // A deleted container's record holds the only note of its old ID, so what's left under it is deleted first.
@@ -666,10 +666,10 @@ internal sealed partial class ObjectStoreRepository(IObjectStore store, string k
         return page;
     }
 
-    public override async Task<ContainerInfo?> GetContainerInfoAsync(string resourceContainerName,
+    public override async Task<ContainerInfo?> GetContainerInfoAsync(string containerName,
         CancellationToken cancellationToken = default) =>
-        await GetContainerAsync(resourceContainerName, cancellationToken).ConfigureAwait(false) is { } record
-            ? ToInfo(resourceContainerName, record)
+        await GetContainerAsync(containerName, cancellationToken).ConfigureAwait(false) is { } record
+            ? ToInfo(containerName, record)
             : null;
 
     /// <summary>
@@ -677,9 +677,9 @@ internal sealed partial class ObjectStoreRepository(IObjectStore store, string k
     /// deleted, which hides everything in it at once, then deletes what it held. If that stops partway, deleting the
     /// container again finishes it.
     /// </summary>
-    public override async Task<bool> DeleteContainerAsync(string resourceContainerName, CancellationToken cancellationToken = default)
+    public override async Task<bool> DeleteContainerAsync(string containerName, CancellationToken cancellationToken = default)
     {
-        string key = _keys.Container(resourceContainerName);
+        string key = _keys.Container(containerName);
         string? deleting = null;
         for (int attempt = 1; ; attempt++)
         {
@@ -740,10 +740,10 @@ internal sealed partial class ObjectStoreRepository(IObjectStore store, string k
         }
     }
 
-    public override async Task<bool> SetContainerMetadataAsync(string resourceContainerName,
+    public override async Task<bool> SetContainerMetadataAsync(string containerName,
         IReadOnlyDictionary<string, string> metadata, CancellationToken cancellationToken = default)
     {
-        string key = _keys.Container(resourceContainerName);
+        string key = _keys.Container(containerName);
         for (int attempt = 1; ; attempt++)
         {
             Stored<ContainerRecord> existing = await GetAsync<ContainerRecord>(key, cancellationToken).ConfigureAwait(false);
@@ -756,8 +756,8 @@ internal sealed partial class ObjectStoreRepository(IObjectStore store, string k
 
     // Storage
 
-    private async Task<ContainerRecord?> GetContainerAsync(string resourceContainerName, CancellationToken cancellationToken) =>
-        (await GetAsync<ContainerRecord>(_keys.Container(resourceContainerName), cancellationToken).ConfigureAwait(false)).Value
+    private async Task<ContainerRecord?> GetContainerAsync(string containerName, CancellationToken cancellationToken) =>
+        (await GetAsync<ContainerRecord>(_keys.Container(containerName), cancellationToken).ConfigureAwait(false)).Value
             is { Deleted: false } record ? record : null;
 
     private async Task<Head?> GetHeadAsync(ResourceAddress resource, CancellationToken cancellationToken) =>
@@ -991,8 +991,8 @@ internal sealed partial class ObjectStoreRepository(IObjectStore store, string k
             ContainerName = location.ContainerName, ResourceName = location.ResourceName
         };
 
-    private static ResourceContainerNotFoundException ContainerMissing(string resourceContainerName) =>
-        new($"The container {resourceContainerName} doesn't exist.") { ContainerName = resourceContainerName };
+    private static ResourceContainerNotFoundException ContainerMissing(string containerName) =>
+        new($"The container {containerName} doesn't exist.") { ContainerName = containerName };
 
     /// <summary>An object's value and ETag, as read.</summary>
     private readonly record struct Stored<T>(T? Value, string? ETag) where T : class;

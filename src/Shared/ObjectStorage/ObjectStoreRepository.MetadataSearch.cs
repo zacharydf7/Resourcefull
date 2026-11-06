@@ -12,10 +12,10 @@ namespace Resourcefull.ObjectStorage;
 // one the current version needs: either way, the version current at the end has its entries.
 internal sealed partial class ObjectStoreRepository
 {
-    public override async Task<IReadOnlyList<ResourceInfo>> FindResourcePageAsync(string resourceContainerName, string? prefix,
+    public override async Task<IReadOnlyList<ResourceInfo>> FindResourcePageAsync(string containerName, string? prefix,
         string? afterName, int pageSize, ResourceMetadataMatch match, CancellationToken cancellationToken = default)
     {
-        if (await GetContainerAsync(resourceContainerName, cancellationToken).ConfigureAwait(false) is not { } container)
+        if (await GetContainerAsync(containerName, cancellationToken).ConfigureAwait(false) is not { } container)
             return [];
 
         string entries = _keys.SearchEntries(container.Id, match.Key, match.Value);
@@ -29,12 +29,12 @@ internal sealed partial class ObjectStoreRepository
             batch.Add(entry);
             if (batch.Count < Math.Min(pageSize - page.Count, ParallelReads)) continue;
             examined += batch.Count;
-            page.AddRange(await ReadMatchesAsync(resourceContainerName, container.Id, entries, batch, match, cancellationToken).ConfigureAwait(false));
+            page.AddRange(await ReadMatchesAsync(containerName, container.Id, entries, batch, match, cancellationToken).ConfigureAwait(false));
             batch.Clear();
             if (page.Count >= pageSize) break;
         }
         examined += batch.Count;
-        page.AddRange(await ReadMatchesAsync(resourceContainerName, container.Id, entries, batch, match, cancellationToken).ConfigureAwait(false));
+        page.AddRange(await ReadMatchesAsync(containerName, container.Id, entries, batch, match, cancellationToken).ConfigureAwait(false));
         // On the client's span only, never an application's own.
         if (Activity.Current is { } activity && activity.Source.Name == ResourcefullTelemetry.ActivitySourceName)
             activity.SetTag("resourcefull.search_examined", examined);
@@ -68,10 +68,10 @@ internal sealed partial class ObjectStoreRepository
         return found.OfType<ResourceInfo>();
     }
 
-    public override async Task<long> IndexMetadataAsync(string resourceContainerName, CancellationToken cancellationToken = default)
+    public override async Task<long> IndexMetadataAsync(string containerName, CancellationToken cancellationToken = default)
     {
         if (SearchableMetadataKeys.Count == 0
-            || await GetContainerAsync(resourceContainerName, cancellationToken).ConfigureAwait(false) is not { } container)
+            || await GetContainerAsync(containerName, cancellationToken).ConfigureAwait(false) is not { } container)
         {
             return 0;
         }

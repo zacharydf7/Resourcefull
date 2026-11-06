@@ -8,9 +8,9 @@ public abstract partial class ResourcefullContractTests
     /// <summary>A policy provider whose answers each test sets for its own containers.</summary>
     private sealed class TestPolicyProvider : IResourcePolicyProvider
     {
-        public static readonly ConcurrentDictionary<string, ResourceContainerPolicy> Policies = new();
+        public static readonly ConcurrentDictionary<string, ContainerPolicy> Policies = new();
 
-        public ValueTask<ResourceContainerPolicy?> GetPolicyAsync(string containerName, CancellationToken cancellationToken) =>
+        public ValueTask<ContainerPolicy?> GetPolicyAsync(string containerName, CancellationToken cancellationToken) =>
             ValueTask.FromResult(Policies.GetValueOrDefault(containerName));
     }
 
@@ -38,7 +38,7 @@ public abstract partial class ResourcefullContractTests
         string name = NewContainerName();
         IResourceContainerClient frozen = await service.CreateContainerAsync(name);
         ResourceInfo stored = await frozen.UploadAsync("notes.txt", BinaryData.FromString("kept"));
-        TestPolicyProvider.Policies[name] = new ResourceContainerPolicy { ReadOnly = true };
+        TestPolicyProvider.Policies[name] = new ContainerPolicy { ReadOnly = true };
 
         // Act
         var refused = new[]
@@ -76,7 +76,7 @@ public abstract partial class ResourcefullContractTests
     {
         // Arrange
         using ServiceProvider provider = BuildServiceProvider(o => o.UseContainerPolicies(
-            new ResourceContainerPolicy { AllowedContentTypes = ["image/*", "application/pdf"] }));
+            new ContainerPolicy { AllowedContentTypes = ["image/*", "application/pdf"] }));
         IResourceContainerClient container = await NewContainerAsync(provider);
 
         // Act
@@ -96,7 +96,7 @@ public abstract partial class ResourcefullContractTests
     public async Task UploadAsync_ShouldRefuseAndStoreNothing_WhenTheContentIsLargerThanMaxResourceSize(long? contentLength, bool tooLarge)
     {
         // Arrange
-        using ServiceProvider provider = BuildServiceProvider(o => o.UseContainerPolicies(new ResourceContainerPolicy { MaxResourceSize = 64 }));
+        using ServiceProvider provider = BuildServiceProvider(o => o.UseContainerPolicies(new ContainerPolicy { MaxResourceSize = 64 }));
         IResourceContainerClient container = await NewContainerAsync(provider);
         Stream content = tooLarge && contentLength is not null ? new UnreadableStream() : new MemoryStream(new byte[tooLarge ? 100 : 64]);
 
@@ -118,7 +118,7 @@ public abstract partial class ResourcefullContractTests
     {
         // Arrange: 100 bytes allowed, and 60 stored in two versions of one name.
         using ServiceProvider provider = BuildServiceProvider(o => o.UseVersioning()
-            .UseContainerPolicies(new ResourceContainerPolicy { MaxContainerSize = 100 }));
+            .UseContainerPolicies(new ContainerPolicy { MaxContainerSize = 100 }));
         IResourceContainerClient container = await NewContainerAsync(provider);
         await container.UploadAsync("a", new MemoryStream(new byte[30]));
         await container.UploadAsync("a", new MemoryStream(new byte[30]), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace });
@@ -135,7 +135,7 @@ public abstract partial class ResourcefullContractTests
         Assert.False(await container.ExistsAsync("b"));
         Assert.False(await container.ExistsAsync("c"));
         Assert.Equal(40, fits.ContentLength);
-        Assert.Equal(new ResourceContainerUsage(100, 2, 3), await container.GetUsageAsync());
+        Assert.Equal(new ContainerUsage(100, 2, 3), await container.GetUsageAsync());
     }
 
     [Fact]
@@ -143,7 +143,7 @@ public abstract partial class ResourcefullContractTests
     {
         // Arrange
         using ServiceProvider provider = BuildServiceProvider(o => o.UseVersioning()
-            .UseContainerPolicies(new ResourceContainerPolicy { MaxResourceCount = 2 }));
+            .UseContainerPolicies(new ContainerPolicy { MaxResourceCount = 2 }));
         IResourceContainerClient container = await NewContainerAsync(provider);
         await container.UploadAsync("a", BinaryData.FromString("1"));
         await container.UploadAsync("b", BinaryData.FromString("1"));
@@ -169,7 +169,7 @@ public abstract partial class ResourcefullContractTests
         IResourceContainerClient container = await ServiceOf(provider).CreateContainerAsync(name);
         ResourceInfo large = await container.UploadAsync("a", new MemoryStream(new byte[100]));
         await container.UploadAsync("a", new MemoryStream(new byte[10]), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace });
-        TestPolicyProvider.Policies[name] = new ResourceContainerPolicy { MaxResourceSize = 50 };
+        TestPolicyProvider.Policies[name] = new ContainerPolicy { MaxResourceSize = 50 };
 
         // Act
         Task act() => container.RestoreVersionAsync("a", large.VersionId);
@@ -185,11 +185,11 @@ public abstract partial class ResourcefullContractTests
         // Arrange: the defaults allow only text, and limit size; one container's own policy allows images, and sets no
         // size, so the default size still applies to it.
         using ServiceProvider provider = BuildServiceProvider(o => o
-            .UseContainerPolicies(new ResourceContainerPolicy { AllowedContentTypes = ["text/plain"], MaxResourceSize = 10 })
+            .UseContainerPolicies(new ContainerPolicy { AllowedContentTypes = ["text/plain"], MaxResourceSize = 10 })
             .UsePolicyProvider<TestPolicyProvider>());
         IResourceServiceClient service = ServiceOf(provider);
         string images = NewContainerName();
-        TestPolicyProvider.Policies[images] = new ResourceContainerPolicy { AllowedContentTypes = ["image/png"] };
+        TestPolicyProvider.Policies[images] = new ContainerPolicy { AllowedContentTypes = ["image/png"] };
         IResourceContainerClient own = await service.CreateContainerAsync(images);
         IResourceContainerClient other = await NewContainerAsync(provider);
 
@@ -219,7 +219,7 @@ public abstract partial class ResourcefullContractTests
         await container.UploadAsync("first", BinaryData.FromString("x"));
 
         // Act
-        TestPolicyProvider.Policies[name] = new ResourceContainerPolicy { ReadOnly = true };
+        TestPolicyProvider.Policies[name] = new ContainerPolicy { ReadOnly = true };
         Exception? second = await Record.ExceptionAsync(() => container.UploadAsync("second", BinaryData.FromString("x")));
 
         // Assert
@@ -237,11 +237,11 @@ public abstract partial class ResourcefullContractTests
         await container.UploadAsync("b", new MemoryStream(new byte[7]));
 
         // Act
-        ResourceContainerUsage usage = await container.GetUsageAsync();
-        ResourceContainerUsage empty = await ServiceOf(provider).GetContainerClient(NewContainerName()).GetUsageAsync();
+        ContainerUsage usage = await container.GetUsageAsync();
+        ContainerUsage empty = await ServiceOf(provider).GetContainerClient(NewContainerName()).GetUsageAsync();
 
         // Assert
-        Assert.Equal(new ResourceContainerUsage(100_012, 2, 3), usage);
-        Assert.Equal(new ResourceContainerUsage(0, 0, 0), empty);
+        Assert.Equal(new ContainerUsage(100_012, 2, 3), usage);
+        Assert.Equal(new ContainerUsage(0, 0, 0), empty);
     }
 }

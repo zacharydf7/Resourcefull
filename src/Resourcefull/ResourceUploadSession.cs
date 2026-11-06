@@ -60,7 +60,7 @@ public sealed class ResourceUploadSessionOptions
 
     /// <summary>
     /// Until when the version can't be deleted, once the session completes: as for
-    /// <see cref="ResourceUploadOptions.RetainUntil"/>, counting <see cref="ResourceContainerPolicy.RetainFor"/> from
+    /// <see cref="ResourceUploadOptions.RetainUntil"/>, counting <see cref="ContainerPolicy.RetainFor"/> from
     /// when the session starts.
     /// <para>Coming in 4.0.</para>
     /// </summary>

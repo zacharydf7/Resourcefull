@@ -6,7 +6,7 @@ using System.Text.RegularExpressions;
 namespace Resourcefull;
 
 /// <summary>
-/// An amount of stored content, such as a <see cref="ResourceContainerPolicy"/> limit. Units are 1,024-based, as
+/// An amount of stored content, such as a <see cref="ContainerPolicy"/> limit. Units are 1,024-based, as
 /// Windows shows file sizes: <c>ResourceSize.Megabytes(1)</c> is 1,048,576 bytes. A number of bytes converts to it,
 /// and configuration binds it from text such as <c>"5 GB"</c>, <c>"100MB"</c> or <c>"1.5 GB"</c>.
 /// <para>Coming in 4.0.</para>

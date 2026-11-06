@@ -108,10 +108,10 @@ internal sealed partial class ObjectStoreRepository
     /// Lists the container's bin entries from where the last page ended, reading each one's head to check it, and stops
     /// once the page is full or, with a prefix, once it has looked at <see cref="MaxBinEntriesExamined"/> entries.
     /// </summary>
-    public override async Task<DeletedVersionPage> GetDeletedPageAsync(string resourceContainerName, string? prefix,
+    public override async Task<DeletedVersionPage> GetDeletedPageAsync(string containerName, string? prefix,
         ResourceVersionKey? after, int pageSize, CancellationToken cancellationToken = default)
     {
-        if (await GetContainerAsync(resourceContainerName, cancellationToken).ConfigureAwait(false) is not { } container)
+        if (await GetContainerAsync(containerName, cancellationToken).ConfigureAwait(false) is not { } container)
             return new DeletedVersionPage([], null);
 
         string bin = _keys.Bin(container.Id);
@@ -136,13 +136,13 @@ internal sealed partial class ObjectStoreRepository
             batch.Add(entry);
             if (batch.Count < Math.Min(pageSize - page.Count, ParallelReads)) continue;
             examined += batch.Count;
-            page.AddRange((await ReadBinnedAsync(resourceContainerName, container.Id, bin, batch, prefix, cancellationToken).ConfigureAwait(false))
+            page.AddRange((await ReadBinnedAsync(containerName, container.Id, bin, batch, prefix, cancellationToken).ConfigureAwait(false))
                 .Where(v => IsPast(v, v.DeletedAt, after)));
             batch.Clear();
         }
         if (batch.Count > 0)
         {
-            page.AddRange((await ReadBinnedAsync(resourceContainerName, container.Id, bin, batch, prefix, cancellationToken).ConfigureAwait(false))
+            page.AddRange((await ReadBinnedAsync(containerName, container.Id, bin, batch, prefix, cancellationToken).ConfigureAwait(false))
                 .Where(v => IsPast(v, v.DeletedAt, after)));
         }
         SortGroupsByName(page, v => v.DeletedAt);
@@ -153,10 +153,10 @@ internal sealed partial class ObjectStoreRepository
         {
             page.RemoveRange(pageSize, page.Count - pageSize);
             return new DeletedVersionPage(page, new ResourceVersionKey(page[^1].DeletedAt!.Value,
-                new ResourceAddress(resourceContainerName, page[^1].Name), page[^1].VersionId));
+                new ResourceAddress(containerName, page[^1].Name), page[^1].VersionId));
         }
         return new DeletedVersionPage(page, next is { } start
-            ? new ResourceVersionKey(start.At, new ResourceAddress(resourceContainerName, ""), start.VersionId)
+            ? new ResourceVersionKey(start.At, new ResourceAddress(containerName, ""), start.VersionId)
             : null);
     }
 

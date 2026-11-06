@@ -1120,7 +1120,7 @@ public class S3IntegrationTests(S3Fixture fixture)
         // Assert
         Assert.Equal((1, 0, 1, 0), (await CountKeysAsync(entry), await CountKeysAsync(stale), await CountKeysAsync(markOfA),
             await CountKeysAsync(markOfB)));
-        ResourceContainerUsage usage = await repository.GetContainerUsageAsync("c");
+        ContainerUsage usage = await repository.GetContainerUsageAsync("c");
         Assert.Equal((1L, 1L, 1L, 1L), (usage.ResourceCount, usage.VersionCount, usage.DeletedVersionCount, usage.DeletedSize.Bytes));
     }
 

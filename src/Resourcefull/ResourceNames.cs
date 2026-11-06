@@ -52,16 +52,16 @@ public static class ResourceNames
     internal static bool IsValidStoredResourceName([NotNullWhen(true)] string? name)
         => !string.IsNullOrWhiteSpace(name) && FindProblem(name, MaxResourceNameLength, strict: false) is null;
 
-    internal static void ThrowIfInvalidContainerName(string resourceContainerName, [CallerArgumentExpression(nameof(resourceContainerName))] string? paramName = null)
-        => ThrowIfInvalid(resourceContainerName, MaxContainerNameLength, paramName, strict: false);
+    internal static void ThrowIfInvalidContainerName(string containerName, [CallerArgumentExpression(nameof(containerName))] string? paramName = null)
+        => ThrowIfInvalid(containerName, MaxContainerNameLength, paramName, strict: false);
 
     internal static void ThrowIfInvalidResourceName(string resourceName, [CallerArgumentExpression(nameof(resourceName))] string? paramName = null)
         => ThrowIfInvalid(resourceName, MaxResourceNameLength, paramName, strict: false);
 
     /// <summary>Checks a container name that a write may create.</summary>
-    internal static void ThrowIfInvalidNewContainerName(string resourceContainerName,
-        [CallerArgumentExpression(nameof(resourceContainerName))] string? paramName = null)
-        => ThrowIfInvalid(resourceContainerName, MaxContainerNameLength, paramName, strict: true);
+    internal static void ThrowIfInvalidNewContainerName(string containerName,
+        [CallerArgumentExpression(nameof(containerName))] string? paramName = null)
+        => ThrowIfInvalid(containerName, MaxContainerNameLength, paramName, strict: true);
 
     /// <summary>Checks a resource name that a write may create.</summary>
     internal static void ThrowIfInvalidNewResourceName(string resourceName,

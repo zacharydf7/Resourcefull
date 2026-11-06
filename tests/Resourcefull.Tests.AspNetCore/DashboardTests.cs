@@ -124,7 +124,7 @@ public class DashboardTests
     public async Task Containers_ShouldListEachContainersUsageAndPolicyAPageAtATime_WhenCalled()
     {
         // Arrange: the test app's container, holding one file, and 50 more.
-        await using TestApp app = await TestApp.StartAsync(policy: new ResourceContainerPolicy
+        await using TestApp app = await TestApp.StartAsync(policy: new ContainerPolicy
         {
             MaxContainerSize = ResourceSize.Parse("1 MB"), MaxResourceCount = 10, AllowedContentTypes = ["text/plain"]
         });

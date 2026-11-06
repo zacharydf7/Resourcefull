@@ -475,17 +475,17 @@ public class ResourceInMemoryRepositoryTests
         await Task.Delay(10);
         var date2 = DateTime.UtcNow;
         var resourceName = "resourceName";
-        var resourceContainerName = "containerName";
-        var resourceInfo1 = new NewResourceVersion(new ResourceAddress(resourceContainerName, resourceName), date1.ToString("yyyy-MM-ddTHH:mm:ss.fffffffZ")) { LastModified = date1 };
-        var resourceInfo2 = new NewResourceVersion(new ResourceAddress(resourceContainerName, resourceName), date2.ToString("yyyy-MM-ddTHH:mm:ss.fffffffZ")) { LastModified = date2 };
+        var containerName = "containerName";
+        var resourceInfo1 = new NewResourceVersion(new ResourceAddress(containerName, resourceName), date1.ToString("yyyy-MM-ddTHH:mm:ss.fffffffZ")) { LastModified = date1 };
+        var resourceInfo2 = new NewResourceVersion(new ResourceAddress(containerName, resourceName), date2.ToString("yyyy-MM-ddTHH:mm:ss.fffffffZ")) { LastModified = date2 };
         var repository = new ResourceInMemoryRepository();
-        await repository.AddContainerAsync(resourceContainerName, new Dictionary<string, string>());
+        await repository.AddContainerAsync(containerName, new Dictionary<string, string>());
         var stream = new MemoryStream();
         await repository.AddResourceAsync(resourceInfo1, stream);
         await repository.AddResourceAsync(resourceInfo2, stream);
 
         // Act
-        var resources = await repository.GetResourceVersionsAsync(new ResourceAddress(resourceContainerName, resourceName));
+        var resources = await repository.GetResourceVersionsAsync(new ResourceAddress(containerName, resourceName));
 
         // Assert
         Assert.Equal(2, resources.Count);

@@ -95,7 +95,7 @@ app.MapPost("/admin/containers/{name}/import", async (string name, HttpRequest r
     await request.Body.CopyToAsync(file, cancellationToken);
     file.Position = 0;
 
-    ResourceImportResult imported = await resources.ImportContainerAsync(name, file, cancellationToken);
+    ContainerImportResult imported = await resources.ImportContainerAsync(name, file, cancellationToken);
     return Results.Ok(imported);
 }).RequireAuthorization("admins");
 ```

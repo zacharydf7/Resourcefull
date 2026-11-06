@@ -13,7 +13,7 @@ namespace Resourcefull;
 /// <param name="ResourceCount">How many resources (names) it exported.</param>
 /// <param name="VersionCount">How many versions it exported, current and older.</param>
 /// <param name="ContentSize">The size of the distinct content it wrote, before compression; content that versions share counts once.</param>
-public sealed record ResourceExportResult(long ResourceCount, long VersionCount, ResourceSize ContentSize);
+public sealed record ContainerExportResult(long ResourceCount, long VersionCount, ResourceSize ContentSize);
 
 /// <summary>
 /// What an import stored: <see cref="IResourceServiceClient.ImportContainerAsync(string, Stream, CancellationToken)"/>, or
@@ -23,7 +23,7 @@ public sealed record ResourceExportResult(long ResourceCount, long VersionCount,
 /// <param name="ResourceCount">How many resources (names) it imported.</param>
 /// <param name="VersionCount">How many versions it imported, current and older.</param>
 /// <param name="ContentSize">The size of every version it stored, as the container now holds them.</param>
-public sealed record ResourceImportResult(long ResourceCount, long VersionCount, ResourceSize ContentSize);
+public sealed record ContainerImportResult(long ResourceCount, long VersionCount, ResourceSize ContentSize);
 
 /// <summary>
 /// A container as a zip: <c>manifest.json</c>, describing the container and every version of every resource in the
@@ -78,7 +78,7 @@ internal static class ContainerArchive
     /// <summary>How many names an export lists the versions of at a time.</summary>
     internal const int NamesPerPage = 1_000;
 
-    public static async Task<ResourceExportResult> ExportAsync(ResourceRepository repository, ContainerInfo container,
+    public static async Task<ContainerExportResult> ExportAsync(ResourceRepository repository, ContainerInfo container,
         Stream destination, Activity? activity, CancellationToken cancellationToken)
     {
         // Each distinct content's entry, by the version's recorded hash, or by its version ID when it has none.
@@ -188,7 +188,7 @@ internal static class ContainerArchive
 
         await output.FlushAsync(cancellationToken).ConfigureAwait(false);
         activity?.SetTag("resourcefull.pages", pages);
-        return new ResourceExportResult(resourceCount, versionCount, contentSize);
+        return new ContainerExportResult(resourceCount, versionCount, contentSize);
     }
 
     /// <summary>
@@ -244,7 +244,7 @@ internal static class ContainerArchive
     /// import just created, so its usage is counted here rather than read before each version a policy limits. Error
     /// messages name what the versions come from as <paramref name="source"/>, such as "the export".
     /// </summary>
-    public static async Task<ResourceImportResult> ImportAsync(IAsyncEnumerable<ImportedVersion> versions, string containerName,
+    public static async Task<ContainerImportResult> ImportAsync(IAsyncEnumerable<ImportedVersion> versions, string containerName,
         bool newContainer, string source, ResourceRepository repository, ResourcefullOptions options, ContainerPolicies? policies,
         ClientTelemetry telemetry, IResourceUploadInspector? inspector, CancellationToken cancellationToken)
     {
@@ -282,7 +282,7 @@ internal static class ContainerArchive
 
             // A new container's usage is what the import has stored so far; a name is counted once its first version is
             // stored, and a policy's count limit lets a name it already has take more versions.
-            ResourceContainerUsage? usage = newContainer ? new ResourceContainerUsage(contentSize, names.Count, versionCount) : null;
+            ContainerUsage? usage = newContainer ? new ContainerUsage(contentSize, names.Count, versionCount) : null;
             Stream checkedContent = policies is not null && await policies.CheckNewVersionAsync(containerName, version.Name, restore: false,
                 version.ContentType, version.ContentLength, telemetry, cancellationToken, usage).ConfigureAwait(false) is { Limit: { } limit }
                 ? new LimitedContentStream(opened, limit)
@@ -331,7 +331,7 @@ internal static class ContainerArchive
         foreach ((string name, ResourceInfo version) in protectedVersions)
             await ProtectAsync(repository, new ResourceAddress(containerName, name), version, cancellationToken).ConfigureAwait(false);
 
-        return new ResourceImportResult(names.Count, versionCount, contentSize);
+        return new ContainerImportResult(names.Count, versionCount, contentSize);
     }
 
     /// <summary>Gives an imported version the retention date and hold it had.</summary>

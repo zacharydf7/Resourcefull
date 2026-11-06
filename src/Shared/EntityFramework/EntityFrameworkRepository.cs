@@ -126,7 +126,7 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
         ResourceWriteCondition condition, DateTimeOffset? lastModified, CancellationToken cancellationToken)
     {
         ThrowIfUnstorable(version);
-        (string resourceContainerName, string resourceName) = version.Resource;
+        (string containerName, string resourceName) = version.Resource;
         using ResourceDbContext dbContext = dbContextFactory.CreateDbContext();
         IExecutionStrategy strategy = dbContext.Database.CreateExecutionStrategy();
         ResourceModel? staged = null;
@@ -151,12 +151,12 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
         {
             // Its container was deleted meanwhile, taking the staged version with it; or the staged version alone is
             // gone, as the sweep of abandoned uploads takes one whose upload stored nothing for a day.
-            await ThrowIfContainerMissingAsync(resourceContainerName, exception, cancellationToken).ConfigureAwait(false);
+            await ThrowIfContainerMissingAsync(containerName, exception, cancellationToken).ConfigureAwait(false);
             if (staged is null) throw;
             throw new ResourceUploadInterruptedException($"The resource {resourceName} wasn't stored in the container " +
-                $"{resourceContainerName}: its version was deleted before it was complete.", exception)
+                $"{containerName}: its version was deleted before it was complete.", exception)
             {
-                ContainerName = resourceContainerName, ResourceName = resourceName
+                ContainerName = containerName, ResourceName = resourceName
             };
         }
         finally
@@ -183,7 +183,7 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
     private async Task<ResourceModel> StartVersionAsync(IExecutionStrategy strategy, NewResourceVersion version,
         ResourceWriteCondition condition, CancellationToken cancellationToken)
     {
-        (string resourceContainerName, string resourceName) = version.Resource;
+        (string containerName, string resourceName) = version.Resource;
         bool committing = false;
         return await strategy.ExecuteAsync(async ct =>
         {
@@ -195,13 +195,13 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
             if (committing || !attempt.Database.IsRelational())
             {
                 ResourceModel? existing = await attempt.Resources.IgnoreQueryFilters().AsNoTracking()
-                    .FirstOrDefaultAsync(r => r.ContainerName == resourceContainerName && r.Name == resourceName
+                    .FirstOrDefaultAsync(r => r.ContainerName == containerName && r.Name == resourceName
                         && r.VersionId == version.VersionId, ct).ConfigureAwait(false);
                 if (existing is not null)
                 {
                     // Its own only while staged: a stored version with the ID, which an import names, is another's.
                     if (committing && existing.StagedAt is not null) return existing;
-                    throw VersionExists(resourceContainerName, resourceName, version.VersionId);
+                    throw VersionExists(containerName, resourceName, version.VersionId);
                 }
             }
 
@@ -215,9 +215,9 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
             {
                 // Checked again as the version becomes current; this only spares reading the content of an upload that
                 // will fail.
-                if (condition.CreateOnly && await attempt.Resources.AnyAsync(r => r.ContainerName == resourceContainerName
+                if (condition.CreateOnly && await attempt.Resources.AnyAsync(r => r.ContainerName == containerName
                     && r.Name == resourceName && r.IsLatest, ct).ConfigureAwait(false))
-                    throw ResourceExists(resourceContainerName, resourceName);
+                    throw ResourceExists(containerName, resourceName);
 
                 // Inserted first, so a missing container is reported before any content is read.
                 ResourceModel resource = NewVersion(version);
@@ -235,13 +235,13 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
                 }
                 catch (DbUpdateException exception) when (IsUniqueViolation(exception))
                 {
-                    throw VersionExists(resourceContainerName, resourceName, version.VersionId, exception);
+                    throw VersionExists(containerName, resourceName, version.VersionId, exception);
                 }
 
                 // Checked again as the version becomes current, like create-only. After the insert, so a missing
                 // container is reported rather than unmet conditions.
                 if (condition.Conditions is { } conditions)
-                    await ThrowIfNotMetAsync(attempt, conditions, resourceContainerName, resourceName, ct).ConfigureAwait(false);
+                    await ThrowIfNotMetAsync(attempt, conditions, containerName, resourceName, ct).ConfigureAwait(false);
 
                 if (transaction is not null)
                 {
@@ -296,9 +296,9 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
     private Task<WrittenContent> FinishVersionAsync(NewResourceVersion version, ResourceModel staged, HashingStream content,
         ResourceWriteCondition condition, DateTimeOffset? lastModified, CancellationToken cancellationToken)
     {
-        (string resourceContainerName, string resourceName) = version.Resource;
+        (string containerName, string resourceName) = version.Resource;
         WrittenContent? written = null;
-        return WriteNameAsync(resourceContainerName, resourceName, async (attempt, ct) =>
+        return WriteNameAsync(containerName, resourceName, async (attempt, ct) =>
         {
             // A retry after a commit whose acknowledgment was lost finds it current, which the filter lets it see.
             if (written is not null && await attempt.Resources.AsNoTracking()
@@ -308,7 +308,7 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
             }
 
             List<ResourceModel> priorLatest =
-                await CurrentForWriteAsync(attempt, resourceContainerName, resourceName, condition, ct).ConfigureAwait(false);
+                await CurrentForWriteAsync(attempt, containerName, resourceName, condition, ct).ConfigureAwait(false);
 
             // Stamped under the name's lock as the version becomes current, not before its content was read. A wrong
             // declared length throws here, before anything about the name changes.
@@ -516,12 +516,12 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
         long contentLength, string contentHash, ResourceWriteCondition? condition = null,
         CancellationToken cancellationToken = default)
     {
-        (string resourceContainerName, string resourceName) = resource;
-        if (HasNul(resourceContainerName) || HasNul(resourceName) || HasNul(versionId)) return Task.FromResult<WrittenContent?>(null);
+        (string containerName, string resourceName) = resource;
+        if (HasNul(containerName) || HasNul(resourceName) || HasNul(versionId)) return Task.FromResult<WrittenContent?>(null);
         condition ??= new ResourceWriteCondition();
         WrittenContent? written = null;
         long completedId = 0;
-        return WriteNameAsync(resourceContainerName, resourceName, async (attempt, ct) =>
+        return WriteNameAsync(containerName, resourceName, async (attempt, ct) =>
         {
             // Locked as it's read, so an append can't store a batch the measured length and hash don't cover.
             SessionRow? staged = await LockSessionAsync(attempt, resource, versionId, ct).ConfigureAwait(false);
@@ -536,11 +536,11 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
             if (staged.ContentLength != contentLength) throw OffsetNotAtEnd(resource, versionId, contentLength, staged.ContentLength);
 
             List<ResourceModel> priorLatest =
-                await CurrentForWriteAsync(attempt, resourceContainerName, resourceName, condition, ct).ConfigureAwait(false);
+                await CurrentForWriteAsync(attempt, containerName, resourceName, condition, ct).ConfigureAwait(false);
             var completed = new WrittenContent(contentLength, contentHash, Now());
             ResourceModel current = attempt.Resources.Attach(new ResourceModel
             {
-                Id = staged.Id, ContainerName = resourceContainerName, Name = resourceName, StagedAt = staged.StagedAt
+                Id = staged.Id, ContainerName = containerName, Name = resourceName, StagedAt = staged.StagedAt
             }).Entity;
             current.StagedAt = null;
             await MakeCurrentAsync(attempt, priorLatest, current, completed, ct).ConfigureAwait(false);
@@ -650,20 +650,20 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
     /// Throws <see cref="ResourceContainerNotFoundException"/> for a foreign key violation a missing container caused.
     /// Only a missing container is ours to report; the caller rethrows any other violation as the database error it is.
     /// </summary>
-    private async Task ThrowIfContainerMissingAsync(string resourceContainerName, Exception exception, CancellationToken cancellationToken)
+    private async Task ThrowIfContainerMissingAsync(string containerName, Exception exception, CancellationToken cancellationToken)
     {
         using ResourceDbContext dbContext = dbContextFactory.CreateDbContext();
-        if (!await dbContext.ResourceContainers.AnyAsync(x => x.Name == resourceContainerName, cancellationToken).ConfigureAwait(false))
-            throw ContainerNotFound(resourceContainerName, exception);
+        if (!await dbContext.ResourceContainers.AnyAsync(x => x.Name == containerName, cancellationToken).ConfigureAwait(false))
+            throw ContainerNotFound(containerName, exception);
     }
 
-    private static ResourceContainerNotFoundException ContainerNotFound(string resourceContainerName,
+    private static ResourceContainerNotFoundException ContainerNotFound(string containerName,
         Exception? innerException = null)
     {
-        string message = $"The container {resourceContainerName} doesn't exist.";
+        string message = $"The container {containerName} doesn't exist.";
         return innerException is null
-            ? new(message) { ContainerName = resourceContainerName }
-            : new(message, innerException) { ContainerName = resourceContainerName };
+            ? new(message) { ContainerName = containerName }
+            : new(message, innerException) { ContainerName = containerName };
     }
 
     /// <summary>
@@ -672,8 +672,8 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
     /// </summary>
     private void ThrowIfUnstorable(NewResourceVersion version)
     {
-        (string resourceContainerName, string resourceName) = version.Resource;
-        if (HasNul(resourceContainerName)) throw ContainerNotFound(resourceContainerName);
+        (string containerName, string resourceName) = version.Resource;
+        if (HasNul(containerName)) throw ContainerNotFound(containerName);
         if (HasNul(resourceName) || HasNul(version.VersionId) || HasNul(version.ContentType)
             || version.CopiedFrom is { } origin
                 && (HasNul(origin.ContainerName) || HasNul(origin.ResourceName) || HasNul(origin.VersionId)))
@@ -687,7 +687,7 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
         NewResourceVersion destination, ResourceWriteCondition? condition = null, CancellationToken cancellationToken = default)
     {
         ThrowIfUnstorable(destination);
-        (string destinationContainer, string destinationName) = destination.Resource;
+        (string destinationContainerName, string destinationName) = destination.Resource;
         condition ??= new ResourceWriteCondition();
         // A version stored before hashes were kept has none to copy, so its content is read, and hashed, as an upload's is.
         if (MayHoldUnmeasuredVersions)
@@ -712,11 +712,11 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
             return await WriteNamesAsync([source, destination.Resource], async (attempt, ct) =>
             {
                 // A retry after a commit whose acknowledgment was lost finds the copy already stored.
-                if (await attempt.Resources.AnyAsync(r => r.ContainerName == destinationContainer && r.Name == destinationName
+                if (await attempt.Resources.AnyAsync(r => r.ContainerName == destinationContainerName && r.Name == destinationName
                     && r.VersionId == destination.VersionId, ct).ConfigureAwait(false))
                 {
                     return written
-                        ?? throw VersionExists(destinationContainer, destinationName, destination.VersionId);
+                        ?? throw VersionExists(destinationContainerName, destinationName, destination.VersionId);
                 }
 
                 // Read under the source name's lock, so the version can't be deleted while its chunks are copied.
@@ -725,7 +725,7 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
                 if (from is null) return null;
 
                 List<ResourceModel> priorLatest =
-                    await CurrentForWriteAsync(attempt, destinationContainer, destinationName, condition, ct).ConfigureAwait(false);
+                    await CurrentForWriteAsync(attempt, destinationContainerName, destinationName, condition, ct).ConfigureAwait(false);
 
                 ResourceModel copy = NewVersion(destination);
                 attempt.Resources.Add(copy);
@@ -740,7 +740,7 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
         }
         catch (DbUpdateException exception) when (IsForeignKeyViolation(exception))
         {
-            await ThrowIfContainerMissingAsync(destinationContainer, exception, cancellationToken).ConfigureAwait(false);
+            await ThrowIfContainerMissingAsync(destinationContainerName, exception, cancellationToken).ConfigureAwait(false);
             throw;
         }
     }
@@ -790,18 +790,18 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
     /// <see cref="ResourcePreconditionFailedException"/>.
     /// </summary>
     private static async Task<List<ResourceModel>> CurrentForWriteAsync(ResourceDbContext attempt,
-        string resourceContainerName, string resourceName, ResourceWriteCondition condition,
+        string containerName, string resourceName, ResourceWriteCondition condition,
         CancellationToken cancellationToken)
     {
         List<ResourceModel> priorLatest = await attempt.Resources
-            .Where(r => r.ContainerName == resourceContainerName && r.Name == resourceName && r.IsLatest)
+            .Where(r => r.ContainerName == containerName && r.Name == resourceName && r.IsLatest)
             .ToListAsync(cancellationToken).ConfigureAwait(false);
         if (condition.CreateOnly && priorLatest.Count > 0)
-            throw ResourceExists(resourceContainerName, resourceName);
+            throw ResourceExists(containerName, resourceName);
         if (condition.Conditions is { } conditions)
         {
             ResourceModel? current = priorLatest.FirstOrDefault();
-            conditions.ThrowIfNotMet(new ResourceAddress(resourceContainerName, resourceName), current?.VersionId,
+            conditions.ThrowIfNotMet(new ResourceAddress(containerName, resourceName), current?.VersionId,
                 current?.ContentHash);
         }
         return priorLatest;
@@ -831,15 +831,15 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
     /// that made a version current, or changed its metadata, is saved. Nothing to do without
     /// <see cref="ResourceRepository.SearchableMetadataKeys"/>.
     /// </summary>
-    private async Task IndexNameAsync(ResourceDbContext dbContext, string resourceContainerName, string resourceName,
+    private async Task IndexNameAsync(ResourceDbContext dbContext, string containerName, string resourceName,
         CancellationToken cancellationToken)
     {
         if (SearchableMetadataKeys.Count == 0) return;
         List<ResourceMetadataModel> indexed = await dbContext.ResourceMetadata
-            .Where(m => m.ContainerName == resourceContainerName && m.Name == resourceName)
+            .Where(m => m.ContainerName == containerName && m.Name == resourceName)
             .ToListAsync(cancellationToken).ConfigureAwait(false);
         var current = await dbContext.Resources
-            .Where(r => r.ContainerName == resourceContainerName && r.Name == resourceName && r.IsLatest)
+            .Where(r => r.ContainerName == containerName && r.Name == resourceName && r.IsLatest)
             .Select(r => new { r.Id, r.Metadata })
             .FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
 
@@ -854,7 +854,7 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
         {
             dbContext.ResourceMetadata.Add(new ResourceMetadataModel
             {
-                ResourceId = current!.Id, ContainerName = resourceContainerName, Name = resourceName, Key = key, Value = value
+                ResourceId = current!.Id, ContainerName = containerName, Name = resourceName, Key = key, Value = value
             });
         }
         await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
@@ -922,9 +922,9 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
         batch.Clear();
     }
 
-    private Task<T> WriteNameAsync<T>(string resourceContainerName, string resourceName,
+    private Task<T> WriteNameAsync<T>(string containerName, string resourceName,
         Func<ResourceDbContext, CancellationToken, Task<T>> write, CancellationToken cancellationToken) =>
-        WriteNamesAsync([new ResourceAddress(resourceContainerName, resourceName)], write, cancellationToken);
+        WriteNamesAsync([new ResourceAddress(containerName, resourceName)], write, cancellationToken);
 
     /// <summary>
     /// Runs a write to resource names in a transaction holding each name's write lock, so writers of a name queue
@@ -966,43 +966,43 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
     }
 
     private async Task ThrowIfNotMetAsync(ResourceDbContext dbContext, ResourceConditions conditions,
-        string resourceContainerName, string resourceName, CancellationToken cancellationToken)
+        string containerName, string resourceName, CancellationToken cancellationToken)
     {
         if (conditions.IsEmpty) return;
 
-        var current = await Version(dbContext.Resources, resourceContainerName, resourceName, null)
+        var current = await Version(dbContext.Resources, containerName, resourceName, null)
             .Select(r => new { r.VersionId, r.ContentHash })
             .FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
-        conditions.ThrowIfNotMet(new ResourceAddress(resourceContainerName, resourceName), current?.VersionId,
+        conditions.ThrowIfNotMet(new ResourceAddress(containerName, resourceName), current?.VersionId,
             current?.ContentHash);
     }
 
-    private static ResourceConflictException ResourceExists(string resourceContainerName, string resourceName) =>
-        new($"The resource {resourceName} already exists in the container {resourceContainerName}.")
+    private static ResourceConflictException ResourceExists(string containerName, string resourceName) =>
+        new($"The resource {resourceName} already exists in the container {containerName}.")
         {
-            ContainerName = resourceContainerName, ResourceName = resourceName
+            ContainerName = containerName, ResourceName = resourceName
         };
 
-    private static ResourceConflictException VersionExists(string resourceContainerName, string resourceName,
+    private static ResourceConflictException VersionExists(string containerName, string resourceName,
         string versionId, Exception? innerException = null)
     {
         string message =
-            $"The resource {resourceName} in the container {resourceContainerName} already has a version {versionId}.";
+            $"The resource {resourceName} in the container {containerName} already has a version {versionId}.";
         return innerException is null
-            ? new(message) { ContainerName = resourceContainerName, ResourceName = resourceName }
-            : new(message, innerException) { ContainerName = resourceContainerName, ResourceName = resourceName };
+            ? new(message) { ContainerName = containerName, ResourceName = resourceName }
+            : new(message, innerException) { ContainerName = containerName, ResourceName = resourceName };
     }
 
-    public override async Task<IReadOnlyList<ResourceInfo>> GetResourcePageAsync(string resourceContainerName, string? prefix,
+    public override async Task<IReadOnlyList<ResourceInfo>> GetResourcePageAsync(string containerName, string? prefix,
         string? afterName, int pageSize, CancellationToken cancellationToken = default)
     {
-        if (HasNul(resourceContainerName) || HasNul(prefix)) return [];
+        if (HasNul(containerName) || HasNul(prefix)) return [];
         afterName = CutAtNul(afterName);
         using ResourceDbContext dbContext = dbContextFactory.CreateDbContext();
 
         // A seek on the current-versions index, which holds (ContainerName, Name) in the names' binary order: the
         // prefix and the name to continue after bound the range, so a page reads only its own rows.
-        IQueryable<ResourceModel> current = dbContext.Resources.Where(r => r.ContainerName == resourceContainerName && r.IsLatest);
+        IQueryable<ResourceModel> current = dbContext.Resources.Where(r => r.ContainerName == containerName && r.IsLatest);
         if (prefix is not null) current = WithNamePrefix(current, prefix, afterName);
         if (afterName is not null) current = current.Where(r => string.Compare(r.Name, afterName) > 0);
 
@@ -1013,10 +1013,10 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
             .ToListAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    public override async Task<IReadOnlyList<ResourceInfo>> FindResourcePageAsync(string resourceContainerName, string? prefix,
+    public override async Task<IReadOnlyList<ResourceInfo>> FindResourcePageAsync(string containerName, string? prefix,
         string? afterName, int pageSize, ResourceMetadataMatch match, CancellationToken cancellationToken = default)
     {
-        if (HasNul(resourceContainerName) || HasNul(prefix) || HasNul(match.Key) || HasNul(match.Value)) return [];
+        if (HasNul(containerName) || HasNul(prefix) || HasNul(match.Key) || HasNul(match.Value)) return [];
         afterName = CutAtNul(afterName);
         using ResourceDbContext dbContext = dbContextFactory.CreateDbContext();
 
@@ -1028,7 +1028,7 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
         while (found.Count < pageSize)
         {
             IQueryable<ResourceMetadataModel> entries = dbContext.ResourceMetadata
-                .Where(m => m.ContainerName == resourceContainerName && m.Key == match.Key && m.Value == match.Value);
+                .Where(m => m.ContainerName == containerName && m.Key == match.Key && m.Value == match.Value);
             if (afterName is not null) entries = entries.Where(m => string.Compare(m.Name, afterName) > 0);
             IQueryable<ResourceModel> current = entries.Join(dbContext.Resources.Where(r => r.IsLatest), m => m.ResourceId, r => r.Id,
                 (m, r) => new { m, r }).Where(x => x.r.ContainerName == x.m.ContainerName && x.r.Name == x.m.Name).Select(x => x.r);
@@ -1049,9 +1049,9 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
     /// <summary>How many names <see cref="IndexMetadataAsync"/> indexes in one transaction.</summary>
     private const int NamesPerIndexBatch = 100;
 
-    public override async Task<long> IndexMetadataAsync(string resourceContainerName, CancellationToken cancellationToken = default)
+    public override async Task<long> IndexMetadataAsync(string containerName, CancellationToken cancellationToken = default)
     {
-        if (SearchableMetadataKeys.Count == 0 || HasNul(resourceContainerName)) return 0;
+        if (SearchableMetadataKeys.Count == 0 || HasNul(containerName)) return 0;
         long indexed = 0;
         string? afterName = null;
         while (true)
@@ -1059,7 +1059,7 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
             List<string> names;
             using (ResourceDbContext dbContext = dbContextFactory.CreateDbContext())
             {
-                IQueryable<ResourceModel> current = dbContext.Resources.Where(r => r.ContainerName == resourceContainerName && r.IsLatest);
+                IQueryable<ResourceModel> current = dbContext.Resources.Where(r => r.ContainerName == containerName && r.IsLatest);
                 if (afterName is not null) current = current.Where(r => string.Compare(r.Name, afterName) > 0);
                 names = await current.OrderBy(r => r.Name).Take(NamesPerIndexBatch).Select(r => r.Name)
                     .ToListAsync(cancellationToken).ConfigureAwait(false);
@@ -1067,9 +1067,9 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
             if (names.Count == 0) return indexed;
 
             // Under the names' locks, so a write to one of them can't come between reading its metadata and indexing it.
-            await WriteNamesAsync(names.Select(name => new ResourceAddress(resourceContainerName, name)), async (dbContext, ct) =>
+            await WriteNamesAsync(names.Select(name => new ResourceAddress(containerName, name)), async (dbContext, ct) =>
             {
-                foreach (string name in names) await IndexNameAsync(dbContext, resourceContainerName, name, ct).ConfigureAwait(false);
+                foreach (string name in names) await IndexNameAsync(dbContext, containerName, name, ct).ConfigureAwait(false);
                 return true;
             }, cancellationToken).ConfigureAwait(false);
             indexed += names.Count;
@@ -1080,31 +1080,31 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
     public override async Task<IReadOnlyList<ResourceInfo>> GetResourceVersionsAsync(ResourceAddress resource,
         CancellationToken cancellationToken = default)
     {
-        (string resourceContainerName, string resourceName) = resource;
+        (string containerName, string resourceName) = resource;
         using ResourceDbContext dbContext = dbContextFactory.CreateDbContext();
 
-        return await Versions(dbContext.Resources, resourceContainerName, resourceName)
+        return await Versions(dbContext.Resources, containerName, resourceName)
             .OrderByDescending(r => r.IsLatest)
             .ThenByDescending(r => r.Id)
             .Select(AsResourceInfo)
             .ToListAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    public override async Task<IReadOnlyList<ResourceInfo>> GetVersionPageAsync(string resourceContainerName, string? afterName,
+    public override async Task<IReadOnlyList<ResourceInfo>> GetVersionPageAsync(string containerName, string? afterName,
         int maxNames, CancellationToken cancellationToken = default)
     {
-        if (HasNul(resourceContainerName)) return [];
+        if (HasNul(containerName)) return [];
         afterName = CutAtNul(afterName);
         using ResourceDbContext dbContext = dbContextFactory.CreateDbContext();
 
         // The page's names, found as GetResourcePageAsync finds them, and every version of each, in one query.
         IQueryable<ResourceModel> current =
-            dbContext.Resources.Where(r => r.ContainerName == resourceContainerName && r.IsLatest);
+            dbContext.Resources.Where(r => r.ContainerName == containerName && r.IsLatest);
         if (afterName is not null) current = current.Where(r => string.Compare(r.Name, afterName) > 0);
         IQueryable<string> names = current.OrderBy(r => r.Name).Take(maxNames).Select(r => r.Name);
 
         return await dbContext.Resources
-            .Where(r => r.ContainerName == resourceContainerName && names.Contains(r.Name))
+            .Where(r => r.ContainerName == containerName && names.Contains(r.Name))
             .OrderBy(r => r.Name)
             .ThenByDescending(r => r.IsLatest)
             .ThenByDescending(r => r.Id)
@@ -1115,10 +1115,10 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
     public override async Task<ResourceInfo?> GetResourceInfoAsync(ResourceAddress resource, string? versionId = null,
         CancellationToken cancellationToken = default)
     {
-        (string resourceContainerName, string resourceName) = resource;
+        (string containerName, string resourceName) = resource;
         using ResourceDbContext dbContext = dbContextFactory.CreateDbContext();
 
-        ResourceModel? existingResource = await ResolveAsync(dbContext.Resources, resourceContainerName, resourceName, versionId, cancellationToken).ConfigureAwait(false);
+        ResourceModel? existingResource = await ResolveAsync(dbContext.Resources, containerName, resourceName, versionId, cancellationToken).ConfigureAwait(false);
 
         if (existingResource is null) return null;
 
@@ -1156,14 +1156,14 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
     public override async Task<Stream?> GetResourceStreamAsync(ResourceAddress resource, string? versionId, long offset,
         long? length, CancellationToken cancellationToken = default)
     {
-        (string resourceContainerName, string resourceName) = resource;
+        (string containerName, string resourceName) = resource;
         // The stream reads the chunks through this context as the caller reads, and disposes it.
         ResourceDbContext dbContext = dbContextFactory.CreateDbContext();
         try
         {
             // One statement, so the length belongs to the version found even if it is deleted right after.
             StoredVersion? existingResource = await StoredVersionAsync(
-                Version(dbContext.Resources, resourceContainerName, resourceName, versionId), cancellationToken).ConfigureAwait(false);
+                Version(dbContext.Resources, containerName, resourceName, versionId), cancellationToken).ConfigureAwait(false);
             if (existingResource == null)
             {
                 await dbContext.DisposeAsync().ConfigureAwait(false);
@@ -1266,24 +1266,24 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
     public override Task<bool> DeleteResourceAsync(ResourceAddress resource, string? versionId = null,
         ResourceConditions? conditions = null, CancellationToken cancellationToken = default)
     {
-        (string resourceContainerName, string resourceName) = resource;
+        (string containerName, string resourceName) = resource;
         conditions ??= new ResourceConditions();
-        if (versionId == null) return DeleteNameAsync(resourceContainerName, resourceName, conditions, cancellationToken);
+        if (versionId == null) return DeleteNameAsync(containerName, resourceName, conditions, cancellationToken);
 
         bool deletedInAnEarlierAttempt = false;
 
         // Under the name's lock, so a concurrent delete of the same version finds it gone instead of failing, the
         // promotion of the next version can't race a write, and the conditions hold until the delete commits.
-        return WriteNameAsync(resourceContainerName, resourceName, async (dbContext, ct) =>
+        return WriteNameAsync(containerName, resourceName, async (dbContext, ct) =>
         {
             // A retry after a commit whose acknowledgment was lost finds what it deleted gone. The conditions it met
             // no longer hold then, and it mustn't report that nothing was deleted.
-            if (deletedInAnEarlierAttempt && !await dbContext.Resources.AnyAsync(r => r.ContainerName == resourceContainerName
+            if (deletedInAnEarlierAttempt && !await dbContext.Resources.AnyAsync(r => r.ContainerName == containerName
                 && r.Name == resourceName && r.VersionId == versionId, ct).ConfigureAwait(false))
                 return true;
 
-            await ThrowIfNotMetAsync(dbContext, conditions, resourceContainerName, resourceName, ct).ConfigureAwait(false);
-            if (await ResolveWithChunksAsync(dbContext.Resources, resourceContainerName, resourceName, versionId, ct).ConfigureAwait(false) is not { } found)
+            await ThrowIfNotMetAsync(dbContext, conditions, containerName, resourceName, ct).ConfigureAwait(false);
+            if (await ResolveWithChunksAsync(dbContext.Resources, containerName, resourceName, versionId, ct).ConfigureAwait(false) is not { } found)
                 return deletedInAnEarlierAttempt = false;
             ThrowIfRetained(found.Version, Now());
             return deletedInAnEarlierAttempt = await DeleteVersionAsync(dbContext, found.Version, found.Chunks, ct).ConfigureAwait(false);
@@ -1297,7 +1297,7 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
     /// it had been stored just after the delete. A delete that's canceled or fails partway leaves every version it
     /// didn't reach whole, and calling it again finishes the job.
     /// </summary>
-    private async Task<bool> DeleteNameAsync(string resourceContainerName, string resourceName, ResourceConditions conditions,
+    private async Task<bool> DeleteNameAsync(string containerName, string resourceName, ResourceConditions conditions,
         CancellationToken cancellationToken)
     {
         List<(long Id, int Chunks)> versions = [];
@@ -1306,15 +1306,15 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
         do
         {
             // Under the name's lock, so a batch can't race a write that makes a version current.
-            deleted += await WriteNameAsync(resourceContainerName, resourceName, async (dbContext, ct) =>
+            deleted += await WriteNameAsync(containerName, resourceName, async (dbContext, ct) =>
             {
                 // A retry after a commit whose acknowledgment was lost keeps the list it took, and doesn't check the
                 // conditions again: with versions deleted, they may no longer hold.
                 bool firstBatch = versions.Count == 0;
                 if (firstBatch)
                 {
-                    await ThrowIfNotMetAsync(dbContext, conditions, resourceContainerName, resourceName, ct).ConfigureAwait(false);
-                    var listed = await Versions(dbContext.Resources, resourceContainerName, resourceName)
+                    await ThrowIfNotMetAsync(dbContext, conditions, containerName, resourceName, ct).ConfigureAwait(false);
+                    var listed = await Versions(dbContext.Resources, containerName, resourceName)
                         .OrderBy(r => r.IsLatest).ThenBy(r => r.Id)
                         .Select(r => new { r.Id, r.VersionId, r.RetainUntil, r.LegalHold, Chunks = r.Chunks!.Count })
                         .ToListAsync(ct).ConfigureAwait(false);
@@ -1322,7 +1322,7 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
                     DateTimeOffset now = Now();
                     if (listed.FirstOrDefault(v => v.LegalHold || v.RetainUntil > now) is { } retained)
                     {
-                        throw ResourceRetainedException.Create(new ResourceAddress(resourceContainerName, resourceName),
+                        throw ResourceRetainedException.Create(new ResourceAddress(containerName, resourceName),
                             retained.VersionId!, retained.RetainUntil, retained.LegalHold, now);
                     }
                     versions = [.. listed.Select(v => (v.Id, v.Chunks))];
@@ -1344,13 +1344,13 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
                 List<ResourceModel> found;
                 if (firstBatch)
                 {
-                    found = [.. ids.Select(id => new ResourceModel { Id = id, ContainerName = resourceContainerName, Name = resourceName })];
+                    found = [.. ids.Select(id => new ResourceModel { Id = id, ContainerName = containerName, Name = resourceName })];
                     dbContext.Resources.AttachRange(found);
                 }
                 else
                 {
                     found = await dbContext.Resources
-                        .Where(r => ids.Contains(r.Id) && r.ContainerName == resourceContainerName && r.Name == resourceName)
+                        .Where(r => ids.Contains(r.Id) && r.ContainerName == containerName && r.Name == resourceName)
                         .ToListAsync(ct).ConfigureAwait(false);
                     // This batch took the name's lock again after the first one released it, so a hold or a later date
                     // may have been set in between.
@@ -1620,18 +1620,18 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
     public override Task<bool> SoftDeleteResourceAsync(ResourceAddress resource, string? versionId, ResourceConditions? conditions,
         DateTimeOffset purgeAt, CancellationToken cancellationToken = default)
     {
-        (string resourceContainerName, string resourceName) = resource;
+        (string containerName, string resourceName) = resource;
         bool deletedInAnEarlierAttempt = false;
-        return WriteNameAsync(resourceContainerName, resourceName, async (dbContext, ct) =>
+        return WriteNameAsync(containerName, resourceName, async (dbContext, ct) =>
         {
             IQueryable<ResourceModel> targets = versionId is null
-                ? Versions(dbContext.Resources, resourceContainerName, resourceName)
-                : Version(dbContext.Resources, resourceContainerName, resourceName, versionId);
+                ? Versions(dbContext.Resources, containerName, resourceName)
+                : Version(dbContext.Resources, containerName, resourceName, versionId);
             // A retry after a commit whose acknowledgment was lost finds what it deleted in the bin. The conditions it
             // met no longer hold then, and it mustn't report that nothing was deleted.
             if (deletedInAnEarlierAttempt && !await targets.AnyAsync(ct).ConfigureAwait(false)) return true;
 
-            await ThrowIfNotMetAsync(dbContext, conditions ?? new ResourceConditions(), resourceContainerName, resourceName, ct).ConfigureAwait(false);
+            await ThrowIfNotMetAsync(dbContext, conditions ?? new ResourceConditions(), containerName, resourceName, ct).ConfigureAwait(false);
             List<ResourceModel> deleting = await targets.ToListAsync(ct).ConfigureAwait(false);
             if (deleting.Count == 0) return deletedInAnEarlierAttempt = false;
             DateTimeOffset now = Now();
@@ -1648,7 +1648,7 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
             await dbContext.SaveChangesAsync(ct).ConfigureAwait(false);
             if (lostCurrent)
             {
-                ResourceModel? next = await Versions(dbContext.Resources, resourceContainerName, resourceName)
+                ResourceModel? next = await Versions(dbContext.Resources, containerName, resourceName)
                     .OrderByDescending(r => r.Id)
                     .FirstOrDefaultAsync(ct).ConfigureAwait(false);
                 if (next is not null)
@@ -1656,7 +1656,7 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
                     next.IsLatest = true;
                     await dbContext.SaveChangesAsync(ct).ConfigureAwait(false);
                 }
-                await IndexNameAsync(dbContext, resourceContainerName, resourceName, ct).ConfigureAwait(false);
+                await IndexNameAsync(dbContext, containerName, resourceName, ct).ConfigureAwait(false);
             }
             return deletedInAnEarlierAttempt = true;
         }, cancellationToken);
@@ -1675,12 +1675,12 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
     }
 
     /// <summary>A seek on the index of versions in bins, newest deletion first.</summary>
-    public override async Task<DeletedVersionPage> GetDeletedPageAsync(string resourceContainerName, string? prefix,
+    public override async Task<DeletedVersionPage> GetDeletedPageAsync(string containerName, string? prefix,
         ResourceVersionKey? after, int pageSize, CancellationToken cancellationToken = default)
     {
-        if (HasNul(resourceContainerName) || HasNul(prefix)) return new DeletedVersionPage([], null);
+        if (HasNul(containerName) || HasNul(prefix)) return new DeletedVersionPage([], null);
         using ResourceDbContext dbContext = dbContextFactory.CreateDbContext();
-        IQueryable<ResourceModel> bin = Bin(dbContext).Where(r => r.ContainerName == resourceContainerName);
+        IQueryable<ResourceModel> bin = Bin(dbContext).Where(r => r.ContainerName == containerName);
         if (prefix is not null) bin = WithNamePrefix(bin, prefix, null);
         if (after is { } last)
         {
@@ -1704,7 +1704,7 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
         if (found.Count <= pageSize) return new DeletedVersionPage(found, null);
         found.RemoveAt(pageSize);
         return new DeletedVersionPage(found, new ResourceVersionKey(found[^1].DeletedAt!.Value,
-            new ResourceAddress(resourceContainerName, found[^1].Name), found[^1].VersionId));
+            new ResourceAddress(containerName, found[^1].Name), found[^1].VersionId));
     }
 
     public override async Task<IReadOnlyList<ResourceInfo>> GetDeletedVersionsAsync(ResourceAddress resource,
@@ -1845,7 +1845,7 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
                 .ExecuteUpdateAsync(s => s.SetProperty(r => r.ContentType, contentType), ct).ConfigureAwait(false) > 0, cancellationToken);
     }
 
-    public override async Task AddContainerAsync(string resourceContainerName,
+    public override async Task AddContainerAsync(string containerName,
         IReadOnlyDictionary<string, string> metadata, CancellationToken cancellationToken = default)
     {
         bool created = false;
@@ -1853,7 +1853,7 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
         {
             attempt.ResourceContainers.Add(new ResourceContainerModel
             {
-                Name = resourceContainerName,
+                Name = containerName,
                 Metadata = new Dictionary<string, string>(metadata)
             });
 
@@ -1866,21 +1866,21 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
                 // A retry after a commit whose acknowledgment was lost finds the container it created. It can't tell
                 // that from a commit that failed while another caller created the name, which counts as created too.
                 if (created) return true;
-                throw new ResourceConflictException($"The container {resourceContainerName} already exists.",
-                    exception) { ContainerName = resourceContainerName };
+                throw new ResourceConflictException($"The container {containerName} already exists.",
+                    exception) { ContainerName = containerName };
             }
 
             return created = true;
         }, cancellationToken).ConfigureAwait(false);
     }
 
-    public override async Task<bool> SetContainerMetadataAsync(string resourceContainerName,
+    public override async Task<bool> SetContainerMetadataAsync(string containerName,
         IReadOnlyDictionary<string, string> metadata, CancellationToken cancellationToken = default)
     {
-        if (HasNul(resourceContainerName)) return false;
+        if (HasNul(containerName)) return false;
         using ResourceDbContext dbContext = dbContextFactory.CreateDbContext();
         IDictionary<string, string> copy = new Dictionary<string, string>(metadata);
-        return await dbContext.ResourceContainers.Where(x => x.Name == resourceContainerName)
+        return await dbContext.ResourceContainers.Where(x => x.Name == containerName)
             .ExecuteUpdateAsync(s => s.SetProperty(c => c.Metadata, copy), cancellationToken).ConfigureAwait(false) > 0;
     }
 
@@ -1906,54 +1906,54 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
             }).ToListAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    public override async Task<ContainerInfo?> GetContainerInfoAsync(string resourceContainerName,
+    public override async Task<ContainerInfo?> GetContainerInfoAsync(string containerName,
         CancellationToken cancellationToken = default)
     {
-        if (HasNul(resourceContainerName)) return null;
+        if (HasNul(containerName)) return null;
         using ResourceDbContext dbContext = dbContextFactory.CreateDbContext();
 
-        return await dbContext.ResourceContainers.Where(x => x.Name == resourceContainerName).Select(x => new ContainerInfo
+        return await dbContext.ResourceContainers.Where(x => x.Name == containerName).Select(x => new ContainerInfo
         {
             Name = x.Name,
             Metadata = (IReadOnlyDictionary<string, string>)x.Metadata
         }).FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    public override async Task<ResourceContainerUsage> GetContainerUsageAsync(string resourceContainerName,
+    public override async Task<ContainerUsage> GetContainerUsageAsync(string containerName,
         CancellationToken cancellationToken = default)
     {
-        if (HasNul(resourceContainerName)) return new ResourceContainerUsage(0, 0, 0);
+        if (HasNul(containerName)) return new ContainerUsage(0, 0, 0);
         using ResourceDbContext dbContext = dbContextFactory.CreateDbContext();
-        return await MeasureContainerAsync(dbContext, resourceContainerName, cancellationToken).ConfigureAwait(false);
+        return await MeasureContainerAsync(dbContext, containerName, cancellationToken).ConfigureAwait(false);
     }
 
-    public override async Task<IReadOnlyList<ResourceInfo>> GetTopVersionsAsync(string resourceContainerName,
+    public override async Task<IReadOnlyList<ResourceInfo>> GetTopVersionsAsync(string containerName,
         ResourceVersionOrder order, int count, CancellationToken cancellationToken = default)
     {
-        if (HasNul(resourceContainerName)) return [];
+        if (HasNul(containerName)) return [];
         using ResourceDbContext dbContext = dbContextFactory.CreateDbContext();
 
         // One query over the container's version rows. Neither order has an index of its own, so it reads them all, as
         // usage does. SQL Server sorts NULL lowest, so a version an early release stored without a length comes last.
-        IQueryable<ResourceModel> versions = dbContext.Resources.Where(r => r.ContainerName == resourceContainerName);
+        IQueryable<ResourceModel> versions = dbContext.Resources.Where(r => r.ContainerName == containerName);
         versions = order == ResourceVersionOrder.LargestFirst
             ? versions.OrderByDescending(r => r.ContentLength).ThenBy(r => r.VersionId)
             : versions.Where(r => r.ExpiresAt != null).OrderBy(r => r.ExpiresAt).ThenBy(r => r.VersionId);
         return await versions.Take(count).Select(AsResourceInfo).ToListAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    public override async Task<bool> DeleteContainerAsync(string resourceContainerName,
+    public override async Task<bool> DeleteContainerAsync(string containerName,
         CancellationToken cancellationToken = default)
     {
-        if (HasNul(resourceContainerName)) return false;
+        if (HasNul(containerName)) return false;
         using ResourceDbContext dbContext = dbContextFactory.CreateDbContext();
 
-        if (!await dbContext.ResourceContainers.AnyAsync(x => x.Name == resourceContainerName, cancellationToken).ConfigureAwait(false)) return false;
+        if (!await dbContext.ResourceContainers.AnyAsync(x => x.Name == containerName, cancellationToken).ConfigureAwait(false)) return false;
 
         // Every version is checked before any goes, so a delete that's refused deletes nothing. A version held or
         // retained after this is left by the batch that reaches it, and the next batch refuses.
         DateTimeOffset now = Now();
-        await ThrowIfAnyRetainedAsync(dbContext.Resources.Where(r => r.ContainerName == resourceContainerName), now, cancellationToken).ConfigureAwait(false);
+        await ThrowIfAnyRetainedAsync(dbContext.Resources.Where(r => r.ContainerName == containerName), now, cancellationToken).ConfigureAwait(false);
 
         // Each batch commits in a transaction of its own, so no single transaction holds the whole container's content.
         // A batch takes whole resources, each with its chunks, so a reader never sees part of one, until it reaches the
@@ -1974,7 +1974,7 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
             // Staged versions too, so an abandoned upload's chunks go in batches with the rest rather than all at once
             // when the container's row does.
             var candidates = await attempt.Resources.IgnoreQueryFilters()
-                .Where(r => r.ContainerName == resourceContainerName)
+                .Where(r => r.ContainerName == containerName)
                 .OrderBy(r => r.Name).ThenBy(r => r.VersionId)
                 .Select(r => new { r.Id, r.Name, r.VersionId, r.IsLatest, r.StagedAt, r.RetainUntil, r.LegalHold, Chunks = r.Chunks!.Count })
                 .Take(MaxResourcesPerDeleteBatch)
@@ -1983,7 +1983,7 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
             // A staged version's retention applies only once its upload completes.
             if (candidates.FirstOrDefault(c => c.StagedAt is null && (c.LegalHold || c.RetainUntil > now)) is { } retained)
             {
-                throw ResourceRetainedException.Create(new ResourceAddress(resourceContainerName, retained.Name), retained.VersionId!,
+                throw ResourceRetainedException.Create(new ResourceAddress(containerName, retained.Name), retained.VersionId!,
                     retained.RetainUntil, retained.LegalHold, now);
             }
 
@@ -2010,7 +2010,7 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
             foreach (var candidate in candidates.Where(c => batch.Contains(c.Id)))
             {
                 if (candidate.Chunks > ChunksDeletedPerStatement && attempt.Database.IsRelational()
-                    && !await LockVersionInContainerAsync(attempt, candidate.Id, resourceContainerName, now, ct).ConfigureAwait(false))
+                    && !await LockVersionInContainerAsync(attempt, candidate.Id, containerName, now, ct).ConfigureAwait(false))
                     continue;
                 deleting.Add((candidate.Id, candidate.Chunks));
             }
@@ -2018,7 +2018,7 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
             await DeleteLargeVersionsChunksAsync(attempt, deleting, ct).ConfigureAwait(false);
             if (attempt.Database.IsRelational())
             {
-                await DeleteVersionsInContainerAsync(attempt, resourceContainerName, batch, now, ct).ConfigureAwait(false);
+                await DeleteVersionsInContainerAsync(attempt, containerName, batch, now, ct).ConfigureAwait(false);
             }
             else
             {
@@ -2035,12 +2035,12 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
         // it unchecked, so this returns null for another round of batches.
         async Task<bool?> RemoveIfEmptyAsync(ResourceDbContext attempt, CancellationToken ct)
         {
-            ResourceContainerModel? container = await attempt.ResourceContainers.FirstOrDefaultAsync(x => x.Name == resourceContainerName, ct).ConfigureAwait(false);
+            ResourceContainerModel? container = await attempt.ResourceContainers.FirstOrDefaultAsync(x => x.Name == containerName, ct).ConfigureAwait(false);
             // A retry after a commit whose acknowledgment was lost finds the container gone.
             if (container is null) return deleted;
             if (attempt.Database.IsRelational()
-                ? !await LockEmptyContainerAsync(attempt, resourceContainerName, ct).ConfigureAwait(false)
-                : await attempt.Resources.IgnoreQueryFilters().AnyAsync(r => r.ContainerName == resourceContainerName, ct).ConfigureAwait(false))
+                ? !await LockEmptyContainerAsync(attempt, containerName, ct).ConfigureAwait(false)
+                : await attempt.Resources.IgnoreQueryFilters().AnyAsync(r => r.ContainerName == containerName, ct).ConfigureAwait(false))
             {
                 return null;
             }
@@ -2076,27 +2076,27 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
     }
 
     private Task<ResourceModel?> ResolveAsync(IQueryable<ResourceModel> query,
-        string resourceContainerName, string resourceName, string? versionId, CancellationToken cancellationToken) =>
-        Version(query, resourceContainerName, resourceName, versionId).FirstOrDefaultAsync(cancellationToken);
+        string containerName, string resourceName, string? versionId, CancellationToken cancellationToken) =>
+        Version(query, containerName, resourceName, versionId).FirstOrDefaultAsync(cancellationToken);
 
     /// <summary>As <see cref="ResolveAsync"/>, with how many chunks the version has, for deleting it.</summary>
     private async Task<(ResourceModel Version, int Chunks)?> ResolveWithChunksAsync(IQueryable<ResourceModel> query,
-        string resourceContainerName, string resourceName, string? versionId, CancellationToken cancellationToken) =>
-        await Version(query, resourceContainerName, resourceName, versionId)
+        string containerName, string resourceName, string? versionId, CancellationToken cancellationToken) =>
+        await Version(query, containerName, resourceName, versionId)
             .Select(r => new { Version = r, Chunks = r.Chunks!.Count })
             .FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false) is { } found ? (found.Version, found.Chunks) : null;
 
     /// <summary>Every version of a name.</summary>
-    private IQueryable<ResourceModel> Versions(IQueryable<ResourceModel> query, string resourceContainerName, string resourceName) =>
-        HasNul(resourceContainerName) || HasNul(resourceName)
+    private IQueryable<ResourceModel> Versions(IQueryable<ResourceModel> query, string containerName, string resourceName) =>
+        HasNul(containerName) || HasNul(resourceName)
             ? query.Where(r => false)
-            : query.Where(r => r.ContainerName == resourceContainerName && r.Name == resourceName);
+            : query.Where(r => r.ContainerName == containerName && r.Name == resourceName);
 
     /// <summary>The named version, or the current one when <paramref name="versionId"/> is null.</summary>
-    private IQueryable<ResourceModel> Version(IQueryable<ResourceModel> query, string resourceContainerName, string resourceName, string? versionId)
+    private IQueryable<ResourceModel> Version(IQueryable<ResourceModel> query, string containerName, string resourceName, string? versionId)
     {
         if (HasNul(versionId)) return query.Where(r => false);
-        query = Versions(query, resourceContainerName, resourceName);
+        query = Versions(query, containerName, resourceName);
 
         // A current version is never staged or in the bin, so the filter on those goes. With its condition, SQL Server
         // was measured caching a scan for this query in some runs, rather than a seek.
@@ -2183,7 +2183,7 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
     protected abstract Task<int> DeleteSomeChunksAsync(ResourceDbContext dbContext, long resourceId, CancellationToken cancellationToken);
 
     /// <summary>A container's usage, from its stored versions.</summary>
-    protected abstract Task<ResourceContainerUsage> MeasureContainerAsync(ResourceDbContext dbContext, string resourceContainerName,
+    protected abstract Task<ContainerUsage> MeasureContainerAsync(ResourceDbContext dbContext, string containerName,
         CancellationToken cancellationToken);
 
     /// <summary>
@@ -2191,14 +2191,14 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
     /// <paramref name="now"/>.
     /// </summary>
     /// <returns>Whether it is.</returns>
-    protected abstract Task<bool> LockVersionInContainerAsync(ResourceDbContext attempt, long resourceId, string resourceContainerName,
+    protected abstract Task<bool> LockVersionInContainerAsync(ResourceDbContext attempt, long resourceId, string containerName,
         DateTimeOffset now, CancellationToken cancellationToken);
 
     /// <summary>
     /// Locks the container until the transaction ends, so nothing can be stored in it, and says whether it holds no
     /// versions, staged ones included, counting one whose write was still under way.
     /// </summary>
-    protected abstract Task<bool> LockEmptyContainerAsync(ResourceDbContext attempt, string resourceContainerName,
+    protected abstract Task<bool> LockEmptyContainerAsync(ResourceDbContext attempt, string containerName,
         CancellationToken cancellationToken);
 
     /// <summary>
@@ -2206,7 +2206,7 @@ internal abstract class EntityFrameworkRepository(IDbContextFactory<ResourceDbCo
     /// another container since it was listed is left there, and one that's become held or retained at
     /// <paramref name="now"/> since then is left where it is, unless it's staged.
     /// </summary>
-    protected abstract Task DeleteVersionsInContainerAsync(ResourceDbContext attempt, string resourceContainerName, List<long> ids,
+    protected abstract Task DeleteVersionsInContainerAsync(ResourceDbContext attempt, string containerName, List<long> ids,
         DateTimeOffset now, CancellationToken cancellationToken);
 
     /// <summary>

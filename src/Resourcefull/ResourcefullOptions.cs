@@ -9,7 +9,7 @@ public class ResourcefullOptions
 {
     /// <summary>
     /// Gets how many versions of each name to keep, including the current one, in a container whose
-    /// <see cref="ResourceContainerPolicy.MaxVersions"/> isn't set. Set through
+    /// <see cref="ContainerPolicy.MaxVersions"/> isn't set. Set through
     /// <see cref="ResourcefullOptionsBuilder.UseVersioning(int?)"/>; 1 without it, which keeps only the current version.
     /// </summary>
     public int MaxVersions { get; internal set; } = 1;

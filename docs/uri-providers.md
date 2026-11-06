@@ -3,15 +3,15 @@
 Resourcefull doesn't serve files itself; your application does. A URI provider lets each `ContainerInfo` and
 `ResourceInfo` carry the URI your application serves it at, so callers get a link along with the attributes.
 
-Implement `IUriProvider`. `GetAbsoluteUri` gets a `ResourcefullContext` with the container name and, for a resource,
-its name and version ID, and returns the URI, or `null` for none:
+Implement `IResourceUriProvider`. `GetAbsoluteUri` gets a `ResourceUriContext` with the container name and, for a
+resource, its name and version ID, and returns the URI, or `null` for none:
 
 ```csharp
-public class FilesUriProvider(IConfiguration configuration) : IUriProvider
+public class FilesUriProvider(IConfiguration configuration) : IResourceUriProvider
 {
     private readonly string? _baseUrl = configuration["Files:BaseUrl"]?.TrimEnd('/');
 
-    public string? GetAbsoluteUri(ResourcefullContext context)
+    public string? GetAbsoluteUri(ResourceUriContext context)
     {
         if (_baseUrl is null) return null;
 
@@ -19,7 +19,7 @@ public class FilesUriProvider(IConfiguration configuration) : IUriProvider
         if (context.ResourceName is null) return $"{_baseUrl}/files/{container}";
 
         string uri = $"{_baseUrl}/files/{container}?name={Uri.EscapeDataString(context.ResourceName)}";
-        return context.ResourceVersionId is null ? uri : $"{uri}&version={Uri.EscapeDataString(context.ResourceVersionId)}";
+        return context.VersionId is null ? uri : $"{uri}&version={Uri.EscapeDataString(context.VersionId)}";
     }
 }
 ```

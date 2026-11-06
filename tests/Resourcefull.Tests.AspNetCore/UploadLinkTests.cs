@@ -134,7 +134,7 @@ public class UploadLinkTests
     public async Task SharedUpload_ShouldStillApplyTheContainersPolicy_WhenTheLinkAllowsTheUpload()
     {
         // Arrange: the link takes any type, the container only PDFs.
-        await using TestApp app = await TestApp.StartAsync(policy: new ResourceContainerPolicy { AllowedContentTypes = ["application/pdf"] });
+        await using TestApp app = await TestApp.StartAsync(policy: new ContainerPolicy { AllowedContentTypes = ["application/pdf"] });
         string token = app.Links.CreateUploadToken(new ResourceUploadLink(TestApp.Container) { ResourceName = "a.txt" });
 
         // Act

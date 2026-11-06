@@ -293,7 +293,7 @@ public sealed class SharedUploadHttpResult : IResult, IActionResult
 
     /// <summary>Why the link's content types don't allow <paramref name="contentType"/>, or <see langword="null"/> if they do.</summary>
     private static string? TypeRefusalTitle(SignedResourceUploadLink link, string? contentType) =>
-        new ResourceContainerPolicy { AllowedContentTypes = link.AllowedContentTypes }.AllowsContentType(contentType)
+        new ContainerPolicy { AllowedContentTypes = link.AllowedContentTypes }.AllowsContentType(contentType)
             ? null
             : $"The upload link accepts only {string.Join(", ", link.AllowedContentTypes!)}.";
 

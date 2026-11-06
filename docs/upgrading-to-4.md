@@ -172,11 +172,11 @@ change the members whose signatures changed:
 |---|---|
 | The two `AddResourceAsync` overloads, one taking `bool createOnly` and one taking a `ResourceWriteCondition` | One `AddResourceAsync(NewResourceVersion version, Stream content, ResourceWriteCondition? condition, ...)`; `condition` is `null` for no condition, and `createOnly` is now `condition.CreateOnly` |
 | The two `DeleteResourceAsync` overloads, with and without `ResourceConditions` | One, with `ResourceConditions? conditions`, `null` for no condition |
-| Reads and deletes taking `string resourceContainerName, string resourceName` | A `ResourceAddress` |
+| Reads and deletes taking a container name and a resource name | A `ResourceAddress` |
 | `GetAllResourceInfoAsync`, which every provider implemented, and the default `GetResourcePageAsync` built on it | `GetResourcePageAsync`, now abstract: return one page of names without reading the whole container (see [Listing by page](providers/writing-a-provider.md#listing-by-page)); `GetAllResourceInfoAsync` is gone |
-| `AddResourceContainerAsync(ResourceContainerInfo)` | `AddContainerAsync(string resourceContainerName, IReadOnlyDictionary<string, string> metadata, ...)` |
+| `AddResourceContainerAsync(ResourceContainerInfo)` | `AddContainerAsync(string containerName, IReadOnlyDictionary<string, string> metadata, ...)` |
 | `CopyResourceAsync`'s `ResourceInfo destination` | A `NewResourceVersion` |
-| `ImportVersionAsync(string resourceContainerName, ResourceInfo version, ...)` | `ImportVersionAsync(NewResourceVersion version, ...)` |
+| `ImportVersionAsync(string, ResourceInfo version, ...)` | `ImportVersionAsync(NewResourceVersion version, ...)` |
 | `GetExpiredAsync`'s `ResourceInfo? after` | `ResourceVersionKey? after`: the key of the previous batch's last version |
 | `IDictionary<string, string>` metadata parameters | `IReadOnlyDictionary<string, string>` |
 | Lists returned as `List<T>` | `IReadOnlyList<T>` |

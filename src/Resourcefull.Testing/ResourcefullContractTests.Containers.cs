@@ -139,10 +139,10 @@ public abstract partial class ResourcefullContractTests
         Assert.Empty(await container.ListResourcesAsync().ToListAsync());
     }
 
-    private sealed class PathUriProvider : IUriProvider
+    private sealed class PathUriProvider : IResourceUriProvider
     {
-        public string? GetAbsoluteUri(ResourcefullContext context) => context.ResourceName is null
+        public string? GetAbsoluteUri(ResourceUriContext context) => context.ResourceName is null
             ? $"https://resources.test/{context.ContainerName}"
-            : $"https://resources.test/{context.ContainerName}/{context.ResourceName}/{context.ResourceVersionId}";
+            : $"https://resources.test/{context.ContainerName}/{context.ResourceName}/{context.VersionId}";
     }
 }

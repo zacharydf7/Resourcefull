@@ -17,10 +17,10 @@ public abstract partial class ResourcefullContractTests
 
     /// <summary>A provider whose containers keep deleted versions for <see cref="KeptFor"/>, on a clock the test moves.</summary>
     private ServiceProvider BuildBinProvider(ManualTimeProvider clock, Action<ResourcefullOptionsBuilder>? configure = null,
-        ResourceContainerPolicy? policy = null) =>
+        ContainerPolicy? policy = null) =>
         BuildServiceProvider(clock, o =>
         {
-            o.UseExpiry().UseContainerPolicies(policy ?? new ResourceContainerPolicy { KeepDeletedFor = KeptFor }, TimeSpan.Zero);
+            o.UseExpiry().UseContainerPolicies(policy ?? new ContainerPolicy { KeepDeletedFor = KeptFor }, TimeSpan.Zero);
             configure?.Invoke(o);
         });
 
@@ -128,7 +128,7 @@ public abstract partial class ResourcefullContractTests
             (v.ContainerName, v.Name, v.DeletedAt, v.PurgeAt, v.IsLatest)));
         ResourceInfo binned = bin.Single(v => v.VersionId == current.VersionId);
         Assert.Equal((current.ContentHash, 8L, "v"), (binned.ContentHash, binned.ContentLength, binned.Metadata["k"]));
-        ResourceContainerUsage usage = await container.GetUsageAsync();
+        ContainerUsage usage = await container.GetUsageAsync();
         Assert.Equal((0L, 0L, 0L, 13L, 2L), (usage.StoredSize.Bytes, usage.ResourceCount, usage.VersionCount,
             usage.DeletedSize.Bytes, usage.DeletedVersionCount));
     }
@@ -140,7 +140,7 @@ public abstract partial class ResourcefullContractTests
 
         // Arrange
         var clock = new ManualTimeProvider { Now = DateTimeOffset.UtcNow };
-        using ServiceProvider provider = BuildBinProvider(clock, policy: new ResourceContainerPolicy { KeepDeletedFor = TimeSpan.Zero });
+        using ServiceProvider provider = BuildBinProvider(clock, policy: new ContainerPolicy { KeepDeletedFor = TimeSpan.Zero });
         IResourceContainerClient container = await NewContainerAsync(provider);
         await container.UploadAsync("a", BinaryData.FromString("a"));
 
@@ -269,7 +269,7 @@ public abstract partial class ResourcefullContractTests
 
         // Arrange: the bin doesn't count, so another name takes the one place.
         var clock = new ManualTimeProvider { Now = DateTimeOffset.UtcNow };
-        using ServiceProvider provider = BuildBinProvider(clock, policy: new ResourceContainerPolicy { KeepDeletedFor = KeptFor, MaxResourceCount = 1 });
+        using ServiceProvider provider = BuildBinProvider(clock, policy: new ContainerPolicy { KeepDeletedFor = KeptFor, MaxResourceCount = 1 });
         IResourceContainerClient container = await NewContainerAsync(provider);
         await container.UploadAsync("a", BinaryData.FromString("a"));
         await container.DeleteResourceIfExistsAsync("a");
@@ -330,7 +330,7 @@ public abstract partial class ResourcefullContractTests
         Assert.True(purged >= 1);
         Assert.Equal([kept.VersionId], (await ListDeletedAsync(container)).Select(v => v.VersionId));
         ResourceCleanup cleanup = Assert.Single(RecordingCleanupHandler.In(container.Name));
-        Assert.Equal((due.VersionId, ResourceCleanupReason.Purged), (cleanup.Resource.VersionId, cleanup.Reason));
+        Assert.Equal((due.VersionId, ResourceCleanupReason.Purged), (cleanup.Version.VersionId, cleanup.Reason));
     }
 
     [Fact]
@@ -376,7 +376,7 @@ public abstract partial class ResourcefullContractTests
         ResourceInfo binned = Assert.Single(await ListDeletedAsync(container));
         Assert.Equal((replaced.VersionId, null), (binned.VersionId, binned.ExpiresAt));
         ResourceCleanup cleanup = Assert.Single(RecordingCleanupHandler.In(container.Name));
-        Assert.Equal((replaced.VersionId, ResourceCleanupReason.Pruned), (cleanup.Resource.VersionId, cleanup.Reason));
+        Assert.Equal((replaced.VersionId, ResourceCleanupReason.Pruned), (cleanup.Version.VersionId, cleanup.Reason));
     }
 
     [Fact]
@@ -451,7 +451,7 @@ public abstract partial class ResourcefullContractTests
         await Assert.ThrowsAsync<ArgumentException>(() =>
             container.GetDeletedPageAsync(new ResourceListOptions { Prefix = "x/" }, first.ContinuationToken));
         await Assert.ThrowsAsync<ArgumentException>(() =>
-            container.GetDeletedPageAsync(new ResourceListOptions { Metadata = new ResourceMetadataMatch("k", "v") }));
+            container.GetDeletedPageAsync(new ResourceListOptions { MetadataMatch = new ResourceMetadataMatch("k", "v") }));
     }
 
     [Fact]
@@ -494,7 +494,7 @@ public abstract partial class ResourcefullContractTests
         var tagged = new ResourceUploadOptions { Metadata = new Dictionary<string, string> { ["k"] = "v" } };
         await container.UploadAsync("a", BinaryData.FromString("a"), tagged);
         await container.UploadAsync("b", BinaryData.FromString("b"), tagged);
-        var search = new ResourceListOptions { Metadata = new ResourceMetadataMatch("k", "v") };
+        var search = new ResourceListOptions { MetadataMatch = new ResourceMetadataMatch("k", "v") };
 
         // Act
         await container.DeleteResourceIfExistsAsync("a");

@@ -3,7 +3,7 @@ namespace Resourcefull;
 /// <summary>
 /// Hears about every version Resourcefull deletes by itself, before it's deleted: expired versions, which
 /// <see cref="ResourcefullOptionsBuilder.UseExpiry"/> deletes, older versions pruned past
-/// the container's <see cref="ResourceContainerPolicy.MaxVersions"/>, and versions it purges from a bin. Use it to record them in an audit system. The application's own
+/// the container's <see cref="ContainerPolicy.MaxVersions"/>, and versions it purges from a bin. Use it to record them in an audit system. The application's own
 /// deletes aren't included. Register one with <see cref="ResourcefullOptionsBuilder.UseCleanupHandler{THandler}"/>;
 /// it's a scoped service, so it can depend on the application's own.
 /// <para>Coming in 4.0.</para>
@@ -28,10 +28,10 @@ public interface IResourceCleanupHandler
 /// A version Resourcefull is about to delete by itself.
 /// <para>Coming in 4.0.</para>
 /// </summary>
-/// <param name="Resource">The version, as stored.</param>
+/// <param name="Version">The version, as stored.</param>
 /// <param name="Reason">Why it's being deleted.</param>
 /// <param name="At">When the cleanup that's deleting it started.</param>
-public sealed record ResourceCleanup(ResourceInfo Resource, ResourceCleanupReason Reason, DateTimeOffset At);
+public sealed record ResourceCleanup(ResourceInfo Version, ResourceCleanupReason Reason, DateTimeOffset At);
 
 /// <summary>
 /// Why Resourcefull is deleting a version by itself.
@@ -43,12 +43,12 @@ public enum ResourceCleanupReason
     Expired,
 
     /// <summary>
-    /// The name has more versions than its container's <see cref="ResourceContainerPolicy.MaxVersions"/> keeps. With
+    /// The name has more versions than its container's <see cref="ContainerPolicy.MaxVersions"/> keeps. With
     /// <see cref="ResourcefullOptionsBuilder.UseExpiry"/> and a provider that supports it, such a version is set to
     /// expire five minutes later instead, and
     /// is reported as <see cref="Expired"/> when the sweep deletes it, or as <see cref="Pruned"/> if, in a container
     /// that keeps one version, it's deleted sooner along with the version that replaced it. In a container with a
-    /// <see cref="ResourceContainerPolicy.KeepDeletedFor"/>, it goes to the bin straight away.
+    /// <see cref="ContainerPolicy.KeepDeletedFor"/>, it goes to the bin straight away.
     /// </summary>
     Pruned,
 

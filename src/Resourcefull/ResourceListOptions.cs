@@ -23,7 +23,7 @@ public sealed class ResourceListOptions
     /// resources whatever their metadata.
     /// <para>Coming in 4.0.</para>
     /// </summary>
-    public ResourceMetadataMatch? Metadata { get; init; }
+    public ResourceMetadataMatch? MetadataMatch { get; init; }
 
     internal const int DefaultPageSize = 1000;
 }

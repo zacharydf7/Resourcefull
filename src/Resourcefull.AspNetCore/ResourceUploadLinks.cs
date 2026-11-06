@@ -33,7 +33,7 @@ public sealed record ResourceUploadLink(string ContainerName)
 
     /// <summary>
     /// The content types an upload may declare, such as <c>application/pdf</c>, or <c>image/*</c> for every image type,
-    /// compared as <see cref="ResourceContainerPolicy.AllowedContentTypes"/> compares them; an upload that declares no
+    /// compared as <see cref="ContainerPolicy.AllowedContentTypes"/> compares them; an upload that declares no
     /// type is refused. <see langword="null"/> allows any type, or none.
     /// </summary>
     public IReadOnlyCollection<string>? AllowedContentTypes { get; init; }

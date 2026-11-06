@@ -8,10 +8,10 @@ namespace Resourcefull;
 /// The store-wide policy settings, and each container's effective policy, cached for every scope to share: a cache
 /// that drops expired entries, so it doesn't grow with the number of containers ever seen.
 /// </summary>
-internal sealed class ContainerPolicySettings(ResourceContainerPolicy defaults, TimeSpan cacheFor,
+internal sealed class ContainerPolicySettings(ContainerPolicy defaults, TimeSpan cacheFor,
     TimeSpan keepLastKnownFor) : IDisposable
 {
-    public ResourceContainerPolicy Defaults { get; } = defaults;
+    public ContainerPolicy Defaults { get; } = defaults;
 
     public TimeSpan CacheFor { get; } = cacheFor;
 
@@ -39,7 +39,7 @@ internal sealed class ContainerPolicies(ContainerPolicySettings settings, Resour
     public async Task CheckContentTypeAsync(string containerName, string? contentType, ClientTelemetry telemetry,
         CancellationToken cancellationToken)
     {
-        ResourceContainerPolicy policy = await GetAsync(containerName, telemetry, cancellationToken).ConfigureAwait(false);
+        ContainerPolicy policy = await GetAsync(containerName, telemetry, cancellationToken).ConfigureAwait(false);
         ThrowIfReadOnly(containerName, policy);
         ThrowIfTypeNotAllowed(containerName, policy, contentType);
     }
@@ -49,22 +49,22 @@ internal sealed class ContainerPolicies(ContainerPolicySettings settings, Resour
 
     /// <summary>
     /// Checks a new version against the policy before its content is read: an upload or a copy, or a restore, which
-    /// keeps its name and type and so isn't checked against <see cref="ResourceContainerPolicy.MaxResourceCount"/> or
-    /// <see cref="ResourceContainerPolicy.AllowedContentTypes"/>. A caller that keeps track of the container's usage, as an
+    /// keeps its name and type and so isn't checked against <see cref="ContainerPolicy.MaxResourceCount"/> or
+    /// <see cref="ContainerPolicy.AllowedContentTypes"/>. A caller that keeps track of the container's usage, as an
     /// import does, passes it as <paramref name="knownUsage"/>; otherwise it's read from storage when a limit needs it.
     /// </summary>
     /// <returns>
     /// The size the content must stay within as it's read, or <see langword="null"/> for no limit, and the
-    /// container's <see cref="ResourceContainerPolicy.RetainFor"/>.
+    /// container's <see cref="ContainerPolicy.RetainFor"/>.
     /// </returns>
     public async Task<NewVersionCheck> CheckNewVersionAsync(string containerName, string resourceName, bool restore, string? contentType,
-        long? declaredLength, ClientTelemetry telemetry, CancellationToken cancellationToken, ResourceContainerUsage? knownUsage = null)
+        long? declaredLength, ClientTelemetry telemetry, CancellationToken cancellationToken, ContainerUsage? knownUsage = null)
     {
-        ResourceContainerPolicy policy = await GetAsync(containerName, telemetry, cancellationToken).ConfigureAwait(false);
+        ContainerPolicy policy = await GetAsync(containerName, telemetry, cancellationToken).ConfigureAwait(false);
         ThrowIfReadOnly(containerName, policy);
         if (!restore) ThrowIfTypeNotAllowed(containerName, policy, contentType);
 
-        ResourceContainerUsage? usage = policy.MaxContainerSize is not null || (!restore && policy.MaxResourceCount is not null)
+        ContainerUsage? usage = policy.MaxContainerSize is not null || (!restore && policy.MaxResourceCount is not null)
             ? knownUsage ?? await repository.GetContainerUsageAsync(containerName, cancellationToken).ConfigureAwait(false)
             : null;
         if (!restore && policy.MaxResourceCount is { } maxCount && usage!.ResourceCount >= maxCount
@@ -104,7 +104,7 @@ internal sealed class ContainerPolicies(ContainerPolicySettings settings, Resour
     public async Task<ContentLimit?> CheckAppendAsync(string containerName, long offset, ClientTelemetry telemetry,
         CancellationToken cancellationToken)
     {
-        ResourceContainerPolicy policy = await GetAsync(containerName, telemetry, cancellationToken).ConfigureAwait(false);
+        ContainerPolicy policy = await GetAsync(containerName, telemetry, cancellationToken).ConfigureAwait(false);
         ThrowIfReadOnly(containerName, policy);
         ContentLimit? limit = null;
         if (policy.MaxResourceSize is { } maxSize)
@@ -127,31 +127,31 @@ internal sealed class ContainerPolicies(ContainerPolicySettings settings, Resour
     /// versions, unless the move stays within its container, which then holds what it did. Every version's
     /// <see cref="ResourceInfo.ContentLength"/> must be set.
     /// </summary>
-    public async Task CheckMoveAsync(string sourceContainer, string destinationContainer, IReadOnlyList<ResourceInfo> versions,
+    public async Task CheckMoveAsync(string sourceContainerName, string destinationContainerName, IReadOnlyList<ResourceInfo> versions,
         ClientTelemetry telemetry, CancellationToken cancellationToken)
     {
-        ThrowIfReadOnly(sourceContainer, await GetAsync(sourceContainer, telemetry, cancellationToken).ConfigureAwait(false));
-        if (destinationContainer == sourceContainer) return;
+        ThrowIfReadOnly(sourceContainerName, await GetAsync(sourceContainerName, telemetry, cancellationToken).ConfigureAwait(false));
+        if (destinationContainerName == sourceContainerName) return;
 
-        ResourceContainerPolicy policy = await GetAsync(destinationContainer, telemetry, cancellationToken).ConfigureAwait(false);
-        ThrowIfReadOnly(destinationContainer, policy);
+        ContainerPolicy policy = await GetAsync(destinationContainerName, telemetry, cancellationToken).ConfigureAwait(false);
+        ThrowIfReadOnly(destinationContainerName, policy);
         foreach (string? contentType in versions.Select(v => v.ContentType).Distinct())
-            ThrowIfTypeNotAllowed(destinationContainer, policy, contentType);
-        ResourceContainerUsage? usage = policy.MaxContainerSize is not null || policy.MaxResourceCount is not null
-            ? await repository.GetContainerUsageAsync(destinationContainer, cancellationToken).ConfigureAwait(false)
+            ThrowIfTypeNotAllowed(destinationContainerName, policy, contentType);
+        ContainerUsage? usage = policy.MaxContainerSize is not null || policy.MaxResourceCount is not null
+            ? await repository.GetContainerUsageAsync(destinationContainerName, cancellationToken).ConfigureAwait(false)
             : null;
         if (policy.MaxResourceCount is { } maxCount && usage!.ResourceCount >= maxCount)
-            throw CountExceeded(destinationContainer, usage, maxCount);
+            throw CountExceeded(destinationContainerName, usage, maxCount);
         if (policy.MaxResourceSize is { } maxSize && versions.Any(v => v.ContentLength > maxSize.Bytes))
         {
-            throw new ResourcePolicyViolationException(TooLargeMessage(destinationContainer, maxSize),
-                ResourcePolicyRule.MaxResourceSize, maxSize.Bytes) { ContainerName = destinationContainer };
+            throw new ResourcePolicyViolationException(TooLargeMessage(destinationContainerName, maxSize),
+                ResourcePolicyRule.MaxResourceSize, maxSize.Bytes) { ContainerName = destinationContainerName };
         }
         if (policy.MaxContainerSize is { } maxContainerSize
             && usage!.StoredSize.Bytes + versions.Sum(v => v.ContentLength ?? 0) > maxContainerSize.Bytes)
         {
-            throw new ResourcePolicyViolationException(NoRoomMessage(destinationContainer, usage, maxContainerSize),
-                ResourcePolicyRule.MaxContainerSize, maxContainerSize.Bytes) { ContainerName = destinationContainer };
+            throw new ResourcePolicyViolationException(NoRoomMessage(destinationContainerName, usage, maxContainerSize),
+                ResourcePolicyRule.MaxContainerSize, maxContainerSize.Bytes) { ContainerName = destinationContainerName };
         }
     }
 
@@ -163,9 +163,9 @@ internal sealed class ContainerPolicies(ContainerPolicySettings settings, Resour
     public async Task CheckUndeleteAsync(string containerName, string resourceName, IReadOnlyList<ResourceInfo> versions,
         ClientTelemetry telemetry, CancellationToken cancellationToken)
     {
-        ResourceContainerPolicy policy = await GetAsync(containerName, telemetry, cancellationToken).ConfigureAwait(false);
+        ContainerPolicy policy = await GetAsync(containerName, telemetry, cancellationToken).ConfigureAwait(false);
         ThrowIfReadOnly(containerName, policy);
-        ResourceContainerUsage? usage = policy.MaxContainerSize is not null || policy.MaxResourceCount is not null
+        ContainerUsage? usage = policy.MaxContainerSize is not null || policy.MaxResourceCount is not null
             ? await repository.GetContainerUsageAsync(containerName, cancellationToken).ConfigureAwait(false)
             : null;
         if (policy.MaxResourceCount is { } maxCount && usage!.ResourceCount >= maxCount
@@ -181,7 +181,7 @@ internal sealed class ContainerPolicies(ContainerPolicySettings settings, Resour
         }
     }
 
-    private static void ThrowIfReadOnly(string containerName, ResourceContainerPolicy policy)
+    private static void ThrowIfReadOnly(string containerName, ContainerPolicy policy)
     {
         if (policy.ReadOnly == true)
         {
@@ -190,7 +190,7 @@ internal sealed class ContainerPolicies(ContainerPolicySettings settings, Resour
         }
     }
 
-    private static void ThrowIfTypeNotAllowed(string containerName, ResourceContainerPolicy policy, string? contentType)
+    private static void ThrowIfTypeNotAllowed(string containerName, ContainerPolicy policy, string? contentType)
     {
         if (policy.AllowedContentTypes is { } allowed && !policy.AllowsContentType(contentType))
         {
@@ -201,26 +201,26 @@ internal sealed class ContainerPolicies(ContainerPolicySettings settings, Resour
         }
     }
 
-    private static ResourcePolicyViolationException CountExceeded(string containerName, ResourceContainerUsage usage, long maxCount) =>
+    private static ResourcePolicyViolationException CountExceeded(string containerName, ContainerUsage usage, long maxCount) =>
         new($"The container {containerName} holds {usage.ResourceCount} resources, as many as it may.",
             ResourcePolicyRule.MaxResourceCount, maxCount) { ContainerName = containerName };
 
     private static string TooLargeMessage(string containerName, ResourceSize maxSize) =>
         $"The content is larger than the container {containerName} allows for one resource, {maxSize}.";
 
-    private static string NoRoomMessage(string containerName, ResourceContainerUsage usage, ResourceSize maxContainerSize) =>
+    private static string NoRoomMessage(string containerName, ContainerUsage usage, ResourceSize maxContainerSize) =>
         $"The container {containerName} has no room for the content: it holds {usage.StoredSize} of its {maxContainerSize}.";
 
     /// <summary>
     /// The container's effective policy: the defaults, with the provider's policy for the container in place of each
     /// limit it sets.
     /// </summary>
-    public async ValueTask<ResourceContainerPolicy> GetAsync(string containerName, ClientTelemetry telemetry,
+    public async ValueTask<ContainerPolicy> GetAsync(string containerName, ClientTelemetry telemetry,
         CancellationToken cancellationToken)
     {
-        if (settings.Cache.TryGetValue(containerName, out ResourceContainerPolicy? cached)) return cached!;
+        if (settings.Cache.TryGetValue(containerName, out ContainerPolicy? cached)) return cached!;
 
-        ResourceContainerPolicy? own = null;
+        ContainerPolicy? own = null;
         if (provider is not null)
         {
             using Activity? activity = telemetry.StartSpan("get_policy", containerName);
@@ -233,7 +233,7 @@ internal sealed class ContainerPolicies(ContainerPolicySettings settings, Resour
                 telemetry.RecordFailure(activity, exception);
                 // An outage of the policy store mustn't fail every write: the policy it last gave stands in for a while.
                 if (exception is OperationCanceledException && cancellationToken.IsCancellationRequested
-                    || !settings.Cache.TryGetValue(new LastKnown(containerName), out ResourceContainerPolicy? lastKnown))
+                    || !settings.Cache.TryGetValue(new LastKnown(containerName), out ContainerPolicy? lastKnown))
                 {
                     throw;
                 }
@@ -246,7 +246,7 @@ internal sealed class ContainerPolicies(ContainerPolicySettings settings, Resour
             }
         }
 
-        ResourceContainerPolicy effective = own is null ? settings.Defaults : Merge(own, settings.Defaults);
+        ContainerPolicy effective = own is null ? settings.Defaults : Merge(own, settings.Defaults);
         if (settings.CacheFor > TimeSpan.Zero) settings.Cache.Set(containerName, effective, settings.CacheFor);
         if (provider is not null && settings.KeepLastKnownFor > TimeSpan.Zero)
             settings.Cache.Set(new LastKnown(containerName), effective, settings.KeepLastKnownFor);
@@ -254,7 +254,7 @@ internal sealed class ContainerPolicies(ContainerPolicySettings settings, Resour
     }
 
     /// <summary><paramref name="own"/>, with <paramref name="defaults"/>' value for each property it leaves unset.</summary>
-    public static ResourceContainerPolicy Merge(ResourceContainerPolicy own, ResourceContainerPolicy defaults) => new()
+    public static ContainerPolicy Merge(ContainerPolicy own, ContainerPolicy defaults) => new()
     {
         MaxResourceSize = own.MaxResourceSize ?? defaults.MaxResourceSize,
         MaxContainerSize = own.MaxContainerSize ?? defaults.MaxContainerSize,

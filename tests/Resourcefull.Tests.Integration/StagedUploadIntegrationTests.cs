@@ -35,7 +35,7 @@ public class StagedUploadIntegrationTests(SqlServerFixture fixture)
         ResourceInfo? info = await container.GetResourceInfoAsync("video.mp4");
         IReadOnlyList<ResourceInfo> versions = await container.GetResourceVersionsAsync("video.mp4");
         IReadOnlyList<ResourceInfo> listed = await container.ListResourcesAsync().ToListAsync();
-        ResourceContainerUsage usage = await container.GetUsageAsync();
+        ContainerUsage usage = await container.GetUsageAsync();
         int chunksSeenWithLocks = await CountChunksWithLocksAsync();
         content.Resume();
         ResourceInfo stored = await upload;

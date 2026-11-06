@@ -9,7 +9,7 @@ using Resourcefull.Providers;
 
 namespace Resourcefull;
 
-internal partial class ResourceServiceClient(ResourceRepository resourceRepository, IOptions<ResourcefullOptions> options, IUriProvider? uriProvider = null,
+internal partial class ResourceServiceClient(ResourceRepository resourceRepository, IOptions<ResourcefullOptions> options, IResourceUriProvider? uriProvider = null,
     ILogger<ResourceContainerClient>? containerLogger = null, ContainerPolicies? policies = null,
     IResourceCleanupHandler? cleanupHandler = null, TimeProvider? timeProvider = null, ExpirySettings? expiry = null,
     IResourceUploadInspector? uploadInspector = null) : IResourceServiceClient
@@ -19,51 +19,51 @@ internal partial class ResourceServiceClient(ResourceRepository resourceReposito
     public string? StoreName => _options.StoreName;
     private readonly ClientTelemetry _telemetry = new(Telemetry.ProviderName(resourceRepository), options.Value);
 
-    public IResourceContainerClient GetContainerClient(string resourceContainerName)
+    public IResourceContainerClient GetContainerClient(string containerName)
     {
-        ResourceNames.ThrowIfInvalidContainerName(resourceContainerName);
-        return NewContainerClient(resourceContainerName);
+        ResourceNames.ThrowIfInvalidContainerName(containerName);
+        return NewContainerClient(containerName);
     }
 
-    public Task<IResourceContainerClient> CreateContainerAsync(string resourceContainerName, IDictionary<string, string>? metadata = null,
+    public Task<IResourceContainerClient> CreateContainerAsync(string containerName, IReadOnlyDictionary<string, string>? metadata = null,
         CancellationToken cancellationToken = default)
-        => _telemetry.RunAsync("create_container", resourceContainerName, null, async () =>
+        => _telemetry.RunAsync("create_container", containerName, null, async () =>
         {
-            ResourceNames.ThrowIfInvalidNewContainerName(resourceContainerName);
-            return await CreateContainerCoreAsync(resourceContainerName, metadata, cancellationToken).ConfigureAwait(false);
+            ResourceNames.ThrowIfInvalidNewContainerName(containerName);
+            return await CreateContainerCoreAsync(containerName, metadata, cancellationToken).ConfigureAwait(false);
         });
 
-    public Task<IResourceContainerClient> CreateContainerIfNotExistsAsync(string resourceContainerName, IDictionary<string, string>? metadata = null,
+    public Task<IResourceContainerClient> CreateContainerIfNotExistsAsync(string containerName, IReadOnlyDictionary<string, string>? metadata = null,
         CancellationToken cancellationToken = default)
-        => _telemetry.RunAsync("create_container", resourceContainerName, null,
-            () => CreateIfNotExistsCoreAsync(resourceContainerName, metadata, cancellationToken));
+        => _telemetry.RunAsync("create_container", containerName, null,
+            () => CreateIfNotExistsCoreAsync(containerName, metadata, cancellationToken));
 
-    private async Task<IResourceContainerClient> CreateIfNotExistsCoreAsync(string resourceContainerName, IDictionary<string, string>? metadata, CancellationToken cancellationToken)
+    private async Task<IResourceContainerClient> CreateIfNotExistsCoreAsync(string containerName, IReadOnlyDictionary<string, string>? metadata, CancellationToken cancellationToken)
     {
-        ResourceNames.ThrowIfInvalidContainerName(resourceContainerName);
+        ResourceNames.ThrowIfInvalidContainerName(containerName);
 
         // The usual case is a container that already exists; finding it with a read avoids a failed insert each time.
-        if (await resourceRepository.GetContainerInfoAsync(resourceContainerName, cancellationToken).ConfigureAwait(false) is not null)
-            return GetContainerClient(resourceContainerName);
+        if (await resourceRepository.GetContainerInfoAsync(containerName, cancellationToken).ConfigureAwait(false) is not null)
+            return GetContainerClient(containerName);
 
-        ResourceNames.ThrowIfInvalidNewContainerName(resourceContainerName);
+        ResourceNames.ThrowIfInvalidNewContainerName(containerName);
 
         try
         {
-            return await CreateContainerCoreAsync(resourceContainerName, metadata, cancellationToken).ConfigureAwait(false);
+            return await CreateContainerCoreAsync(containerName, metadata, cancellationToken).ConfigureAwait(false);
         }
         catch (ResourceConflictException)
         {
             // Created concurrently; the caller gets a client for it all the same.
-            return GetContainerClient(resourceContainerName);
+            return GetContainerClient(containerName);
         }
     }
 
-    private async Task<IResourceContainerClient> CreateContainerCoreAsync(string resourceContainerName, IDictionary<string, string>? metadata, CancellationToken cancellationToken)
+    private async Task<IResourceContainerClient> CreateContainerCoreAsync(string containerName, IReadOnlyDictionary<string, string>? metadata, CancellationToken cancellationToken)
     {
-        await resourceRepository.AddContainerAsync(resourceContainerName,
+        await resourceRepository.AddContainerAsync(containerName,
             metadata is null ? new Dictionary<string, string>() : new Dictionary<string, string>(metadata), cancellationToken).ConfigureAwait(false);
-        return NewContainerClient(resourceContainerName);
+        return NewContainerClient(containerName);
     }
 
     private ResourceContainerClient NewContainerClient(string containerName)
@@ -74,8 +74,8 @@ internal partial class ResourceServiceClient(ResourceRepository resourceReposito
     // URL applies to containers created before the change as well.
     private ContainerInfo WithUri(ContainerInfo containerInfo) => WithUri(containerInfo, uriProvider);
 
-    internal static ContainerInfo WithUri(ContainerInfo containerInfo, IUriProvider? uriProvider)
-        => containerInfo with { Uri = uriProvider?.GetAbsoluteUri(new ResourcefullContext(containerInfo.Name)) };
+    internal static ContainerInfo WithUri(ContainerInfo containerInfo, IResourceUriProvider? uriProvider)
+        => containerInfo with { Uri = uriProvider?.GetAbsoluteUri(new ResourceUriContext(containerInfo.Name)) };
 
     public Task<ContainerPage> GetContainerPageAsync(ContainerListOptions? options = null, string? continuationToken = null,
         CancellationToken cancellationToken = default)
@@ -103,23 +103,23 @@ internal partial class ResourceServiceClient(ResourceRepository resourceReposito
         return new ContainerPage([.. containers.Select(WithUri)], next);
     }
 
-    public Task<bool> ContainerExistsAsync(string resourceContainerName, CancellationToken cancellationToken = default)
-        => _telemetry.RunAsync("container_exists", resourceContainerName, null, async () =>
+    public Task<bool> ContainerExistsAsync(string containerName, CancellationToken cancellationToken = default)
+        => _telemetry.RunAsync("container_exists", containerName, null, async () =>
         {
-            ResourceNames.ThrowIfInvalidContainerName(resourceContainerName);
-            return await resourceRepository.GetContainerInfoAsync(resourceContainerName, cancellationToken).ConfigureAwait(false) != null;
+            ResourceNames.ThrowIfInvalidContainerName(containerName);
+            return await resourceRepository.GetContainerInfoAsync(containerName, cancellationToken).ConfigureAwait(false) != null;
         });
 
-    public Task<IReadOnlyList<ResourceInfo>> GetExpiredVersionsAsync(int maxVersions = 100, CancellationToken cancellationToken = default)
+    public Task<IReadOnlyList<ResourceInfo>> GetExpiredVersionsAsync(int count = 100, CancellationToken cancellationToken = default)
         => _telemetry.RunAsync<IReadOnlyList<ResourceInfo>>("list_expired", null, null, async () =>
         {
-            ArgumentOutOfRangeException.ThrowIfLessThan(maxVersions, 1);
-            ArgumentOutOfRangeException.ThrowIfGreaterThan(maxVersions, ResourceContainerClient.MaxListedVersions);
+            ArgumentOutOfRangeException.ThrowIfLessThan(count, 1);
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(count, ResourceContainerClient.MaxListedVersions);
             IReadOnlyList<ResourceInfo> expired = await resourceRepository.GetExpiredAsync((timeProvider ?? TimeProvider.System).GetUtcNow(),
-                maxVersions, null, cancellationToken).ConfigureAwait(false);
+                count, null, cancellationToken).ConfigureAwait(false);
             return [.. expired.Select(v => v with
             {
-                Uri = uriProvider?.GetAbsoluteUri(new ResourcefullContext(v.ContainerName, v.Name, v.VersionId))
+                Uri = uriProvider?.GetAbsoluteUri(new ResourceUriContext(v.ContainerName, v.Name, v.VersionId))
             })];
         });
 
@@ -388,30 +388,30 @@ internal partial class ResourceServiceClient(ResourceRepository resourceReposito
     /// </summary>
     internal const int FailuresKept = 10;
 
-    public Task<ResourceExportResult> ExportContainerAsync(string resourceContainerName, Stream destination,
+    public Task<ContainerExportResult> ExportContainerAsync(string containerName, Stream destination,
         CancellationToken cancellationToken = default)
-        => _telemetry.RunAsync("export", resourceContainerName, null, async activity =>
+        => _telemetry.RunAsync("export", containerName, null, async activity =>
         {
-            ResourceNames.ThrowIfInvalidContainerName(resourceContainerName);
+            ResourceNames.ThrowIfInvalidContainerName(containerName);
             ArgumentNullException.ThrowIfNull(destination);
-            ContainerInfo container = await resourceRepository.GetContainerInfoAsync(resourceContainerName, cancellationToken).ConfigureAwait(false)
-                ?? throw new ResourceContainerNotFoundException($"The container {resourceContainerName} doesn't exist.")
+            ContainerInfo container = await resourceRepository.GetContainerInfoAsync(containerName, cancellationToken).ConfigureAwait(false)
+                ?? throw new ResourceContainerNotFoundException($"The container {containerName} doesn't exist.")
                 {
-                    ContainerName = resourceContainerName
+                    ContainerName = containerName
                 };
 
-            ResourceExportResult exported = await ContainerArchive.ExportAsync(resourceRepository, container,
+            ContainerExportResult exported = await ContainerArchive.ExportAsync(resourceRepository, container,
                 destination, activity, cancellationToken).ConfigureAwait(false);
             activity?.SetTag("resourcefull.resources", exported.ResourceCount);
             activity?.SetTag("resourcefull.versions", exported.VersionCount);
             return exported;
         });
 
-    public Task<ResourceImportResult> ImportContainerAsync(string resourceContainerName, Stream source,
+    public Task<ContainerImportResult> ImportContainerAsync(string containerName, Stream source,
         CancellationToken cancellationToken = default)
-        => _telemetry.RunAsync("import", resourceContainerName, null, async activity =>
+        => _telemetry.RunAsync("import", containerName, null, async activity =>
         {
-            ResourceNames.ThrowIfInvalidNewContainerName(resourceContainerName);
+            ResourceNames.ThrowIfInvalidNewContainerName(containerName);
             ArgumentNullException.ThrowIfNull(source);
             if (!source.CanSeek)
                 throw new ArgumentException("An import reads the zip's directory at its end, so it needs a stream that can seek, such as a file.", nameof(source));
@@ -422,7 +422,7 @@ internal partial class ResourceServiceClient(ResourceRepository resourceReposito
             ContainerArchive.Manifest manifest = await ContainerArchive.ReadManifestAsync(zip, cancellationToken).ConfigureAwait(false);
             ContainerArchive.ThrowIfUnimportable(manifest, resourceRepository, _options);
             // Without the mark of an import the exported container may have been in the middle of.
-            return await ImportNewContainerAsync(resourceContainerName, WithoutImportMark(manifest.Metadata),
+            return await ImportNewContainerAsync(containerName, WithoutImportMark(manifest.Metadata),
                 ContainerArchive.VersionsOf(zip, manifest).ToAsyncEnumerable(), "the export", activity, cancellationToken).ConfigureAwait(false);
         });
 
@@ -430,12 +430,12 @@ internal partial class ResourceServiceClient(ResourceRepository resourceReposito
     internal const string ImportMarkerKey = "resourcefull.import", ImportMarkerValue = "in-progress";
 
     /// <returns><see langword="false"/> if the provider doesn't change container metadata.</returns>
-    private async Task<bool> TrySetMetadataAsync(string resourceContainerName, IReadOnlyDictionary<string, string> metadata,
+    private async Task<bool> TrySetMetadataAsync(string containerName, IReadOnlyDictionary<string, string> metadata,
         CancellationToken cancellationToken)
     {
         try
         {
-            return await resourceRepository.SetContainerMetadataAsync(resourceContainerName, metadata,
+            return await resourceRepository.SetContainerMetadataAsync(containerName, metadata,
                 cancellationToken).ConfigureAwait(false);
         }
         catch (NotSupportedException)
@@ -444,18 +444,18 @@ internal partial class ResourceServiceClient(ResourceRepository resourceReposito
         }
     }
 
-    public Task<bool> DeleteContainerIfExistsAsync(string resourceContainerName,
+    public Task<bool> DeleteContainerIfExistsAsync(string containerName,
         CancellationToken cancellationToken = default)
-        => _telemetry.RunAsync("delete_container", resourceContainerName, null, async () =>
+        => _telemetry.RunAsync("delete_container", containerName, null, async () =>
         {
-            ResourceNames.ThrowIfInvalidContainerName(resourceContainerName);
-            if (policies is not null) await policies.ThrowIfReadOnlyAsync(resourceContainerName, _telemetry, cancellationToken).ConfigureAwait(false);
+            ResourceNames.ThrowIfInvalidContainerName(containerName);
+            if (policies is not null) await policies.ThrowIfReadOnlyAsync(containerName, _telemetry, cancellationToken).ConfigureAwait(false);
 
             // Through the repository rather than ContainerExistsAsync, so the delete records one operation, not two.
-            if (await resourceRepository.GetContainerInfoAsync(resourceContainerName, cancellationToken).ConfigureAwait(false) is null)
+            if (await resourceRepository.GetContainerInfoAsync(containerName, cancellationToken).ConfigureAwait(false) is null)
             {
                 return false;
             }
-            return await resourceRepository.DeleteContainerAsync(resourceContainerName, cancellationToken).ConfigureAwait(false);
+            return await resourceRepository.DeleteContainerAsync(containerName, cancellationToken).ConfigureAwait(false);
         });
 }

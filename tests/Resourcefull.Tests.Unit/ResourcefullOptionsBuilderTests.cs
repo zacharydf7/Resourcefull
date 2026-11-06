@@ -6,9 +6,9 @@ namespace Resourcefull.Tests.Unit;
 
 public class ResourcefullOptionsBuilderTests
 {
-    private sealed class FakeUriProvider : IUriProvider
+    private sealed class FakeUriProvider : IResourceUriProvider
     {
-        public string? GetAbsoluteUri(ResourcefullContext context) => null;
+        public string? GetAbsoluteUri(ResourceUriContext context) => null;
     }
 
     [Theory]
@@ -61,7 +61,7 @@ public class ResourcefullOptionsBuilderTests
         new ResourcefullOptionsBuilder(services).UseUriProvider<FakeUriProvider>();
 
         // Assert
-        IUriProvider? provider = services.BuildServiceProvider().GetService<IUriProvider>();
+        IResourceUriProvider? provider = services.BuildServiceProvider().GetService<IResourceUriProvider>();
         Assert.IsType<FakeUriProvider>(provider);
     }
 
@@ -77,19 +77,19 @@ public class ResourcefullOptionsBuilderTests
         builder.UseUriProvider<FakeUriProvider>();
 
         // Assert
-        Assert.NotNull(services.SingleOrDefault(d => d.ServiceType == typeof(IUriProvider)));
+        Assert.NotNull(services.SingleOrDefault(d => d.ServiceType == typeof(IResourceUriProvider)));
     }
 
     /// <summary>A provider defined outside the library, knowing one container and nothing else.</summary>
     private sealed class OneContainerProvider : ResourceRepository
     {
-        public override Task<ContainerInfo?> GetContainerInfoAsync(string resourceContainerName,
+        public override Task<ContainerInfo?> GetContainerInfoAsync(string containerName,
             CancellationToken cancellationToken = default)
-            => Task.FromResult(resourceContainerName == "custom" ? new ContainerInfo { Name = "custom" } : null);
+            => Task.FromResult(containerName == "custom" ? new ContainerInfo { Name = "custom" } : null);
 
         public override Task<WrittenContent> AddResourceAsync(NewResourceVersion version, Stream content,
             ResourceWriteCondition? condition = null, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public override Task<IReadOnlyList<ResourceInfo>> GetResourcePageAsync(string resourceContainerName, string? prefix,
+        public override Task<IReadOnlyList<ResourceInfo>> GetResourcePageAsync(string containerName, string? prefix,
             string? afterName, int pageSize, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public override Task<IReadOnlyList<ResourceInfo>> GetResourceVersionsAsync(ResourceAddress resource,
             CancellationToken cancellationToken = default) => throw new NotSupportedException();
@@ -99,11 +99,11 @@ public class ResourcefullOptionsBuilderTests
             CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public override Task<bool> DeleteResourceAsync(ResourceAddress resource, string? versionId = null,
             ResourceConditions? conditions = null, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public override Task AddContainerAsync(string resourceContainerName, IReadOnlyDictionary<string, string> metadata,
+        public override Task AddContainerAsync(string containerName, IReadOnlyDictionary<string, string> metadata,
             CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public override Task<IReadOnlyList<ContainerInfo>> GetContainerPageAsync(string? prefix, string? afterName, int pageSize,
             CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public override Task<bool> DeleteContainerAsync(string resourceContainerName,
+        public override Task<bool> DeleteContainerAsync(string containerName,
             CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 

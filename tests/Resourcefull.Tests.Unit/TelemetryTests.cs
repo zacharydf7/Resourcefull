@@ -116,7 +116,7 @@ public sealed class TelemetryTests : IDisposable
 
     private static object? ArgumentFor(ParameterInfo parameter, MethodInfo method, ResourceInfo version) => parameter.Name switch
     {
-        "resourceContainerName" => method.Name.StartsWith("Create", StringComparison.Ordinal) ? $"c-{Guid.NewGuid():N}" : "c",
+        "containerName" => method.Name.StartsWith("Create", StringComparison.Ordinal) ? $"c-{Guid.NewGuid():N}" : "c",
         "resourceName" => "r",
         "versionId" => version.VersionId,
         "content" when parameter.ParameterType == typeof(Stream) => new MemoryStream([1, 2, 3]),
@@ -353,8 +353,8 @@ public sealed class TelemetryTests : IDisposable
 
     private sealed class TextOnlyProvider : IResourcePolicyProvider
     {
-        public ValueTask<ResourceContainerPolicy?> GetPolicyAsync(string containerName, CancellationToken cancellationToken) =>
-            ValueTask.FromResult<ResourceContainerPolicy?>(new ResourceContainerPolicy { AllowedContentTypes = ["text/plain"] });
+        public ValueTask<ContainerPolicy?> GetPolicyAsync(string containerName, CancellationToken cancellationToken) =>
+            ValueTask.FromResult<ContainerPolicy?>(new ContainerPolicy { AllowedContentTypes = ["text/plain"] });
     }
 
     [Fact]
@@ -624,7 +624,7 @@ public sealed class TelemetryTests : IDisposable
     private sealed class RefusingCleanupHandler : IResourceCleanupHandler
     {
         public ValueTask OnCleanupAsync(ResourceCleanup cleanup, CancellationToken cancellationToken) =>
-            cleanup.Resource.Name == "refused" ? throw new InvalidOperationException("The audit system is down.") : ValueTask.CompletedTask;
+            cleanup.Version.Name == "refused" ? throw new InvalidOperationException("The audit system is down.") : ValueTask.CompletedTask;
     }
 
     [Fact]
@@ -748,8 +748,8 @@ public sealed class TelemetryTests : IDisposable
 
     private sealed class NoPolicies : IResourcePolicyProvider
     {
-        public ValueTask<ResourceContainerPolicy?> GetPolicyAsync(string containerName,
-            CancellationToken cancellationToken) => ValueTask.FromResult<ResourceContainerPolicy?>(null);
+        public ValueTask<ContainerPolicy?> GetPolicyAsync(string containerName,
+            CancellationToken cancellationToken) => ValueTask.FromResult<ContainerPolicy?>(null);
     }
 
     [Fact]
@@ -965,7 +965,7 @@ public sealed class TelemetryTests : IDisposable
         using Activity root = TestSource.StartActivity("test")!;
 
         // Act
-        await container.GetResourcePageAsync(new ResourceListOptions { Metadata = new ResourceMetadataMatch("customer", "secret-42") });
+        await container.GetResourcePageAsync(new ResourceListOptions { MetadataMatch = new ResourceMetadataMatch("customer", "secret-42") });
         long indexed = await service.GetContainerClient("c").IndexMetadataAsync();
 
         // Assert: the value may be personal data, so no tag carries it.
@@ -1049,7 +1049,7 @@ public sealed class TelemetryTests : IDisposable
     {
         ServiceProvider provider = new ServiceCollection().AddResourcefull(o =>
         {
-            o.UseInMemory().UseExpiry().UseContainerPolicies(new ResourceContainerPolicy { KeepDeletedFor = TimeSpan.FromDays(1) });
+            o.UseInMemory().UseExpiry().UseContainerPolicies(new ContainerPolicy { KeepDeletedFor = TimeSpan.FromDays(1) });
             configure?.Invoke(o);
         }).BuildServiceProvider();
         IResourceContainerClient container = await provider.GetRequiredService<IResourceServiceClient>().CreateContainerAsync("c");
@@ -1123,9 +1123,9 @@ public sealed class TelemetryTests : IDisposable
     {
         private static readonly ConcurrentDictionary<string, bool> Given = new();
 
-        public ValueTask<ResourceContainerPolicy?> GetPolicyAsync(string containerName, CancellationToken cancellationToken) =>
+        public ValueTask<ContainerPolicy?> GetPolicyAsync(string containerName, CancellationToken cancellationToken) =>
             Given.TryAdd(containerName, true)
-                ? ValueTask.FromResult<ResourceContainerPolicy?>(new ResourceContainerPolicy())
+                ? ValueTask.FromResult<ContainerPolicy?>(new ContainerPolicy())
                 : throw new InvalidOperationException("The policy store is down.");
     }
 

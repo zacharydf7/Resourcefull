@@ -92,7 +92,7 @@ public sealed class FileSystemRepository(FileSystemOptions options, TimeProvider
 
     // Containers
 
-    public override Task AddContainerAsync(string resourceContainerName,
+    public override Task AddContainerAsync(string containerName,
         IReadOnlyDictionary<string, string> metadata, CancellationToken cancellationToken = default)
         // Store the name and a copy of the metadata. A container that already exists throws
         // ResourceConflictException, decided by the write itself, not by a check before it.
@@ -104,12 +104,12 @@ public sealed class FileSystemRepository(FileSystemOptions options, TimeProvider
         // with its own copy of the metadata. Seek on the name rather than reading every container.
         => throw new NotImplementedException();
 
-    public override Task<ContainerInfo?> GetContainerInfoAsync(string resourceContainerName,
+    public override Task<ContainerInfo?> GetContainerInfoAsync(string containerName,
         CancellationToken cancellationToken = default)
         // The container, or null if there's none by that name (compared ordinally).
         => throw new NotImplementedException();
 
-    public override Task<bool> DeleteContainerAsync(string resourceContainerName,
+    public override Task<bool> DeleteContainerAsync(string containerName,
         CancellationToken cancellationToken = default)
         // The container and every version in it; false if it didn't exist. It may stop between whole versions when
         // canceled, as long as every name left keeps its current version and calling it again finishes.
@@ -135,7 +135,7 @@ public sealed class FileSystemRepository(FileSystemOptions options, TimeProvider
 
     // Reading
 
-    public override Task<IReadOnlyList<ResourceInfo>> GetResourcePageAsync(string resourceContainerName, string? prefix,
+    public override Task<IReadOnlyList<ResourceInfo>> GetResourcePageAsync(string containerName, string? prefix,
         string? afterName, int pageSize, CancellationToken cancellationToken = default)
         // Up to pageSize current versions whose names start with prefix and come after afterName, ordered by name:
         // see Listing by page. Answer it without reading the whole container.

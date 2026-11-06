@@ -232,7 +232,7 @@ public class ResourceUploadEndpointTests
         // Arrange: a limit of 10 bytes on the endpoints, or on the container.
         await using UploadApp app = endpointLimit
             ? await UploadApp.StartAsync(maxSize: 10)
-            : await UploadApp.StartAsync(policy: new ResourceContainerPolicy { MaxResourceSize = 10 });
+            : await UploadApp.StartAsync(policy: new ContainerPolicy { MaxResourceSize = 10 });
 
         // Act
         HttpResponseMessage response = await CreateAsync(app, 11, Metadata(("filename", "a.bin")));

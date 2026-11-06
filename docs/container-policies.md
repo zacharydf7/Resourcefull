@@ -11,7 +11,7 @@ application runs.
 ```csharp
 builder.Services.AddResourcefull(options => options
     .UseSqlServer(connectionString)
-    .UseContainerPolicies(new ResourceContainerPolicy
+    .UseContainerPolicies(new ContainerPolicy
     {
         MaxResourceSize = ResourceSize.Megabytes(100),
         AllowedContentTypes = ["image/*", "application/pdf"]
@@ -109,8 +109,8 @@ application at startup with the key's name, rather than being ignored. The same 
 see [Settings from configuration](getting-started.md#settings-from-configuration).
 
 A size is a number followed by `B`, `KB`, `MB`, `GB` or `TB` (or `KiB` and so on, which mean the same), such as
-`"1.5 GB"`; a number alone is bytes. `ResourceContainerPolicy` also binds on its own, with
-`GetSection(...).Get<ResourceContainerPolicy>()`, for a policy you keep somewhere else in your configuration.
+`"1.5 GB"`; a number alone is bytes. `ContainerPolicy` also binds on its own, with
+`GetSection(...).Get<ContainerPolicy>()`, for a policy you keep somewhere else in your configuration.
 
 ## A policy for each container
 
@@ -120,10 +120,10 @@ from their plan:
 ```csharp
 public sealed class PlanPolicyProvider(AppDbContext db) : IResourcePolicyProvider
 {
-    public async ValueTask<ResourceContainerPolicy?> GetPolicyAsync(string containerName, CancellationToken cancellationToken)
+    public async ValueTask<ContainerPolicy?> GetPolicyAsync(string containerName, CancellationToken cancellationToken)
     {
         Plan? plan = await db.PlanForContainerAsync(containerName, cancellationToken);
-        return plan is null ? null : new ResourceContainerPolicy { MaxContainerSize = plan.Storage };
+        return plan is null ? null : new ContainerPolicy { MaxContainerSize = plan.Storage };
     }
 }
 ```
@@ -147,9 +147,9 @@ public sealed class PlanPolicyProvider(AppDbContext db) : IResourcePolicyProvide
 you can show users their storage against their plan:
 
 ```csharp
-ResourceContainerUsage usage = await container.GetUsageAsync(cancellationToken);
+ContainerUsage usage = await container.GetUsageAsync(cancellationToken);
 // usage.StoredSize, such as "1536 MB", usage.ResourceCount and usage.VersionCount
-ResourceContainerPolicy policy = await container.GetPolicyAsync(cancellationToken);
+ContainerPolicy policy = await container.GetPolicyAsync(cancellationToken);
 // policy.MaxContainerSize, such as "5 GB", or null for no limit
 
 string shown = policy.MaxContainerSize is { } max ? $"{usage.StoredSize} of {max}" : $"{usage.StoredSize}";

@@ -303,10 +303,10 @@ public abstract partial class ResourcefullContractTests
         await destination.UploadAsync("other", new MemoryStream(new byte[1]), Typed("application/pdf"));
         TestPolicyProvider.Policies[to] = rule switch
         {
-            "type" => new ResourceContainerPolicy { AllowedContentTypes = ["application/pdf"] },
-            "size" => new ResourceContainerPolicy { MaxResourceSize = 50 },
-            "count" => new ResourceContainerPolicy { MaxResourceCount = 1 },
-            _ => new ResourceContainerPolicy { ReadOnly = true }
+            "type" => new ContainerPolicy { AllowedContentTypes = ["application/pdf"] },
+            "size" => new ContainerPolicy { MaxResourceSize = 50 },
+            "count" => new ContainerPolicy { MaxResourceCount = 1 },
+            _ => new ContainerPolicy { ReadOnly = true }
         };
 
         // Act
@@ -329,7 +329,7 @@ public abstract partial class ResourcefullContractTests
     {
         // Arrange
         using ServiceProvider provider = BuildServiceProvider(o => o.UseVersioning()
-            .UseContainerPolicies(new ResourceContainerPolicy { MaxResourceCount = 2 }));
+            .UseContainerPolicies(new ContainerPolicy { MaxResourceCount = 2 }));
         IResourceContainerClient container = await NewContainerAsync(provider);
         string name = container.Name;
         await container.UploadAsync("a", BinaryData.FromString("a"));
@@ -356,12 +356,12 @@ public abstract partial class ResourcefullContractTests
         await service.CreateContainerAsync(to);
         await source.UploadAsync("notes.txt", BinaryData.FromString("text"), Typed("text/plain"));
         await source.UploadAsync("photo.png", new MemoryStream(new byte[100]), Typed("image/png"));
-        TestPolicyProvider.Policies[to] = new ResourceContainerPolicy { AllowedContentTypes = ["image/*"], MaxContainerSize = 50 };
+        TestPolicyProvider.Policies[to] = new ContainerPolicy { AllowedContentTypes = ["image/*"], MaxContainerSize = 50 };
 
         // Act
         Exception? wrongType = await Record.ExceptionAsync(() => source.CopyResourceAsync("notes.txt", to, "notes.txt"));
         Exception? tooLarge = await Record.ExceptionAsync(() => source.MoveResourceAsync("photo.png", to, "photo.png"));
-        TestPolicyProvider.Policies[from] = new ResourceContainerPolicy { ReadOnly = true };
+        TestPolicyProvider.Policies[from] = new ContainerPolicy { ReadOnly = true };
         Exception? readOnly = await Record.ExceptionAsync(() => source.MoveResourceAsync("notes.txt", from, "renamed.txt"));
 
         // Assert

@@ -41,7 +41,7 @@ public class ResourceUploadOptions
     /// <summary>
     /// Until when the uploaded version can't be deleted, by anyone or anything, expiry and pruning included; see
     /// <see cref="IResourceContainerClient.SetRetentionAsync"/>. <see langword="null"/> takes the container's
-    /// <see cref="ResourceContainerPolicy.RetainFor"/>, if it has one.
+    /// <see cref="ContainerPolicy.RetainFor"/>, if it has one.
     /// <para>Coming in 4.0.</para>
     /// </summary>
     public DateTimeOffset? RetainUntil { get; init; }

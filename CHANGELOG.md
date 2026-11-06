@@ -160,7 +160,7 @@
   until they expire. A link uploads to one name or to names under a prefix, and can set a size limit, allowed content
   types, and whether an upload may replace a file (by default it can't). `Results.SharedUpload` serves them, checking
   the link's limits before the body is read, and `CheckUpload` reads a token. Upload and download tokens are sealed
-  apart, so neither works as the other. `ResourceContainerPolicy.AllowsContentType` says whether a policy allows a
+  apart, so neither works as the other. `ContainerPolicy.AllowsContentType` says whether a policy allows a
   type. A `POST` of a `multipart/form-data` form, as a plain HTML `<form>` sends one, stores the files in the form: a
   link with a prefix stores each under the prefix and its file name, and a link to one name takes one file. Each file
   is checked against the link's types and refused once it passes the link's size limit. The first file refused stops
@@ -194,7 +194,7 @@
   version at a time took 98. Its default deletes them one at a time. See [Expiring resources](docs/expiry.md).
 - **Retention dates and legal holds.** `ResourceUploadOptions.RetainUntil` keeps a version from being deleted until a
   date, and `LegalHold` until the hold is lifted; `SetRetentionAsync` moves a version's date later (never earlier), and
-  `SetLegalHoldAsync` sets or lifts its hold. `ResourceContainerPolicy.RetainFor` gives every new version in a
+  `SetLegalHoldAsync` sets or lifts its hold. `ContainerPolicy.RetainFor` gives every new version in a
   container a date. While either applies, a delete of the version, its name or its container throws
   `ResourceRetainedException` (409 with the ASP.NET Core exception handler) and deletes nothing (unless the version was
   protected while a batched delete was under way), expiry leaves it, and
@@ -204,12 +204,12 @@
   `resourcefull.client.delete.refused`. Providers get `SupportsRetention`, `SetRetentionAsync` and
   `SetLegalHoldAsync`, and with one that doesn't support them, a write that would protect a version throws
   `NotSupportedException`. See [Deleting safely](docs/deleting-safely.md).
-- **The bin.** `ResourceContainerPolicy.KeepDeletedFor` keeps deleted and pruned versions in their container's bin for
+- **The bin.** `ContainerPolicy.KeepDeletedFor` keeps deleted and pruned versions in their container's bin for
   that long. `UndeleteAsync` brings them back as older versions, and `ListDeletedAsync` and `GetDeletedPageAsync` list
   them, newest deletion first, with `ResourceInfo.DeletedAt` and `PurgeAt`. The expiry sweep
   purges each version at its `PurgeAt`, fixed when it was deleted, telling the cleanup handler first
   (`ResourceCleanupReason.Purged`), and `PurgeDeletedAsync` purges one early. Expired versions and container deletes
-  skip the bin, and the bin doesn't count toward `MaxContainerSize` or `MaxResourceCount`: `ResourceContainerUsage`
+  skip the bin, and the bin doesn't count toward `MaxContainerSize` or `MaxResourceCount`: `ContainerUsage`
   reports it separately, as `DeletedSize` and `DeletedVersionCount`, and so does the dashboard. `KeepDeletedFor` needs
   `UseExpiry`. Every provider has a bin; the `Resourcefull_AddBin` migration adds two columns and two small indexes.
   The bin records `list_deleted`, `undelete`, `purge_deleted` and `purge` spans and the `resourcefull.client.purged`,
@@ -217,7 +217,7 @@
   doesn't have a bin, a delete in a container that keeps deleted versions throws `NotSupportedException`. See
   [Deleting safely](docs/deleting-safely.md#the-bin).
 - **Finding resources by metadata.** `UseMetadataSearch("customer")` names the metadata keys a listing can search by,
-  and `ResourceListOptions.Metadata = new ResourceMetadataMatch("customer", "42")` lists the resources whose current
+  and `ResourceListOptions.MetadataMatch = new ResourceMetadataMatch("customer", "42")` lists the resources whose current
   version has that value, in name order, by page, with a prefix if you like. Every provider supports it: SQL Server,
   PostgreSQL and SQLite keep the index in a `ResourceMetadata` table, which the `Resourcefull_AddMetadataSearch`
   migration adds, and the file system, S3 and Azure Blob keep an index entry for each value, so a search reads only the
@@ -304,6 +304,15 @@
 
 ### Changed
 
+- **Consistent names in the core API.** Parameters: `containerName` replaces `resourceContainerName`,
+  `destinationContainerName` replaces `destinationContainer` on `CopyResourceAsync` and `MoveResourceAsync`, `count`
+  replaces `maxVersions` on `GetExpiredVersionsAsync`, and `storeName` replaces `name` on `AddKeyedResourcefull`. Types:
+  `IResourceUriProvider` replaces `IUriProvider`; `ResourceUriContext` replaces `ResourcefullContext`, is sealed, and
+  renames `ResourceVersionId` to `VersionId`; and `ContainerPolicy`, `ContainerUsage`, `ContainerExportResult` and
+  `ContainerImportResult` replace `ResourceContainerPolicy`, `ResourceContainerUsage`, `ResourceExportResult` and
+  `ResourceImportResult`. Members: `ResourceCleanup.Version` replaces `Resource`, and
+  `ResourceListOptions.MetadataMatch` replaces `Metadata`. `CreateContainerAsync`, `CreateContainerIfNotExistsAsync` and
+  `SetResourceMetadataAsync` take `IReadOnlyDictionary<string, string>`. Policies in `appsettings.json` don't change.
 - **Client interfaces have no defaults that only throw.** A class that implements `IResourceContainerClient` or
   `IResourceServiceClient` must now implement every member that used to throw by default, so forgetting one is a compile
   error rather than a `NotSupportedException` at run time. Only `ListResourcesAsync`, `ListDeletedAsync`,
@@ -330,7 +339,7 @@
 - **Uploads say whether they replace.** `ResourceUploadOptions.Mode` and `ResourceCopyOptions.Mode`, a
   `ResourceWriteMode`, replace `Overwrite` and `CreateOnly`: `Create`, the default, refuses a name that exists, and
   `Replace` stores a new current version, whether or not versioning is on. With versioning on, an upload of an
-  existing name is now refused unless it asks to replace. Conditions need `Replace`. `ResourceContainerPolicy` gains
+  existing name is now refused unless it asks to replace. Conditions need `Replace`. `ContainerPolicy` gains
   `MaxVersions`, so each container can keep its own number of versions; `UseVersioning` sets the default for the
   rest. `ResourcefullOptions.IsVersioningEnabled` is gone. `RestoreVersionAsync` works with versioning off, as long
   as the version exists. The `upload` and `copy` spans gain `resourcefull.write_mode`. `UploadFromRequestAsync` still

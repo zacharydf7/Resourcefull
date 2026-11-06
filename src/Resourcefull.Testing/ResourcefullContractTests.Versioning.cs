@@ -61,8 +61,8 @@ public abstract partial class ResourcefullContractTests
             .UsePolicyProvider<TestPolicyProvider>());
         IResourceServiceClient service = ServiceOf(provider);
         string one = NewContainerName(), two = NewContainerName(), storeWide = NewContainerName();
-        TestPolicyProvider.Policies[one] = new ResourceContainerPolicy { MaxVersions = 1 };
-        TestPolicyProvider.Policies[two] = new ResourceContainerPolicy { MaxVersions = 2 };
+        TestPolicyProvider.Policies[one] = new ContainerPolicy { MaxVersions = 1 };
+        TestPolicyProvider.Policies[two] = new ContainerPolicy { MaxVersions = 2 };
 
         // Act
         var kept = new List<int>();

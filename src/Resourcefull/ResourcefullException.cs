@@ -228,7 +228,7 @@ public sealed class ResourceContainerNotFoundException : ResourcefullException
 }
 
 /// <summary>
-/// Thrown when a write breaks its container's <see cref="ResourceContainerPolicy"/>. Nothing is changed. Maps naturally
+/// Thrown when a write breaks its container's <see cref="ContainerPolicy"/>. Nothing is changed. Maps naturally
 /// to an HTTP 413 for content too large for the limits, 409 for a container that holds as many resources as it may,
 /// 403 for a read-only container, and 415 for a content type that isn't allowed.
 /// <para>Coming in 4.0.</para>

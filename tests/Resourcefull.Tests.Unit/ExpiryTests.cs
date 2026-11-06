@@ -312,8 +312,8 @@ public class ExpiryTests
     {
         public static bool Frozen;
 
-        public ValueTask<ResourceContainerPolicy?> GetPolicyAsync(string containerName, CancellationToken cancellationToken) =>
-            ValueTask.FromResult(Frozen && containerName == "frozen" ? new ResourceContainerPolicy { ReadOnly = true } : null);
+        public ValueTask<ContainerPolicy?> GetPolicyAsync(string containerName, CancellationToken cancellationToken) =>
+            ValueTask.FromResult(Frozen && containerName == "frozen" ? new ContainerPolicy { ReadOnly = true } : null);
     }
 
     [Fact]
@@ -351,7 +351,7 @@ public class ExpiryTests
     private sealed class TimingOutHandler : IResourceCleanupHandler
     {
         public ValueTask OnCleanupAsync(ResourceCleanup cleanup, CancellationToken cancellationToken) =>
-            cleanup.Resource.Name == "first" ? throw new TaskCanceledException("The audit call timed out.") : ValueTask.CompletedTask;
+            cleanup.Version.Name == "first" ? throw new TaskCanceledException("The audit call timed out.") : ValueTask.CompletedTask;
     }
 
     [Fact]
@@ -472,7 +472,7 @@ public class ExpiryTests
         await client.UploadAsync("a", BinaryData.FromString("x"), new ResourceUploadOptions { Mode = ResourceWriteMode.Replace });
 
         // Assert
-        handler.Verify(h => h.OnCleanupAsync(It.Is<ResourceCleanup>(c => c.Reason == ResourceCleanupReason.Pruned && c.Resource.VersionId == "v1"),
+        handler.Verify(h => h.OnCleanupAsync(It.Is<ResourceCleanup>(c => c.Reason == ResourceCleanupReason.Pruned && c.Version.VersionId == "v1"),
             It.IsAny<CancellationToken>()));
         repository.Verify(r => r.DeleteResourceAsync(new ResourceAddress("c", "a"), "v1", It.IsAny<ResourceConditions?>(), It.IsAny<CancellationToken>()));
     }
@@ -483,8 +483,8 @@ public class ExpiryTests
         public static readonly ConcurrentDictionary<string, bool> Refusing = new();
 
         public ValueTask OnCleanupAsync(ResourceCleanup cleanup, CancellationToken cancellationToken) =>
-            Refusing.ContainsKey(cleanup.Resource.ContainerName + "/" + cleanup.Resource.Name)
-                || Refusing.ContainsKey(cleanup.Resource.ContainerName + "/*")
+            Refusing.ContainsKey(cleanup.Version.ContainerName + "/" + cleanup.Version.Name)
+                || Refusing.ContainsKey(cleanup.Version.ContainerName + "/*")
                 ? throw new InvalidOperationException("The audit system is down.")
                 : ValueTask.CompletedTask;
     }

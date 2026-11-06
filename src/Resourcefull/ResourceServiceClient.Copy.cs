@@ -26,30 +26,30 @@ internal partial class ResourceServiceClient
     /// <summary>How many differences the exception for a container that doesn't match lists.</summary>
     private const int DifferencesNamed = 5;
 
-    public Task<ResourceImportResult> ImportContainerAsync(string resourceContainerName, IAsyncEnumerable<ImportedVersion> versions,
+    public Task<ContainerImportResult> ImportContainerAsync(string containerName, IAsyncEnumerable<ImportedVersion> versions,
         IReadOnlyDictionary<string, string>? metadata = null, CancellationToken cancellationToken = default)
-        => _telemetry.RunAsync("import", resourceContainerName, null, activity =>
+        => _telemetry.RunAsync("import", containerName, null, activity =>
         {
-            ResourceNames.ThrowIfInvalidNewContainerName(resourceContainerName);
+            ResourceNames.ThrowIfInvalidNewContainerName(containerName);
             ArgumentNullException.ThrowIfNull(versions);
-            return ImportNewContainerAsync(resourceContainerName, WithoutImportMark(metadata ?? new Dictionary<string, string>()),
+            return ImportNewContainerAsync(containerName, WithoutImportMark(metadata ?? new Dictionary<string, string>()),
                 versions, "the source", activity, cancellationToken);
         });
 
-    public Task<ResourceImportResult> ImportVersionsAsync(string resourceContainerName, IAsyncEnumerable<ImportedVersion> versions,
+    public Task<ContainerImportResult> ImportVersionsAsync(string containerName, IAsyncEnumerable<ImportedVersion> versions,
         CancellationToken cancellationToken = default)
-        => _telemetry.RunAsync("import_versions", resourceContainerName, null, async activity =>
+        => _telemetry.RunAsync("import_versions", containerName, null, async activity =>
         {
-            ResourceNames.ThrowIfInvalidContainerName(resourceContainerName);
+            ResourceNames.ThrowIfInvalidContainerName(containerName);
             ArgumentNullException.ThrowIfNull(versions);
-            if (await resourceRepository.GetContainerInfoAsync(resourceContainerName, cancellationToken).ConfigureAwait(false) is null)
+            if (await resourceRepository.GetContainerInfoAsync(containerName, cancellationToken).ConfigureAwait(false) is null)
             {
-                throw new ResourceContainerNotFoundException($"The container {resourceContainerName} doesn't exist.")
+                throw new ResourceContainerNotFoundException($"The container {containerName} doesn't exist.")
                 {
-                    ContainerName = resourceContainerName
+                    ContainerName = containerName
                 };
             }
-            ResourceImportResult imported = await ContainerArchive.ImportAsync(versions, resourceContainerName, newContainer: false,
+            ContainerImportResult imported = await ContainerArchive.ImportAsync(versions, containerName, newContainer: false,
                 "the source", resourceRepository, _options, policies, _telemetry, uploadInspector, cancellationToken)
                 .ConfigureAwait(false);
             activity?.SetTag("resourcefull.resources", imported.ResourceCount);
@@ -61,22 +61,22 @@ internal partial class ResourceServiceClient
     /// Creates a container and imports <paramref name="versions"/> into it, marked unfinished while it fills, and deletes
     /// it again if anything fails, so nothing is left half-imported.
     /// </summary>
-    private async Task<ResourceImportResult> ImportNewContainerAsync(string resourceContainerName, Dictionary<string, string> metadata,
+    private async Task<ContainerImportResult> ImportNewContainerAsync(string containerName, Dictionary<string, string> metadata,
         IAsyncEnumerable<ImportedVersion> versions, string source, Activity? activity, CancellationToken cancellationToken)
     {
-        await CreateContainerCoreAsync(resourceContainerName, metadata, cancellationToken).ConfigureAwait(false);
-        ResourceImportResult imported;
+        await CreateContainerCoreAsync(containerName, metadata, cancellationToken).ConfigureAwait(false);
+        ContainerImportResult imported;
         try
         {
             // Marked while it fills, so a container whose import never finished, such as when the application stopped
             // partway, can be told from a finished one, and written again as it goes, so a copy can tell it's still
             // running. A provider that can't change metadata goes unmarked.
-            bool marked = await TrySetMetadataAsync(resourceContainerName, Marked(metadata), cancellationToken).ConfigureAwait(false);
+            bool marked = await TrySetMetadataAsync(containerName, Marked(metadata), cancellationToken).ConfigureAwait(false);
             using var done = new CancellationTokenSource();
-            Task keeping = marked ? KeepMarkedAsync(resourceContainerName, metadata, activity, done.Token) : Task.CompletedTask;
+            Task keeping = marked ? KeepMarkedAsync(containerName, metadata, activity, done.Token) : Task.CompletedTask;
             try
             {
-                imported = await ContainerArchive.ImportAsync(versions, resourceContainerName, newContainer: true, source,
+                imported = await ContainerArchive.ImportAsync(versions, containerName, newContainer: true, source,
                     resourceRepository, _options, policies, _telemetry, uploadInspector, cancellationToken).ConfigureAwait(false);
             }
             finally
@@ -85,18 +85,18 @@ internal partial class ResourceServiceClient
                 // Waited for, so a write of the mark still going doesn't land after the mark is cleared.
                 await keeping.ConfigureAwait(false);
             }
-            if (marked) await resourceRepository.SetContainerMetadataAsync(resourceContainerName, metadata, cancellationToken).ConfigureAwait(false);
+            if (marked) await resourceRepository.SetContainerMetadataAsync(containerName, metadata, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception failure)
         {
             // Nothing is left half-imported; the caller's token may be what stopped it, so it isn't used here.
             try
             {
-                await resourceRepository.DeleteContainerAsync(resourceContainerName, CancellationToken.None).ConfigureAwait(false);
+                await resourceRepository.DeleteContainerAsync(containerName, CancellationToken.None).ConfigureAwait(false);
             }
             catch (Exception cleanupFailure)
             {
-                throw new AggregateException($"The import of {resourceContainerName} failed, and deleting what it had imported failed too: " +
+                throw new AggregateException($"The import of {containerName} failed, and deleting what it had imported failed too: " +
                     "delete the container before importing it again.", failure, cleanupFailure);
             }
 
@@ -129,7 +129,7 @@ internal partial class ResourceServiceClient
     /// fails, a timeout included, is recorded on the import's span and tried again at the next turn. Each write runs to
     /// its end, so none lands after the import clears the mark.
     /// </summary>
-    private async Task KeepMarkedAsync(string resourceContainerName, Dictionary<string, string> metadata, Activity? activity,
+    private async Task KeepMarkedAsync(string containerName, Dictionary<string, string> metadata, Activity? activity,
         CancellationToken stop)
     {
         while (true)
@@ -137,7 +137,7 @@ internal partial class ResourceServiceClient
             try
             {
                 await Task.Delay(ImportMarkInterval, timeProvider ?? TimeProvider.System, stop).ConfigureAwait(false);
-                await resourceRepository.SetContainerMetadataAsync(resourceContainerName, Marked(metadata), CancellationToken.None)
+                await resourceRepository.SetContainerMetadataAsync(containerName, Marked(metadata), CancellationToken.None)
                     .ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (stop.IsCancellationRequested)
@@ -165,29 +165,29 @@ internal partial class ResourceServiceClient
             && markedAt > (timeProvider ?? TimeProvider.System).GetUtcNow() - StaleImportAge;
     }
 
-    public Task<ContainerCopyResult> CopyContainerToAsync(string resourceContainerName, IResourceServiceClient destination,
+    public Task<ContainerCopyResult> CopyContainerToAsync(string containerName, IResourceServiceClient destination,
         string? destinationContainerName = null, CancellationToken cancellationToken = default)
-        => _telemetry.RunAsync("copy_container", resourceContainerName, null, async activity =>
+        => _telemetry.RunAsync("copy_container", containerName, null, async activity =>
         {
-            ResourceNames.ThrowIfInvalidContainerName(resourceContainerName);
+            ResourceNames.ThrowIfInvalidContainerName(containerName);
             ArgumentNullException.ThrowIfNull(destination);
-            string destinationName = destinationContainerName ?? resourceContainerName;
+            string destinationName = destinationContainerName ?? containerName;
             if (destination.StoreName is { } store) activity?.SetTag("resourcefull.destination_store", store);
-            ContainerInfo container = await resourceRepository.GetContainerInfoAsync(resourceContainerName, cancellationToken).ConfigureAwait(false)
-                ?? throw new ResourceContainerNotFoundException($"The container {resourceContainerName} doesn't exist.")
+            ContainerInfo container = await resourceRepository.GetContainerInfoAsync(containerName, cancellationToken).ConfigureAwait(false)
+                ?? throw new ResourceContainerNotFoundException($"The container {containerName} doesn't exist.")
                 {
-                    ContainerName = resourceContainerName
+                    ContainerName = containerName
                 };
             ThrowIfUnfinished(container);
 
-            ResourceImportResult imported = await destination.ImportContainerAsync(destinationName,
-                VersionsOfAsync(resourceContainerName, cancellationToken), WithoutImportMark(container.Metadata), cancellationToken).ConfigureAwait(false);
+            ContainerImportResult imported = await destination.ImportContainerAsync(destinationName,
+                VersionsOfAsync(containerName, cancellationToken), WithoutImportMark(container.Metadata), cancellationToken).ConfigureAwait(false);
             activity?.SetTag("resourcefull.resources", imported.ResourceCount);
             activity?.SetTag("resourcefull.versions", imported.VersionCount);
             _telemetry.CountCopied("imported", imported.VersionCount);
-            return new ContainerCopyResult(resourceContainerName, destinationName, imported.ResourceCount, imported.VersionCount,
+            return new ContainerCopyResult(containerName, destinationName, imported.ResourceCount, imported.VersionCount,
                 imported.ContentSize);
-        }, "resourcefull.destination_container", destinationContainerName ?? resourceContainerName);
+        }, "resourcefull.destination_container", destinationContainerName ?? containerName);
 
     /// <summary>
     /// Throws if a container in this store still has the mark of a copy or import that hasn't finished, whether it's
@@ -208,26 +208,26 @@ internal partial class ResourceServiceClient
     /// Every version in a container, a page of names at a time, each name's oldest first, as an export reads them; each
     /// opens its content from this store when the destination reads it.
     /// </summary>
-    private async IAsyncEnumerable<ImportedVersion> VersionsOfAsync(string resourceContainerName,
+    private async IAsyncEnumerable<ImportedVersion> VersionsOfAsync(string containerName,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
-        await foreach (IReadOnlyList<ResourceInfo> page in VersionPagesAsync(resourceContainerName, cancellationToken).ConfigureAwait(false))
+        await foreach (IReadOnlyList<ResourceInfo> page in VersionPagesAsync(containerName, cancellationToken).ConfigureAwait(false))
         {
             foreach (IGrouping<string, ResourceInfo> name in page.GroupBy(v => v.Name, StringComparer.Ordinal))
             {
-                foreach (ResourceInfo version in name.Reverse()) yield return ToImport(resourceContainerName, version);
+                foreach (ResourceInfo version in name.Reverse()) yield return ToImport(containerName, version);
             }
         }
     }
 
     /// <summary>A container's versions, a page of names at a time, as <see cref="ResourceRepository.GetVersionPageAsync"/> lists them.</summary>
-    private async IAsyncEnumerable<IReadOnlyList<ResourceInfo>> VersionPagesAsync(string resourceContainerName,
+    private async IAsyncEnumerable<IReadOnlyList<ResourceInfo>> VersionPagesAsync(string containerName,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         string? afterName = null;
         while (true)
         {
-            IReadOnlyList<ResourceInfo> page = await resourceRepository.GetVersionPageAsync(resourceContainerName, afterName,
+            IReadOnlyList<ResourceInfo> page = await resourceRepository.GetVersionPageAsync(containerName, afterName,
                 ContainerArchive.NamesPerPage, cancellationToken).ConfigureAwait(false);
             // Only an empty page ends it: a page can hold fewer names than asked for, and more still follow.
             if (page.Count == 0) yield break;
@@ -237,8 +237,8 @@ internal partial class ResourceServiceClient
     }
 
     /// <summary>One of this store's versions, to import elsewhere.</summary>
-    private ImportedVersion ToImport(string resourceContainerName, ResourceInfo version) =>
-        new(version, ct => resourceRepository.GetResourceStreamAsync(new ResourceAddress(resourceContainerName, version.Name),
+    private ImportedVersion ToImport(string containerName, ResourceInfo version) =>
+        new(version, ct => resourceRepository.GetResourceStreamAsync(new ResourceAddress(containerName, version.Name),
             version.VersionId, ct));
 
     public Task<StoreCopyResult> CopyStoreToAsync(IResourceServiceClient destination, StoreCopyOptions? options = null,

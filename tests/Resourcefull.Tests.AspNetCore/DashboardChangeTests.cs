@@ -201,7 +201,7 @@ public class DashboardChangeTests
     public async Task Changes_ShouldSayWhyTheStoreRefusedThem_WhenAPolicyRefuses()
     {
         // Arrange: containers that are read-only.
-        await using TestApp app = await TestApp.StartAsync(policy: new ResourceContainerPolicy { ReadOnly = true });
+        await using TestApp app = await TestApp.StartAsync(policy: new ContainerPolicy { ReadOnly = true });
 
         // Act
         HttpResponseMessage response = await app.Client.SendAsync(Upload("a.txt", "a"));

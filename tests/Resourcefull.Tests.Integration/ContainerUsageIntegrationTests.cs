@@ -30,10 +30,10 @@ public class ContainerUsageIntegrationTests(SqlServerFixture fixture)
         }
 
         // Act
-        ResourceContainerUsage usage = await container.GetUsageAsync();
+        ContainerUsage usage = await container.GetUsageAsync();
 
         // Assert
-        Assert.Equal(new ResourceContainerUsage(150_010, 1, 2), usage);
+        Assert.Equal(new ContainerUsage(150_010, 1, 2), usage);
     }
 
     [Fact]
@@ -95,9 +95,9 @@ public class ContainerUsageIntegrationTests(SqlServerFixture fixture)
     /// <summary>Gives containers whose names start with <c>small-</c> a limit of 100,000 bytes a resource.</summary>
     private sealed class SmallDestinations : IResourcePolicyProvider
     {
-        public ValueTask<ResourceContainerPolicy?> GetPolicyAsync(string containerName, CancellationToken cancellationToken) =>
+        public ValueTask<ContainerPolicy?> GetPolicyAsync(string containerName, CancellationToken cancellationToken) =>
             ValueTask.FromResult(containerName.StartsWith("small-", StringComparison.Ordinal)
-                ? new ResourceContainerPolicy { MaxResourceSize = 100_000 }
+                ? new ContainerPolicy { MaxResourceSize = 100_000 }
                 : null);
     }
 

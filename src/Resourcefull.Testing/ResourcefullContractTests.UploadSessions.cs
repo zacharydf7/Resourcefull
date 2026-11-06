@@ -52,7 +52,7 @@ public abstract partial class ResourcefullContractTests
         ResourceInfo? info = await container.GetResourceInfoAsync("a");
         IReadOnlyList<ResourceInfo> versions = await container.GetResourceVersionsAsync("a");
         List<ResourceInfo> listed = await container.ListResourcesAsync().ToListAsync();
-        ResourceContainerUsage usage = await container.GetUsageAsync();
+        ContainerUsage usage = await container.GetUsageAsync();
         IReadOnlyList<ResourceInfo> largest = await container.GetTopVersionsAsync(ResourceVersionOrder.LargestFirst);
         ResourceUploadSession? session = await container.GetUploadAsync("a", upload.UploadId);
 
@@ -213,7 +213,7 @@ public abstract partial class ResourcefullContractTests
         Requires(SupportsUploadSessions, "upload sessions");
 
         // Arrange: a version may hold 10 bytes, the container one resource, of PDFs only.
-        using ServiceProvider provider = BuildServiceProvider(o => o.UseContainerPolicies(new ResourceContainerPolicy
+        using ServiceProvider provider = BuildServiceProvider(o => o.UseContainerPolicies(new ContainerPolicy
         {
             MaxResourceSize = 10, MaxResourceCount = 1, AllowedContentTypes = ["application/pdf"]
         }));
@@ -248,7 +248,7 @@ public abstract partial class ResourcefullContractTests
         Requires(SupportsUploadSessions, "upload sessions");
 
         // Arrange: the container holds 10 bytes in all, and no limit is set for one resource.
-        using ServiceProvider provider = BuildServiceProvider(o => o.UseContainerPolicies(new ResourceContainerPolicy
+        using ServiceProvider provider = BuildServiceProvider(o => o.UseContainerPolicies(new ContainerPolicy
         {
             MaxContainerSize = 10
         }));

@@ -57,7 +57,7 @@ internal sealed class TestApp : IAsyncDisposable
         _app.Services.CreateScope().ServiceProvider.GetRequiredKeyedService<IResourceLinkSigner>(ArchiveStore);
 
     public static async Task<TestApp> StartAsync(Exception? toThrow = null, bool versioning = true, TimeProvider? clock = null,
-        ResourceContainerPolicy? policy = null)
+        ContainerPolicy? policy = null)
     {
         WebApplicationBuilder builder = WebApplication.CreateSlimBuilder();
         builder.WebHost.UseTestServer();

@@ -79,7 +79,7 @@ version, it's deleted sooner along with the version that replaced it:
 public sealed class AuditCleanup(AuditClient audit) : IResourceCleanupHandler
 {
     public async ValueTask OnCleanupAsync(ResourceCleanup cleanup, CancellationToken cancellationToken) =>
-        await audit.RecordAsync(cleanup.Resource.ContainerName, cleanup.Resource.Name, cleanup.Resource.VersionId,
+        await audit.RecordAsync(cleanup.Version.ContainerName, cleanup.Version.Name, cleanup.Version.VersionId,
             cleanup.Reason, cleanup.At, cancellationToken);
 }
 
