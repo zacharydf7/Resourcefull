@@ -53,7 +53,6 @@ public static partial class ResourcefullUploadsEndpointRouteBuilderExtensions
     /// <exception cref="InvalidOperationException">
     /// <see cref="ResourceUploadEndpointOptions.ResolveAsync"/> isn't set, or ASP.NET Core Data Protection isn't added.
     /// </exception>
-    /// <exception cref="ArgumentOutOfRangeException"><see cref="ResourceUploadEndpointOptions.MaxSize"/> is negative.</exception>
     public static RouteGroupBuilder MapResourcefullUploads(this IEndpointRouteBuilder endpoints, string pattern,
         Action<ResourceUploadEndpointOptions> configure)
     {
@@ -67,7 +66,6 @@ public static partial class ResourcefullUploadsEndpointRouteBuilderExtensions
             throw new InvalidOperationException(
                 $"MapResourcefullUploads needs {nameof(ResourceUploadEndpointOptions.ResolveAsync)}, to decide where each upload goes.");
         }
-        if (options.MaxSize is { } maxSize) ArgumentOutOfRangeException.ThrowIfNegative(maxSize, nameof(configure));
         if (options.StoreName is not null) ArgumentException.ThrowIfNullOrWhiteSpace(options.StoreName, nameof(configure));
         if (endpoints.ServiceProvider.GetService<IServiceProviderIsService>()?.IsService(typeof(IDataProtectionProvider)) == false)
         {
@@ -113,7 +111,6 @@ public static partial class ResourcefullUploadsEndpointRouteBuilderExtensions
     /// </param>
     /// <returns>The group the endpoints are in, to add CORS or rate limits to.</returns>
     /// <exception cref="InvalidOperationException">The store's signed links aren't added with <see cref="ResourceLinkServiceCollectionExtensions.AddResourcefullLinks"/>.</exception>
-    /// <exception cref="ArgumentOutOfRangeException"><see cref="ResourceUploadLinkEndpointOptions.MaxSize"/> is negative.</exception>
     public static RouteGroupBuilder MapResourcefullUploadLinks(this IEndpointRouteBuilder endpoints, string pattern,
         Action<ResourceUploadLinkEndpointOptions>? configure = null)
     {
@@ -123,7 +120,6 @@ public static partial class ResourcefullUploadsEndpointRouteBuilderExtensions
         configure?.Invoke(linkOptions);
         string? storeName = linkOptions.StoreName;
         if (storeName is not null) ArgumentException.ThrowIfNullOrWhiteSpace(storeName, nameof(configure));
-        if (linkOptions.MaxSize is { } maxSize) ArgumentOutOfRangeException.ThrowIfNegative(maxSize, nameof(configure));
         IServiceProvider services = endpoints.ServiceProvider;
         bool? signs = storeName is null
             ? services.GetService<IServiceProviderIsService>()?.IsService(typeof(IResourceLinkSigner))
@@ -243,7 +239,7 @@ internal sealed partial class ResourceUploadEndpoints(ResourceUploadEndpointOpti
         HttpResponse response = httpContext.Response;
         response.Headers["Tus-Version"] = TusVersion;
         response.Headers["Tus-Extension"] = "creation,creation-with-upload,termination,expiration";
-        if (options.MaxSize is { } maxSize) response.Headers["Tus-Max-Size"] = maxSize.ToString(CultureInfo.InvariantCulture);
+        if (options.MaxSize is { } maxSize) response.Headers["Tus-Max-Size"] = maxSize.Bytes.ToString(CultureInfo.InvariantCulture);
         response.StatusCode = StatusCodes.Status204NoContent;
     }
 
@@ -264,10 +260,10 @@ internal sealed partial class ResourceUploadEndpoints(ResourceUploadEndpointOpti
             await RefuseAsync(httpContext, StatusCodes.Status400BadRequest, "Upload-Length must be a whole number of bytes.").ConfigureAwait(false);
             return;
         }
-        if (length > options.MaxSize)
+        if (length > options.MaxSize?.Bytes)
         {
             await RefuseAsync(httpContext, StatusCodes.Status413PayloadTooLarge,
-                $"The upload is larger than the {options.MaxSize} bytes these endpoints take.").ConfigureAwait(false);
+                $"The upload is larger than the {options.MaxSize} these endpoints take.").ConfigureAwait(false);
             return;
         }
         if (!TryParseMetadata(request.Headers["Upload-Metadata"], out Dictionary<string, string>? metadata))

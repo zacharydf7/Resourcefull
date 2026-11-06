@@ -132,9 +132,7 @@ public interface IResourceLinkSigner
     /// </summary>
     /// <param name="link">Where uploads go, what they may be, and for how long.</param>
     /// <returns>The token.</returns>
-    /// <exception cref="ArgumentOutOfRangeException">
-    /// <see cref="ResourceUploadLink.ExpiresIn"/> isn't positive, or <see cref="ResourceUploadLink.MaxSize"/> is negative.
-    /// </exception>
+    /// <exception cref="ArgumentOutOfRangeException"><see cref="ResourceUploadLink.ExpiresIn"/> isn't positive.</exception>
     /// <exception cref="ArgumentException">
     /// The link sets both <see cref="ResourceUploadLink.ResourceName"/> and <see cref="ResourceUploadLink.NamePrefix"/>, or
     /// neither, or a name breaks the name rules.
@@ -191,7 +189,6 @@ internal sealed class ResourceLinkSigner(IDataProtectionProvider dataProtection,
     {
         ArgumentNullException.ThrowIfNull(link);
         ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(link.ExpiresIn, TimeSpan.Zero, nameof(link));
-        if (link.MaxSize is { } maxSize) ArgumentOutOfRangeException.ThrowIfNegative(maxSize, nameof(link));
         if (link.ResourceName is null == link.NamePrefix is null)
             throw new ArgumentException("An upload link uploads to one name or to names under a prefix: set one of the two.", nameof(link));
         // A prefix is valid when a name can start with it.
@@ -201,7 +198,7 @@ internal sealed class ResourceLinkSigner(IDataProtectionProvider dataProtection,
             throw new ArgumentException("The upload link's container name, resource name or prefix breaks the name rules.", nameof(link));
         }
 
-        var payload = new UploadPayload(link.ContainerName, link.ResourceName, link.NamePrefix, link.MaxSize,
+        var payload = new UploadPayload(link.ContainerName, link.ResourceName, link.NamePrefix, link.MaxSize?.Bytes,
             link.AllowedContentTypes?.ToArray(), link.Mode == ResourceWriteMode.Replace,
             (_clock.GetUtcNow() + link.ExpiresIn).ToUnixTimeMilliseconds());
         return Base64Url.EncodeToString(_uploadProtector.Protect(JsonSerializer.SerializeToUtf8Bytes(payload)));

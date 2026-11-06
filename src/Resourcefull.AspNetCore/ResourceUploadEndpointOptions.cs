@@ -39,12 +39,12 @@ public sealed class ResourceUploadEndpointOptions
     public string? StoreName { get; set; }
 
     /// <summary>
-    /// The largest upload the endpoints take, in bytes, sent to clients in <c>Tus-Max-Size</c>; a larger one is refused
-    /// with 413 Content Too Large before any of it is sent. <see langword="null"/>, the default, sets no limit of its
-    /// own, and leaves sizes to the container's policies, which are also checked before anything is sent. Either way,
-    /// no request stores more than its upload's length.
+    /// The largest upload the endpoints take, sent to clients as a number of bytes in <c>Tus-Max-Size</c>; a larger one
+    /// is refused with 413 Content Too Large before any of it is sent. <see langword="null"/>, the default, sets no
+    /// limit of its own, and leaves sizes to the container's policies, which are also checked before anything is sent.
+    /// Either way, no request stores more than its upload's length.
     /// </summary>
-    public long? MaxSize { get; set; }
+    public ResourceSize? MaxSize { get; set; }
 }
 
 /// <summary>
@@ -71,13 +71,13 @@ public sealed class ResourceUploadLinkEndpointOptions
     public string? StoreName { get; set; }
 
     /// <summary>
-    /// The largest upload the endpoints take through any link, in bytes, sent to clients in <c>Tus-Max-Size</c>; a
-    /// larger one is refused with 413 Content Too Large before any of it is sent. <see langword="null"/>, the default,
-    /// leaves sizes to each link's <see cref="ResourceUploadLink.MaxSize"/> and the container's policies. The endpoints
-    /// lift ASP.NET Core's limit on the size of a request's body, so when neither the link nor the container sets a
-    /// limit, an upload has no limit at all.
+    /// The largest upload the endpoints take through any link, sent to clients as a number of bytes in
+    /// <c>Tus-Max-Size</c>; a larger one is refused with 413 Content Too Large before any of it is sent.
+    /// <see langword="null"/>, the default, leaves sizes to each link's <see cref="ResourceUploadLink.MaxSize"/> and the
+    /// container's policies. The endpoints lift ASP.NET Core's limit on the size of a request's body, so when neither the
+    /// link nor the container sets a limit, an upload has no limit at all.
     /// </summary>
-    public long? MaxSize { get; set; }
+    public ResourceSize? MaxSize { get; set; }
 }
 
 /// <summary>

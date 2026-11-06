@@ -36,7 +36,7 @@ app.MapPost("/claims/{claimId:int}/upload-link", (int claimId, IResourceLinkSign
     string token = links.CreateUploadToken(new ResourceUploadLink("claims")
     {
         NamePrefix = $"{claimId}/",
-        MaxSize = 20 * 1024 * 1024,
+        MaxSize = ResourceSize.Megabytes(20),
         AllowedContentTypes = ["image/*", "application/pdf"],
         ExpiresIn = TimeSpan.FromDays(7)
     });
@@ -122,7 +122,7 @@ const response = await fetch(form.action, { method: "POST", body: new FormData(f
 | `ResourceName` | | The one name uploads go to. Set this or `NamePrefix`, not both. |
 | `NamePrefix` | | What every name starts with: the person uploading picks the rest. Set this or `ResourceName`, not both. |
 | `ExpiresIn` | one hour | How long the link works, from when it's created. |
-| `MaxSize` | no limit | The most bytes one upload may hold. |
+| `MaxSize` | no limit | How large one upload may be, such as `ResourceSize.Megabytes(20)`. |
 | `AllowedContentTypes` | any type | The types an upload may have, such as `application/pdf`, or `image/*` for every image type. |
 | `Mode` | `Create` | `Create` refuses a name that already has a file, so the link can't overwrite anything. `Replace` stores the upload as the name's new version. |
 
@@ -239,7 +239,7 @@ limits every upload through the endpoints, whatever the link. For a store added 
 app.MapResourcefullUploadLinks("/upload-links", options =>
 {
     options.OnCompletedAsync = (context, version) => claims.FileReceivedAsync(version.Name);
-    options.MaxSize = 10L * 1024 * 1024 * 1024;     // 10 GiB
+    options.MaxSize = ResourceSize.Gigabytes(10);
 });
 ```
 

@@ -11,7 +11,7 @@ namespace Resourcefull.Tests.AspNetCore;
 
 public class ResourceUploadLinkEndpointTests
 {
-    private static string Token(UploadApp app, string? name = null, string? prefix = null, long? maxSize = null,
+    private static string Token(UploadApp app, string? name = null, string? prefix = null, ResourceSize? maxSize = null,
         string[]? types = null, ResourceWriteMode mode = ResourceWriteMode.Create) =>
         app.Links.CreateUploadToken(new ResourceUploadLink(UploadApp.Container)
         {

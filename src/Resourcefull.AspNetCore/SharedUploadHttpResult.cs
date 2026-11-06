@@ -176,7 +176,7 @@ public sealed class SharedUploadHttpResult : IResult, IActionResult
             }
 
             // A form doesn't say how long each file is, so a file is cut off at the link's limit, and refused.
-            var content = new ResourceUploadEndpoints.BoundedStream(section.Body, link.MaxSize ?? long.MaxValue);
+            var content = new ResourceUploadEndpoints.BoundedStream(section.Body, link.MaxSize?.Bytes ?? long.MaxValue);
             try
             {
                 ResourceInfo version = await container.UploadAsync(link.ResourceName ?? link.NamePrefix + fileName, content,
@@ -188,7 +188,7 @@ public sealed class SharedUploadHttpResult : IResult, IActionResult
             catch (Exception) when (content.Exceeded)
             {
                 await RefuseFileAsync(httpContext, StatusCodes.Status413PayloadTooLarge,
-                    $"The upload link accepts at most {link.MaxSize} bytes, and {fileName} has more.", fileName, stored).ConfigureAwait(false);
+                    $"The upload link accepts at most {link.MaxSize}, and {fileName} is larger.", fileName, stored).ConfigureAwait(false);
                 return;
             }
             catch (Exception) when (content.ReadFailure is { } failure)
@@ -285,10 +285,10 @@ public sealed class SharedUploadHttpResult : IResult, IActionResult
                 return TypedResults.Problem(statusCode: StatusCodes.Status411LengthRequired,
                     title: "The upload link limits the size of an upload, so the request must send Content-Length.");
             }
-            if (length > maxSize)
+            if (length > maxSize.Bytes)
             {
                 return TypedResults.Problem(statusCode: StatusCodes.Status413PayloadTooLarge,
-                    title: $"The upload link accepts at most {maxSize} bytes, and the upload has {length}.");
+                    title: $"The upload link accepts at most {maxSize}, and the upload is larger.");
             }
         }
         return TypeRefusalTitle(link, contentType) is { } title

@@ -24,12 +24,12 @@ public sealed record ResourceUploadLink(string ContainerName)
     public TimeSpan ExpiresIn { get; init; } = TimeSpan.FromHours(1);
 
     /// <summary>
-    /// The most bytes one upload may hold, or <see langword="null"/> for no limit of the link's own. With a limit, a
+    /// How large one upload may be, or <see langword="null"/> for no limit of the link's own. With a limit, a
     /// body sent to <c>Results.SharedUpload</c> must have a <c>Content-Length</c>, and is refused before it's read if
     /// that's over the limit; each file a form posts is refused once it goes past the limit; and a resumable upload is
     /// refused when it starts if the length it declares is over it.
     /// </summary>
-    public long? MaxSize { get; init; }
+    public ResourceSize? MaxSize { get; init; }
 
     /// <summary>
     /// The content types an upload may declare, such as <c>application/pdf</c>, or <c>image/*</c> for every image type,
@@ -63,8 +63,8 @@ public sealed record SignedResourceUploadLink
     /// </summary>
     public string? NamePrefix { get; init; }
 
-    /// <summary>The most bytes one upload may hold, or <see langword="null"/> for no limit of the link's own.</summary>
-    public long? MaxSize { get; init; }
+    /// <summary>How large one upload may be, or <see langword="null"/> for no limit of the link's own.</summary>
+    public ResourceSize? MaxSize { get; init; }
 
     /// <summary>The content types an upload may declare, or <see langword="null"/> for any.</summary>
     public IReadOnlyCollection<string>? AllowedContentTypes { get; init; }

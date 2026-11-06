@@ -12,7 +12,7 @@ namespace Resourcefull;
 /// <para>Coming in 4.0.</para>
 /// </summary>
 [TypeConverter(typeof(ResourceSizeConverter))]
-public readonly partial record struct ResourceSize : IParsable<ResourceSize>
+public readonly partial record struct ResourceSize : IParsable<ResourceSize>, IComparable<ResourceSize>
 {
     private static readonly (string Unit, long Bytes)[] Units =
         [("TB", 1L << 40), ("GB", 1L << 30), ("MB", 1L << 20), ("KB", 1L << 10)];
@@ -41,7 +41,24 @@ public readonly partial record struct ResourceSize : IParsable<ResourceSize>
     public static ResourceSize Terabytes(long terabytes) => new(checked(terabytes * (1L << 40)));
 
     /// <summary>A size of <paramref name="bytes"/> bytes.</summary>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="bytes"/> is negative.</exception>
     public static implicit operator ResourceSize(long bytes) => new(bytes);
+
+    /// <summary>Compares this size with <paramref name="other"/>, by their bytes.</summary>
+    /// <returns>Less than zero if this is smaller, zero if they're the same, and more than zero if this is larger.</returns>
+    public int CompareTo(ResourceSize other) => Bytes.CompareTo(other.Bytes);
+
+    /// <summary>Whether <paramref name="left"/> is smaller than <paramref name="right"/>.</summary>
+    public static bool operator <(ResourceSize left, ResourceSize right) => left.Bytes < right.Bytes;
+
+    /// <summary>Whether <paramref name="left"/> is no larger than <paramref name="right"/>.</summary>
+    public static bool operator <=(ResourceSize left, ResourceSize right) => left.Bytes <= right.Bytes;
+
+    /// <summary>Whether <paramref name="left"/> is larger than <paramref name="right"/>.</summary>
+    public static bool operator >(ResourceSize left, ResourceSize right) => left.Bytes > right.Bytes;
+
+    /// <summary>Whether <paramref name="left"/> is no smaller than <paramref name="right"/>.</summary>
+    public static bool operator >=(ResourceSize left, ResourceSize right) => left.Bytes >= right.Bytes;
 
     /// <summary>
     /// Reads a size such as <c>"5 GB"</c>, <c>"100MB"</c>, <c>"1.5 GB"</c> or <c>"2048"</c> (bytes): a number, with or

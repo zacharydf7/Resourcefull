@@ -74,6 +74,14 @@ ResourceSize.Gigabytes(5)
 MaxResourceSize = 1_048_576    // a number of bytes works too
 ```
 
+Sizes compare by their bytes, whichever units they were written in, so you can check what a container holds against a
+limit of your own:
+
+```csharp
+ContainerUsage usage = await container.GetUsageAsync();
+bool nearlyFull = usage.StoredSize >= ResourceSize.Gigabytes(4);
+```
+
 ## Defaults from configuration
 
 `UseConfiguration` <span class="rf-badge rf-upcoming" title="Coming in 4.0">4.0</span> reads the defaults, and how

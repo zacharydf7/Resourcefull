@@ -243,6 +243,24 @@ public class ResourceUploadEndpointTests
     }
 
     [Fact]
+    public async Task UploadEndpoints_ShouldAdvertiseBytesAndNameTheLimitWhenRefusing_WhenGivenALimitInUnits()
+    {
+        // Arrange
+        await using UploadApp app = await UploadApp.StartAsync(maxSize: ResourceSize.Kilobytes(1));
+
+        // Act
+        HttpResponseMessage options = await app.Client.SendAsync(new HttpRequestMessage(HttpMethod.Options, "/uploads"));
+        HttpResponseMessage atLimit = await CreateAsync(app, 1024, Metadata(("filename", "fits.bin")));
+        HttpResponseMessage over = await CreateAsync(app, 1025, Metadata(("filename", "big.bin")));
+
+        // Assert: the protocol's header is a number of bytes, and the refusal gives the limit in units.
+        Assert.Equal("1024", Header(options, "Tus-Max-Size"));
+        Assert.Equal(HttpStatusCode.Created, atLimit.StatusCode);
+        Assert.Equal(HttpStatusCode.RequestEntityTooLarge, over.StatusCode);
+        Assert.Contains("larger than the 1 KB these endpoints take", await over.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
     public async Task Patch_ShouldCancelTheUploadAndAnswerConflict_WhenTheNameIsTakenBeforeTheUploadCompletes()
     {
         // Arrange: an upload that creates, and the name taken while it's sent.

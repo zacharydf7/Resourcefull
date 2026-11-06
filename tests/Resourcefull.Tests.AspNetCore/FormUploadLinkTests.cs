@@ -22,7 +22,7 @@ public class FormUploadLinkTests
         return form;
     }
 
-    private static string Token(TestApp app, string? name = null, string? prefix = null, long? maxSize = null, string[]? types = null) =>
+    private static string Token(TestApp app, string? name = null, string? prefix = null, ResourceSize? maxSize = null, string[]? types = null) =>
         app.Links.CreateUploadToken(new ResourceUploadLink(TestApp.Container)
         {
             ResourceName = name, NamePrefix = prefix, MaxSize = maxSize, AllowedContentTypes = types
@@ -113,6 +113,25 @@ public class FormUploadLinkTests
         Assert.Equal("one", await ReadAsync(app, "in/first.jpg"));
         Assert.Equal(problem == "taken" ? "theirs" : null, await ReadAsync(app, "in/" + second.Item1));
         Assert.Null(await app.Files.GetResourceInfoAsync("in/third.jpg"));
+    }
+
+    [Fact]
+    public async Task SharedUpload_ShouldNameTheLimitAndTheFile_WhenAFormPostsAFileOverALimitInUnits()
+    {
+        // Arrange
+        await using TestApp app = await TestApp.StartAsync();
+        string token = Token(app, prefix: "in/", maxSize: ResourceSize.Kilobytes(1));
+
+        // Act
+        HttpResponseMessage atLimit = await app.Client.PostAsync($"/upload/{token}",
+            Form(("fits.jpg", "image/jpeg", new string('x', 1024))));
+        HttpResponseMessage over = await app.Client.PostAsync($"/upload/{token}",
+            Form(("big.jpg", "image/jpeg", new string('x', 1025))));
+
+        // Assert
+        Assert.Equal(HttpStatusCode.Created, atLimit.StatusCode);
+        Assert.Equal(HttpStatusCode.RequestEntityTooLarge, over.StatusCode);
+        Assert.Contains("at most 1 KB, and big.jpg is larger", await over.Content.ReadAsStringAsync());
     }
 
     [Fact]

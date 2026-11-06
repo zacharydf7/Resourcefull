@@ -304,6 +304,10 @@
 
 ### Changed
 
+- **`ResourceSize` for upload limits, and comparisons.** `ResourceUploadLink.MaxSize`, `SignedResourceUploadLink.MaxSize`,
+  `ResourceUploadEndpointOptions.MaxSize` and `ResourceUploadLinkEndpointOptions.MaxSize` are `ResourceSize?`, as the
+  core's limits are, so `ResourceSize.Megabytes(20)` sets any of them, and a number of bytes still converts.
+  `ResourceSize` implements `IComparable<ResourceSize>` and `<`, `<=`, `>` and `>=`.
 - **Provider registration is the same everywhere.** `UseSqlServer`, `UsePostgreSql` and `UseSqlite` take a connection
   string and an optional callback that sets `ResourcefullSqlServerOptions`, `ResourcefullPostgreSqlOptions` or
   `ResourcefullSqliteOptions`, as `UseS3` and `UseAzureBlob` do with theirs. `Schema` replaces the `schema` parameter,

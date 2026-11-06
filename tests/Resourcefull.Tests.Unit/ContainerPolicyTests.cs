@@ -37,6 +37,35 @@ public class ContainerPolicyTests
         Assert.True(new ContainerPolicy().AllowsContentType(contentType));
     }
 
+    [Fact]
+    public void ResourceSize_ShouldCompareByBytes_WhenGivenTwoSizes()
+    {
+        // Arrange
+        ResourceSize smaller = ResourceSize.Gigabytes(4);
+        ResourceSize larger = ResourceSize.Gigabytes(5);
+        ResourceSize same = ResourceSize.Megabytes(5 * 1024);
+
+        // Act & Assert
+        Assert.True(smaller < larger);
+        Assert.True(smaller <= larger);
+        Assert.True(larger <= same);
+        Assert.True(larger > smaller);
+        Assert.True(larger >= same);
+        Assert.False(larger < same);
+        Assert.False(larger > same);
+        Assert.True(smaller.CompareTo(larger) < 0);
+        Assert.Equal(0, larger.CompareTo(same));
+        Assert.True(larger.CompareTo(smaller) > 0);
+        Assert.Equal([smaller, larger], new[] { larger, smaller }.Order());
+    }
+
+    [Fact]
+    public void ResourceSize_ShouldThrowOutOfRange_WhenConvertedFromANegativeNumberOfBytes()
+    {
+        // Act & Assert
+        Assert.Throws<ArgumentOutOfRangeException>(() => { ResourceSize size = -1L; });
+    }
+
     [Theory]
     [InlineData("5 GB", 5L << 30)]
     [InlineData("100MB", 100L << 20)]

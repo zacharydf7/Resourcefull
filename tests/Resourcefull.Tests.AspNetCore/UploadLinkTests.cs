@@ -88,6 +88,7 @@ public class UploadLinkTests
 
         // Assert
         Assert.Equal(HttpStatusCode.RequestEntityTooLarge, tooLarge.StatusCode);
+        Assert.Contains("at most 4 B, and the upload is larger", await tooLarge.Content.ReadAsStringAsync());
         Assert.Equal(HttpStatusCode.UnsupportedMediaType, wrongType.StatusCode);
         Assert.Equal(HttpStatusCode.LengthRequired, noLength.StatusCode);
         Assert.Equal(HttpStatusCode.Created, allowed.StatusCode);
@@ -235,7 +236,6 @@ public class UploadLinkTests
         Assert.Throws<ArgumentException>(() => app.Links.CreateUploadToken(link with { ResourceName = null, NamePrefix = "\tin/" }));
         Assert.Throws<ArgumentException>(() => app.Links.CreateUploadToken(new ResourceUploadLink(" ") { ResourceName = "a.txt" }));
         Assert.Throws<ArgumentOutOfRangeException>(() => app.Links.CreateUploadToken(link with { ExpiresIn = TimeSpan.Zero }));
-        Assert.Throws<ArgumentOutOfRangeException>(() => app.Links.CreateUploadToken(link with { MaxSize = -1 }));
     }
 
     [Fact]
@@ -260,7 +260,7 @@ public class UploadLinkTests
         Assert.Equal(ResourceLinkStatus.Expired, expired.Status);
         SignedResourceUploadLink allowed = valid.Link!;
         Assert.Equal((TestApp.Container, (string?)null, "in/", (long?)10, ResourceWriteMode.Replace, new DateTimeOffset(2026, 1, 1, 2, 0, 0, TimeSpan.Zero)),
-            (allowed.ContainerName, allowed.ResourceName, allowed.NamePrefix, allowed.MaxSize, allowed.Mode, allowed.ExpiresAt));
+            (allowed.ContainerName, allowed.ResourceName, allowed.NamePrefix, allowed.MaxSize?.Bytes, allowed.Mode, allowed.ExpiresAt));
         Assert.Equal(["image/*"], allowed.AllowedContentTypes!);
         Assert.Equal(new ResourceUploadLinkCheck { Status = ResourceLinkStatus.Invalid }, app.Links.CheckUpload(""));
     }
