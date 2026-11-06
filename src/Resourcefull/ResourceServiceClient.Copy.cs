@@ -166,12 +166,14 @@ internal partial class ResourceServiceClient
     }
 
     public Task<ContainerCopyResult> CopyContainerToAsync(string containerName, IResourceServiceClient destination,
-        string? destinationContainerName = null, CancellationToken cancellationToken = default)
+        ContainerCopyOptions? options = null, CancellationToken cancellationToken = default)
         => _telemetry.RunAsync("copy_container", containerName, null, async activity =>
         {
             ResourceNames.ThrowIfInvalidContainerName(containerName);
             ArgumentNullException.ThrowIfNull(destination);
-            string destinationName = destinationContainerName ?? containerName;
+            options ??= new ContainerCopyOptions();
+            if (!Enum.IsDefined(options.Existing))
+                throw new ArgumentOutOfRangeException(nameof(options), options.Existing, $"{options.Existing} isn't an {nameof(ExistingContainers)} value.");
             if (destination.StoreName is { } store) activity?.SetTag("resourcefull.destination_store", store);
             ContainerInfo container = await resourceRepository.GetContainerInfoAsync(containerName, cancellationToken).ConfigureAwait(false)
                 ?? throw new ResourceContainerNotFoundException($"The container {containerName} doesn't exist.")
@@ -180,20 +182,25 @@ internal partial class ResourceServiceClient
                 };
             ThrowIfUnfinished(container);
 
-            ContainerImportResult imported = await destination.ImportContainerAsync(destinationName,
-                VersionsOfAsync(containerName, cancellationToken), WithoutImportMark(container.Metadata), cancellationToken).ConfigureAwait(false);
-            activity?.SetTag("resourcefull.resources", imported.ResourceCount);
-            activity?.SetTag("resourcefull.versions", imported.VersionCount);
-            _telemetry.CountCopied("imported", imported.VersionCount);
-            return new ContainerCopyResult
+            ContainerCopyResult result = await CopyOneAsync(container, options.DestinationName ?? containerName, destination,
+                options.Existing, cancellationToken).ConfigureAwait(false);
+            activity?.SetTag("resourcefull.outcome", OutcomeTag(result.Outcome));
+            activity?.SetTag("resourcefull.resources", result.ResourceCount);
+            activity?.SetTag("resourcefull.versions", result.VersionCount);
+            if (result.Update is { } update)
             {
-                SourceContainerName = containerName,
-                DestinationContainerName = destinationName,
-                ResourceCount = imported.ResourceCount,
-                VersionCount = imported.VersionCount,
-                ContentSize = imported.ContentSize
-            };
-        }, "resourcefull.destination_container", destinationContainerName ?? containerName);
+                activity?.SetTag("resourcefull.changed", update.Changed);
+                activity?.SetTag("resourcefull.deleted", update.Deleted);
+            }
+            return result;
+        }, "resourcefull.destination_container", options?.DestinationName ?? containerName);
+
+    private static string OutcomeTag(ContainerCopyOutcome outcome) => outcome switch
+    {
+        ContainerCopyOutcome.Copied => "copied",
+        ContainerCopyOutcome.Updated => "updated",
+        _ => "matching"
+    };
 
     /// <summary>
     /// Throws if a container in this store still has the mark of a copy or import that hasn't finished, whether it's
@@ -278,8 +285,12 @@ internal partial class ResourceServiceClient
                 ContainerCopyOutcome outcome;
                 try
                 {
-                    outcome = await CopyOneAsync(container, destination, options.Existing, copied, updated, matching, cancellationToken)
-                        .ConfigureAwait(false);
+                    ContainerCopyResult result = await CopyContainerToAsync(container.Name, destination,
+                        new ContainerCopyOptions { Existing = options.Existing }, cancellationToken).ConfigureAwait(false);
+                    if (result.Outcome == ContainerCopyOutcome.Copied) copied.Add(result);
+                    else if (result.Update is { } update) updated.Add(update);
+                    else matching.Add(container.Name);
+                    outcome = result.Outcome;
                 }
                 catch (Exception exception) when (exception is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
                 {
@@ -321,71 +332,73 @@ internal partial class ResourceServiceClient
         });
 
     /// <summary>
-    /// Copies one container, or does what <paramref name="existing"/> says with one the destination has, and adds what it
-    /// did to <paramref name="copied"/>, <paramref name="updated"/> or <paramref name="matching"/>.
+    /// Copies one container, or does what <paramref name="existing"/> says when the destination has a container called
+    /// <paramref name="destinationName"/>.
     /// </summary>
-    /// <exception cref="ResourceConflictException">The container can't be copied, or the destination's doesn't match.</exception>
-    private async Task<ContainerCopyOutcome> CopyOneAsync(ContainerInfo container, IResourceServiceClient destination,
-        ExistingContainers existing, List<ContainerCopyResult> copied, List<ContainerUpdateResult> updated, List<string> matching,
-        CancellationToken cancellationToken)
+    /// <exception cref="ResourceConflictException">The destination's container is busy, or doesn't match.</exception>
+    private async Task<ContainerCopyResult> CopyOneAsync(ContainerInfo container, string destinationName, IResourceServiceClient destination,
+        ExistingContainers existing, CancellationToken cancellationToken)
     {
-        ThrowIfUnfinished(container);
-        ContainerInfo? theirs = await destination.GetContainerClient(container.Name).GetInfoAsync(cancellationToken).ConfigureAwait(false);
+        ContainerInfo? theirs = await destination.GetContainerClient(destinationName).GetInfoAsync(cancellationToken).ConfigureAwait(false);
         if (theirs is null)
         {
-            copied.Add(await CopyContainerToAsync(container.Name, destination, null, cancellationToken).ConfigureAwait(false));
-            return ContainerCopyOutcome.Copied;
+            ContainerImportResult imported = await destination.ImportContainerAsync(destinationName,
+                VersionsOfAsync(container.Name, cancellationToken), WithoutImportMark(container.Metadata), cancellationToken).ConfigureAwait(false);
+            _telemetry.CountCopied("imported", imported.VersionCount);
+            return new ContainerCopyResult
+            {
+                SourceContainerName = container.Name,
+                DestinationContainerName = destinationName,
+                Outcome = ContainerCopyOutcome.Copied,
+                ResourceCount = imported.ResourceCount,
+                VersionCount = imported.VersionCount,
+                ContentSize = imported.ContentSize
+            };
         }
 
         bool? running = ImportRunning(theirs.Metadata);
         if (running == true)
-            throw Conflict(container.Name, $"The destination's container {container.Name} is still being copied or imported; try again once it finishes.");
+            throw Conflict(destinationName, $"The destination's container {destinationName} is still being copied or imported; try again once it finishes.");
         if (existing == ExistingContainers.Fail)
-            throw Conflict(container.Name, $"The destination already has a container {container.Name}: {nameof(ExistingContainers)}.{nameof(ExistingContainers.SkipMatching)} " +
+            throw Conflict(destinationName, $"The destination already has a container {destinationName}: {nameof(ExistingContainers)}.{nameof(ExistingContainers.SkipMatching)} " +
                 $"checks it and {nameof(ExistingContainers.Update)} brings it up to date.");
         if (running == false && existing == ExistingContainers.SkipMatching)
         {
-            throw Conflict(container.Name, $"The destination's container {container.Name} is from a copy or import that stopped " +
+            throw Conflict(destinationName, $"The destination's container {destinationName} is from a copy or import that stopped " +
                 $"partway: {nameof(ExistingContainers)}.{nameof(ExistingContainers.Update)} finishes it.");
         }
 
-        var comparison = new ContainerComparison(this, resourceRepository, container, theirs, destination);
-        if (existing == ExistingContainers.SkipMatching)
+        var comparison = new ContainerComparison(this, resourceRepository, container, destinationName, theirs, destination);
+        if (existing == ExistingContainers.Update) return await comparison.UpdateAsync(cancellationToken).ConfigureAwait(false);
+
+        List<string> differences = await comparison.FindDifferencesAsync(cancellationToken).ConfigureAwait(false);
+        if (differences.Count > 0)
         {
-            List<string> differences = await comparison.FindDifferencesAsync(cancellationToken).ConfigureAwait(false);
-            if (differences.Count == 0)
-            {
-                matching.Add(container.Name);
-                return ContainerCopyOutcome.Matching;
-            }
-            throw Conflict(container.Name, $"The destination's container {container.Name} doesn't match the source's: " +
+            throw Conflict(destinationName, $"The destination's container {destinationName} doesn't match the source's: " +
                 string.Join("; ", differences) + (differences.Count == DifferencesNamed ? "; and maybe more." : "."));
         }
-
-        ContainerUpdateResult result = await comparison.UpdateAsync(cancellationToken).ConfigureAwait(false);
-        if (result is { Imported: 0, Changed: 0, Deleted: 0 } && !comparison.MetadataChanged)
+        return new ContainerCopyResult
         {
-            matching.Add(container.Name);
-            return ContainerCopyOutcome.Matching;
-        }
-        updated.Add(result);
-        return ContainerCopyOutcome.Updated;
+            SourceContainerName = container.Name,
+            DestinationContainerName = destinationName,
+            Outcome = ContainerCopyOutcome.Matching,
+            ResourceCount = 0,
+            VersionCount = 0,
+            ContentSize = 0
+        };
     }
 
     private static ResourceConflictException Conflict(string containerName, string message) =>
         new(message) { ContainerName = containerName };
 
     /// <summary>
-    /// One container in this store, compared with the destination's container of the same name, name by name: this
-    /// store's names a page at a time, then the destination's names this store doesn't have.
+    /// One container in this store, compared with the destination's container, name by name: this store's names a page
+    /// at a time, then the destination's names this store doesn't have.
     /// </summary>
     private sealed class ContainerComparison(ResourceServiceClient source, ResourceRepository repository, ContainerInfo container,
-        ContainerInfo theirs, IResourceServiceClient destination)
+        string destinationName, ContainerInfo theirs, IResourceServiceClient destination)
     {
-        private readonly IResourceContainerClient _destination = destination.GetContainerClient(container.Name);
-
-        /// <summary>Whether <see cref="UpdateAsync"/> gave the destination's container the source's metadata.</summary>
-        public bool MetadataChanged { get; private set; }
+        private readonly IResourceContainerClient _destination = destination.GetContainerClient(destinationName);
 
         /// <summary>Up to <see cref="DifferencesNamed"/> differences, described; none when the containers match.</summary>
         public async Task<List<string>> FindDifferencesAsync(CancellationToken cancellationToken)
@@ -405,22 +418,25 @@ internal partial class ResourceServiceClient
         /// before changing anything of that name.
         /// </summary>
         /// <exception cref="ResourceConflictException">A name needs what an update can't do, such as an older version put back.</exception>
-        public async Task<ContainerUpdateResult> UpdateAsync(CancellationToken cancellationToken)
+        public async Task<ContainerCopyResult> UpdateAsync(CancellationToken cancellationToken)
         {
-            long imported = 0, changed = 0, deleted = 0;
+            long resources = 0, imported = 0, importedBytes = 0, changed = 0, deleted = 0;
             var missing = new List<ImportedVersion>();
             async Task ImportMissingAsync()
             {
                 if (missing.Count == 0) return;
-                imported += (await destination.ImportVersionsAsync(container.Name, missing.ToAsyncEnumerable(), cancellationToken)
-                    .ConfigureAwait(false)).VersionCount;
+                ContainerImportResult batch = await destination.ImportVersionsAsync(destinationName, missing.ToAsyncEnumerable(), cancellationToken)
+                    .ConfigureAwait(false);
+                resources += batch.ResourceCount;
+                imported += batch.VersionCount;
+                importedBytes += batch.ContentSize.Bytes;
                 missing.Clear();
             }
 
             await foreach (NamePlan plan in PlansAsync(cancellationToken).ConfigureAwait(false))
             {
                 if (plan.Unchangeable is { } reason)
-                    throw Conflict(container.Name, $"The destination's container {container.Name} can't be updated in place: {reason}. Copy it afresh.");
+                    throw Conflict(destinationName, $"The destination's container {destinationName} can't be updated in place: {reason}. Copy it afresh.");
                 foreach (ResourceInfo extra in plan.Extras)
                 {
                     await _destination.DeleteResourceIfExistsAsync(extra.Name, extra.VersionId, null, cancellationToken).ConfigureAwait(false);
@@ -438,21 +454,22 @@ internal partial class ResourceServiceClient
 
             // Last, so the mark of an import that stopped partway stays until the container is whole.
             Dictionary<string, string> metadata = WithoutImportMark(container.Metadata);
-            if (!SameMetadata(metadata, theirs.Metadata))
-            {
-                await destination.GetContainerClient(container.Name).SetMetadataAsync(metadata, cancellationToken).ConfigureAwait(false);
-                MetadataChanged = true;
-            }
+            bool metadataChanged = !SameMetadata(metadata, theirs.Metadata);
+            if (metadataChanged) await _destination.SetMetadataAsync(metadata, cancellationToken).ConfigureAwait(false);
 
             source._telemetry.CountCopied("imported", imported);
             source._telemetry.CountCopied("changed", changed);
             source._telemetry.CountCopied("deleted", deleted);
-            return new ContainerUpdateResult
+            bool updated = imported > 0 || changed > 0 || deleted > 0 || metadataChanged;
+            return new ContainerCopyResult
             {
-                Name = container.Name,
-                Imported = imported,
-                Changed = changed,
-                Deleted = deleted
+                SourceContainerName = container.Name,
+                DestinationContainerName = destinationName,
+                Outcome = updated ? ContainerCopyOutcome.Updated : ContainerCopyOutcome.Matching,
+                ResourceCount = resources,
+                VersionCount = imported,
+                ContentSize = importedBytes,
+                Update = updated ? new ContainerUpdateResult { Name = destinationName, Imported = imported, Changed = changed, Deleted = deleted } : null
             };
         }
 

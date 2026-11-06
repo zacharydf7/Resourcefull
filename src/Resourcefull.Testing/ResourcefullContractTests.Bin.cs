@@ -39,7 +39,7 @@ public abstract partial class ResourcefullContractTests
         IResourceContainerClient source = await NewContainerAsync(provider);
         await source.UploadAsync("a", BinaryData.FromString("x"));
         string copyName = NewContainerName();
-        await ServiceOf(provider).CopyContainerToAsync(source.Name, ServiceOf(provider), copyName);
+        await ServiceOf(provider).CopyContainerToAsync(source.Name, ServiceOf(provider), new ContainerCopyOptions { DestinationName = copyName });
         IResourceContainerClient copy = ServiceOf(provider).GetContainerClient(copyName);
         await source.DeleteResourceIfExistsAsync("a");
         await copy.DeleteResourceIfExistsAsync("a");

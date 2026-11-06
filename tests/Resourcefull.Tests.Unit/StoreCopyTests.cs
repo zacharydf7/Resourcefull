@@ -66,6 +66,67 @@ public class StoreCopyTests : IDisposable
         Assert.Equal(["theirs"], (await Target.GetContainerClient("c").ListResourcesAsync().ToListAsync()).Select(r => r.Name));
     }
 
+    [Theory]
+    [InlineData(ExistingContainers.Fail)]
+    [InlineData(ExistingContainers.SkipMatching)]
+    [InlineData(ExistingContainers.Update)]
+    public async Task CopyContainerToAsync_ShouldCopyTheContainer_WhenTheDestinationLacksItWhateverExistingSays(ExistingContainers existing)
+    {
+        // Arrange
+        await (await Source.CreateContainerAsync("c")).UploadAsync("a", BinaryData.FromString("a"));
+
+        // Act
+        ContainerCopyResult copied = await Source.CopyContainerToAsync("c", Target, new ContainerCopyOptions { Existing = existing });
+
+        // Assert
+        Assert.Equal((ContainerCopyOutcome.Copied, "c", 1L), (copied.Outcome, copied.DestinationContainerName, copied.VersionCount));
+        Assert.Equal("a", (await Target.GetContainerClient("c").DownloadContentAsync("a"))!.Content.ToString());
+    }
+
+    [Fact]
+    public async Task CopyContainerToAsync_ShouldLeaveAContainerWithALongerName_WhenUpdatingOneContainer()
+    {
+        // Arrange: a name a store copy's prefix would also match.
+        await (await Source.CreateContainerAsync("docs")).UploadAsync("a", BinaryData.FromString("a"));
+        await (await Source.CreateContainerAsync("docs-archive")).UploadAsync("b", BinaryData.FromString("b"));
+        await Target.CreateContainerAsync("docs");
+
+        // Act
+        ContainerCopyResult updated = await Source.CopyContainerToAsync("docs", Target, new ContainerCopyOptions { Existing = ExistingContainers.Update });
+
+        // Assert
+        Assert.Equal(ContainerCopyOutcome.Updated, updated.Outcome);
+        Assert.False(await Target.ContainerExistsAsync("docs-archive"));
+    }
+
+    [Fact]
+    public async Task CopyContainerToAsync_ShouldGiveTheDestinationTheSourcesMetadataAndCallThatUpdated_WhenOnlyTheMetadataDiffers()
+    {
+        // Arrange
+        await Source.CreateContainerAsync("c", new Dictionary<string, string> { ["team"] = "billing" });
+        await Target.CreateContainerAsync("c");
+
+        // Act
+        ContainerCopyResult updated = await Source.CopyContainerToAsync("c", Target, new ContainerCopyOptions { Existing = ExistingContainers.Update });
+
+        // Assert
+        Assert.Equal(ContainerCopyOutcome.Updated, updated.Outcome);
+        Assert.Equal(new ContainerUpdateResult { Name = "c", Imported = 0, Changed = 0, Deleted = 0 }, updated.Update);
+        Assert.Equal("billing", (await Target.GetContainerClient("c").GetInfoAsync())!.Metadata["team"]);
+    }
+
+    [Fact]
+    public async Task CopyContainerToAsync_ShouldThrowOutOfRange_WhenExistingIsntDefined()
+    {
+        // Arrange
+        await Source.CreateContainerAsync("c");
+
+        // Act & Assert
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() =>
+            Source.CopyContainerToAsync("c", Target, new ContainerCopyOptions { Existing = (ExistingContainers)99 }));
+        Assert.False(await Target.ContainerExistsAsync("c"));
+    }
+
     [Fact]
     public async Task CopyStoreToAsync_ShouldCopyEachContainerInThePrefixAndListTheDestinationsOwn_WhenTheDestinationHasNone()
     {

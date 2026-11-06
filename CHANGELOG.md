@@ -142,7 +142,7 @@
   [Backing up and moving containers](docs/backup-and-move.md).
 - **Moving to another provider.** `CopyContainerToAsync` copies a container to another store, such as one with another
   provider, with every version as it was. It stores through the destination's new `ImportContainerAsync` overload,
-  which imports from a stream of versions rather than a zip. `CopyStoreToAsync` copies every container. By default a
+  which imports from a stream of versions rather than a zip. `CopyStoreToAsync` copies every container. For both, by default a
   container the destination already has fails; with `ExistingContainers.SkipMatching` it's skipped once it's found to
   match version for version, and with `ExistingContainers.Update` it's brought up to date in place through the new
   `ImportVersionsAsync`. `Update` never deletes the container. `StoreCopyFailures.Stop`, the default, stops at the
@@ -304,6 +304,11 @@
 
 ### Changed
 
+- **Copying a container takes options.** `CopyContainerToAsync` takes a `ContainerCopyOptions`: `DestinationName` replaces
+  the `destinationContainerName` parameter, and `Existing` works as it does for `CopyStoreToAsync`, so one container can
+  be checked or brought up to date without a prefix that also matches its neighbors. `ContainerCopyResult` says what
+  happened in `Outcome`, and what an update changed in `Update`. In a store copy, every container now gets a
+  `copy_container` span, not only those it creates.
 - **`ResourceSize` for upload limits, and comparisons.** `ResourceUploadLink.MaxSize`, `SignedResourceUploadLink.MaxSize`,
   `ResourceUploadEndpointOptions.MaxSize` and `ResourceUploadLinkEndpointOptions.MaxSize` are `ResourceSize?`, as the
   core's limits are, so `ResourceSize.Megabytes(20)` sets any of them, and a number of bytes still converts.

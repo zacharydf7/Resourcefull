@@ -24,7 +24,20 @@ public sealed record ImportedVersion
 }
 
 /// <summary>
-/// What <see cref="IResourceServiceClient.CopyContainerToAsync"/> copied.
+/// How <see cref="IResourceServiceClient.CopyContainerToAsync"/> copies.
+/// <para>Coming in 4.0.</para>
+/// </summary>
+public sealed class ContainerCopyOptions
+{
+    /// <summary>The name the container gets in the destination; <see langword="null"/> for its own.</summary>
+    public string? DestinationName { get; init; }
+
+    /// <summary>What to do if the destination already has that container. The default is <see cref="ExistingContainers.Fail"/>.</summary>
+    public ExistingContainers Existing { get; init; } = ExistingContainers.Fail;
+}
+
+/// <summary>
+/// What <see cref="IResourceServiceClient.CopyContainerToAsync"/> did.
 /// <para>Coming in 4.0.</para>
 /// </summary>
 public sealed record ContainerCopyResult
@@ -35,7 +48,19 @@ public sealed record ContainerCopyResult
     /// <summary>The container it was copied to.</summary>
     public required string DestinationContainerName { get; init; }
 
-    /// <summary>How many resources (names) were copied.</summary>
+    /// <summary>
+    /// What the copy did with the container: <see cref="ContainerCopyOutcome.Copied"/>,
+    /// <see cref="ContainerCopyOutcome.Updated"/> or <see cref="ContainerCopyOutcome.Matching"/>. A failure throws.
+    /// </summary>
+    public required ContainerCopyOutcome Outcome { get; init; }
+
+    /// <summary>
+    /// What <see cref="ExistingContainers.Update"/> changed, when <see cref="Outcome"/> is
+    /// <see cref="ContainerCopyOutcome.Updated"/>; otherwise <see langword="null"/>.
+    /// </summary>
+    public ContainerUpdateResult? Update { get; init; }
+
+    /// <summary>How many resources (names) had versions copied.</summary>
     public required long ResourceCount { get; init; }
 
     /// <summary>How many versions were copied, current and older.</summary>
@@ -46,7 +71,7 @@ public sealed record ContainerCopyResult
 }
 
 /// <summary>
-/// What <see cref="IResourceServiceClient.CopyStoreToAsync"/> does with a container the destination already has.
+/// What a copy does with a container the destination already has.
 /// <para>Coming in 4.0.</para>
 /// </summary>
 public enum ExistingContainers
@@ -119,7 +144,7 @@ public sealed record ContainerCopied
 }
 
 /// <summary>
-/// What <see cref="IResourceServiceClient.CopyStoreToAsync"/> did with one container.
+/// What a copy did with one container.
 /// <para>Coming in 4.0.</para>
 /// </summary>
 public enum ContainerCopyOutcome
@@ -133,7 +158,7 @@ public enum ContainerCopyOutcome
     /// <summary>The destination had it, and it matched the source's version for version.</summary>
     Matching,
 
-    /// <summary>It failed.</summary>
+    /// <summary>It failed, which <see cref="IResourceServiceClient.CopyStoreToAsync"/> reports; a copy of one container throws.</summary>
     Failed
 }
 
@@ -143,7 +168,7 @@ public enum ContainerCopyOutcome
 /// </summary>
 public sealed record ContainerUpdateResult
 {
-    /// <summary>The container's name.</summary>
+    /// <summary>The name of the container brought up to date.</summary>
     public required string Name { get; init; }
 
     /// <summary>How many versions the update imported that the destination lacked.</summary>

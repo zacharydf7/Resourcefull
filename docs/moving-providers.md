@@ -43,9 +43,21 @@ ContainerCopyResult copied = await oldStore.CopyContainerToAsync("invoices", new
 Console.WriteLine($"{copied.VersionCount} versions, {copied.ContentSize}");
 ```
 
-- **The destination container mustn't exist.** Give it another name with `destinationContainerName`, which also lets
-  you copy a container within one store.
-- **A copy that fails deletes what it created,** as an [import](backup-and-move.md#imports-are-checked-and-all-or-nothing)
+- **By default, the destination container mustn't exist.** `Existing` in `ContainerCopyOptions` changes that, as it
+  does for [a whole store](#copying-a-whole-store). `DestinationName` gives the copy another name, which also lets you
+  copy a container within one store. This sets both:
+
+  ```csharp
+  ContainerCopyResult result = await oldStore.CopyContainerToAsync("invoices", newStore, new ContainerCopyOptions
+  {
+      DestinationName = "invoices-2026",
+      Existing = ExistingContainers.Update
+  }, cancellationToken);
+  ```
+
+  `Outcome` says what happened: `Copied`, `Updated` or `Matching`. `VersionCount` and the other counts say what was
+  copied, and when the container was brought up to date, `Update` says what changed in it.
+- **A copy that fails deletes a container it created,** as an [import](backup-and-move.md#imports-are-checked-and-all-or-nothing)
   does, so you can fix the cause and copy again. While it fills, the destination's container is visible, but marked
   unfinished in its metadata.
 - **The destination's rules apply:** its policies and [upload inspector](upload-inspection.md) see every version, as
@@ -55,7 +67,7 @@ Console.WriteLine($"{copied.VersionCount} versions, {copied.ContentSize}");
 
 ## Copying a whole store
 
-`CopyStoreToAsync` copies every container, one at a time:
+`CopyStoreToAsync` copies every container, one at a time, each the way `CopyContainerToAsync` does:
 
 ```csharp
 StoreCopyResult result = await oldStore.CopyStoreToAsync(newStore, new StoreCopyOptions

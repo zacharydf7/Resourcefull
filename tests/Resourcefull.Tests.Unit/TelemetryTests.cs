@@ -422,9 +422,31 @@ public sealed class TelemetryTests : IDisposable
         await service.CopyStoreToAsync(archive, new StoreCopyOptions { Existing = ExistingContainers.SkipMatching });
 
         // Assert
-        Activity container = Assert.Single(SpansIn(root), s => s.OperationName == "resourcefull copy_container");
+        Activity[] containers = [.. SpansIn(root).Where(s => s.OperationName == "resourcefull copy_container")];
         Activity store = Assert.Single(SpansIn(root), s => s.OperationName == "resourcefull copy_store");
-        Assert.All(new[] { container, store }, s => Assert.Equal("archive", s.GetTagItem("resourcefull.destination_store")));
+        Assert.All(containers.Append(store), s => Assert.Equal("archive", s.GetTagItem("resourcefull.destination_store")));
+        Assert.Equal(["copied", "matching"], containers.Select(s => s.GetTagItem("resourcefull.outcome")));
+    }
+
+    [Fact]
+    public async Task CopyContainerToAsync_ShouldTagWhatTheUpdateChanged_WhenExistingIsUpdate()
+    {
+        // Arrange: a destination holding a version the source doesn't have, and lacking one it does.
+        using ServiceProvider provider = new ServiceCollection().AddResourcefull(o => o.UseInMemory())
+            .AddKeyedResourcefull("archive", o => o.UseInMemory()).BuildServiceProvider();
+        IResourceServiceClient service = provider.GetRequiredService<IResourceServiceClient>();
+        IResourceServiceClient archive = provider.GetRequiredKeyedService<IResourceServiceClient>("archive");
+        await (await service.CreateContainerAsync("c")).UploadAsync("a", BinaryData.FromString("x"));
+        await (await archive.CreateContainerAsync("c")).UploadAsync("b", BinaryData.FromString("y"));
+        using Activity root = TestSource.StartActivity("test")!;
+
+        // Act
+        await service.CopyContainerToAsync("c", archive, new ContainerCopyOptions { Existing = ExistingContainers.Update });
+
+        // Assert
+        Activity span = Assert.Single(SpansIn(root), s => s.OperationName == "resourcefull copy_container");
+        Assert.Equal(("updated", 1L, 1L, 0L, 1L), (span.GetTagItem("resourcefull.outcome"), span.GetTagItem("resourcefull.resources"),
+            span.GetTagItem("resourcefull.versions"), span.GetTagItem("resourcefull.changed"), span.GetTagItem("resourcefull.deleted")));
     }
 
     /// <summary>A client that passes every call to another, as a decorator in an application would.</summary>

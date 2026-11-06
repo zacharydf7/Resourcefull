@@ -240,24 +240,36 @@ public interface IResourceServiceClient
     /// <see cref="ImportContainerAsync(string, IAsyncEnumerable{ImportedVersion}, IReadOnlyDictionary{string, string}?, CancellationToken)"/>,
     /// so each content is checked against its hash as it's stored, the destination's policies apply, and a copy that
     /// fails deletes what it created. The destination's container is visible while it fills, marked unfinished. A
-    /// version stored here after its name was read isn't copied; <see cref="CopyStoreToAsync"/> with
+    /// version stored here after its name was read isn't copied; copying again with
     /// <see cref="ExistingContainers.Update"/> catches up. Upload sessions in progress and the
     /// <see cref="ContainerPolicy.KeepDeletedFor">bin</see> aren't copied.
+    /// <see cref="ContainerCopyOptions.Existing"/> decides what happens if the destination already has the container:
+    /// whether the copy fails, checks that it matches version for version, or brings it up to date in place, which deletes
+    /// the versions the source no longer has but never the container. The copy fails if the destination's container is
+    /// still being filled by another copy or import, whatever <see cref="ContainerCopyOptions.Existing"/> says.
     /// <para>Coming in 4.0.</para>
     /// </summary>
     /// <param name="containerName">The container to copy.</param>
     /// <param name="destination">The store to copy it to, which may be this one, for a copy under another name.</param>
-    /// <param name="destinationContainerName">The name it gets there, which mustn't exist; <see langword="null"/> for its own.</param>
-    /// <param name="cancellationToken">Cancels the copy, which then deletes what it created.</param>
-    /// <returns>What it copied.</returns>
+    /// <param name="options">The name it gets there, and what to do if it exists; <see langword="null"/> for the defaults.</param>
+    /// <param name="cancellationToken">Cancels the copy. A container being created is deleted again; an update keeps what it did.</param>
+    /// <returns>What it did with the container.</returns>
     /// <exception cref="ResourceContainerNotFoundException">The container doesn't exist here.</exception>
-    /// <exception cref="ResourceConflictException">The destination already has a container with that name.</exception>
-    /// <exception cref="ArgumentException">A name breaks the name rules, or <paramref name="destination"/> is null.</exception>
+    /// <exception cref="ResourceConflictException">
+    /// This container is from a copy or import that hasn't finished, or the destination's container is still being
+    /// filled, or <see cref="ContainerCopyOptions.Existing"/> refuses the destination's container:
+    /// <see cref="ExistingContainers.Fail"/> because it exists, <see cref="ExistingContainers.SkipMatching"/> because it
+    /// differs, or <see cref="ExistingContainers.Update"/> because it can't change in place.
+    /// </exception>
+    /// <exception cref="ArgumentException">
+    /// A name breaks the name rules, <paramref name="destination"/> is null, or <paramref name="options"/> has a value
+    /// that isn't defined.
+    /// </exception>
     /// <exception cref="NotSupportedException">
-    /// The destination can't import versions.
+    /// The destination can't import versions or, with <see cref="ExistingContainers.Update"/>, change what differs.
     /// </exception>
     public Task<ContainerCopyResult> CopyContainerToAsync(string containerName, IResourceServiceClient destination,
-        string? destinationContainerName = null, CancellationToken cancellationToken = default);
+        ContainerCopyOptions? options = null, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Copies every container, or those whose names start with <see cref="StoreCopyOptions.Prefix"/>, to another store,
